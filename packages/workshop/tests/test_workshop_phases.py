@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _extensions
+from livery.workshop import _extensions, _phases
 from livery.workshop._composition import package_set
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package
@@ -77,10 +77,14 @@ def _run(
     phase: str = "build",
     inputs: Mapping[str, object] | None = None,
 ) -> PhaseContext:
-    """Run *phase* over *package* as the train does: the steps of its set."""
+    """Run *phase* over *package* as the train does: the steps of its set.
+
+    *inputs* are the keys the engine gives *phase*.
+    """
     lookup = _extensions.installed_declaration
     steps = phase_steps(phase, package_set(package.extensions, lookup), lookup)
-    return run_phase(_engine(root, package, phase), steps, inputs=inputs)
+    given = {} if inputs is None else {phase: inputs}
+    return run_phase(_engine(root, package, phase), steps, inputs=given)
 
 
 def _said(out: str) -> list[str]:
@@ -100,22 +104,37 @@ def test_the_engine_refuses_an_input_the_phase_does_not_take(tmp_path: Path) -> 
         match="gives wheel to the build phase, which takes configuration, epoch,"
         " isolated from it",
     ):
-        run_phase(_engine(tmp_path, package, "build"), (), inputs={"wheel": "x"})
+        run_phase(
+            _engine(tmp_path, package, "build"), (), inputs={"build": {"wheel": "x"}}
+        )
     with pytest.raises(
         PhaseError,
         match="gives epoch to the build phase as str, which the phase takes as int",
     ):
-        run_phase(_engine(tmp_path, package, "build"), (), inputs={"epoch": "0"})
-    with pytest.raises(
-        PhaseError, match="the run phase, which takes arguments, executable from it"
-    ):
-        run_phase(_engine(tmp_path, package, "run"), (), inputs={"epoch": 0})
+        run_phase(
+            _engine(tmp_path, package, "build"), (), inputs={"build": {"epoch": "0"}}
+        )
+    # The words after -- are the context's arguments, so the run phase
+    # takes the executable alone.
+    with pytest.raises(PhaseError, match="the run phase, which takes executable from"):
+        run_phase(
+            _engine(tmp_path, package, "run"), (), inputs={"run": {"arguments": []}}
+        )
     with pytest.raises(PhaseError, match="the sync phase, which takes nothing from it"):
-        run_phase(_engine(tmp_path, package, "sync"), (), inputs={"epoch": 0})
-    # A context naming no phase takes no input: nothing says whose
-    # keys they are.
-    with pytest.raises(PhaseError, match="gives epoch and names no phase"):
-        run_phase(PhaseContext(root=tmp_path), (), inputs={"epoch": 0})
+        run_phase(_engine(tmp_path, package, "sync"), (), inputs={"sync": {"epoch": 0}})
+    # The inputs name their phase, so a phase nobody declares refuses
+    # naming the declared ones, from a context naming none as well.
+    listed = ", ".join(_phases.declared_phases())
+    with pytest.raises(PhaseError) as raised:
+        run_phase(PhaseContext(root=tmp_path), (), inputs={"bild": {"epoch": 0}})
+    assert str(raised.value) == f"bild is not a declared phase; the phases are {listed}"
+    # A walk over several phases, the gate's, gives each phase its own.
+    ctx = run_phase(
+        PhaseContext(root=tmp_path),
+        (),
+        inputs={"build": {"isolated": False}, "test": {"isolated": False}},
+    )
+    assert ctx.phase == ""
 
 
 def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
@@ -129,11 +148,14 @@ def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
         ("sync", {}),
         ("clean", {}),
         ("stamp", {"version": "1.2.3"}),
-        ("build", {"epoch": 7}),
-        ("prove", {"resolution": "floor", "release-dirs": [Path("dist")]}),
+        ("build", {"isolated": True, "configuration": "release", "epoch": 7}),
+        (
+            "test",
+            {"isolated": True, "resolution": "floor", "release-dirs": [Path("dist")]},
+        ),
         ("publish", {"version": "1.2.3", "registry-target": {"url": "x"}}),
         (
-            "replay",
+            "verify",
             {
                 "version": "1.2.3",
                 "tree": Path("tree"),
@@ -142,13 +164,42 @@ def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
                 "extras": "",
             },
         ),
-        ("run", {}),
+        ("run", {"executable": "serve"}),
     ]
     for phase, inputs in given:
-        ctx = run_phase(_engine(tmp_path, package, phase), (), inputs=inputs)
+        ctx = run_phase(_engine(tmp_path, package, phase), (), inputs={phase: inputs})
         assert ctx.phase == phase
         for key, value in inputs.items():
             assert ctx.result(key) == value
+
+
+def test_a_side_on_a_phase_with_one_side_refuses_in_the_walk(tmp_path: Path) -> None:
+    # A step built in code bypasses the declaration's reader, so the
+    # walk refuses it before any step runs, naming the phase.
+    from livery.workshop._checks import PACKAGE as PER_PACKAGE
+    from livery.workshop._checks import CheckRecord
+
+    ran: list[str] = []
+
+    def body(ctx: PhaseContext) -> None:
+        ran.append(ctx.check)
+
+    record = CheckRecord(
+        "odd",
+        "stamp",
+        body,
+        scope=PER_PACKAGE,
+        extensions=("acme.odd",),
+        isolated=False,
+    )
+    package = _package(tmp_path, "acme.odd")
+    with pytest.raises(PhaseError) as raised:
+        run_phase(_engine(tmp_path, package, "stamp"), (record,))
+    assert str(raised.value) == (
+        "packages/core: the stamp phase: stamp.odd declares isolated, and the"
+        " phase has one side: its declaration gives no isolated key"
+    )
+    assert ran == []
 
 
 def test_a_step_providing_a_key_the_engine_gives_refuses(
@@ -273,7 +324,7 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
             PACKAGE + '\n[phases.biuld.odd]\nmain = "{package}._steps:main"\n',
             "phases.biuld names no phase; the phases are sync, clean, build, format,"
             " lint, typecheck, typecomplete, examples, drift, provenance, layering,"
-            " test, prove, stamp, publish, replay, configure, run; did you mean"
+            " test, stamp, publish, verify, configure, run; did you mean"
             " 'build'?",
         ),
         (
@@ -315,6 +366,12 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
             " runs once per package whose set holds the extension, as the phase's"
             " level says",
         ),
+        (
+            PACKAGE + '\n[phases.stamp.odd]\nmain = "{package}._steps:main"\n'
+            "isolated = true\n",
+            "phases.stamp.odd.isolated is not read on a step of the stamp phase,"
+            " which has one side: its declaration gives no isolated key",
+        ),
     ],
     ids=[
         "unknown-phase",
@@ -325,6 +382,7 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
         "reads-its-own",
         "no-function",
         "scope",
+        "side-of-a-one-sided-phase",
     ],
 )
 def test_a_phase_table_the_file_alone_shows_wrong_refuses(
@@ -530,11 +588,59 @@ def test_a_frozen_view_records_the_exit_code_through_the_shared_state(
         tmp_path,
         "s",
         "import dataclasses\n\n\ndef main(ctx):\n    try:\n"
-        '        ctx.executable = "x"\n    except dataclasses.FrozenInstanceError:\n'
+        '        ctx.phase = "x"\n    except dataclasses.FrozenInstanceError:\n'
         "        ctx.exit(7)\n",
     )
     ctx = _run(tmp_path, package, "run")
     assert ctx.exit_code == 7
+
+
+def _sided(name: str, side: str) -> str:
+    """A declaration adding *name*'s one step to the test phase, on *side*."""
+    lines = [f"[phases.test.{name}]", 'main = "{package}._steps:main"']
+    if side:
+        lines.append(f"isolated = {side}")
+    return PACKAGE + "\n" + "\n".join(lines) + "\n"
+
+
+def test_each_step_runs_on_the_side_of_its_phase_the_engine_gives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    package = _workspace(
+        tmp_path,
+        monkeypatch,
+        iso=_sided("iso", "true"),
+        tree=_sided("tree", "false"),
+        both=_sided("both", ""),
+    )
+    # The engine gives nothing, the gate's shape: the tree side.
+    _run(tmp_path, package, "test")
+    assert sorted(_said(capsys.readouterr().out)) == ["both.main", "tree.main"]
+    _run(tmp_path, package, "test", inputs={"isolated": False})
+    assert sorted(_said(capsys.readouterr().out)) == ["both.main", "tree.main"]
+    # The isolated side: the train's legs.
+    _run(tmp_path, package, "test", inputs={"isolated": True})
+    assert sorted(_said(capsys.readouterr().out)) == ["both.main", "iso.main"]
+
+
+def test_a_step_serving_the_isolated_side_alone_registers_no_gate_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The gate runs the tree side, so of a workspace-level phase's steps
+    # the isolated one stays out of the registry and in the phase's steps.
+    fake_extensions(
+        tmp_path, monkeypatch, iso=_sided("iso", "true"), tree=_sided("tree", "false")
+    )
+    for name in ("iso", "tree"):
+        fake_steps(tmp_path, name, SAYS.format(name=name))
+    iso = _extensions.declaration("acme.iso")
+    tree = _extensions.declaration("acme.tree")
+    assert iso is not None and tree is not None
+    assert iso.additions.checks == ()
+    assert [(r.name, r.isolated) for r in iso.phases["test"]] == [("test.iso", True)]
+    assert [(r.name, r.isolated) for r in tree.additions.checks] == [
+        ("test.tree", False)
+    ]
 
 
 # The declared phases: the base's from its contract file, an extension's
@@ -599,10 +705,9 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
         "provenance",
         "layering",
         "test",
-        "prove",
         "stamp",
         "publish",
-        "replay",
+        "verify",
         "configure",
         "run",
     ]
@@ -638,36 +743,33 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
         "sync",
         "clean",
         "build",
-        "prove",
         "stamp",
         "publish",
-        "replay",
+        "verify",
         "run",
     )
-    # The train's order, by after.
+    # The train's order, by after: stamp, build, test, publish, verify.
     assert {name: spec.after for name, spec in found.items() if spec.after} == {
         "build": ("stamp",),
         "test": ("build",),
-        "prove": ("build",),
-        "publish": ("prove",),
-        "replay": ("publish",),
+        "publish": ("test",),
+        "verify": ("publish",),
         "run": ("build",),
     }
     # Each engine's keys, typed with the types a context value has.
     assert {name: dict(spec.keys) for name, spec in found.items() if spec.keys} == {
         "build": {"isolated": "bool", "configuration": "str", "epoch": "int"},
         "test": {"isolated": "bool", "resolution": "str", "release-dirs": "paths"},
-        "prove": {"resolution": "str", "release-dirs": "paths"},
         "stamp": {"version": "str"},
         "publish": {"version": "str", "registry-target": "table"},
-        "replay": {
+        "verify": {
             "version": "str",
             "tree": "path",
             "interpreter": "str",
             "index": "str",
             "extras": "str",
         },
-        "run": {"executable": "str", "arguments": "strs"},
+        "run": {"executable": "str"},
     }
     for spec in found.values():
         assert set(spec.keys.values()) <= set(TYPES)
@@ -681,7 +783,6 @@ def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
     from livery.footman import _registry as registry
-    from livery.workshop import _phases
 
     # The reader: a step into a phase no declaration names.
     fake_extensions(tmp_path, monkeypatch, odd=ADDS_DOCS_STEP.replace("docs", "dcos"))
@@ -727,7 +828,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_checks: None
 ) -> None:
     from livery.footman import _registry as registry
-    from livery.workshop import _checks, _phases
+    from livery.workshop import _checks
     from livery.workshop._phases import WORKSPACE_LEVEL, PhaseSpec, phase_spec
 
     # The declared phases are read through the module: each fake set

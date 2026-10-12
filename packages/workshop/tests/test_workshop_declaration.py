@@ -437,7 +437,7 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         'inputs = { reads = ["docs/**/*.md"], widens = ["mkdocs.yml"],'
         ' on-removal = true, widen = "acme_declared._checks:mend",'
         ' ignores = ["docs/README.md"], per-file = false }\n'
-        'enabled = false\nisolated = true\nreads = ["wheel"]\n'
+        'enabled = false\nreads = ["wheel"]\n'
         'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
         'deletes = { "acme.base:lint.old" = "it reads nothing" }\n'
         '[phases.lint.acme.provides]\nreport = "path"\n'
@@ -477,6 +477,7 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
     assert [(f.file, f.extensions) for f in record.fragments] == [
         (".acme", ("acme-kind",))
     ]
+    # The lint phase has one side, so its step names none.
     assert (
         record.enabled,
         record.isolated,
@@ -486,7 +487,7 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         record.deletes,
     ) == (
         False,
-        True,
+        None,
         ("wheel",),
         (("report", "path"),),
         (("acme.base:lint.acme", "it reads faster"),),

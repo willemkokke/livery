@@ -1,14 +1,15 @@
-"""What the engine asks of a package: build, versions, publish, requirements.
+"""What the engine asks of a package: build, versions, tests, publish, requirements.
 
 The release train, the layering check and the docs reach a package's
 artifacts and manifests through these functions alone: its build, the
 version its manifest declares, the files a version is written into,
-writing a version, publishing what it built, its declared requirements,
-writing one, the names other packages reference its code by, and the
-siblings its sources use. A question that is a query
+writing a version, testing the built artifact in isolation, publishing
+what it built, verifying a released version, its declared
+requirements, writing one, the names other packages reference its code
+by, and the siblings its sources use. A question that is a query
 ([livery.workshop._queries.Query][]) is answered by the package's
-extensions when one of them answers it, and a build, a stamp or a
-publish runs as the package's lifecycle phase
+extensions when one of them answers it, and a build, a stamp, an
+isolated test, a publish or a verification runs as the package's phase
 ([livery.workshop._phases.run_phase][]) when its extensions add steps
 to it; anything else, and any package whose extensions do neither, is
 answered by the package's kind backend
@@ -58,15 +59,23 @@ def sync(packages: Iterable[Package], root: Path) -> None:
         _run_steps(held, "sync", root, {})
 
 
-def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
-    """Build *package*'s artifacts into its ``dist/``; that directory.
+#: What the release train's build gives the build phase beside the
+#: epoch: the isolated side, in the release configuration.
+RELEASE_BUILD: Mapping[str, object] = {"isolated": True, "configuration": "release"}
 
-    *epoch* is the build's source date, so two builds of one tree are
-    the same bytes; 0 takes the build tool's own.
+
+def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+    """Build *package*'s release artifacts into its ``dist/``; that directory.
+
+    The release train's build: the build phase on its isolated side,
+    in the ``release`` configuration
+    ([livery.workshop._lifecycle.RELEASE_BUILD][]). *epoch* is the
+    build's source date, so two builds of one tree are the same bytes;
+    0 takes the build tool's own.
     """
     from pathlib import Path
 
-    ctx = _run_steps(package, "build", root, {"epoch": epoch})
+    ctx = _run_steps(package, "build", root, {**RELEASE_BUILD, "epoch": epoch})
     if ctx is not None:
         return cast("Path", _provided(ctx, "dist", Path))
     from livery.workshop._kinds import backend_for
@@ -136,46 +145,52 @@ def publish(
     )
 
 
-def proves(package: Package) -> bool:
-    """Whether *package*'s release proves its artifacts in isolated legs.
+def has_isolated_test(package: Package) -> bool:
+    """Whether *package*'s release tests its built artifact on the isolated side.
 
-    Through its extensions' ``prove`` steps where they add them, and its
-    kind otherwise; a kind that builds no wheels proves nothing.
+    Through a step of its set serving the test phase's isolated side
+    where one is added, and its kind otherwise; a kind that builds no
+    wheels has no isolated test.
     """
-    return _adds_steps(package, "prove") or _optional(package, "prove") is not None
+    return bool(_isolated_tests(package)) or (
+        _optional(package, "isolated_test") is not None
+    )
 
 
-def prove(
+def isolated_test(
     package: Package, root: Path, *, resolution: str, release_dirs: tuple[Path, ...]
 ) -> dict[str, str]:
-    """One isolated leg of *package*'s release at *resolution*; what it installed.
+    """Run *package*'s test phase on its isolated side at *resolution*; what it got.
 
-    Each distribution the leg installed, to its version. *release_dirs*
-    are the co-released set's ``dist/`` directories, the only place the
-    leg finds a sibling's unpublished wheel. Ask
-    [livery.workshop._lifecycle.proves][] first: a package nothing
-    proves refuses here.
+    Each distribution the run installed, to its version. *resolution*
+    is ``floor``, ``latest`` or ``head``; *release_dirs* are the
+    co-released set's ``dist/`` directories, the only place the run
+    finds a sibling's unpublished wheel. Ask
+    [livery.workshop._lifecycle.has_isolated_test][] first: a package
+    with no isolated test refuses here.
     """
     from livery.footman import fail
 
     inputs: dict[str, object] = {
+        "isolated": True,
         "resolution": resolution,
         "release-dirs": list(release_dirs),
     }
-    ctx = _run_steps(package, "prove", root, inputs)
-    if ctx is not None:
-        resolved = cast("dict[object, object]", _provided(ctx, "resolved", dict))
-        return {str(name): str(version) for name, version in resolved.items()}
-    reader = _optional(package, "prove")
+    if _isolated_tests(package):
+        ctx = _run_steps(package, "test", root, inputs)
+        if ctx is not None:
+            resolved = cast("dict[object, object]", _provided(ctx, "resolved", dict))
+            return {str(name): str(version) for name, version in resolved.items()}
+    reader = _optional(package, "isolated_test")
     if reader is None:
         fail(
-            f"{package.path}: nothing proves its release: its extensions add no"
-            " prove step, and its kind proves nothing"
+            f"{package.path}: nothing tests its release isolated: its extensions"
+            " add no step on the test phase's isolated side, and its kind has none"
         )
     return dict(reader(package, root, release_dirs=release_dirs, resolution=resolution))
 
 
-def replay(
+def verify(
     package: Package,
     root: Path,
     *,
@@ -200,14 +215,14 @@ def replay(
         "index": index,
         "extras": extras,
     }
-    ctx = _run_steps(package, "replay", root, inputs)
+    ctx = _run_steps(package, "verify", root, inputs)
     if ctx is not None:
         return cast("int", _provided(ctx, "exit-code", int))
-    reader = _optional(package, "replay")
+    reader = _optional(package, "verify")
     if reader is None:
         fail(
-            f"{package.path}: nothing replays its released version: its extensions"
-            " add no replay step, and its kind replays nothing"
+            f"{package.path}: nothing verifies its released version: its extensions"
+            " add no verify step, and its kind verifies nothing"
         )
     return int(
         reader(
@@ -321,12 +336,18 @@ def _run_steps(
     from livery.workshop._phases import PhaseContext, run_phase
 
     ctx = PhaseContext(root=root, packages=(package,), package=package, phase=phase)
-    return run_phase(ctx, steps, inputs=inputs)
+    return run_phase(ctx, steps, inputs={phase: inputs})
 
 
-def _adds_steps(package: Package, phase: str) -> bool:
-    """Whether an extension of *package*'s set adds steps to *phase*."""
-    return bool(_phase_steps(package, phase))
+def _isolated_tests(package: Package) -> tuple[CheckRecord, ...]:
+    """The steps *package*'s set adds to the test phase that serve its isolated side."""
+    from livery.workshop._phases import ISOLATED, serves
+
+    return tuple(
+        record
+        for record in _phase_steps(package, "test")
+        if serves(record, {ISOLATED: True})
+    )
 
 
 def _phase_steps(package: Package, phase: str) -> tuple[CheckRecord, ...]:

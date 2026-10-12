@@ -10,9 +10,11 @@ levels = ["workspace"]
 # pytest is the record's tool in the store, for the typed handle the
 # runner calls, and its venv copy is the one that imports the project's
 # environment. A package's tests measure its source, so a source change
-# is one the test step reads, and runs the suite for.
+# is one the test step reads, and runs the suite for. The suite runs in
+# the workspace's venv, so the step serves the test phase's tree side.
 [phases.test.pytest]
 main = "livery.extensions.pytest._checks:judge_test"
+isolated = false
 extensions = ["python"]
 tools = ["pytest"]
 flags = ["point"]

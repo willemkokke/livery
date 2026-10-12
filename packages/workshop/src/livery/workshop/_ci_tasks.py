@@ -491,12 +491,12 @@ def ci_dispatch(
     a pull request alone, and its stamp writes a full row for the
     tree it proved; the nightly's run waits for nobody, and this verb
     starts the same run now, so a failure only the nightly meets (a
-    floor Python, a replay) is reproduced on demand. Exits green 0,
-    red 13 with the red jobs named, a run that never registered or a
-    wait that runs out 14, a forge unreachable for five polls in a
-    row 15, and, with ``--no-follow``, 18 while the run moves. The
-    merge point runs on a push alone, and the release wave is the
-    merge point's to dispatch.
+    floor Python, a release's verification) is reproduced on demand.
+    Exits green 0, red 13 with the red jobs named, a run that never
+    registered or a wait that runs out 14, a forge unreachable for
+    five polls in a row 15, and, with ``--no-follow``, 18 while the
+    run moves. The merge point runs on a push alone, and the release
+    wave is the merge point's to dispatch.
     """
     repo, _root = _resolved()
     code = dispatch_flow(

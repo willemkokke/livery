@@ -1,4 +1,4 @@
-"""The python extension's steps in a package's lifecycle phases."""
+"""The python extension's steps: a package's lifecycle phases and its isolated test."""
 
 from __future__ import annotations
 
@@ -38,23 +38,23 @@ def publish(ctx: PhaseContext) -> None:
     ctx.provide("published", published)
 
 
-def prove(ctx: PhaseContext) -> None:
-    """Run one isolated release leg at the engine's resolution; the versions it got."""
+def isolated_test(ctx: PhaseContext) -> None:
+    """Test the built wheel in a fresh venv at the engine's resolution; what it got."""
     from pathlib import Path
 
     resolution = cast("str", ctx.read("resolution"))
     dirs = tuple(Path(path) for path in cast("list[Path]", ctx.read("release-dirs")))
-    resolved = _backend.prove(
+    resolved = _backend.isolated_test(
         ctx.member, ctx.root, release_dirs=dirs, resolution=resolution
     )
     ctx.provide("resolved", dict(resolved))
 
 
-def replay(ctx: PhaseContext) -> None:
+def verify(ctx: PhaseContext) -> None:
     """Install the released version alone and run its tests at the engine's tree."""
     from pathlib import Path
 
-    code = _backend.replay(
+    code = _backend.verify(
         ctx.member,
         tree=Path(cast("Path", ctx.read("tree"))),
         version=cast("str", ctx.read("version")),

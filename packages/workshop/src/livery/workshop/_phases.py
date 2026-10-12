@@ -24,10 +24,20 @@ through it ([livery.workshop._lifecycle][]), the steps those of the
 package's set ([livery.workshop._phases.phase_steps][]). Each step
 receives the one context, [livery.workshop.PhaseContext][].
 
-Two steps providing one key, a key nobody provides and an order with
-no start refuse before any step runs
-([livery.workshop._phases.phase_problems][]); the layering check names
-them for each package.
+The engine running a walk gives each phase its keys, by phase. The
+train builds on the isolated side in the ``release`` configuration and
+tests on the isolated side once per resolution it proves; the gate
+builds on the tree side in the ``instrumented`` configuration, and
+``fm run`` on the tree side in ``debug``. A phase whose declaration
+holds ``isolated`` has two sides: the tree, and the isolated one, from
+a copy of the sources in a fresh environment. A step that declares
+``isolated`` serves the side it names alone, and one that declares
+nothing serves both ([livery.workshop._phases.serves][]).
+
+Two steps providing one key, a key nobody provides, a step declaring a
+side of a phase that has one side, and an order with no start refuse
+before any step runs ([livery.workshop._phases.phase_problems][]); the
+layering check names them for each package.
 """
 
 from __future__ import annotations
@@ -290,18 +300,20 @@ class PhaseContext:
             inputs judges ([livery.workshop._influence.select][]); None
             when the run knows nothing of it, and then each judges
             everything.
-        arguments: The words after ``--``: on a check's own verb, which
-            a check that takes them (``CheckRecord.arguments``) hands
-            its tool, and on ``fm run``, which the step starting the
-            executable passes it; empty in every other run.
+        arguments: The words after ``--``, the same for every step of
+            the run: on a check's own verb, which a step that takes
+            them hands its tool (``CheckRecord.arguments``, a
+            template's ``{arguments}``), and on ``fm run``, which the
+            step starting the executable passes it; empty in every
+            other run.
         check: The running step's name, ``<phase>.<step>``, which the
             walk sets as it hands the context to the step; empty
             outside a step's run.
-        phase: The phase whose keys the engine gives, ``build``, which
-            the engine running the phase names; on a step's view, the
-            step's own phase. Empty for a run that gives no keys.
-        executable: The executable the ``run`` phase starts, as the
-            ``executables`` query names it; empty in another phase.
+        phase: The phase the engine runs, ``build``, whose given keys
+            [livery.workshop.PhaseContext.result][] reads back; on a
+            step's view, the step's own phase, whose given keys the
+            step reads. Empty for a walk over several phases, the
+            gate's.
     """
 
     root: Path
@@ -322,11 +334,12 @@ class PhaseContext:
     arguments: tuple[str, ...] = ()
     check: str = ""
     phase: str = ""
-    executable: str = ""
     _steps: Mapping[str, CheckRecord] = field(
         default_factory=dict[str, "CheckRecord"], repr=False
     )
-    _given: Mapping[str, object] = field(default_factory=dict[str, object], repr=False)
+    _given: Mapping[str, Mapping[str, object]] = field(
+        default_factory=dict[str, Mapping[str, object]], repr=False
+    )
     _shared: _Shared = field(default_factory=_Shared, repr=False)
 
     @property
@@ -414,12 +427,13 @@ class PhaseContext:
                 " name it in reads"
             )
         if key in self._engine():
-            if key not in self._given:
+            given = self._given.get(self.phase, {})
+            if key not in given:
                 raise PhaseError(
                     f"{self.check} reads {key}, which the engine running the"
                     f" {self.phase} phase did not give it"
                 )
-            return self._given[key]
+            return given[key]
         values = self._shared.values.get(self._unit(), {})
         if key not in values:
             provider = next(
@@ -440,10 +454,10 @@ class PhaseContext:
         """The value under *key* once the phase ran, for the engine that ran it.
 
         A key a step provided for the context's package, else one the
-        engine gave; None when neither wrote one.
+        engine gave the context's phase; None when neither wrote one.
         """
         values = self._shared.values.get(self._unit(), {})
-        return values.get(key, self._given.get(key))
+        return values.get(key, self._given.get(self.phase, {}).get(key))
 
     def _running(self) -> CheckRecord:
         """The running step's record; refuses outside a walk's step."""
@@ -483,6 +497,23 @@ def phase_steps(
         if declared is not None:
             found += declared.phases.get(phase, ())
     return tuple(found)
+
+
+#: The engine key that names a phase's side: true for the isolated one.
+ISOLATED = "isolated"
+
+
+def serves(record: CheckRecord, given: Mapping[str, object]) -> bool:
+    """Whether *record* runs on the side of its phase the engine's *given* keys name.
+
+    *given* are the keys the engine gives the step's phase. A step
+    declaring ``isolated = true`` runs when the engine gives
+    ``isolated`` true; one declaring false runs when the engine gives
+    false or nothing; one declaring neither runs on both sides.
+    """
+    if record.isolated is None:
+        return True
+    return record.isolated == (given.get(ISOLATED) is True)
 
 
 def _providers(steps: Iterable[CheckRecord]) -> dict[str, list[str]]:
@@ -562,8 +593,9 @@ def phase_problems(phase: str, steps: Iterable[CheckRecord]) -> list[str]:
     """Why *steps* cannot run as *phase*; empty when they can.
 
     Two extensions declaring one step, two steps providing one key, a
-    step providing a key the phase's engine gives, a key a step reads
-    and no step provides, and an order with no start.
+    step providing a key the phase's engine gives, a step declaring a
+    side of a phase whose declaration gives no ``isolated``, a key a
+    step reads and no step provides, and an order with no start.
 
     Raises:
         PhaseError: when no extension declares *phase*.
@@ -595,6 +627,13 @@ def phase_problems(phase: str, steps: Iterable[CheckRecord]) -> list[str]:
                 f"the {phase} phase: {' and '.join(sorted(names))} both provide"
                 f" {key}; one step of a package provides a key"
             )
+    if ISOLATED not in engine:
+        problems += [
+            f"the {phase} phase: {record.name} declares isolated, and the phase"
+            " has one side: its declaration gives no isolated key"
+            for record in records
+            if record.isolated is not None
+        ]
     for record in records:
         for key in record.reads:
             if key not in providers and key not in engine:
@@ -646,38 +685,40 @@ def run_phase(
     ctx: PhaseContext,
     steps: Iterable[CheckRecord],
     *,
-    inputs: Mapping[str, object] | None = None,
+    inputs: Mapping[str, Mapping[str, object]] | None = None,
     fixing: bool = False,
 ) -> PhaseContext:
     """Run *steps* as footman steps inside one ``parallel()`` block.
 
-    A workspace step runs once. A package step runs once per package
-    in scope (the context's ``judged``) it judges: one whose set holds
-    an extension the step names, that has not turned the step off,
-    that has a file the step's claims reach, and whose change is not
-    confined to its tests unless the step is tests-only; each other
-    package is said and not run. Independent steps run concurrently,
-    and a step starts once the steps it names in ``after`` and the
-    providers of the keys it reads have run, for the same package. A
-    step whose earlier step failed is not run and says so; the earlier
-    failure is the verdict, and the steps that depend on nothing
-    failed still run, as footman runs a block. *inputs* are the keys
-    the engine gives the phase the context names, judged against the
-    phase's declaration before any step runs. *fixing* runs each step's
-    fix body instead of its main, a step without one running nothing,
-    in the given order: a fix rewrites what its own tool reads, and the
-    gate runs its fixers one at a time, so ``after`` orders nothing
-    there.
+    A step runs on the side of its phase the engine gives
+    ([livery.workshop._phases.serves][]), and a step serving the other
+    side is not run. A workspace step runs once. A package step runs
+    once per package in scope (the context's ``judged``) it judges:
+    one whose set holds an extension the step names, that has not
+    turned the step off, that has a file the step's claims reach, and
+    whose change is not confined to its tests unless the step is
+    tests-only; each other package is said and not run. Independent
+    steps run concurrently, and a step starts once the steps it names
+    in ``after`` and the providers of the keys it reads have run, for
+    the same package. A step whose earlier step failed is not run and
+    says so; the earlier failure is the verdict, and the steps that
+    depend on nothing failed still run, as footman runs a block.
+    *inputs* are the keys the engine gives each phase, by phase, each
+    phase's judged against its declaration before any step runs.
+    *fixing* runs each step's fix body instead of its main, a step
+    without one running nothing, in the given order: a fix rewrites
+    what its own tool reads, and the gate runs its fixers one at a
+    time, so ``after`` orders nothing there.
 
     Returns:
         The context the steps shared, which the engine reads a provided
         key or the exit code back from.
 
     Raises:
-        PhaseError: before any step runs, when the context names no
-            declared phase, when *inputs* holds a key the phase does
-            not take or a value of another type, or when the steps
-            cannot run as declared
+        PhaseError: before any step runs, when the context or *inputs*
+            names a phase nobody declares, when *inputs* gives a phase
+            a key it does not take or a value of another type, or when
+            the steps cannot run as declared
             ([livery.workshop._phases.phase_problems][]).
         Exception: the first failing step's, raised again once every
             step ran.
@@ -692,8 +733,12 @@ def run_phase(
 
     records = tuple(steps)
     where = f"{ctx.package.path}: " if ctx.package is not None else ""
-    given = dict(inputs or {})
-    _judge_inputs(ctx.phase, given, where)
+    given = {phase: dict(keys) for phase, keys in (inputs or {}).items()}
+    if ctx.phase:
+        # A context naming a phase nobody declares refuses here, before
+        # any step runs, as an input to such a phase does.
+        phase_spec(ctx.phase)
+    _judge_inputs(given, where)
     problems: list[str] = []
     for phase in dict.fromkeys(record.role for record in records):
         problems += phase_problems(
@@ -708,6 +753,8 @@ def run_phase(
     units: list[_Unit] = []
     for record in ordered:
         if (record.fix if fixing else record.run) is None:
+            continue
+        if not serves(record, given.get(record.role, {})):
             continue
         if record.scope != PACKAGE:
             units.append(_Unit(record, None))
@@ -734,28 +781,22 @@ def run_phase(
     return held
 
 
-def _judge_inputs(phase: str, given: Mapping[str, object], where: str) -> None:
-    """Refuse an input the phase does not take, or one of another type."""
-    if not phase:
-        if given:
-            raise PhaseError(
-                f"{where}the engine gives {', '.join(sorted(given))} and names no"
-                " phase; the context's phase names the phase whose keys it gives"
-            )
-        return
-    engine = phase_spec(phase).keys
-    for key, value in given.items():
-        if key not in engine:
-            known = ", ".join(sorted(engine)) or "nothing"
-            raise PhaseError(
-                f"{where}the engine gives {key} to the {phase} phase, which takes"
-                f" {known} from it"
-            )
-        if not _holds(engine[key], value):
-            raise PhaseError(
-                f"{where}the engine gives {key} to the {phase} phase as"
-                f" {type(value).__name__}, which the phase takes as {engine[key]}"
-            )
+def _judge_inputs(given: Mapping[str, Mapping[str, object]], where: str) -> None:
+    """Refuse an undeclared phase, a key it does not take, or a mistyped value."""
+    for phase, keys in given.items():
+        engine = phase_spec(phase).keys
+        for key, value in keys.items():
+            if key not in engine:
+                known = ", ".join(sorted(engine)) or "nothing"
+                raise PhaseError(
+                    f"{where}the engine gives {key} to the {phase} phase, which takes"
+                    f" {known} from it"
+                )
+            if not _holds(engine[key], value):
+                raise PhaseError(
+                    f"{where}the engine gives {key} to the {phase} phase as"
+                    f" {type(value).__name__}, which the phase takes as {engine[key]}"
+                )
 
 
 def _link(units: list[_Unit], ordered: tuple[CheckRecord, ...], *, after: bool) -> None:

@@ -1,9 +1,9 @@
-"""The replay's python half: a released version installed alone and tested.
+"""The verify phase's python half: a released version installed alone and tested.
 
-The released-wheels replay checks the pairing a consumer gets: the
-distribution the index serves, installed into a plain virtual
-environment beside the tests recorded for that same version, the
-package imported from site-packages and never from the workspace.
+The verification checks the pairing a consumer gets: the distribution
+the index serves, installed into a plain virtual environment beside
+the tests recorded for that same version, the package imported from
+site-packages and never from the workspace.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
 
-def replay(
+def verify(
     package: Package, *, tree: Path, version: str, python: str, index: str, extras: str
 ) -> int:
     """Install *package*'s released *version* alone, then run its tests at *tree*.
@@ -31,7 +31,7 @@ def replay(
     """
     from dataclasses import replace
 
-    venv = tree.parent / ".replay"
+    venv = tree.parent / ".verify"
     requirement = f"{package.name}{f'[{extras}]' if extras else ''}=={version}"
     module = import_name(replace(package, directory=tree / package.path))
     code = install(venv, python, requirement, index)
@@ -41,7 +41,7 @@ def replay(
 
 
 def import_name(package: Package) -> str:
-    """The module *package*'s wheel ships, which the replay imports from site-packages.
+    """The module *package*'s wheel ships, which the tests import from site-packages.
 
     The first of the python kind's module roots
     ([livery.extensions.python._backend.module_roots][]): the build
@@ -100,7 +100,8 @@ def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
     )
     if probe.code != 0:
         print(
-            f"  {module} does not import from site-packages; the replay proves nothing"
+            f"  {module} does not import from site-packages; the verification"
+            " proves nothing"
         )
         return probe.code
     return run(

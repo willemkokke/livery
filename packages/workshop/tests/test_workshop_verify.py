@@ -1,4 +1,4 @@
-"""The released-wheels replay: refusals first, then the orchestration."""
+"""The verify phase's flow: refusals first, then the orchestration."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
-from livery.workshop import _replay
+from livery.workshop import _verify
 from livery.workshop._packages import Package
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
@@ -31,7 +31,7 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _build(base: Path) -> None:
-    # No origin: replay reads tags and trees, never a remote.
+    # No origin: the verification reads tags and trees, never a remote.
     root = base / "ws"
     src = root / "packages" / "thing" / "src" / "livery" / "thing"
     src.mkdir(parents=True)
@@ -65,29 +65,29 @@ def released(seeds: Seeds) -> tuple[Path, Package]:
 
 def test_no_released_version_refuses() -> None:
     with pytest.raises(_FAILURES, match="serves no released version of livery-thing"):
-        _replay.latest_release(_Index("1.2.0.dev3", "2.0.0rc1"), "livery-thing")
+        _verify.latest_release(_Index("1.2.0.dev3", "2.0.0rc1"), "livery-thing")
 
 
 def test_the_latest_release_is_the_newest_final() -> None:
     assert (
-        _replay.latest_release(_Index("1.9.0", "1.10.0", "2.0.0.dev1"), "x") == "1.10.0"
+        _verify.latest_release(_Index("1.9.0", "1.10.0", "2.0.0.dev1"), "x") == "1.10.0"
     )
 
 
 def test_a_missing_receipt_tag_refuses(released: tuple[Path, Package]) -> None:
     root, package = released
     with pytest.raises(_FAILURES, match=r"carries no tag packages/thing/v2\.0\.0"):
-        _replay.replay_flow(
+        _verify.verify_flow(
             root, package, python="3.14", registry=_Index("2.0.0"), index=""
         )
 
 
-def _replayed(
+def _verified(
     monkeypatch: pytest.MonkeyPatch, code: int, seen: dict[str, object] | None = None
 ) -> None:
-    """Stand in for the replay phase: record what it got, answer *code*."""
+    """Stand in for the verify phase: record what it got, answer *code*."""
 
-    def _replay(package: Package, root: Path, **given: object) -> int:
+    def _verify_phase(package: Package, root: Path, **given: object) -> int:
         tree = given["tree"]
         assert isinstance(tree, Path)
         if seen is not None:
@@ -95,14 +95,14 @@ def _replayed(
             seen["tests"] = (tree / "packages" / "thing" / "tests").is_dir()
         return code
 
-    monkeypatch.setattr("livery.workshop._lifecycle.replay", _replay)
+    monkeypatch.setattr("livery.workshop._lifecycle.verify", _verify_phase)
 
 
-def test_a_red_replay_fails_and_leaves_no_worktree(
+def test_a_red_verification_fails_and_leaves_no_worktree(
     released: tuple[Path, Package], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, package = released
-    _replayed(monkeypatch, 1)
+    _verified(monkeypatch, 1)
     from livery.footman import scratch_dir as real
 
     made: list[Path] = []
@@ -111,19 +111,19 @@ def test_a_red_replay_fails_and_leaves_no_worktree(
         made.append(real(label))
         return made[-1]
 
-    monkeypatch.setattr(_replay, "scratch_dir", _recorded)
+    monkeypatch.setattr(_verify, "scratch_dir", _recorded)
     with pytest.raises(
-        _FAILURES, match=r"replay of livery-thing==1.2.0 is red \(exit 1\)"
+        _FAILURES, match=r"verification of livery-thing==1.2.0 is red \(exit 1\)"
     ):
-        _replay.replay_flow(
+        _verify.verify_flow(
             root, package, python="3.14", registry=_Index("1.2.0"), index=""
         )
     # The temporary worktree is gone either way, and the scratch that held it.
-    assert "replay-" not in _git(root, "worktree", "list")
+    assert "verify-" not in _git(root, "worktree", "list")
     assert made and not made[0].exists()
 
 
-def test_a_refused_issue_is_named_and_the_replay_still_fails(
+def test_a_refused_issue_is_named_and_the_verification_still_fails(
     released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -138,9 +138,9 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
 
     monkeypatch.setattr(repo.issue, "search", refuse)
 
-    _replayed(monkeypatch, 2)
+    _verified(monkeypatch, 2)
     with pytest.raises(_FAILURES, match="is red"):
-        _replay.replay_flow(
+        _verify.verify_flow(
             root,
             package,
             python="3.14",
@@ -157,15 +157,15 @@ def test_a_refused_issue_is_named_and_the_replay_still_fails(
 # --- the orchestration --------------------------------------------------------
 
 
-def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
+def test_a_green_verification_runs_the_tests_from_the_tagged_tree(
     released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root, package = released
     seen: dict[str, object] = {}
-    _replayed(monkeypatch, 0, seen)
-    _replay.replay_flow(
+    _verified(monkeypatch, 0, seen)
+    _verify.verify_flow(
         root,
         package,
         python="3.14",
@@ -182,7 +182,7 @@ def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
     assert seen["tests"] is True
     out = capsys.readouterr().out
     assert (
-        "replaying livery-thing[github-secrets]==1.2.0 at packages/thing/v1.2.0"
+        "verifying livery-thing[github-secrets]==1.2.0 at packages/thing/v1.2.0"
         " on python 3.14"
     ) in out
     assert (
@@ -191,7 +191,7 @@ def test_a_green_replay_runs_the_tests_from_the_tagged_tree(
     ) in out
 
 
-def test_a_red_replay_files_then_extends_the_marker_issue(
+def test_a_red_verification_files_then_extends_the_marker_issue(
     released: tuple[Path, Package],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -204,10 +204,10 @@ def test_a_red_replay_files_then_extends_the_marker_issue(
     monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
     monkeypatch.setenv("GITHUB_RUN_ID", "77")
 
-    _replayed(monkeypatch, 1)
+    _verified(monkeypatch, 1)
     for _ in range(2):
         with pytest.raises(_FAILURES, match="is red"):
-            _replay.replay_flow(
+            _verify.verify_flow(
                 root,
                 package,
                 python="3.14",
@@ -216,10 +216,10 @@ def test_a_red_replay_files_then_extends_the_marker_issue(
                 repo=repo,
             )
     out = capsys.readouterr().out
-    assert f"filed #1: {_replay.MARKER}" in out
+    assert f"filed #1: {_verify.MARKER}" in out
     assert (
-        "commented on #1: livery-thing==1.2.0 failed its replay: http://gitea:3000/o/r/actions/runs/77"
-        in out
+        "commented on #1: livery-thing==1.2.0 failed its verification:"
+        " http://gitea:3000/o/r/actions/runs/77" in out
     )
-    (issue,) = repo.issue.search(_replay.MARKER)
+    (issue,) = repo.issue.search(_verify.MARKER)
     assert issue.number == 1

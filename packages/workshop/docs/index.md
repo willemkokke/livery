@@ -238,14 +238,14 @@ with `+`, such as `cmake+cpp`.
 The base declares its phases in the `[phases]` section of its
 `contract.toml`: `sync`, `clean`, `build`, `format`, `lint`,
 `typecheck`, `typecomplete`, `examples`, `drift`, `provenance`,
-`layering`, `test`, `prove`, `stamp`, `publish`, `replay`, `configure`
-and `run`. The gated ones, `build`, `format`, `lint`, `typecheck`,
+`layering`, `test`, `stamp`, `publish`, `verify`, `configure` and
+`run`. The gated ones, `build`, `format`, `lint`, `typecheck`,
 `typecomplete`, `examples`, `drift`, `provenance`, `layering` and
 `test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
 with a sub-task per step. A package-level phase, `sync`, `clean`,
-`build`, `prove`, `stamp`, `publish`, `replay` or `run`, runs its
-steps once per package, and each extension of the package's set may
-add steps to it, as many as it needs:
+`build`, `stamp`, `publish`, `verify` or `run`, runs its steps once
+per package, and each extension of the package's set may add steps to
+it, as many as it needs:
 
 ```toml
 [phases.build.configure]
@@ -278,23 +278,34 @@ one step, and an order with no start refuse before any step runs, and
 the layering check names them for each package.
 
 A phase's declaration names the keys the engine running it gives its
-steps, which a step reads like any other and no extension provides:
+steps, which a step reads like any other and no extension provides.
+The engine gives each phase its own; a key the phase does not declare,
+or a value of another type, refuses before any step runs:
 
 | Phase | Keys the engine gives | Key the release train reads back |
 | --- | --- | --- |
 | `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
-| `build` | `epoch` (`int`), the build's source date; 0 takes the build tool's own. `isolated` (`bool`) and `configuration` (`str`) are declared, and no engine gives them: a step that reads one refuses | `dist` (`path`), where the artifacts are |
-| `prove` | `resolution` (`str`), the leg's dependency resolution, and `release-dirs` (`paths`), the co-released set's `dist/` directories | `resolved` (`table`), each distribution the leg installed, to its version |
+| `build` | `isolated` (`bool`), the side; `configuration` (`str`), the preset: the train builds isolated in `release`, `fm check` on the tree in `instrumented`, and `fm run` on the tree in `debug`. `epoch` (`int`), the build's source date, from the train; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
+| `test` | `isolated` (`bool`), true on the train's legs; `resolution` (`str`), `floor`, `latest` or `head`; `release-dirs` (`paths`), the co-released set's `dist/` directories. `fm check` gives none of them, which is the tree side | `resolved` (`table`), each distribution the leg installed, to its version |
 | `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
-| `replay` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the replay's |
-| `run` | `executable` (`str`) and `arguments` (`strs`) are declared; the walk hands them to the steps as the context's `executable` and `arguments`, and the step that starts the executable records its exit code with `exit` | |
-| `test` | `isolated` (`bool`), `resolution` (`str`) and `release-dirs` (`paths`) are declared; the test phase runs through the gate, and no engine gives them | |
+| `verify` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the verification's |
+| `run` | `executable` (`str`), the executable to start. The words after `--` are the context's `arguments`, as they are for every step, and the step that starts the executable records its exit code with `exit` | |
 
-The release train stamps, builds, proves and publishes a package, and
-`fm release.replay` replays it, through these phases when its
-extensions add steps to them, and through the package's kind
-otherwise. A phase whose steps provide nothing under the
-key the train reads back refuses, naming the phase and the key.
+A phase whose keys hold `isolated` has two sides: the tree, and the
+isolated one, from a copy of the sources in a fresh environment. A
+step declares `isolated = true` to serve the isolated side alone,
+`isolated = false` for the tree alone, and neither for both; the walk
+runs it on the side the engine gives. `isolated` on a step of a phase
+without the key refuses. `fm check` runs the tree side, so a step
+serving the isolated side alone is none of the gate's checks: the
+release train runs it, once per resolution `[release] prove` lists
+([Releases](releases.md)).
+
+The release train stamps, builds, tests and publishes a package, and
+`fm release.verify` verifies a released version, through these phases
+when its extensions add steps to them, and through the package's kind
+otherwise. A phase whose steps provide nothing under the key the train
+reads back refuses, naming the phase and the key.
 
 An extension also answers queries, questions the base or another
 extension declares:
@@ -344,14 +355,15 @@ exits with its exit code. A package with one executable needs no name,
 and inside a package's directory the package may be left out;
 completion offers each `package:executable`. First the gate's `build`
 role runs over the package's dependency closure, dependencies first,
-and passes over each package whose files and dependencies are
-unchanged since its last good build in this checkout, so a second run
-with nothing changed starts at once. Then the `run` phase runs every
+on the build phase's tree side in the `debug` configuration, and
+passes over each package whose files and dependencies are unchanged
+since its last good build in this checkout, so a second run with
+nothing changed starts at once. Then the `run` phase runs every
 step the package's set adds to it, except that of the extensions
 answering `executables` only the owner's steps run: the step that
-starts the executable reads the context's `executable` and
-`arguments` and records the exit code with `exit`, which the verb
-exits with. An extension that answers `executables` adds a step to
+starts the executable reads the phase's `executable` key and the
+context's `arguments`, and records the exit code with `exit`, which
+the verb exits with. An extension that answers `executables` adds a step to
 the `run` phase, or its declaration refuses.
 
 From any directory inside a workspace, a verb resolves the workspace
@@ -999,9 +1011,11 @@ absence.
   to what the listed extensions and the contract write, and names
   `fm sync` as the remedy;
   `fm new.package` renders a member and wires it in.
-- `fm release.prepare` and `fm release.verify` run the path-tag
+- `fm release.prepare` and `fm release.check-tag` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.
+  `fm release.verify` tests a member's released version from the
+  index against its own tests at the release tag.
 - `fm janitor` sweeps the runner's directories and the state store:
   footman's cache, then what the workshop leaves in the data
   directory (the worktrees of closed issues and merged branches,

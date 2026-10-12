@@ -208,7 +208,10 @@ class CheckRecord:
         reads: The context keys the step reads inside its phase.
         isolated: Whether the step serves the phase's isolated side
             (True), from a copy of the sources in a fresh environment,
-            or its tree side (False); None serves both.
+            or its tree side (False); None serves both. The walk runs
+            the step on the side the engine gives the phase
+            ([livery.workshop._phases.serves][]), and the gate gives
+            the tree side.
         enabled: Whether the step registers while its extension is
             listed. An extension declares False for a step a workspace
             turns on at the step's address in the root contract,

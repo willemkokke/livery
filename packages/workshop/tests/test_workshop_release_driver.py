@@ -183,12 +183,12 @@ def test_rollback_restores_the_version_in_a_roots_init(
     assert git.is_clean(root)
 
 
-def test_the_floor_leg_follows_prove_floors_package_over_workspace(
+def test_the_legs_follow_release_prove_package_over_workspace(
     workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from livery.workshop._release_driver import proves_floors, validate_member
+    from livery.workshop._release_driver import proved_resolutions, validate_member
 
     _fake, root = workspace
     core = resolve_set(root, ("core",))[0]
@@ -201,31 +201,43 @@ def test_the_floor_leg_follows_prove_floors_package_over_workspace(
         return {}
 
     monkeypatch.setattr("livery.extensions.python._backend.run_isolated_test", _leg)
-    # The fallback first: neither contract says, so the floors are proved.
-    assert proves_floors(root, core) == (True, "")
+    # The fallback first: neither contract lists any, so the floor and
+    # the latest legs run, and no file is named.
+    assert proved_resolutions(root, core) == (("floor", "latest"), "")
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    assert ran == ["floor", "latest"]
+    assert "[release] prove in" not in capsys.readouterr().out
     contract = core.directory / "workshop.toml"
     package_text = contract.read_text()
-    # The workspace turns it off for every member.
-    (root / "workshop.toml").write_text(
-        "[workspace]\n\n[release]\nprove-floors = false\n"
-    )
-    assert proves_floors(root, core) == (False, "workshop.toml")
-    validate_member(root, MemberPlan(core, "0.3.0"), ())
-    assert ran == ["highest"]
-    assert (
-        "livery-core floor leg: skipped, `[release] prove-floors = false` in"
-        " workshop.toml" in capsys.readouterr().out
-    )
-    # A package turns it back on for itself.
-    contract.write_text(package_text + "\n[release]\nprove-floors = true\n")
-    assert proves_floors(root, core) == (True, "packages/core/workshop.toml")
+    # The workspace lists the lock's resolution for every member.
+    (root / "workshop.toml").write_text('[workspace]\n\n[release]\nprove = ["head"]\n')
+    assert proved_resolutions(root, core) == (("head",), "workshop.toml")
     ran.clear()
     validate_member(root, MemberPlan(core, "0.3.0"), ())
-    assert ran == ["lowest-direct", "highest"]
-    # And off for itself while the workspace proves.
-    (root / "workshop.toml").write_text("[workspace]\n")
-    contract.write_text(package_text + "\n[release]\nprove-floors = false\n")
-    assert proves_floors(root, core) == (False, "packages/core/workshop.toml")
+    assert ran == ["head"]
+    assert (
+        "  livery-core: [release] prove in workshop.toml lists head\n"
+        in capsys.readouterr().out
+    )
+    # A package's own list wins, and its legs run floor first whatever
+    # the order it lists them in.
+    contract.write_text(package_text + '\n[release]\nprove = ["head", "floor"]\n')
+    assert proved_resolutions(root, core) == (
+        ("floor", "head"),
+        "packages/core/workshop.toml",
+    )
+    ran.clear()
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    assert ran == ["floor", "head"]
+    # An empty list runs no leg, and says so.
+    contract.write_text(package_text + "\n[release]\nprove = []\n")
+    ran.clear()
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    assert ran == []
+    assert (
+        "  livery-core: [release] prove in packages/core/workshop.toml lists"
+        " nothing, so no leg runs\n" in capsys.readouterr().out
+    )
 
 
 def test_the_base_gate_refuses_red_and_teaches(
@@ -815,7 +827,7 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
         "livery.extensions.python._backend._pins_without", lambda pins, _r: pins
     )
     with pytest.raises(_FAILURES) as caught:
-        _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
+        _python.run_isolated_test(packages["core"], root, resolution="floor")
     message = str(caught.value)
     assert "moved direct dependencies" in message
     assert f"{PROBE} 24.0 -> 25.0" in message
@@ -853,9 +865,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
     monkeypatch.setattr(
         "livery.extensions.python._backend._dev_pins", _overlapping_pins
     )
-    resolved = _python.run_isolated_test(
-        packages["core"], root, resolution="lowest-direct"
-    )
+    resolved = _python.run_isolated_test(packages["core"], root, resolution="floor")
     assert resolved[PROBE] == "24.0"
 
 
@@ -1018,7 +1028,7 @@ def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
     packages = {p.directory.name: p for p in discover_packages(root)}
     _python.build(packages["tool"], root)
     with pytest.raises(_FAILURES) as caught:
-        _python.run_isolated_test(packages["tool"], root, resolution="lowest-direct")
+        _python.run_isolated_test(packages["tool"], root, resolution="floor")
     assert "isolated install" in str(caught.value)
 
 
@@ -1060,7 +1070,7 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
         events.append(f"leg:{package.name}")
         return {}
 
-    monkeypatch.setattr("livery.workshop._lifecycle.prove", _leg)
+    monkeypatch.setattr("livery.workshop._lifecycle.isolated_test", _leg)
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),
@@ -1132,13 +1142,87 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
     with pytest.raises(_FAILURES):
         _python.run_isolated_test(
-            core, root, release_dirs=(dist, sibling), resolution="lowest-direct"
+            core, root, release_dirs=(dist, sibling), resolution="floor"
         )
     install = next(args for args in commands if args[:2] == ("pip", "install"))
+    # The floor leg resolves every direct dependency at its floor.
+    assert "--resolution=lowest-direct" in install
     assert "--refresh-package=livery-core" in install
     assert "--refresh-package=livery-tool" in install
+    # The co-released set's directories are the only place the leg
+    # finds a wheel beside the indexes.
+    assert [arg for arg in install if arg.startswith("--find-links")] == [
+        f"--find-links={dist}",
+        f"--find-links={sibling}",
+    ]
     # The stub refused the install: nothing after it ran.
     assert commands[-1] is install
+
+
+def test_the_head_leg_installs_at_the_pins_the_lock_holds(
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusals first: a word other than the three, and a workspace
+    # whose lock uv export cannot read, install nothing. The stub
+    # answers the export and the venv, keeps what the install was
+    # handed as constraints, and refuses the install, so the leg stops
+    # after the command under test.
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _backend as _python
+
+    _fake, root = workspace
+    core = {p.directory.name: p for p in discover_packages(root)}["core"]
+    dist = core.directory / "dist"
+    dist.mkdir(exist_ok=True)
+    (dist / "livery_core-0.2.0-py3-none-any.whl").write_bytes(b"")
+    with pytest.raises(_FAILURES) as caught:
+        _python.run_isolated_test(core, root, resolution="highest")
+    assert str(caught.value) == (
+        "livery-core: the isolated test resolves at floor, latest, head, not 'highest'"
+    )
+    locked = [False]
+    commands: list[tuple[str, ...]] = []
+    constraints: list[str] = []
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            if args[0] == "export":
+                if not locked[0]:
+                    return SimpleNamespace(code=2, stdout="", stderr="no uv.lock\n")
+                pins = Path(args[args.index("-o") + 1])
+                pins.write_text("packaging==25.0\n-e ./vendored\nidna==3.10\n")
+                return SimpleNamespace(code=0, stdout="", stderr="")
+            if args[:2] == ("pip", "install"):
+                where = Path(args[args.index("--constraint") + 1])
+                constraints.append(where.read_text())
+            code = 0 if args[0] == "venv" else 1
+            return SimpleNamespace(code=code, stdout="", stderr="refused\n")
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES) as caught:
+        _python.run_isolated_test(core, root, resolution="head")
+    assert "the head leg installs at the versions the workspace lock pins" in str(
+        caught.value
+    )
+    assert [args[0] for args in commands] == ["export"]
+    # With a lock, every pin it holds constrains the install, the local
+    # lines dropped, at the newest each pin allows.
+    locked[0] = True
+    commands.clear()
+    with pytest.raises(_FAILURES):
+        _python.run_isolated_test(core, root, resolution="head")
+    export = commands[0]
+    assert export[0] == "export"
+    for flag in ("--frozen", "--all-packages", "--no-emit-workspace", "--no-hashes"):
+        assert flag in export
+    install = next(args for args in commands if args[:2] == ("pip", "install"))
+    assert "--resolution=highest" in install
+    assert constraints == ["packaging==25.0\nidna==3.10\n"]
 
 
 def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:
@@ -1240,11 +1324,11 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
         legs.append((package.name, resolution, release_dirs))
         return {}
 
-    monkeypatch.setattr("livery.workshop._lifecycle.prove", _leg)
+    monkeypatch.setattr("livery.workshop._lifecycle.isolated_test", _leg)
     validate_member(root, MemberPlan(core, "0.3.0"), dists)
     assert legs == [
-        ("livery-core", "lowest-direct", dists),
-        ("livery-core", "highest", dists),
+        ("livery-core", "floor", dists),
+        ("livery-core", "latest", dists),
     ]
     # The driver hands every member's legs the whole set's directories,
     # member after member in set order.
@@ -1267,8 +1351,44 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     )
     assert driver.prepare() is not None
     assert legs == [
-        ("livery-core", "lowest-direct", dists),
-        ("livery-core", "highest", dists),
-        ("livery-tool", "lowest-direct", dists),
-        ("livery-tool", "highest", dists),
+        ("livery-core", "floor", dists),
+        ("livery-core", "latest", dists),
+        ("livery-tool", "floor", dists),
+        ("livery-tool", "latest", dists),
     ]
+
+
+def test_each_leg_reports_what_it_resolved_per_co_member_and_sibling(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._release_driver import validate_member
+
+    _fake, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    core, tool = packages["core"], packages["tool"]
+    # The edge first: a leg that resolved no sibling says so.
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.isolated_test",
+        lambda package, root, **kw: {"livery-core": "0.3.0", "packaging": "25.0"},
+    )
+    validate_member(root, MemberPlan(core, "0.3.0"), ())
+    out = capsys.readouterr().out
+    assert "  livery-core floor leg: no siblings\n" in out
+    assert "  livery-core latest leg: no siblings\n" in out
+    # Each leg names every sibling it resolved, by name and version, and
+    # neither the member itself nor a third-party distribution.
+    resolved = {
+        "livery-core": "0.2.0",
+        "livery-tool": "0.3.0",
+        "packaging": "25.0",
+    }
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.isolated_test", lambda package, root, **kw: resolved
+    )
+    validate_member(root, MemberPlan(tool, "0.3.0"), ())
+    out = capsys.readouterr().out
+    assert "  livery-tool floor leg: livery-core 0.2.0\n" in out
+    assert "  livery-tool latest leg: livery-core 0.2.0\n" in out
+    assert out.index("floor leg") < out.index("latest leg")

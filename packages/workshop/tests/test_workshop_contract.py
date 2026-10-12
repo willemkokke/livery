@@ -117,6 +117,45 @@ def test_a_wrong_type_refuses_naming_the_allowed_values(tmp_path: Path) -> None:
     ]
 
 
+def test_the_release_resolutions_refuse_another_word_and_one_listed_twice(
+    tmp_path: Path,
+) -> None:
+    path = _workspace(tmp_path, '\n[release]\nprove = ["flor", "head", "head"]\n')
+    message = _refusal(lambda: _contract.load_contract(path))
+    assert message.splitlines()[1:] == [
+        "  release.prove lists 'flor'; it takes floor, latest, head;"
+        " did you mean 'floor'?",
+        "  release.prove lists 'head' twice; it takes each of floor, latest, head once",
+    ]
+    # A package's list is judged the same way.
+    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n')
+    member.write_text('kind = "python"\nname = "m"\n\n[release]\nprove = ["late"]\n')
+    assert "release.prove lists 'late'; it takes floor, latest, head" in _refusal(
+        lambda: _contract.load_contract(member)
+    )
+    # Each of the three once, in any order, loads; so does none.
+    path.write_text(
+        '[workspace]\nextensions = []\n\n[release]\nprove = ["head", "floor"]\n'
+    )
+    assert _contract.load_contract(path)["release"] == {"prove": ["head", "floor"]}
+    path.write_text("[workspace]\nextensions = []\n\n[release]\nprove = []\n")
+    assert _contract.load_contract(path)["release"] == {"prove": []}
+
+
+def test_prove_floors_refuses_naming_the_prove_list(tmp_path: Path) -> None:
+    refusal = (
+        "  [release] prove-floors is not a key: [release] prove lists the"
+        " resolutions a release tests each member at, from floor, latest and"
+        ' head; prove = ["latest"] leaves the floor out'
+    )
+    path = _workspace(tmp_path, "\n[release]\nprove-floors = false\n")
+    assert _refusal(lambda: _contract.load_contract(path)) == f"{path}:\n{refusal}"
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n\n[release]\nprove-floors = true\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+
+
 def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> None:
     path = _workspace(tmp_path, '\n[toolroom.modes]\nruff = "link"\nmypy = "copy"\n')
     assert "toolroom.modes.mypy is 'copy'; it takes one of link, path, none" in (

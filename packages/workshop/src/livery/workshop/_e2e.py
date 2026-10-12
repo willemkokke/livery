@@ -567,6 +567,10 @@ LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
 CONTRIBUTING_MEMBER = "loop-echo"
 CONTRIBUTED_POINT = "echo-audit"
 
+#: The verb the loop's contract schedules at the nightly point: it
+#: verifies the member's released wheel against its own tests.
+VERIFY_TASK = "release.verify"
+
 
 def _member_dist(name: str) -> str:
     """The distribution name ``new.package`` gives the loop member *name*."""
@@ -1396,17 +1400,24 @@ def _eat_dev_wheels(
             marker, marker + 'host-allowed = ["cmake", "ninja"]\n', 1
         )
     if "[[ci.schedule]]" not in contract_text:
-        # The schedule seam's first entry: the nightly point replays
+        # The schedule seam's first entry: the nightly point verifies
         # the member's released wheel, so a dispatched nightly proves
         # a task scheduled through the contract with no YAML change.
         contract_text = (
             contract_text.rstrip("\n")
-            + "\n\n# The nightly point replays the released member.\n"
+            + "\n\n# The nightly point verifies the released member.\n"
             + "[[ci.schedule]]\n"
             + 'point = "nightly"\n'
-            + 'task = "release.replay"\n'
+            + f'task = "{VERIFY_TASK}"\n'
             + 'args = ["loop-echo", "--python={python}"]\n'
         )
+    # An adopted loop keeps the entry its birth wrote: the entry's task
+    # is set to the verb that verifies a release, whatever it named.
+    contract_text = re.sub(
+        r'task = "release\.[a-z-]+"\nargs = \["loop-echo"',
+        f'task = "{VERIFY_TASK}"\nargs = ["loop-echo"',
+        contract_text,
+    )
     contract_text = _enable_steps(contract_text, enabled)
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
@@ -2627,11 +2638,11 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
 def _prove_nightly(root: Path, kind: str) -> None:
     """Prove the nightly point by hand: dispatched, followed to green, read back.
 
-    The loop's contract schedules the released member's replay at the
-    nightly point, so the dispatched run proves a task attached
+    The loop's contract schedules the released member's verification
+    at the nightly point, so the dispatched run proves a task attached
     through the contract with no YAML change, and the verbs that
     start and read a point run against the real runner. After the
-    release act, so the replay has a wheel to install.
+    release act, so the verification has a wheel to install.
     """
     code = _loop_fm(root, "ci.dispatch", "--point=nightly", "--interval=5", nofail=True)
     if code:
@@ -2652,11 +2663,11 @@ def _prove_nightly(root: Path, kind: str) -> None:
         run,
         jobs,
         "nightly",
-        ("replaying ", " passes its own tests from site-packages"),
+        ("verifying ", " passes its own tests from site-packages"),
     )
     print(
         f"  nightly: proven by hand (run {run.id}: dispatched, followed to green,"
-        " the scheduled replay ran, and the point read back green)"
+        " the scheduled verification ran, and the point read back green)"
     )
 
 

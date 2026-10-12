@@ -528,7 +528,10 @@ class _Reader:
         The steps are those of the workspace-level phases among
         *steps*, read from *data* when none are given; a package-level
         phase's steps run through the walk of a package's phase and
-        register nothing.
+        register nothing. A step serving a phase's isolated side alone
+        registers nothing either: the gate runs the tree side, and the
+        release train runs that step through the walk of the package's
+        phase.
         """
         from livery.workshop._phases import WORKSPACE_LEVEL
 
@@ -538,6 +541,7 @@ class _Reader:
             for phase, records in found.items()
             if self.specs[phase].level == WORKSPACE_LEVEL
             for record in records
+            if record.isolated is not True
         ]
         jobs: list[JobContribution] = []
         for point, named in data.get("ci", {}).get("jobs", {}).items():
@@ -791,14 +795,22 @@ class _Reader:
         [livery.workshop.scoped_packages][] for, and one with ``inputs``
         is selected by them and judges the whole; a step that names
         ``tools`` wraps them and takes the words after ``--``, and one
-        that names none refuses them.
+        that names none refuses them. ``isolated`` names the side of the
+        phase the step serves, and refuses on a step of a phase whose
+        declaration gives no ``isolated`` key.
         """
         from dataclasses import replace
 
         from livery.workshop._checks import NONE, PACKAGE, PACKAGES, PATHS, WORKSPACE
-        from livery.workshop._phases import PACKAGE_LEVEL
+        from livery.workshop._phases import ISOLATED, PACKAGE_LEVEL
 
         where = (*prefix, phase, step)
+        if ISOLATED in entry and ISOLATED not in self.specs[phase].keys:
+            raise self.refuse(
+                (*where, ISOLATED),
+                f"is not read on a step of the {phase} phase, which has one side:"
+                " its declaration gives no isolated key",
+            )
         run, fix, words = self.step_bodies(entry, where)
         provides, reads = self.context_keys(entry, where, "another step")
         others = {

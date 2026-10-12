@@ -113,6 +113,32 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
     return data
 
 
+#: Each key a contract spells another way, by its table and name, to the
+#: line refusing it: the judge would call the key unknown without naming
+#: the spelling that says it.
+OTHER_SPELLINGS: dict[tuple[str, str], str] = {
+    ("release", "prove-floors"): (
+        "[release] prove-floors is not a key: [release] prove lists the"
+        " resolutions a release tests each member at, from floor, latest and"
+        ' head; prove = ["latest"] leaves the floor out'
+    ),
+}
+
+
+def other_spellings(data: dict[str, Any]) -> list[str]:
+    """Each key of contract *data* that the contract spells another way, one line each.
+
+    Read before the judge, so the refusal names the key to write
+    ([livery.workshop._contract.OTHER_SPELLINGS][]).
+    """
+    found: list[str] = []
+    for (table, key), line in OTHER_SPELLINGS.items():
+        held = data.get(table)
+        if isinstance(held, dict) and key in held:
+            found.append(line)
+    return found
+
+
 #: The contracts this process loaded and judged, by path and the stamps
 #: of every file the judgement read: one parse serves the process, and a
 #: contract edited since is parsed and judged again. Package discovery
@@ -188,12 +214,16 @@ def load_contract(path: Path) -> dict[str, Any]:
         # before the judge, which would call the table unknown.
         from livery.workshop._packages import removed_option_tables
 
-        problems = removed_option_tables(data) or judge(
-            data, contract="package", where=str(path), listed=listed
+        problems = (
+            removed_option_tables(data)
+            or other_spellings(data)
+            or judge(data, contract="package", where=str(path), listed=listed)
         )
     else:
         listed = listed_extensions(data) | set(package_extensions(path.parent))
-        problems = judge(data, contract="root", where=str(path), listed=listed)
+        problems = other_spellings(data) or judge(
+            data, contract="root", where=str(path), listed=listed
+        )
     if problems:
         fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
     _CONTRACTS[key] = copy.deepcopy(data)

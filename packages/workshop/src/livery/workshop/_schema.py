@@ -11,7 +11,8 @@ the language server behind an editor's TOML support: the judge and the
 editor read one statement of each contract's shape.
 
 A key's types become JSON Schema types, its values an ``enum`` and its
-doc the ``description``. A table whose keys the author names (``*`` in
+doc the ``description``; a list of strings with values takes each of
+them at most once. A table whose keys the author names (``*`` in
 a declared path) takes ``additionalProperties`` with the entry's
 schema, and a key the table declares by name wins over that entry;
 every other table refuses a key it does not declare. A key of an
@@ -131,7 +132,13 @@ def _branch(kind: str, node: _Node) -> dict[str, Any]:
     if kind == "bool":
         return {"type": "boolean"}
     if kind == "strs":
-        return dict(_STRINGS)
+        if not values:
+            return dict(_STRINGS)
+        return {
+            "type": "array",
+            "items": {"type": "string", "enum": list(values)},
+            "uniqueItems": True,
+        }
     if kind == "list":
         entries = _schema(node.items) if node.items is not None else {}
         return {"type": "array", "items": entries}
@@ -376,17 +383,50 @@ def _value(
     elif isinstance(value, list):
         array = next(branch for branch in fitting if branch.get("type") == "array")
         entries = cast("dict[str, Any]", array.get("items", {}))
-        if _is_strings(array) or _takes_any(entries):
+        if _is_strings(array):
+            _choices(array, cast("list[str]", value), named, found)
+            return
+        if _takes_any(entries):
             return
         listed_at = (*path[:-1], f"{path[-1]}[]")
         for item in cast("list[object]", value):
             _value(entries, item, listed_at, found)
 
 
+def _choices(
+    array: dict[str, Any], value: list[str], named: str, found: list[str]
+) -> None:
+    """Refuse an entry of a list of strings off its values, and one listed twice."""
+    allowed = cast("list[str] | None", array["items"].get("enum"))
+    if allowed is None:
+        return
+    takes = ", ".join(allowed)
+    seen: set[str] = set()
+    for item in value:
+        if item not in allowed:
+            near = difflib.get_close_matches(item, allowed, n=1)
+            hint = f"; did you mean {near[0]!r}?" if near else ""
+            found.append(f"{named} lists {item!r}; it takes {takes}{hint}")
+        elif item in seen:
+            found.append(f"{named} lists {item!r} twice; it takes each of {takes} once")
+        seen.add(item)
+
+
 def _is_strings(branch: dict[str, Any]) -> bool:
-    """Whether *branch* is a list of strings, its doc set aside."""
-    return {key: value for key, value in branch.items() if key != "description"} == (
-        _STRINGS
+    """Whether *branch* is a ``strs`` key's list of strings, its doc set aside.
+
+    A list of strings, or one taking each of its values at most once;
+    a ``list`` key's entries are judged one by one instead.
+    """
+    shape = {key: value for key, value in branch.items() if key != "description"}
+    if shape == _STRINGS:
+        return True
+    items = cast("dict[str, Any]", shape.get("items", {}))
+    return (
+        shape.get("uniqueItems") is True
+        and shape.get("type") == "array"
+        and items.get("type") == "string"
+        and "enum" in items
     )
 
 

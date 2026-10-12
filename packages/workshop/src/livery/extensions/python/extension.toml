@@ -16,7 +16,9 @@ module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 
 # The steps this extension adds to a package's lifecycle phases, one
-# per phase, each named for the extension.
+# per phase, each named for the extension, and the test phase's
+# isolated side, which the release train runs once per resolution it
+# proves.
 [phases.stamp.python]
 main = "livery.extensions.python._steps:stamp"
 reads = ["version"]
@@ -32,13 +34,19 @@ main = "livery.extensions.python._steps:publish"
 reads = ["version", "registry-target"]
 provides = { published = "bool" }
 
-[phases.prove.python]
-main = "livery.extensions.python._steps:prove"
+# The built wheel in a fresh venv at the engine's resolution, its tests
+# run against the installed copy: the release's isolated test, which
+# the gate's tree side never runs.
+[phases.test.python]
+main = "livery.extensions.python._steps:isolated_test"
+isolated = true
+scope = "package"
+extensions = ["python"]
 reads = ["resolution", "release-dirs"]
 provides = { resolved = "table" }
 
-[phases.replay.python]
-main = "livery.extensions.python._steps:replay"
+[phases.verify.python]
+main = "livery.extensions.python._steps:verify"
 reads = ["version", "tree", "interpreter", "index", "extras"]
 provides = { exit-code = "int" }
 

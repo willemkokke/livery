@@ -454,5 +454,5 @@ def test_a_phase_declared_without_a_verb_gets_none(empty: None) -> None:
     generate_verbs(root)
     assert set(root.groups) == with_verb
     assert set(root.tasks) == set()
-    for name in ("stamp", "publish", "prove", "replay", "sync", "clean", "run"):
+    for name in ("stamp", "publish", "verify", "sync", "clean", "run"):
         assert name not in root.groups, name

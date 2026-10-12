@@ -1834,27 +1834,20 @@ def _index_args(root: Path) -> tuple[str, ...]:
     return tuple(args)
 
 
-def _dev_pins(root: Path, scratch: Path) -> Path | None:
-    """The lock's dev-group resolution as exact pins; None without one.
+def _exported(root: Path, pins: Path, *selection: str) -> Path | None:
+    """The workspace lock's *selection* as exact pins in *pins*; None without a lock.
 
-    ``uv export`` reads the workspace lock offline, so the isolated
-    venv's toolchain arrives at the versions the gate itself tested
-    with. Workspace members are excluded: the leg already installed
-    the released wheel and its floors, the members export as
-    workspace-relative paths a scratch venv cannot resolve, and
-    reinstalling them would clobber the starved resolution the
-    movement guard protects. A workspace without a lock or a dev
-    group (a bare rig, a consumer checkout) answers None and the leg
-    falls back to a bare pytest install.
+    ``uv export`` reads the lock offline. Workspace members are left
+    out: they export as workspace-relative paths a scratch venv cannot
+    resolve, and the leg installs the built wheel and finds a sibling's
+    in the co-released set's ``dist/`` directories alone. A workspace
+    without a lock (a bare rig, a consumer checkout) answers None.
     """
-    pins = scratch / "dev-pins.txt"
     result = tools.uv.opts(cwd=root, nofail=True, recorded=False)(
         "export",
         "--format",
         "requirements-txt",
-        "--only-group",
-        "dev",
-        "--no-emit-project",
+        *selection,
         "--no-emit-workspace",
         "--no-hashes",
         "-o",
@@ -1862,10 +1855,10 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     )
     if result.code != 0 or not pins.is_file():
         return None
-    # A path-sourced dev entry (a checkout standing in for a wheel)
+    # A path-sourced entry (a checkout standing in for a wheel)
     # exports as a local reference the scratch venv can neither
-    # reach nor parse; the toolchain pins we want are the
-    # index-resolvable lines, so the local ones are dropped.
+    # reach nor parse; the pins we want are the index-resolvable
+    # lines, so the local ones are dropped.
     lines = [
         line
         for line in pins.read_text("utf-8").splitlines()
@@ -1873,6 +1866,38 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     ]
     pins.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return pins
+
+
+def _dev_pins(root: Path, scratch: Path) -> Path | None:
+    """The lock's dev-group resolution as exact pins; None without one.
+
+    The isolated venv's toolchain arrives at the versions the gate
+    itself tested with. Workspace members stay out: the leg already
+    installed the built wheel at its resolution, and reinstalling them
+    would clobber the starved resolution the movement guard protects.
+    A workspace without a lock or a dev group answers None and the leg
+    falls back to a bare pytest install.
+    """
+    return _exported(
+        root, scratch / "dev-pins.txt", "--only-group", "dev", "--no-emit-project"
+    )
+
+
+def _lock_pins(root: Path, scratch: Path) -> Path | None:
+    """Every version the workspace lock pins, as it stands; None without a lock.
+
+    The head leg's constraints: every package, group and extra the
+    lock resolves, read with ``--frozen``, so the export never locks
+    again and the leg installs at the pins the gate tested.
+    """
+    return _exported(
+        root,
+        scratch / "lock-pins.txt",
+        "--frozen",
+        "--all-packages",
+        "--all-groups",
+        "--all-extras",
+    )
 
 
 def _pins_without(pins: Path, resolved: dict[str, str]) -> Path:
@@ -2005,10 +2030,19 @@ def _refresh_args(release_dirs: tuple[Path, ...]) -> list[str]:
     return [f"--refresh-package={name}" for name in sorted(names)]
 
 
-def prove(
+#: The resolutions the isolated test takes, each to uv's resolution
+#: strategy and whether the workspace lock's pins constrain the install.
+RESOLUTIONS: dict[str, tuple[str, bool]] = {
+    "floor": ("lowest-direct", False),
+    "latest": ("highest", False),
+    "head": ("highest", True),
+}
+
+
+def isolated_test(
     package: Package, root: Path, *, release_dirs: tuple[Path, ...], resolution: str
 ) -> dict[str, str]:
-    """One isolated leg of *package*'s release at *resolution*; the resolved versions.
+    """Test *package*'s built wheel in a fresh venv at *resolution*; what it got.
 
     [livery.extensions.python._backend.run_isolated_test][] runs it.
     """
@@ -2017,16 +2051,16 @@ def prove(
     )
 
 
-def replay(
+def verify(
     package: Package, *, tree: Path, version: str, python: str, index: str, extras: str
 ) -> int:
     """Install *package*'s released *version* alone and run its tests at *tree*.
 
-    The exit code; [livery.extensions.python._replay.replay][] runs it.
+    The exit code; [livery.extensions.python._verify.verify][] runs it.
     """
-    from livery.extensions.python import _replay
+    from livery.extensions.python import _verify
 
-    return _replay.replay(
+    return _verify.verify(
         package, tree=tree, version=version, python=python, index=index, extras=extras
     )
 
@@ -2036,15 +2070,18 @@ def run_isolated_test(
     root: Path,
     *,
     release_dirs: tuple[Path, ...] = (),
-    resolution: str = "highest",
+    resolution: str = "latest",
     wheels_dir: Path | None = None,
 ) -> dict[str, str]:
     """Install the built wheel into a fresh venv and test the installed copy.
 
-    One leg of the isolated validation; the caller runs it twice, the
-    floor leg (``resolution="lowest-direct"``, every direct dependency
-    at its declared floor, so a floor lying about compatibility fails
-    here) and the latest leg (the world a fresh consumer gets).
+    One leg of the release's isolated test, at *resolution*
+    ([livery.extensions.python._backend.RESOLUTIONS][]): ``floor``
+    puts every direct dependency at its declared floor, so a floor
+    lying about compatibility fails here; ``latest`` resolves the
+    newest, the world a fresh consumer gets; ``head`` installs at the
+    versions the workspace lock pins, read as it stands, and refuses
+    in a workspace without a lock.
 
     ``--find-links`` is limited to *release_dirs*, the co-released
     set's ``dist/`` directories: a leftover wheel from a non-released
@@ -2068,9 +2105,22 @@ def run_isolated_test(
 
     Returns the resolved version per distribution, the report's raw
     material ("floor leg: livery-forge 0.1.0").
+
+    Raises:
+        Failed: when *resolution* is none of the three, when the head
+            leg finds no lock, when an install fails, when the
+            toolchain install moves a direct dependency the leg
+            resolved, and when the tests fail.
     """
     import json
     import tempfile
+
+    if resolution not in RESOLUTIONS:
+        fail(
+            f"{package.name}: the isolated test resolves at"
+            f" {', '.join(RESOLUTIONS)}, not {resolution!r}"
+        )
+    strategy, locked = RESOLUTIONS[resolution]
 
     # Sorted for determinism: with several wheels in dist a glob's
     # filesystem order once handed the leg a musllinux wheel the
@@ -2103,6 +2153,17 @@ def run_isolated_test(
                     versions[str(row.get("name", ""))] = str(row.get("version", ""))
             return versions
 
+        constraints: tuple[str, ...] = ()
+        if locked:
+            pins = _lock_pins(root, Path(scratch))
+            if pins is None:
+                fail(
+                    f"{package.name}: the head leg installs at the versions the"
+                    f" workspace lock pins, and uv export read no lock in {root};"
+                    " lock the workspace, or list floor or latest in"
+                    " [release] prove"
+                )
+            constraints = ("--constraint", str(pins))
         # The leg's own interpreter version, explicitly: bare `uv
         # venv` takes uv's default python, and a platform wheel
         # built for the running interpreter (cp311) cannot install
@@ -2118,10 +2179,11 @@ def run_isolated_test(
             "install",
             "--python",
             str(python),
-            f"--resolution={resolution}",
+            f"--resolution={strategy}",
             *[f"--find-links={d}" for d in release_dirs],
             *_refresh_args(release_dirs),
             *_index_args(root),
+            *constraints,
             _install_target(package, wheels[0]),
             # The declared dependencies ride the command line so
             # the resolution strategy treats them as direct; see
