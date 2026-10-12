@@ -383,10 +383,11 @@ def test_every_run_step_of_the_set_runs_and_after_orders_them(
     root = _with_extra(tmp_path, monkeypatch, EXTRA, EXTRA_STEPS)
     assert start(root, "app:serve", (), root) == 3
     lines = _started(capsys.readouterr().out)
-    # The setup and the owner's step are independent; the teardown
-    # names the owner's step in after, so it comes last.
-    assert sorted(lines[:-1]) == ["extra.setup", "started serve []"]
-    assert lines[-1] == "extra.teardown"
+    # The setup and the owner's step are independent, so either may
+    # end first; the teardown names the owner's step in after, so it
+    # ends after it.
+    assert sorted(lines) == ["extra.setup", "extra.teardown", "started serve []"]
+    assert lines.index("extra.teardown") > lines.index("started serve []")
     # With one executable, the package alone names it.
     fake_steps(tmp_path, "native", STEPS.replace('("serve", "tool")', '("serve",)'))
     assert start(root, "app", (), root) == 3
