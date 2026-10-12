@@ -37,7 +37,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NoReturn, Protocol, cast
 
 from livery.toolroom.bench import _artifacts, _drivers, _index, _surfaces
 
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
     from livery.toolroom.bench import _provision, _toolfetch
     from livery.toolroom.store import Ensured, Record, Store, ToolSpec
+    from livery.toolroom.tools import Result
 
 import livery.toolroom.tools as _tools
 from livery.footman import (
@@ -1875,11 +1876,13 @@ def refresh(
     would otherwise make a tool silently untracked while the job kept
     reporting success.
 
-    With ``--submit``, a refresh that moved a tool's surface is
-    committed on a branch of its own and submitted as a pull request:
+    With `--submit`, a refresh that moved a tool's surface is
+    committed on the day's branch and submitted as a pull request:
     armed when every change only added to a surface, the graded
-    trigger's green light, and left for a person otherwise. Nothing
-    moved means no branch and no pull request.
+    trigger's green light, and left for a person otherwise. A day's
+    branch that origin already holds is built on, and a refresh that
+    adds nothing to it says so and commits nothing. Nothing moved means
+    no branch and no pull request.
     """
     found = gather(only=only, prefix=prefix)
     finished = _finish(_assemble_documents([found.document()]), changelog)
@@ -1892,24 +1895,40 @@ def refresh(
 def submit_refresh(
     found: Refreshed,
     *,
-    git: Callable[..., object] | None = None,
+    git: Callable[..., Result] | None = None,
     submit: Callable[[list[str]], int] | None = None,
     on: date | None = None,
     dry_run: bool | None = None,
 ) -> list[str]:
     """Commit a refresh that moved something and open its pull request.
 
-    The branch is ``chore/tools-refresh-<date>``; the pull request is
-    armed when `Refreshed.armed` holds, every change an addition and
-    every ingest check passed, and unarmed otherwise, so a dropped verb
-    or a deployment that does not stand waits for a person. The commit
-    body carries the ingest lines, so the pull request's summary is the
-    structural diff. A refresh that moved nothing opens nothing and
-    says so. Under a dry run nothing is committed or submitted: the
-    lines say what would happen, the arming decision included. *git*,
-    *submit*, *on* and *dry_run* are the seams the tests drive; the
-    defaults are the tool handle, the runner's own submit verb, today,
-    and the run's own dry-run flag.
+    The branch is `chore/tools-refresh-<date>`. When origin already
+    holds the day's branch, from an earlier refresh on another machine
+    or in another job, the refresh builds on it: the branch starts from
+    origin's tip, each file this refresh wrote replaces that file whole,
+    and a commit follows only when that changes the branch. The submit
+    is then a fast-forward and reuses the open pull request. A refresh
+    that adds nothing to the branch commits nothing, submits nothing,
+    and says the day's refresh is already submitted. Origin is asked
+    before anything in the checkout changes, so a refresh that cannot
+    ask it leaves the checkout as the walk left it.
+
+    The pull request is armed when `Refreshed.armed` holds, every change
+    an addition and every ingest check passed, and unarmed otherwise, so
+    a dropped verb or a deployment that does not stand waits for a
+    person. On a branch that also holds files only an earlier refresh
+    wrote, this refresh's verdict does not cover those files, and the
+    pull request goes unarmed. The commit body carries the ingest lines,
+    so the pull request's summary is the structural diff. A refresh that
+    moved nothing opens nothing and says so. Under a dry run nothing is
+    committed or submitted: the lines say what would happen, the arming
+    decision included.
+
+    *git*, *submit*, *on* and *dry_run* are the seams the tests drive;
+    the defaults are the git tool handle, the runner's own submit verb,
+    today, and the run's own dry-run flag. *git* answers each command
+    with its exit code and output and never raises; a code this does
+    not expect fails the refresh in git's own words.
 
     Returns:
         The lines to print, one per step.
@@ -1935,7 +1954,7 @@ def submit_refresh(
             f"  would refresh {moved} on {branch}",
             f"  would submit {'armed' if found.armed else 'unarmed'}: {reason}",
         ]
-    run_git = git or tools.git
+    run_git: Callable[..., Result] = git or tools.git.opts(nofail=True, recorded=False)
     body = "\n".join(
         [
             moved,
@@ -1946,21 +1965,124 @@ def submit_refresh(
             ),
         ]
     )
-    run_git("switch", "-c", branch)
-    run_git("add", "-A")
-    run_git("commit", "-m", f"{title}\n\n{body}")
+    message = f"{title}\n\n{body}"
+    tracking = f"refs/remotes/origin/{branch}"
+    held = _origin_holds(run_git, branch)
+    if held:
+        _git_step(run_git, "fetch", "origin", f"+refs/heads/{branch}:{tracking}")
+    _git_step(run_git, "switch", "-c", branch)
+    _git_step(run_git, "add", "-A")
+    _git_step(run_git, "commit", "-m", message)
+    armed, after = found.armed, ""
+    if held:
+        others = _onto_origin(run_git, branch, tracking, message)
+        if others is None:
+            return [
+                f"  the day's refresh is already submitted: {branch} on origin"
+                " holds every change this one made, so nothing is committed"
+            ]
+        after = ", after the commits origin already holds"
+        if armed and others:
+            armed = False
+            reason = (
+                "origin's branch holds changes this refresh did not make,"
+                " a person decides"
+            )
     argv = [_prog(), "submit", f"--title={title}"]
-    if found.armed:
+    if armed:
         argv.append("--armed")
     code = (submit or _run_submit)(argv)
     if code != 0:
-        from livery.footman import fail
-
         fail(f"the refresh's submit exited {code}; the branch {branch} stands")
     return [
-        f"  refreshed {moved} on {branch}",
-        f"  submitted {'armed' if found.armed else 'unarmed'}: {reason}",
+        f"  refreshed {moved} on {branch}{after}",
+        f"  submitted {'armed' if armed else 'unarmed'}: {reason}",
     ]
+
+
+def _origin_holds(run: Callable[..., Result], branch: str) -> bool:
+    """Whether origin holds *branch*, asked of origin itself.
+
+    Never read from the remote-tracking ref: a fetch does not prune, so
+    the ref of a branch origin deleted at its merge would still answer.
+    `git ls-remote --exit-code` answers 2 for a ref origin does not
+    have; any other failure is origin not answering, and fails here.
+    """
+    answer = run("ls-remote", "--exit-code", "origin", f"refs/heads/{branch}")
+    if answer.code in (0, 2):
+        return answer.code == 0
+    said = (answer.stderr or answer.stdout).strip()
+    fail(
+        f"could not ask origin for {branch}: git ls-remote exited {answer.code}:"
+        f" {said}\n  nothing is committed; the files this refresh wrote stand"
+        " in the checkout"
+    )
+
+
+def _onto_origin(
+    run: Callable[..., Result], branch: str, tracking: str, message: str
+) -> list[str] | None:
+    """Move the refresh's commit onto the day's branch origin holds.
+
+    HEAD is the refresh's commit on the checkout's own history, and
+    *tracking* is origin's tip of *branch*, fetched. The branch is reset
+    to that tip, each file the refresh's commit changed is taken from it
+    whole, a deletion included, and the result is committed with
+    *message* when it differs from origin's tip. A file is taken whole,
+    never merged line by line: one refresh writes a tool record whole,
+    and the lines of two refreshes interleaved are no record at all.
+
+    Returns:
+        None when origin's branch already holds every change, so nothing
+        is committed; otherwise the files the branch changed that this
+        refresh did not write, which its verdict does not cover.
+    """
+    refresh = _git_step(run, "rev-parse", "HEAD").stdout.strip()
+    ours = _paths(
+        _git_step(run, "diff-tree", "-r", "-z", "--name-only", "HEAD~1", "HEAD")
+    )
+    base = _git_step(run, "merge-base", "HEAD~1", tracking).stdout.strip()
+    theirs = _paths(
+        _git_step(run, "diff-tree", "-r", "-z", "--name-only", base, tracking)
+    )
+    _git_step(run, "switch", "-C", branch, tracking)
+    _git_step(
+        run,
+        "--literal-pathspecs",
+        "restore",
+        f"--source={refresh}",
+        "--staged",
+        "--worktree",
+        "--",
+        *ours,
+    )
+    answer = run("diff-index", "--cached", "--quiet", "HEAD")
+    if answer.code not in (0, 1):
+        _git_failed(("diff-index",), answer)
+    if answer.code == 0:
+        return None
+    _git_step(run, "commit", "-m", message)
+    return sorted(set(theirs) - set(ours))
+
+
+def _paths(answer: Result) -> list[str]:
+    """The paths a `-z` listing names, in its order."""
+    return [path for path in answer.stdout.split("\0") if path]
+
+
+def _git_step(run: Callable[..., Result], *args: str) -> Result:
+    """Run one git command that must succeed; its answer."""
+    answer = run(*args)
+    if answer.code != 0:
+        _git_failed(args, answer)
+    return answer
+
+
+def _git_failed(args: tuple[str, ...], answer: Result) -> NoReturn:
+    """Fail the refresh naming the git command and what git said."""
+    command = next((arg for arg in args if not arg.startswith("-")), "")
+    said = (answer.stderr or answer.stdout).strip()
+    fail(f"git {command} exited {answer.code}: {said}")
 
 
 def _bench_store() -> Store:
@@ -1982,7 +2104,9 @@ def _run_submit(argv: list[str]) -> int:
     The runner is started as this interpreter's own module, never by
     the name *argv* carries: the task's environment on a hosted runner
     has no path to the runner's console script, and the module form
-    needs none.
+    needs none. The interpreter must still exist when the submit
+    starts, so nothing the refresh runs before it may delete the run's
+    own environment; the walk deletes only the directories it made.
     """
     import subprocess
     import sys
@@ -2384,7 +2508,8 @@ def observe(
         published=published,
         requires_python=requires_python,
     )
-    placed = _toolfetch.install(driver, release, Path(scratch) / f"{tool}-{version}")
+    into = Path(scratch) / f"{tool}-{version}"
+    placed = _toolfetch.install(driver, release, into)
     if placed is None:
         _refuse_a_broken_environment(Path(scratch))
         return None
@@ -2393,7 +2518,7 @@ def observe(
             # The home this walk made, never the one a lookup would find.
             spec = _extract(driver, home=_fetched_home(driver, placed))
     finally:
-        _discard(placed)
+        _discard(into)
     if not _describes_itself(spec):
         return None
     if spec.version and not _same_release(spec.version, version):
@@ -2596,8 +2721,8 @@ def _events_of(record: Record, fresh: list[str], *, above: str = "") -> list[str
     ]
 
 
-def _discard(bindir: Path) -> None:
-    """Delete one release once its surface has been read.
+def _discard(release: Path) -> None:
+    """Delete one release's directory once its surface has been read.
 
     The walk needs the surface, not the binary, and the surface is in hand by
     the time this is called. Without it a prime holds every release it has
@@ -2605,14 +2730,16 @@ def _discard(bindir: Path) -> None:
     environments at once — so this is the difference between peak disk being
     one release and being all of them.
 
-    Safe only because `_sandboxed` has put uv's interpreter store inside the
-    scratch directory: *bindir*`.parent` is that release's own directory in
-    every tier, and for the python tier that would otherwise be an
-    interpreter this machine actually uses.
+    *release* is the directory the walk made for the release under its
+    scratch, never one derived from what the install answered. An
+    install can answer a directory outside it, as `uv python find`
+    without `--system` answers the checkout's own `.venv` when its
+    interpreter is the version asked; deleting that deletes the
+    interpreter the run itself runs on.
     """
     import shutil
 
-    shutil.rmtree(bindir.parent, ignore_errors=True)
+    shutil.rmtree(release, ignore_errors=True)
 
 
 index_tasks = tasks.group("index", help="The published index of the tool records")

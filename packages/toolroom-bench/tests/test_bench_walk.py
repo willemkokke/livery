@@ -1075,9 +1075,62 @@ def test_a_release_is_discarded_once_its_surface_is_read(tmp_path):
     release = tmp_path / "1.2.3"
     (release / "bin").mkdir(parents=True)
     (release / "bin" / "tool").write_text("x")
-    tools._discard(release / "bin")
+    tools._discard(release)
     assert not release.exists()
-    tools._discard(release / "bin")  # gone already: not an error
+    tools._discard(release)  # gone already: not an error
+
+
+def test_a_python_reading_leaves_the_run_s_own_interpreter_alone(tmp_path, monkeypatch):
+    """Uv's `python find` answers an active virtual environment first when
+    its interpreter is the version asked. A walk reading the release a
+    run's own python is would then read the checkout's `.venv` and discard
+    it, and the run's next spawn of its own interpreter finds nothing.
+    """
+    from livery.toolroom.bench import _tasks as tools_tasks
+    from livery.toolroom.bench import _toolfetch
+
+    python = tmp_path / "checkout" / ".venv" / "bin" / "python3"
+    python.parent.mkdir(parents=True)
+    python.write_text("")
+    monkeypatch.setattr(_toolfetch, "_run", lambda argv, env=None: True)
+    monkeypatch.setattr(_toolfetch, "_capture", lambda argv, env=None: f"{python}\n")
+    monkeypatch.setattr(
+        tools_tasks._drivers,
+        "extract",
+        lambda driver, home=None: spec_of(version="3.14.7"),
+    )
+    monkeypatch.setattr(tools_tasks, "_refuse_a_broken_environment", lambda p: None)
+    scratch = tmp_path / "scratch"
+    surface = tools_tasks.observe("python", "3.14.7", scratch=str(scratch))
+    assert python.is_file()
+    assert surface is None  # the machine's interpreter is no reading of the release
+
+
+def test_a_release_is_discarded_by_the_directory_the_walk_made_for_it(
+    tmp_path, monkeypatch
+):
+    """Whatever directory an install answers, the walk deletes only the one
+    it made for the release: an answer outside it is someone else's.
+    """
+    from livery.toolroom.bench import _tasks as tools_tasks
+
+    outside = tmp_path / "elsewhere" / "bin"
+    outside.mkdir(parents=True)
+    made: list[Any] = []
+
+    def fake_install(driver, release, into):
+        into.mkdir(parents=True)
+        made.append(into)
+        return outside
+
+    monkeypatch.setattr("livery.toolroom.bench._toolfetch.install", fake_install)
+    monkeypatch.setattr(
+        tools_tasks._drivers, "extract", lambda driver: spec_of(version="0.15.0")
+    )
+    scratch = tmp_path / "scratch"
+    assert tools_tasks.observe("ruff", "0.15.0", scratch=str(scratch)) is not None
+    assert outside.is_dir()
+    assert made == [scratch / "ruff-0.15.0"] and not made[0].exists()
 
 
 def test_a_bare_call_is_refused_with_directions(tmp_path, monkeypatch):
@@ -1452,7 +1505,17 @@ def test_python_find_ignores_the_cwd_project(monkeypatch, tmp_path):
     monkeypatch.setattr(_toolfetch, "_run", lambda argv, env=None: True)
     monkeypatch.setattr(_toolfetch, "_capture", capture)
     assert _toolfetch._install_python("3.10.0", tmp_path) is None
-    assert calls == [["uv", "python", "find", "--no-project", "3.10.0"]]
+    assert calls == [
+        [
+            "uv",
+            "python",
+            "find",
+            "--no-project",
+            "--system",
+            "--managed-python",
+            "3.10.0",
+        ]
+    ]
 
 
 def test_python_installs_into_a_private_store(monkeypatch, tmp_path):
@@ -1475,6 +1538,32 @@ def test_python_installs_into_a_private_store(monkeypatch, tmp_path):
     _toolfetch._install_python("3.10.0", tmp_path)
     assert envs[0] is not None
     assert envs[0]["UV_PYTHON_INSTALL_DIR"] == str(tmp_path / "store")
+
+
+def test_python_find_answers_from_the_release_s_own_store_alone(monkeypatch, tmp_path):
+    """Without `--system`, uv answers a virtual environment whose interpreter
+    is the version asked before its own store, and `--managed-python` keeps
+    an interpreter on `PATH` out of the answer. An answer outside the
+    release's directory is refused all the same: the release's own copy is
+    what is read, never the machine's.
+    """
+    from livery.toolroom.bench import _toolfetch
+
+    venv_python = tmp_path / "checkout" / ".venv" / "bin" / "python3"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("")
+    into = tmp_path / "python-3.14.7"
+    stored = into / "store" / "cpython-3.14.7-linux-x86_64-gnu" / "bin" / "python3.14"
+    stored.parent.mkdir(parents=True)
+    stored.write_text("")
+    answer = {"found": venv_python}
+    monkeypatch.setattr(_toolfetch, "_run", lambda argv, env=None: True)
+    monkeypatch.setattr(
+        _toolfetch, "_capture", lambda argv, env=None: f"{answer['found']}\n"
+    )
+    assert _toolfetch._install_python("3.14.7", into) is None
+    answer["found"] = stored
+    assert _toolfetch._install_python("3.14.7", into) == stored.parent
 
 
 def _indexes(monkeypatch, payloads: dict[str, object]) -> None:

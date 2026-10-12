@@ -1003,6 +1003,11 @@ def _install_python(version: str, into: Path) -> Path | None:
 
     The directory uv reports already holds a plain `python` alongside the
     versioned name, which is what the extractor invokes.
+
+    The answer must lie inside *into*, or the release is a hole: an
+    interpreter from anywhere else would be read under this release's
+    name, the run's own `.venv` included when its python is the version
+    asked.
     """
     env = {**os.environ, "UV_PYTHON_INSTALL_DIR": str(into / "store")}
     if not _run(["uv", "python", "install", version], env=env):
@@ -1010,9 +1015,25 @@ def _install_python(version: str, into: Path) -> Path | None:
     # --no-project: `uv python find` consults the nearest pyproject, and the
     # walk runs inside footman's own checkout — whose `requires-python` has
     # opinions about which interpreter the question should resolve to.
-    found = _capture(["uv", "python", "find", "--no-project", version], env=env)
-    found = found.strip()
+    # --system: uv answers an active or discovered virtual environment
+    # before any store when its interpreter is the version asked, and the
+    # walk runs inside a checkout whose `.venv` is one.
+    # --managed-python: an interpreter on PATH is not the store's either.
+    found = _capture(
+        [
+            "uv",
+            "python",
+            "find",
+            "--no-project",
+            "--system",
+            "--managed-python",
+            version,
+        ],
+        env=env,
+    ).strip()
     if not found or not Path(found).exists():
+        return None
+    if not Path(found).resolve().is_relative_to(into.resolve()):
         return None
     return Path(found).parent
 
