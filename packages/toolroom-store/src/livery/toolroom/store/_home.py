@@ -44,11 +44,17 @@ class Home:
     """The store's directories under one root.
 
     Attributes:
-        root: The home, `footman.data_dir() / "toolroom"` for the
-            machinery, whatever the consumer passes otherwise.
+        root: The home: `Home.under(data_dir)` for the machinery, under
+            the runner's data directory; whatever the consumer passes
+            otherwise.
     """
 
     root: Path
+
+    @classmethod
+    def under(cls, data_dir: Path) -> Home:
+        """The store's home under a runner's data directory, `toolroom` in it."""
+        return cls(data_dir / "toolroom")
 
     @property
     def store(self) -> Path:

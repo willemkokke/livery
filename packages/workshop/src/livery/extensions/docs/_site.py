@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.toolroom.tools as tools
+from livery import git
 from livery.extensions.docs._contract import (
     docs_table,
     package_generators,
@@ -1177,17 +1178,13 @@ def _receipt_tags(root: Path) -> list[tuple[str, str, str, str]]:
     """
     import re
 
-    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "for-each-ref",
-        "refs/tags/packages",
-        "--format=%(refname:short) %(creatordate:short)",
-    )
-    if result.code != 0:
+    try:
+        dated = git.tag_dates(root, "refs/tags/packages")
+    except git.GitError:
         return []
     names = {p.member: p.name for p in discover_packages(root)}
     tags: list[tuple[str, str, str, str]] = []
-    for line in result.stdout.splitlines():
-        tag, _, date = line.strip().partition(" ")
+    for tag, date in dated:
         found = release_tag(tag)
         if found is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             continue

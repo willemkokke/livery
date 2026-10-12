@@ -279,7 +279,7 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
         def _run(*args: str) -> object:
             if args[0] == "push":
                 pushes.append(args)
-                if args[2].startswith(":refs/tags/"):
+                if args[-1].startswith(":refs/tags/"):
                     return SimpleNamespace(code=deny["code"], stdout="", stderr="")
             return SimpleNamespace(code=0, stdout="", stderr="")
 
@@ -288,7 +288,12 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     monkeypatch.setattr(tools, "git", SimpleNamespace(opts=_opts))
     with pytest.raises(_FAILURES, match="deletable on gitlab"):
         _e2e._require_receipt_protected(tmp_path, "packages/loop-echo/v0.1.0", "gitlab")
-    assert pushes[-1] == ("push", "origin", "refs/tags/packages/loop-echo/v0.1.0")
+    assert pushes[-1] == (
+        "push",
+        "--quiet",
+        "origin",
+        "refs/tags/packages/loop-echo/v0.1.0",
+    )
     deny["code"] = 1
     _e2e._require_receipt_protected(tmp_path, "packages/loop-echo/v0.1.0", "gitlab")
     assert "delete refused; protection holds" in capsys.readouterr().out

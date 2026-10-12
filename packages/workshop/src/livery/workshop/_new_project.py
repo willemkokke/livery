@@ -17,14 +17,13 @@ axis.
 from __future__ import annotations
 
 import datetime
-import os
 import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
+from livery import git
 from livery.footman import Arg, doc, fail, hidden
 from livery.forge import Forge, ForgeError, Repository
 from livery.workshop._contract import toml_string
@@ -113,11 +112,10 @@ def _hand_off(
 
 def _git(root: Path, *args: str) -> str:
     """Run git under *root*; stdout, or fail with git's own words."""
-    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
-    if result.code != 0:
-        spelled = " ".join(args)
-        fail(f"git {spelled} exited {result.code}:\n{result.stdout}{result.stderr}")
-    return result.stdout
+    try:
+        return git.run(root, *args)
+    except git.GitError as error:
+        fail(str(error))
 
 
 def _git_outside(*args: str) -> Result:
@@ -128,12 +126,7 @@ def _git_outside(*args: str) -> Result:
     person happens to stand in. The temporary directory is that
     nowhere. Every caller reads the exit code itself.
     """
-    return tools.git.opts(
-        cwd=tempfile.gettempdir(),
-        env=dict(os.environ),
-        nofail=True,
-        recorded=False,
-    )(*args)
+    return git.call(Path(tempfile.gettempdir()), *args)
 
 
 def _git_config(name: str) -> str:
@@ -440,10 +433,7 @@ def _finish(
         print("  git: initialised")
     else:
         print("  git: already initialised")
-    heads = tools.git.opts(cwd=root, env=dict(os.environ), nofail=True, recorded=False)(
-        "rev-parse", "--verify", "-q", "HEAD"
-    )
-    if heads.code != 0:
+    if not git.has_commits(root):
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", "chore: birth")
         print("  git: birth committed")
@@ -498,9 +488,7 @@ def _finish(
         _git(root, "push", "-q", "--force", "-u", push_to, "main")
         print("  pushed: main")
     else:
-        pushed = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-            "push", "-q", "-u", push_to, "main"
-        )
+        pushed = git.call(root, "push", "-q", "-u", push_to, "main")
         if pushed.code == 0:
             print("  pushed: main")
         elif "protected branch" in f"{pushed.stdout}{pushed.stderr}":
@@ -569,12 +557,15 @@ def _add_extension(root: Path, extension: str) -> None:
 
 def _pushed_by_us(root: Path, clone_url: str) -> bool:
     """Whether the remote's main is this checkout's history (a resume)."""
-    git = tools.git.opts(cwd=root, env=dict(os.environ), nofail=True, recorded=False)
-    listing = git("ls-remote", clone_url, "refs/heads/main")
-    sha = listing.stdout.split()[0] if listing.stdout.strip() else ""
+    try:
+        sha = git.ls_remote(root, "refs/heads/main", remote=clone_url).get(
+            "refs/heads/main", ""
+        )
+    except git.GitError:
+        sha = ""
     if not sha:
         return True  # exists but empty: get-or-create proceeds
-    return git("cat-file", "-e", sha).code == 0
+    return git.tracks(root, sha)
 
 
 #: The setup branch: a trivial change whose PR proves the gate wires

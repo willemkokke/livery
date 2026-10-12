@@ -46,7 +46,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated
 
-from livery.footman import Group, doc, fail, prog, root_group
+import livery.footman as footman
+from livery import git
+from livery.footman import Group, doc, fail, group, prog, root_group
 from livery.workshop import _fragments
 from livery.workshop._fragments import Fragment
 
@@ -559,12 +561,7 @@ def _package_files(package: Package) -> tuple[str, ...]:
     package is ignored, so no claim reaches it; a tracked file deleted
     from the tree is left out.
     """
-    import livery.toolroom.tools as tools
-
-    listing = tools.git.opts(cwd=package.directory, recorded=False)(
-        "ls-files", "--cached", "--others", "--exclude-standard", "-z"
-    )
-    names = sorted({name for name in listing.stdout.split("\0") if name})
+    names = git.ls_files(package.directory, others=True)
     return tuple(name for name in names if (package.directory / name).is_file())
 
 
@@ -1200,7 +1197,6 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
     root and categorised by the workspace's table. None when the root
     is not a git checkout, and then every check that applies runs.
     """
-    import livery.toolroom.tools as tools
     from livery.workshop._categories import category_of
     from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._provenance import unit_of
@@ -1208,12 +1204,10 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
     if ctx.files:
         names: set[str] = set(ctx.files)
     else:
-        listing = tools.git.opts(cwd=ctx.root, recorded=False, nofail=True)(
-            "ls-files", "--cached", "--others", "--exclude-standard", "-z"
-        )
-        if listing.code != 0:
+        try:
+            names = set(git.ls_files(ctx.root, others=True))
+        except git.GitError:
             return None
-        names = {name for name in listing.stdout.split("\0") if name}
     packages = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
     found: dict[str, list[tuple[str, str]]] = {}
     for name in sorted(names):

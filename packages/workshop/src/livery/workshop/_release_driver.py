@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
 from livery import git
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
@@ -268,25 +267,17 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
                 for home in _lifecycle.version_files(package)
                 if home.is_file()
             )
-    tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "checkout", "HEAD", "--", *paths
-    )
+    git.restore(root, *paths)
     # The lock the stamp refreshed and the manifest, each restored
     # alone: a file HEAD lacks in the same pathspec would refuse the
     # whole checkout, taking every other restore down with it.
     for alone in ("uv.lock", MANIFEST):
-        tools.git.opts(cwd=root, nofail=True, recorded=False)(
-            "checkout", "HEAD", "--", alone
-        )
+        git.restore(root, alone)
     # A first release's manifest has no HEAD to return to: it goes, so
     # the switch back to the base does not carry it along.
-    tracked = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "cat-file", "-e", f"HEAD:{MANIFEST}"
-    )
-    if tracked.code != 0:
-        tools.git.opts(cwd=root, nofail=True, recorded=False)(
-            "rm", "--cached", "--quiet", "--ignore-unmatch", "--", MANIFEST
-        )
+    if not git.tracks(root, f"HEAD:{MANIFEST}"):
+        with contextlib.suppress(git.GitError):
+            git.unstage(root, MANIFEST)
         (root / MANIFEST).unlink(missing_ok=True)
 
 

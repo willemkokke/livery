@@ -792,17 +792,15 @@ def tracked_local(root: Path, outputs: Sequence[Output]) -> list[str]:
     was committed before that, and stays tracked whatever the ignore
     file says. Empty when git cannot answer.
     """
-    import livery.toolroom.tools as tools
+    from livery import git
 
     local = [output.path for output in outputs if output.local]
     if not local:
         return []
-    listed = tools.git.opts(cwd=root, nofail=True, recorded=False)(
-        "ls-files", "--", *local
-    )
-    if listed.code != 0:
+    try:
+        return sorted(set(git.ls_files(root, *local)) & set(local))
+    except git.GitError:
         return []
-    return sorted(set(listed.stdout.splitlines()) & set(local))
 
 
 def _apply_local(root: Path, outputs: Sequence[Output]) -> list[str]:

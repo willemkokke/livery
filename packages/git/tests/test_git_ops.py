@@ -482,3 +482,177 @@ def test_the_author_email_is_what_git_resolves_environment_first(
     assert git.author_email(clone) == "tester@example.invalid"
     monkeypatch.setenv("GIT_AUTHOR_EMAIL", "rider@example.invalid")
     assert git.author_email(clone) == "rider@example.invalid"
+
+
+# --- the functions the workshop's direct calls converged on ---------------------
+
+
+def test_fetch_prunes_forces_and_takes_a_tag(
+    repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    clone, origin = repo
+    other = _second_clone(tmp_path, origin)
+    _git(other, "switch", "-q", "-c", "feat/9-gone")
+    _commit(other, "g.txt", "g\n", "feat: gone")
+    _git(other, "push", "-q", "-u", "origin", "feat/9-gone")
+    _git(other, "tag", "-a", "v1", "-m", "v1")
+    _git(other, "push", "-q", "origin", "v1")
+    git.fetch(clone, prune=True)
+    assert "feat/9-gone" in git.tracking_branches(clone, "feat/")
+    _git(other, "push", "-q", "origin", "--delete", "feat/9-gone")
+    git.fetch(clone, prune=True)
+    assert "feat/9-gone" not in git.tracking_branches(clone, "feat/")
+    git.fetch_tag(clone, "v1")
+    assert "v1" in git.tags(clone)
+    # The tag recut elsewhere replaces the one held here under force.
+    _git(other, "tag", "-f", "-a", "v1", "-m", "v1 again", "HEAD~1")
+    _git(other, "push", "-q", "-f", "origin", "v1")
+    git.fetch_tag(clone, "v1")
+    assert git.sha_of(clone, "v1") == git.sha_of(clone, "HEAD")
+    git.fetch(clone, "main", force=True)
+
+
+def test_a_branch_is_recreated_reset_and_the_tree_cleaned(
+    repo: tuple[Path, Path],
+) -> None:
+    clone, _ = repo
+    head = git.head_sha(clone)
+    git.switch_new(clone, "chore/x")
+    _commit(clone, "x.txt", "x\n", "chore: x")
+    git.switch_new(clone, "chore/x", head)
+    assert git.head_sha(clone) == head
+    _commit(clone, "y.txt", "y\n", "chore: y")
+    git.reset_hard(clone, head)
+    assert not (clone / "y.txt").exists()
+    (clone / "loose.txt").write_text("l\n")
+    (clone / "kept.txt").write_text("k\n")
+    assert git.clean(clone, keep=["kept.txt"], dry_run=True) == ["loose.txt"]
+    assert (clone / "loose.txt").exists()
+    assert git.clean(clone, keep=["kept.txt"]) == ["loose.txt"]
+    assert not (clone / "loose.txt").exists() and (clone / "kept.txt").exists()
+    assert git.clean(clone) == ["kept.txt"]
+
+
+def test_lines_of_a_span_and_the_unpushed_commits(repo: tuple[Path, Path]) -> None:
+    clone, _ = repo
+    assert git.unpushed(clone) == []
+    _commit(clone, "u.txt", "u\n", "feat: unpushed")
+    assert [line.split(" ", 1)[1] for line in git.unpushed(clone)] == ["feat: unpushed"]
+    assert [
+        line.split(" ", 1)[1] for line in git.oneline(clone, "origin/main..main")
+    ] == ["feat: unpushed"]
+    assert git.oneline(clone, "main..origin/main") == []
+
+
+def test_ls_remote_reads_heads_tags_and_a_url(repo: tuple[Path, Path]) -> None:
+    clone, origin = repo
+    _git(clone, "tag", "-a", "pkg/v1.0.0", "-m", "pkg/v1.0.0")
+    _git(clone, "push", "-q", "origin", "pkg/v1.0.0")
+    head = git.head_sha(clone)
+    assert git.ls_remote(clone, "refs/heads/main") == {"refs/heads/main": head}
+    # An annotated tag lists as its own object; the peeled entry is left out.
+    assert git.ls_remote(clone, tags=True) == {
+        "refs/tags/pkg/v1.0.0": git.object_id(clone, "pkg/v1.0.0")
+    }
+    assert git.ls_remote(clone, "refs/heads/main", remote=str(origin)) == {
+        "refs/heads/main": head
+    }
+    assert git.ls_remote(clone, "refs/heads/nonesuch") == {}
+
+
+def test_a_push_names_its_remote_forces_and_a_refspec_pushes_or_deletes_a_tag(
+    repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    clone, origin = repo
+    other = _second_clone(tmp_path, origin)
+    _commit(other, "o.txt", "o\n", "feat: other")
+    _git(other, "push", "-q", "origin", "main")
+    _commit(clone, "c.txt", "c\n", "feat: mine")
+    with pytest.raises(git.GitError):
+        git.push(clone, "main")
+    git.push(clone, "main", remote="origin", force=True)
+    assert git.ls_remote(clone, "refs/heads/main")["refs/heads/main"] == git.head_sha(
+        clone
+    )
+    _git(clone, "tag", "-a", "t1", "-m", "t1")
+    git.push_refspec(clone, "refs/tags/t1")
+    assert "refs/tags/t1" in git.ls_remote(clone, tags=True)
+    git.push_refspec(clone, ":refs/tags/t1")
+    assert "refs/tags/t1" not in git.ls_remote(clone, tags=True)
+
+
+def test_a_worktree_is_added_detached_and_removed(
+    repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    clone, _ = repo
+    tree = tmp_path / "tree"
+    git.worktree_add(clone, tree, "main", detach=True)
+    assert (tree / "seed.txt").is_file() and git.current_branch(tree) == ""
+    git.worktree_remove(clone, tree)
+    assert not tree.exists()
+    _git(clone, "branch", "feat/wt")
+    git.worktree_add(clone, tree, "feat/wt")
+    assert git.current_branch(tree) == "feat/wt"
+    git.worktree_remove(clone, tree)
+    with pytest.raises(git.GitError):
+        git.worktree_add(clone, tree, "main")  # main is checked out here already
+
+
+def test_restore_tracks_and_unstage(repo: tuple[Path, Path]) -> None:
+    clone, _ = repo
+    (clone / "seed.txt").write_text("changed\n")
+    assert git.restore(clone, "seed.txt") == ""
+    assert (clone / "seed.txt").read_text() == "seed\n"
+    assert "nonesuch" in git.restore(clone, "nonesuch")
+    assert git.tracks(clone, "HEAD:seed.txt")
+    assert not git.tracks(clone, "HEAD:nonesuch")
+    (clone / "new.txt").write_text("n\n")
+    _git(clone, "add", "new.txt")
+    git.unstage(clone, "new.txt")
+    git.unstage(clone, "never-added.txt")
+    assert git.dirty_paths(clone) == ["new.txt"]
+    assert "new.txt" in _git(clone, "status", "--porcelain")
+
+
+def test_ls_files_lists_the_index_the_others_and_a_path(
+    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, _ = repo
+    (clone / "pkg").mkdir()
+    (clone / "pkg" / "a.txt").write_text("a\n")
+    (clone / ".gitignore").write_text("ignored.txt\n")
+    (clone / "ignored.txt").write_text("i\n")
+    assert git.ls_files(clone) == ["seed.txt"]
+    assert git.ls_files(clone, others=True) == [".gitignore", "pkg/a.txt", "seed.txt"]
+    assert git.ls_files(clone, "pkg", others=True, cached=False) == ["pkg/a.txt"]
+    monkeypatch.setattr(tools, "git", _Failing(128, "fatal: not a git repository"))
+    with pytest.raises(git.GitError, match="not a git repository"):
+        git.ls_files(clone)
+
+
+def test_remotes_are_read_added_and_repointed(
+    repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    clone, origin = repo
+    assert git.remote_url(clone) == str(origin)
+    assert git.remotes(clone) == ("origin",)
+    with pytest.raises(git.GitError):
+        git.remote_url(clone, "nonesuch")
+    git.add_remote(clone, "mirror", str(tmp_path / "mirror.git"))
+    git.set_remote_url(clone, "mirror", str(tmp_path / "elsewhere.git"))
+    assert git.remote_url(clone, "mirror") == str(tmp_path / "elsewhere.git")
+    assert git.remotes(clone) == ("mirror", "origin")
+
+
+def test_tag_dates_pair_each_tag_with_its_day(
+    repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clone, _ = repo
+    _git(clone, "tag", "-a", "packages/x/v0.1.0", "-m", "x")
+    _git(clone, "tag", "packages/y/v0.2.0")
+    dated = dict(git.tag_dates(clone, "refs/tags/packages"))
+    assert set(dated) == {"packages/x/v0.1.0", "packages/y/v0.2.0"}
+    assert all(len(day) == 10 for day in dated.values())
+    assert git.tag_dates(clone, "refs/tags/nonesuch") == []
+    monkeypatch.setattr(_ops, "run", lambda *_: "\n  \n")
+    assert git.tag_dates(clone, "refs/tags/") == []

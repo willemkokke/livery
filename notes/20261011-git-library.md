@@ -1,7 +1,7 @@
 # One home for every git access: the git library
 
-Status: phases 1 and 2 on main (PRs #1501, #1503), phase 3 in review
-(#1504); phases 4 and 5 not started. The destination note
+Status: phases 1 to 3 on main (PRs #1501, #1503, #1505), phase 4 in
+review (#1506); phase 5 not started. The destination note
 (`notes/20261006-workshop-destination.md`) records the measurements
 this plan stands on and the rulings of 2026-10-11 on narrowing and on
 the git helper's memory.
@@ -397,6 +397,19 @@ and the number recorded here.
 
 ## Decision record
 
+- 2026-10-12, phase 4 built. The library gained the named functions
+  the direct calls needed: a fetch with prune and force and a tag
+  fetch, `switch_new`, `reset_hard`, `clean`, `oneline` and
+  `unpushed`, `ls_remote`, a push with its remote and a bare force
+  and `push_refspec`, the worktree add and remove, `restore`,
+  `tracks`, `unstage`, `ls_files`, the remotes' read, add and
+  repoint, and `tag_dates`. The loop's 31 sites, the birth's wrappers
+  and the ten single calls went through them; two generic wrappers
+  (`_new_project._git`, `_scale._git`) and the clean verb's query
+  stand on `git.run` and `git.call`. The one-door test,
+  `test_workshop_one_door.py`, refuses an attribute `git` on the tools
+  module anywhere under the workshop's source, with no allowance;
+  `git_lfs` is another tool and passes.
 - 2026-10-12, phase 3 built. The store moved whole as
   `livery.git.StateStore(root, in_ci, identity, snapshot_variable,
   prog)`, frozen; `prog` is a fourth construction datum, for the words
