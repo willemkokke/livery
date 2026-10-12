@@ -55,8 +55,10 @@ and its verbs mount under `fm tools.*`:
   day's branch, `chore/tools-refresh-<date>`, and opens the pull
   request, armed when every change only added to a surface. When
   origin already holds the day's branch, from a refresh on another
-  machine, the refresh commits after it and reuses its pull request,
-  or says the day's refresh is already submitted when it adds nothing.
+  machine, the refresh says the day's refresh is already submitted
+  when that branch holds every file it wrote, and otherwise stops,
+  naming the files that differ, for a person to merge or close that
+  pull request first. The checkout never moves onto that branch.
 - `fm toolroom.gather`, `fm toolroom.assemble` and `fm toolroom.observe` are
   the refresh's halves, for a matrix that observes on several
   machines and assembles once.
