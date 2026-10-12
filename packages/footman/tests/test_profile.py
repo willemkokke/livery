@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from livery.footman import _context
 from livery.footman.testing import Runner
 
 TASKS = textwrap.dedent(
@@ -745,7 +746,12 @@ def test_the_trace_records_the_epoch_its_own_zero_sits_at(tmp_path, monkeypatch)
     result = Runner().invoke("--profile fast", tasks=_tasks(tmp_path))
     assert result.ok, result.stderr
     payload = json.loads((tmp_path / "fm-profile.json").read_text(encoding="utf-8"))
-    assert before - 60e6 < payload["originEpochUs"] < time.time() * 1e6
+    # The origin maps the run clock through the anchor this process
+    # inherited from its parent, sampled when that parent started; the wall
+    # clock may have been stepped since, by up to the slack the inheritance
+    # itself allows, so the bound on either side carries that slack.
+    slack = _context._INHERITED_SLACK * 1e6
+    assert before - 60e6 < payload["originEpochUs"] < time.time() * 1e6 + slack
 
 
 def test_a_profiled_child_hands_its_whole_trace_up_as_well(tmp_path, monkeypatch):
