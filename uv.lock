@@ -1021,7 +1021,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-footman"
-version = "0.59.0"
+version = "0.60.0"
 source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
@@ -1077,7 +1077,7 @@ provides-extras = ["github-secrets", "test"]
 
 [[package]]
 name = "livery-git"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/git" }
 dependencies = [
     { name = "dulwich" },
@@ -1144,7 +1144,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-store"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "packages/toolroom-store" }
 dependencies = [
     { name = "livery-strongroom" },
@@ -1166,7 +1166,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "packages/workshop" }
 dependencies = [
     { name = "griffelib" },

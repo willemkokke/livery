@@ -1,21 +1,26 @@
 {
  "schema": 1,
- "mined-at": "af759dd38e57002f7fa19c464e7b459cb46c4a66",
+ "mined-at": "e2a1955fe9fdb10256f5667ed3242e6fbd21182c",
  "members": [
+  {
+   "dir": "footman",
+   "name": "livery-footman",
+   "version": "0.60.0"
+  },
+  {
+   "dir": "git",
+   "name": "livery-git",
+   "version": "0.1.0"
+  },
+  {
+   "dir": "toolroom-store",
+   "name": "livery-toolroom-store",
+   "version": "0.4.0"
+  },
   {
    "dir": "workshop",
    "name": "livery-workshop",
-   "version": "0.8.0"
-  },
-  {
-   "dir": "extensions/changelog",
-   "name": "livery-extensions-changelog",
-   "version": "0.0.0"
-  },
-  {
-   "dir": "extensions/claude",
-   "name": "livery-extensions-claude",
-   "version": "0.0.0"
+   "version": "0.9.0"
   }
  ]
 }

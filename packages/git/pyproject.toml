@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-git"
-version = "0.0.0"
+version = "0.1.0"
 description = "Git access for the livery ecosystem: every call a function of the repository's root, through the tool store's pinned git."
 readme = "README.md"
 license = "MIT"
@@ -36,7 +36,7 @@ dependencies = [
 # The suite drives the plugin, the one module that reaches for the
 # runner. Never a runtime dependency: the plugin loads only through
 # footman's own plugin(), so footman is present by construction.
-test = ["livery-footman>=0.59.0"]
+test = ["livery-footman>=0.60.0"]
 
 [project.entry-points."footman.tasks"]
 # The plugin (livery.git._plugin): the environment every git spawn
