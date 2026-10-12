@@ -122,6 +122,31 @@ def test_a_verb_refuses_both_fix_modes_and_a_fix_inside_ci(
         _quality.run_checks(("layering.sibling-references",), safe_fix=True)
 
 
+def test_a_phase_s_own_verb_builds_in_the_debug_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The gate instruments its build; a phase's own verb, a bare
+    # `fm build` among them, builds the debug configuration, as
+    # `fm run` does.
+    seen: list[object] = []
+
+    def walk(ctx: object, **kwargs: object) -> None:
+        del ctx
+        seen.append(kwargs.get("inputs"))
+
+    (tmp_path / "workshop.toml").write_text("")
+    (tmp_path / "tasks.py").write_text("x = 1\n")
+    monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(_quality, "walk", walk)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    _quality.run_checks(("build.compile",))
+    _quality.run_checks(("build.compile",), ("tasks.py",))
+    debug = {"build": {"isolated": False, "configuration": "debug"}}
+    assert seen == [debug, debug]
+    assert _quality.GATE_INPUTS["build"]["configuration"] == "instrumented"
+
+
 def test_a_path_that_names_nothing_refuses_a_tool_s_words_among_them(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
