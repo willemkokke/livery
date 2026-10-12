@@ -22,7 +22,7 @@ gets the machine check that proves it, in the same work.
 ## What exists that this builds on
 
 - The gate context carries a per-package test-file selection
-  (`GateContext.tests`, `livery.workshop._checks`), the suite runner
+  (`PhaseContext.tests`, `livery.workshop._phases`), the suite runner
   passes it to pytest (`run_suites(selection=...)`,
   `livery.workshop._kinds`), and the affected engine hands it an
   empty map (`affected_from_paths` in `livery.workshop._graph`
@@ -50,7 +50,8 @@ gets the machine check that proves it, in the same work.
   (`livery.workshop._coverage_store`) keeps arcs per suite keyed by
   the suite's closure identity, and a leg skips a suite its record
   holds.
-- The state store (`livery.workshop._state`) declares a series in one
+- The state store (`livery.git.StateStore`, built with the workshop's
+  policy) declares a series in one
   line, CI-only or local, windowed, written by compare-and-swap, and
   `fm store.show` reads it. The series are gathered in
   `livery.workshop._series`.
