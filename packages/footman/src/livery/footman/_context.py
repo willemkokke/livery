@@ -4371,6 +4371,12 @@ def _run_thunks(
     parent = current()
     dest = parent.sink or real_stdout()
     dest_is_real = parent.sink is None
+    # The console gate holds other tasks' flushes back while a wizard owns
+    # the terminal. A block inside the owner's own body writes its
+    # children's blocks as the owner's output, so it never waits at the
+    # gate: the owner is waiting on the block, and a child waiting for the
+    # owner to release would wait on its own ancestor.
+    gated = dest_is_real and not parent.interactive
     lock = threading.Lock()
 
     # parallel() children are units on the live status line, exactly like
@@ -4447,7 +4453,7 @@ def _run_thunks(
             code, error = 1, exc
         finally:
             _current.reset(token)
-        gate = _globals.console_gate() if dest_is_real else contextlib.nullcontext()
+        gate = _globals.console_gate() if gated else contextlib.nullcontext()
         with gate, lock:
             blob = buf.getvalue()
             # A child that ended mid-colour (a crash, an unterminated SGR) must

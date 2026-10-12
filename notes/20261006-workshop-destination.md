@@ -2645,7 +2645,15 @@ the stack, which this design neither needs nor rules out).
   `PhaseContext`, frozen: a step records an exit code with `exit()`,
   `member` is the package a package step runs over, and `result()`
   reads a provided key or an engine input. Steps run with output
-  unbuffered, which a probe shows streams live from a block.
+  unbuffered, which a probe shows streams live from a block. Running
+  the lifecycle phases as footman steps found a footman deadlock: a
+  `parallel()` block inside an `interactive=True` task waited at the
+  console gate for its own ancestor, since the gate held every flush to
+  the real terminal while a task owned it; `fm workflow.release` is
+  interactive, and its stamp of the one member that lists an extension
+  hung the loop's dev act for 38 minutes on the desk and past 50 on
+  GitHub's runner. The gate now exempts a block inside the owner's own
+  body, and the branch's rehearsal runs on GitHub's runner by default.
 
 ## Open
 

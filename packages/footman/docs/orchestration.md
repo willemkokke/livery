@@ -64,7 +64,9 @@ if one fails, and a task whose prerequisite failed is skipped.
     finishes, so concurrent tasks never scramble each other's lines. The
     block guarantee is about stdout; the run summary and the live status
     line are stderr commentary, so redirecting stdout captures task output
-    alone.
+    alone. While an `interactive=True` task owns the terminal, other tasks'
+    blocks wait for it to finish; a block inside that task's own body
+    writes its children's blocks at once, as the owner's output.
 
 ## Failing a task
 
