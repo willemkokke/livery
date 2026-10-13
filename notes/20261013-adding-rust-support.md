@@ -728,6 +728,9 @@ second workspace resolves it from there.
   llvm reading to the JSON export and the record to a new schema, so
   the format changes and every unit is measured afresh once, not twice.
   Ranges are LLVM's, so clang's C and C++ fill them as rustc will.
+  Proved by a desk pass on macOS (loop series pass 20261013T133429Z):
+  loop-cpp's stored parts carry llvm-cov's columns and its ranges with
+  their counts.
 
 ## Open
 

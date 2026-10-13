@@ -2948,6 +2948,26 @@ neither needs nor rules out).
   after this merges measures every unit afresh, since main's rows are of
   the old schema.
 
+- 2026-10-13, 12e's P5 (#1590): every coverage row names the tests that
+  reached each line, one context per test, its node id, on every leg.
+  The numbering lives in the row: the gate job's write extends the
+  numbering of the row it replaces (a branch's first row extends
+  main's) and appends every test the run's rows of that unit name on
+  any leg, so a test keeps its index across runs and legs and two rows
+  of a suite share a line's set of tests byte for byte. A deleted test
+  keeps its index until the record's schema changes or its unit's row
+  goes. Kept rows are named so that git pairs each with its unit's
+  other rows when it computes deltas. Measured on this desk, one leg:
+  the tests add 1.13 MB gzipped over the 19 rows (0.25 MB in the
+  workshop's, 2,253 tests); a cold fetch of the record is 3.9 MB
+  without tests and 5.0 MB with them, against 6.9 MB with P4's kept
+  names (P4's 5.27 MB was measured on deltas git had already computed);
+  a leg's reduction takes 16.8 s instead of 11.0 s, peaking at 866 MB
+  instead of 522 MB. Willem, the same day: the grain stays one context
+  per test, reviewed later (#1591); per test file would serve the
+  selection and the union as well, and per test is what lets the pages
+  name the test that reached a line.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
