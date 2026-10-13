@@ -1,8 +1,8 @@
-"""The sync verb runs before a command, and the receipts decide what it does.
+"""The sync runs before a command, and the receipts decide what it does.
 
-The hook's tests: the failures and the refusals first, then the sync it
-runs and its mode; then the receipts the verb reads, in the order it
-reads them.
+The hook's tests: the failures and the refusals first, inside a run and
+then alone, then the sync it runs and its mode; then the receipts the
+sync reads, in the order it reads them.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -23,10 +24,10 @@ from workshop_receipts import LOCK, delivered, synced, tool_lock, tool_receipt, 
 
 
 def _exploding_sync(monkeypatch: pytest.MonkeyPatch) -> None:
-    def sync(**kwargs: object) -> bool:
-        raise AssertionError(f"sync must not run here: {kwargs}")
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        raise AssertionError(f"sync must not run here: {root} {kwargs}")
 
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
 
 
 def _no_rerun(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,6 +50,96 @@ def _outside_the_hooks_sync(monkeypatch: pytest.MonkeyPatch) -> None:
 # The failures first: a sync that cannot complete never stops a command.
 
 
+def _run_from_elsewhere(tmp_path: Path) -> tuple[Path, Path]:
+    """A workspace, and a tasks file outside it whose one task runs inside it.
+
+    The shape of a person's own tasks file that mounts the workshop: a
+    task the file mounts runs in the file's directory unless it names
+    another, so a task the hook called would run outside the workspace
+    the command's task runs in. Returns the workspace's root and the
+    tasks file.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    tasks = elsewhere / "tasks.py"
+    tasks.write_text(
+        textwrap.dedent(
+            f"""
+            import livery.footman as footman
+            from livery.workshop._env_tasks import sync_first
+
+            @footman.pre_task
+            def first(inv, task):
+                sync_first(inv, task)
+
+            @footman.task(cwd={str(workspace)!r})
+            def build():
+                print("built")
+            """
+        )
+    )
+    return workspace.resolve(), tasks
+
+
+def _in_a_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Arm the hook as a runner invocation arms it, once for this test."""
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr(_reconcile, "is_cli_process", lambda: True)
+    monkeypatch.setattr(_env_tasks, "_SYNCED", [])
+    _no_rerun(monkeypatch)
+
+
+def test_a_failed_sync_leaves_the_commands_verdict_its_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The sync is not a task of the run: its failure is said on stderr,
+    # no row of the run is the sync's, and the command exits 0.
+    from livery.footman import fail
+    from livery.footman.testing import Runner
+
+    workspace, tasks = _run_from_elsewhere(tmp_path)
+    synced_roots: list[Path] = []
+
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        synced_roots.append(root)
+        fail("the store holds no ruff")
+
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
+    _in_a_run(monkeypatch)
+    result = Runner().invoke("build", tasks=tasks, cwd=tasks.parent)
+    assert result.exit_code == 0, result.stderr
+    assert [row.task for row in result.results] == ["build"]
+    assert synced_roots == [workspace]
+    assert "the sync did not complete (the store holds no ruff)" in result.stderr
+
+
+def test_the_hook_syncs_the_workspace_its_task_runs_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The task runs in the workspace and its tasks file lives outside
+    # it: the sync runs on the root the hook found, frozen and offline,
+    # never on a directory a task of its own would resolve.
+    from livery.footman.testing import Runner
+
+    workspace, tasks = _run_from_elsewhere(tmp_path)
+    calls: list[tuple[Path, dict[str, object]]] = []
+
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        calls.append((root, kwargs))
+        return False
+
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
+    _in_a_run(monkeypatch)
+    result = Runner().invoke("build", tasks=tasks, cwd=tasks.parent)
+    assert result.exit_code == 0, result.stderr
+    assert calls == [(workspace, {"frozen": True, "offline": True})]
+    assert "built" in result.stdout
+
+
 def test_a_failed_sync_is_said_and_the_command_goes_on(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -56,10 +147,10 @@ def test_a_failed_sync_is_said_and_the_command_goes_on(
 ) -> None:
     synced(tmp_path, "something-1.0.0")
 
-    def broken(**kwargs: object) -> bool:
+    def broken(root: Path, **kwargs: object) -> bool:
         raise OSError("no space left on device")
 
-    monkeypatch.setattr(_sync, "sync", broken)
+    monkeypatch.setattr(_sync, "sync_checkout", broken)
     _no_rerun(monkeypatch)
     env: dict[str, str] = {}
     assert _reconcile.apply(tmp_path, "check", env) is False
@@ -76,12 +167,12 @@ def test_a_process_the_hooks_sync_starts_syncs_nothing(
     children: list[bool] = []
     env: dict[str, str] = {}
 
-    def sync(**kwargs: object) -> bool:
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
         # The child inherits the task's environment, the marker in it.
-        children.append(_reconcile.apply(tmp_path, "check", env))
+        children.append(_reconcile.apply(root, "check", env))
         return True
 
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     _no_rerun(monkeypatch)
     assert _reconcile.apply(tmp_path, "check", env) is True
     assert children == [False]
@@ -104,24 +195,24 @@ def test_the_sync_verb_itself_runs_no_sync_first(
 # The sync it runs: frozen, offline, on stderr, re-running on changed code.
 
 
-def test_the_hook_runs_the_sync_verb_frozen_and_offline_on_stderr(
+def test_the_hook_syncs_its_root_frozen_and_offline_on_stderr(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     synced(tmp_path, "something-1.0.0")
-    calls: list[dict[str, object]] = []
+    calls: list[tuple[Path, dict[str, object]]] = []
 
-    def sync(**kwargs: object) -> bool:
-        calls.append(kwargs)
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        calls.append((root, kwargs))
         print("  uv.lock moved past the environment; syncing from what is held")
         print("  tools: up to date")
         return True
 
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     _no_rerun(monkeypatch)
     assert _reconcile.apply(tmp_path, "check", {}) is True
-    assert calls == [{"frozen": True, "offline": True}]
+    assert calls == [(tmp_path, {"frozen": True, "offline": True})]
     captured = capsys.readouterr()
     # A command whose stdout a shell evaluates stays clean.
     assert captured.out == ""
@@ -138,7 +229,7 @@ def test_a_sync_that_did_nothing_is_silent_and_enters_nothing(
     # hook says nothing, and the caller does not enter the environment
     # again for nothing.
     synced(tmp_path, "something-1.0.0")
-    monkeypatch.setattr(_sync, "sync", lambda **kwargs: False)
+    monkeypatch.setattr(_sync, "sync_checkout", lambda root, **kwargs: False)
     _no_rerun(monkeypatch)
     assert _reconcile.apply(tmp_path, "check", {}) is False
     captured = capsys.readouterr()
@@ -150,13 +241,13 @@ def test_a_sync_that_changed_installed_code_re_runs_the_command(
 ) -> None:
     synced(tmp_path, "something-1.0.0")
 
-    def sync(**kwargs: object) -> bool:
-        site = venv(tmp_path)
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        site = venv(root)
         (site / "something-1.0.0.dist-info").rename(site / "something-2.0.0.dist-info")
-        _reconcile.record_receipt(tmp_path)
+        _reconcile.record_receipt(root)
         return True
 
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     ran: list[tuple[Path, str]] = []
     monkeypatch.setattr(
         _reconcile, "_reexec", lambda root, cause: ran.append((root, cause))
@@ -191,14 +282,14 @@ def test_a_command_the_hooks_sync_re_runs_starts_without_the_marker(
         handed_on.append(dict(env))
         return subprocess.CompletedProcess(cmd, 0)
 
-    def sync(**kwargs: object) -> bool:
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
         marked.append(os.environ.get("WORKSHOP_SYNCING"))
-        _reconcile._reexec(tmp_path, _reconcile.INSTALLED)
+        _reconcile._reexec(root, _reconcile.INSTALLED)
         return True
 
     monkeypatch.setattr(os, "execve", execed)
     monkeypatch.setattr(subprocess, "run", waited)
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     # Inside a task, os.environ reads the task's own environment: the
     # process environment stands for the task's here.
     with pytest.raises(SystemExit):

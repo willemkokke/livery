@@ -716,15 +716,15 @@ def test_a_command_whose_first_sync_wrote_receipts_runs_with_their_tools(
         )
     )
 
-    def sync(**kwargs: object) -> bool:
-        _receipt(tmp_path, "ruff", paths=(ruff,))
+    def sync_checkout(root: Path, **kwargs: object) -> bool:
+        _receipt(root, "ruff", paths=(ruff,))
         return True
 
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: True)
-    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
     monkeypatch.setattr(_env_tasks, "_SYNCED", [])
     monkeypatch.delenv("WORKSHOP_SYNCING", raising=False)

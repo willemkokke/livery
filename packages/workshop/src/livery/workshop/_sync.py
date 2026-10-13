@@ -563,9 +563,9 @@ def sync(
     ``--locked`` refuses a stale one, so CI's setup runs it and a job
     holds what a person's checkout holds; ``--frozen`` takes them as
     they are, which is how the per-command hook brings a checkout
-    current before every command, calling this verb frozen and offline
-    ([livery.workshop._reconcile.apply][]). Judging the tracked files
-    stays the drift check's.
+    current before every command, running this verb's work frozen and
+    offline ([livery.workshop._reconcile.apply][]). Judging the tracked
+    files stays the drift check's.
 
     A frozen sync reads the receipts first
     ([livery.workshop._reconcile.current][]). When the environment, the
@@ -592,6 +592,32 @@ def sync(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    return sync_checkout(root, frozen=frozen, locked=locked, offline=offline)
+
+
+def sync_checkout(
+    root: Path, *, frozen: bool = False, locked: bool = False, offline: bool = False
+) -> bool:
+    """Do the sync verb's work on the workspace at *root*; whether the local steps ran.
+
+    [livery.workshop._sync.sync][] runs it on the workspace above its
+    task's directory; the options mean what they mean there. The
+    per-command hook ([livery.workshop._reconcile.apply][]) runs it
+    frozen and offline on the root it found, as a plain call and never
+    as a call of the verb: a task called from a hook resolves its own
+    directory, which can lie outside *root*, and its row joins the
+    run's report, where its failure would fail the command the hook
+    must never stop.
+
+    Returns:
+        Whether the local steps ran. A frozen sync of a current
+        checkout returns False.
+
+    Raises:
+        Failed: naming what stopped the sync, a stale lock under
+            *locked* or a listed extension this process cannot mount.
+        RunFailed: when a command one of the steps runs exits non-zero.
+    """
     if locked:
         # Refused before anything runs, naming the lock and the sync that
         # writes it: uv's own refusal would name uv's command instead.
