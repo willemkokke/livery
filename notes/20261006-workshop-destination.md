@@ -7,8 +7,9 @@ but open item 3, and the extensions plan takes phases 10 to 16 from here. Writte
 (issue #1301), 10c (issue #1303) and 10d (issue #1306) shipped on
 2026-10-08 in the wave of PR #1317, after a dispatch published the
 four tool extensions the 2026-10-07 wave could not create;
-clang-tidy keeps its check code, and the extension passes of 10b and
-10c stop at the coverage leg until 12e (#1225). 10e (issue #1307) and
+clang-tidy keeps its check code, and an extension pass of 10b and 10c
+births a project that lists the extension alone, which runs no
+coverage leg since 12e's P2b (#1225). 10e (issue #1307) and
 10f (issue #1313) merged after that wave, as PRs #1312 and #1315, and
 shipped on 2026-10-09 in release PR #1340: `livery-workshop` 0.8.0 and
 the first releases of `livery-extensions-changelog` and
