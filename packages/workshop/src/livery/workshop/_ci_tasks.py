@@ -408,18 +408,29 @@ def dispatch_flow(
     interval: float = 15,
     timeout: float = 1800,
     register_timeout: float = 60,
+    only: str = "",
 ) -> int:
     """Start *point* on *ref* by hand; follow it to its verdict; return the exit.
 
     Refuses a point without a dispatch entry, naming what starts it
-    instead. The dispatch is confirmed by the run that appears: one
+    instead. *only* names the scheduled tasks the run takes,
+    comma-separated, for a point that takes the input: a rehearsal
+    names the loop alone. A name the point does not run, or *only* on
+    a point without the input, refuses before anything is dispatched.
+    The dispatch is confirmed by the run that appears: one
     the forge accepted but never listed within *register_timeout* is
     reported with the verb that reads it later, exit 14. Without
     *follow* the run is named and the exit is 18 while it moves.
     """
     import time
 
-    from livery.workshop._points import dispatchable, point_by_name, workflow_of
+    from livery.workshop._points import (
+        ONLY,
+        asked_tasks,
+        dispatchable,
+        point_by_name,
+        workflow_of,
+    )
 
     root = workspace_root()
     names = point_by_name(root)
@@ -438,15 +449,32 @@ def dispatch_flow(
             f" main; `{footman_prog()} ci.dispatch` starts"
             f" {', '.join(starts)}"
         )
+    inputs: dict[str, str] = {}
+    if only:
+        if ONLY not in {item.name for item in names[point].inputs}:
+            takes = [
+                name
+                for name, found in names.items()
+                if ONLY in {i.name for i in found.inputs}
+            ]
+            fail(
+                f"the {point} point takes no --only; {', '.join(takes) or 'no point'}"
+                " does"
+            )
+        if root is None:
+            fail("--only reads the workspace's schedule: run it inside a workspace")
+        asked = asked_tasks(root, point, only)
+        inputs[ONLY] = ",".join(asked)
     workflow = workflow_of(point, root)
     seen = {run.id for run in point_runs(repo, point)}
     try:
-        repo.checks.dispatch(workflow, ref=ref)
+        repo.checks.dispatch(workflow, ref=ref, inputs=inputs or None)
     except Unsupported as exc:
         fail(f"this forge cannot dispatch a workflow: {exc}")
     except ForgeError as exc:
         fail(f"the forge refused the {point} dispatch on {ref}: {exc}")
-    print(f"  dispatched the {point} point on {ref} ({workflow})")
+    running = f", running {inputs[ONLY]} alone" if inputs.get(ONLY) else ""
+    print(f"  dispatched the {point} point on {ref} ({workflow}){running}")
     deadline = time.monotonic() + register_timeout
     while True:
         new = [run for run in point_runs(repo, point) if run.id not in seen]
@@ -483,6 +511,13 @@ def ci_dispatch(
     follow: Annotated[bool, doc("wait for the run's verdict")] = True,
     interval: Annotated[int, doc("poll seconds")] = 15,
     timeout: Annotated[int, doc("deadline seconds for the verdict")] = 1800,
+    only: Annotated[
+        str,
+        doc(
+            "the scheduled tasks the run takes, comma-separated, for the"
+            " nightly: ci.e2e rehearses the loop alone; empty runs everything"
+        ),
+    ] = "",
 ) -> None:
     """Start a point on the forge by hand and follow it to its verdict.
 
@@ -506,6 +541,7 @@ def ci_dispatch(
         follow=follow,
         interval=interval,
         timeout=timeout,
+        only=only,
     )
     if code:
         raise SystemExit(code)
