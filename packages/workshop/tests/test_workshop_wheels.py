@@ -141,6 +141,8 @@ def test_a_pure_workspace_declares_no_wheel_runners(tmp_path: Path) -> None:
 
 
 def test_the_matrix_is_the_union_in_declaration_order(tmp_path: Path) -> None:
+    from livery.workshop._points import DECLARED, job_runners
+
     _member(
         tmp_path,
         "alpha",
@@ -159,12 +161,10 @@ def test_the_matrix_is_the_union_in_declaration_order(tmp_path: Path) -> None:
         "macos-latest",
         "windows-latest",
     ]
-    roster = _wheels.member_roster(tmp_path)
-    assert roster == [
-        {"dir": "alpha", "name": "alpha", "kind": "python-nanobind"},
-        {"dir": "beta", "name": "beta", "kind": "python-nanobind"},
-        {"dir": "lib", "name": "lib", "kind": "python"},
-    ]
+    # The release point's wheels job fans out to the same labels.
+    assert job_runners(tmp_path, DECLARED) == {
+        ("release", "wheels"): ("ubuntu-latest", "macos-latest", "windows-latest")
+    }
 
 
 def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None:
@@ -182,10 +182,7 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     facts = _facts(tmp_path)
-    assert facts["wheel_runners"] == ["ubuntu-latest"]
-    assert facts["packages"] == [
-        {"dir": "ext", "name": "ext", "kind": "python-nanobind"}
-    ]
+    assert facts["job_runners"] == {("release", "wheels"): ("ubuntu-latest",)}
     github = _actions_workflow(facts, "fm", "release.yml", forge="github")
     assert "os: [ubuntu-latest]" in github and "--prebuilt" not in github
     gitea = _actions_workflow(facts, "fm", "release.yml", forge="gitea")
@@ -199,7 +196,7 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
         'kind = "python"\nname = "ext"\n'
     )
     pure = _facts(tmp_path)
-    assert pure["wheel_runners"] == []
+    assert pure["job_runners"] == {("release", "wheels"): ()}
     assert "wheels:" not in _actions_workflow(pure, "fm", "release.yml", forge="github")
     assert "wheels:" not in _actions_workflow(pure, "fm", "release.yml", forge="gitea")
 

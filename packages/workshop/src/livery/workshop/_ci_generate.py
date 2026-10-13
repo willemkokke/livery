@@ -32,8 +32,8 @@ from livery.workshop._points import (
     Job,
     Point,
     emitted_points,
-    inherited_jobs,
     job_installs,
+    job_runners,
     job_seams,
     points,
     pull_request_runners,
@@ -65,14 +65,14 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
     Runners, the required context, and the forge kind come from
     ``workshop.toml``; the Python matrix from the root
     ``pyproject.toml``'s floor and the workshop's newest supported
-    minor; the uv pin from the lock; what a job installs and where it
-    deploys from the functions the job names, over *everything*, the
-    points the files render, *root*'s when absent. Nothing here is an
-    answer: the answers hold identity alone.
+    minor; the uv pin from the lock; what a job installs, where it
+    deploys and the runners it fans out to from the functions the job
+    names, over *everything*, the points the files render, *root*'s
+    when absent. Nothing here is an answer: the answers hold identity
+    alone.
     """
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
-    from livery.workshop._wheels import member_roster, wheel_runners
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
@@ -94,19 +94,16 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
         # bootstrap then stays unpinned rather than inventing a
         # version.
         "uv_pin": locked_uv_version(root),
-        # The system packages each job installs before it enters, and
-        # the seam each deploying job publishes through, by point and
-        # job: the extension that contributes a job knows why.
+        # The system packages each job installs before it enters, the
+        # seam each deploying job publishes through, and the runner
+        # labels each runners job fans out to, by point and job: the
+        # declaration of a job knows why.
         "installs": job_installs(root, everything),
         "seams": job_seams(root, everything),
+        "job_runners": job_runners(root, everything),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
-        # The members with their kinds, and the runner labels the
-        # platform-wheel members declare: the wheels job exists when
-        # the union is non-empty and runs one leg per label.
-        "packages": member_roster(root),
-        "wheel_runners": wheel_runners(root),
     }
 
 
@@ -308,15 +305,10 @@ def _csv(values: list[Any], *, quoted: bool = False) -> str:
     return ", ".join(f'"{v}"' if quoted else str(v) for v in values)
 
 
-def _wheel_runners(answers: dict[str, Any]) -> list[str]:
-    """The runner labels that build platform wheels; empty for a pure workspace.
-
-    The facts carry the union of the members' ``[ci] wheel-platforms``
-    declarations. The wheels job is emitted only when it is
-    non-empty: a pure workspace releases from one runner, and its
-    workflow says so by shape.
-    """
-    return [str(label) for label in answers.get("wheel_runners", []) or []]
+def _labels(answers: dict[str, Any], point: Point, job: Job) -> list[str]:
+    """The runner labels *job* of *point* fans out to; empty when its function names none."""
+    found = answers.get("job_runners", {}).get((point.name, job.name), ())
+    return [str(label) for label in found]
 
 
 def _gitlab_image(answers: dict[str, Any], python: str) -> str:
@@ -341,11 +333,14 @@ def _comment(text: str, indent: str = "") -> str:
     return "".join(f"{indent}# {line}\n" for line in textwrap.wrap(text, width=width))
 
 
-def _renders(job: Job, answers: dict[str, Any]) -> bool:
-    """Whether *job* exists for this workspace: its ``only`` against the facts."""
-    if job.only == "wheels":
-        return bool(_wheel_runners(answers))
-    return True
+def _renders(point: Point, job: Job, answers: dict[str, Any]) -> bool:
+    """Whether *job* of *point* exists for this workspace.
+
+    A ``runners`` job exists when its function names a runner label
+    for this workspace; when it names none, the job does not render
+    and `_needs` drops a need on it. Every other job always exists.
+    """
+    return job.matrix != "runners" or bool(_labels(answers, point, job))
 
 
 def _points_of(workflow: str, everything: tuple[Point, ...]) -> tuple[Point, ...]:
@@ -357,10 +352,12 @@ def _needs(
     point: Point, job: Job, answers: dict[str, Any], everything: tuple[Point, ...]
 ) -> list[str]:
     """The jobs *job* waits for that render for this workspace."""
+    owners = [other for other in everything if other.name == point.inherits]
     rendered = {
         other.name
-        for other in (*inherited_jobs(point, everything), *point.jobs)
-        if _renders(other, answers)
+        for owner in (*owners, point)
+        for other in owner.jobs
+        if _renders(owner, other, answers)
     }
     return [need for need in job.needs if need in rendered]
 
@@ -524,9 +521,15 @@ def _publish_step(
     )
 
 
-def _driver_step(prog: str, point: Point, job: Job, *, forge: str) -> str:
-    """The driver pin, through its verb: the released workshop the input names."""
-    if not job.driver_pin or not any(item.name == "workshop" for item in point.inputs):
+def _driver_step(prog: str, point: Point, *, forge: str) -> str:
+    """The driver pin, through its verb: the released workshop the input names.
+
+    Every job of a point that takes a ``workshop`` input pins it before
+    its one call, so one workshop drives the whole run; a job of any
+    other point pins nothing. The verb decides for itself on an empty
+    input, so the shell carries no condition.
+    """
+    if not any(item.name == "workshop" for item in point.inputs):
         return ""
     value = "${{ inputs.workshop }}" if forge != "gitlab" else "$workshop"
     return (
@@ -664,10 +667,10 @@ def _actions_job(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
             f"        python: [{pythons}]\n    runs-on: {first}\n"
         )
-    elif job.matrix == "wheels":
+    elif job.matrix == "runners":
         lines.append(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
-            f"        os: [{_csv(_wheel_runners(answers))}]\n"
+            f"        os: [{_csv(_labels(answers, point, job))}]\n"
             "    runs-on: ${{ matrix.os }}\n"
         )
     elif job.matrix == "declared":
@@ -702,7 +705,7 @@ def _actions_job(
     lines.append(
         _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
     )
-    lines.append(_driver_step(prog, point, job, forge=forge))
+    lines.append(_driver_step(prog, point, forge=forge))
     lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
     lines.append(_call_env(job, forge=forge))
     lines.append(_call_step(prog, point, job))
@@ -771,7 +774,7 @@ def _actions_workflow(
                 continue
             if job.matrix == "legs" and _narrows(answers):
                 lines.append(_legs_job(answers))
-            if _renders(job, answers):
+            if _renders(point, job, answers):
                 lines.append(
                     _actions_job(
                         answers, prog, point, job, forge=forge, everything=everything
@@ -822,7 +825,7 @@ def _gitlab_job(
 
     One executor, one image: a ``legs`` matrix is one leg on the first
     runner's label and the first gate Python, so its rows key the same
-    leg the union expects; a ``pythons`` or ``wheels`` matrix is one
+    leg the union expects; a ``pythons`` or ``runners`` matrix is one
     job. A job deploying through the ``pages`` seam is GitLab Pages'
     own: a job named ``pages`` publishing ``public/``. A job that
     pushes, or writes the store, rewrites origin with the push token
@@ -877,7 +880,7 @@ def _gitlab_job(
         # Root in the container image: no sudo.
         lines.append(f"    - apt-get update -q && apt-get install -y -q {packages}\n")
     lines.append("    - source setup.sh\n")
-    driver = _driver_step(prog, point, job, forge="gitlab")
+    driver = _driver_step(prog, point, forge="gitlab")
     if driver:
         lines.append(f"    - {driver.split('run: ', 1)[1]}")
     call = f"{prog} ci.run --point={point.name} --job={job.name}"
@@ -956,7 +959,7 @@ stages: [check, release]
     everything = everything if everything is not None else points(None)
     for point in everything:
         for job in point.jobs:
-            if job.joins or not _renders(job, answers):
+            if job.joins or not _renders(point, job, answers):
                 continue
             lines.append(
                 _gitlab_job(

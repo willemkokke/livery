@@ -93,8 +93,45 @@ def test_a_declaration_a_shell_cannot_render_from_refuses_at_load() -> None:
             jobs=(Job("publish", collects="wheels"),),
         )
     )
+    # A job starts once the jobs it needs end: a collect from a job it
+    # does not wait for may find nothing uploaded yet.
+    assert refusal(
+        Point(
+            "release",
+            "release.yml",
+            ("workflow_dispatch",),
+            jobs=(Job("wheels", publishes="wheels"), Job("publish", collects="wheels")),
+        )
+    ) == (
+        "the release point's publish job collects 'wheels' and waits for no job"
+        " that publishes it (wheels); a job collects only from the jobs it needs"
+    )
+    # A join waits for what the job it joins waits for: this gate job
+    # waits for the check alone, so a join collecting the site the docs
+    # job publishes refuses.
+    site_gate = Point(
+        "gate",
+        "ci.yml",
+        ("pull_request",),
+        jobs=(Job("check"), Job("docs"), Job("gate", needs=("check",))),
+    )
+    site_merge = Point(
+        "merge",
+        "ci.yml",
+        ("push",),
+        inherits="gate",
+        jobs=(
+            Job("docs", joins=True, publishes="site", paths=("site",)),
+            Job("gate", joins=True, collects="site"),
+        ),
+    )
+    assert refusal(site_gate, site_merge) == (
+        "the merge point's gate job collects 'site' and waits for no job that"
+        " publishes it (docs); a job collects only from the jobs it needs"
+    )
     # A need on an inherited job, and an artifact an inherited job
-    # publishes, are both satisfied.
+    # publishes, are both satisfied, as is a join collecting what a job
+    # the joined job waits for publishes.
     verify_points(
         (
             Point(
@@ -110,6 +147,17 @@ def test_a_declaration_a_shell_cannot_render_from_refuses_at_load() -> None:
                 inherits="gate",
                 jobs=(Job("deploy", needs=("check",), collects="trace"),),
             ),
+        )
+    )
+    verify_points(
+        (
+            Point(
+                "gate",
+                "ci.yml",
+                ("pull_request",),
+                jobs=(Job("check"), Job("docs"), Job("gate", needs=("check", "docs"))),
+            ),
+            site_merge,
         )
     )
 

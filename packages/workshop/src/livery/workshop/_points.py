@@ -52,6 +52,7 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
+from livery.workshop._declaration import Reference
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -94,12 +95,17 @@ class Job:
         name: The job's name, and the ``--job`` its one call passes.
         matrix: The legs the job fans out to: ``legs`` for one per
             runner and gate Python, ``pythons`` for one per Python of
-            the whole matrix on the first runner, ``wheels`` for one per
-            declared wheel platform, ``declared`` for one per runner
-            and Python the job itself names, ``""`` for one job on one
+            the whole matrix on the first runner, ``runners`` for one
+            per runner label the job's ``labels`` function names, with
+            no Python of its own, ``declared`` for one per runner and
+            Python the job itself names, ``""`` for one job on one
             runner.
         runners: The runners a ``declared`` matrix fans out to.
         pythons: The Pythons a ``declared`` matrix fans out to.
+        labels: The function naming the runner labels a ``runners``
+            matrix fans out to, given the workspace's root; None for a
+            job of any other matrix. A ``runners`` job whose function
+            names no label renders no job, and a need on it drops.
         needs: The jobs of the point this one waits for.
         always: Whether the job runs when a job it needs was red, the
             verdict job's shape.
@@ -138,11 +144,6 @@ class Job:
         dispatches: Whether the job starts another workflow through the
             forge's API, which GitHub's workflow token may do only with
             the ``actions: write`` grant.
-        driver_pin: Whether the job installs the released workshop the
-            point's ``workshop`` input names, over the checkout's own,
-            before its one call.
-        only: When the job exists at all: ``wheels`` where a member
-            declares wheel platforms, ``""`` always.
         inputs: The files the job's entries read, declared as a step
             declares its own: a pull request's run that changed none of
             them skips the entries. None for a job that always runs.
@@ -161,6 +162,7 @@ class Job:
     matrix: str = ""
     runners: tuple[str, ...] = ()
     pythons: tuple[str, ...] = ()
+    labels: Callable[[Path], Sequence[str]] | None = None
     needs: tuple[str, ...] = ()
     always: bool = False
     fetch: str = ""
@@ -176,8 +178,6 @@ class Job:
     collects: str = ""
     environment: str = ""
     dispatches: bool = False
-    driver_pin: bool = False
-    only: str = ""
     inputs: Inputs | None = None
     step: str = ""
     note: str = ""
@@ -200,8 +200,11 @@ class Point:
         jobs: The point's own jobs, in order.
         inherits: A point whose jobs this one runs first, the gate's
             for the merge point; ``""`` for none.
-        inputs: The inputs a dispatch takes; a point with any is
-            dispatched by a verb that supplies them, never by hand.
+        inputs: The inputs a dispatch takes. A point with a required
+            one is dispatched by a verb that supplies it, never by
+            hand. Every job of a point that takes a ``workshop`` input
+            installs the released workshop it names, over the
+            checkout's own, before its one call.
         ref_input: The input naming the commit the jobs check out,
             ``""`` for the run's own commit.
         cron: When the clock starts the point, for a point whose
@@ -363,10 +366,12 @@ DECLARED: tuple[Point, ...] = (
         jobs=(
             Job(
                 "wheels",
-                matrix="wheels",
-                only="wheels",
+                matrix="runners",
+                # The members' contracts name the labels: the reference
+                # imports their reader when a render asks for the
+                # labels, never when this module loads.
+                labels=Reference("livery.workshop._wheels", "wheel_runners"),
                 fetch="full",
-                driver_pin=True,
                 publishes="wheels",
                 paths=("packages/*/dist/*", "packages/*/*/dist/*"),
                 conan_cache=True,
@@ -386,7 +391,6 @@ DECLARED: tuple[Point, ...] = (
                 publishes_index=True,
                 collects="wheels",
                 environment="pypi",
-                driver_pin=True,
                 step="Publish the wave",
                 note=(
                     "The wave: publish the ref, cut the receipt tags after"
@@ -408,8 +412,12 @@ def verify_points(points: tuple[Point, ...]) -> None:
     point inheriting one that is not declared, two points sharing a
     workflow file whose events overlap (a run would belong to both),
     a job name declared twice in one point, a job needing a job the
-    point does not have, and a job collecting an artifact no job of
-    the point publishes each refuse naming the point and the fault.
+    point does not have, a job collecting an artifact no job of the
+    point publishes, and a job collecting an artifact from jobs it
+    does not wait for each refuse naming the point and the fault. A
+    job starts once the jobs it needs end, so a job it does not wait
+    for may not have uploaded the artifact yet. A join waits for what
+    the job it joins waits for.
     """
     by_name: dict[str, Point] = {}
     for point in points:
@@ -455,9 +463,10 @@ def verify_points(points: tuple[Point, ...]) -> None:
             if job.name in names:
                 fail(f"the {point.name} point declares the job {job.name!r} twice")
             names.append(job.name)
-        published = {
-            job.publishes for job in (*inherited, *point.jobs) if job.publishes
-        }
+        lineage = (*inherited, *point.jobs)
+        # A join renders on the job it joins: it waits for what that job
+        # waits for, and its own needs never render.
+        waits = {job.name: job.needs for job in lineage if not job.joins}
         for job in point.jobs:
             for need in job.needs:
                 if need not in names:
@@ -466,10 +475,24 @@ def verify_points(points: tuple[Point, ...]) -> None:
                         f" {need!r}, which the point does not have; its jobs"
                         f" are {', '.join(names)}"
                     )
-            if job.collects and job.collects not in published:
+            if not job.collects:
+                continue
+            publishers = list(
+                dict.fromkeys(
+                    other.name for other in lineage if other.publishes == job.collects
+                )
+            )
+            if not publishers:
                 fail(
                     f"the {point.name} point's {job.name} job collects"
                     f" {job.collects!r}, which no job of the point publishes"
+                )
+            if not set(publishers) & set(waits.get(job.name, job.needs)):
+                fail(
+                    f"the {point.name} point's {job.name} job collects"
+                    f" {job.collects!r} and waits for no job that publishes it"
+                    f" ({', '.join(publishers)}); a job collects only from the"
+                    " jobs it needs"
                 )
 
 
@@ -944,6 +967,26 @@ def job_seams(
     }
 
 
+def job_runners(
+    root: Path, everything: tuple[Point, ...] | None = None
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    """The runner labels each job's ``labels`` function names, by point and job.
+
+    Only a job that names a ``labels`` function has an entry: the
+    labels the function names for *root*, in its order and each once,
+    so the rendered file is the same on every run. An empty entry is a
+    ``runners`` job this workspace renders no job for. *everything* is
+    the points to read; *root*'s when absent.
+    """
+    everything = everything if everything is not None else points(root)
+    return {
+        (point.name, job.name): tuple(dict.fromkeys(job.labels(root)))
+        for point in everything
+        for job in point.jobs
+        if job.labels is not None
+    }
+
+
 def events_of(root: Path | None, point: str) -> tuple[str, ...]:
     """The events that start *point*'s runs; refuses a name that is not a point."""
     by_name = point_by_name(root)
@@ -1346,8 +1389,9 @@ def first_leg(root: Path, point: str, job: str) -> tuple[str, str]:
 
     An axis the job does not have is empty. The check legs fan out
     over ``[ci] runners`` and the gate's Pythons, the nightly over every
-    Python on the first runner, a declared job over its own lists; a
-    job with no matrix has no leg to name.
+    Python on the first runner, a declared job over its own lists. A
+    ``runners`` job's call names no leg and a job with no matrix has
+    none, so neither has a leg to name.
     """
     from livery.workshop._pythons import gate_pythons, python_matrix
 
