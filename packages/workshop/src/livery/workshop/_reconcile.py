@@ -323,6 +323,10 @@ def _reexec(root: Path, cause: str) -> None:
     boundary and an exec never reaches one, so the wall that catches
     this everywhere else cannot catch it. Both spellings take the
     environment explicitly, so there is nothing to catch.
+
+    The hook's sync marker is never handed on. The replacement runs the
+    command again; it is not a process the sync starts, so its own hook
+    syncs and its children start without the marker.
     """
     import livery.footman as footman
 
@@ -344,11 +348,12 @@ def _reexec(root: Path, cause: str) -> None:
         # environment beside the guard: a profiled run's trace, and
         # whatever else subscribes later. Nothing mounted hands nothing on.
         with footman.handing_off() as handed:
-            handed_on = {
+            handed_on: dict[str, str] = {
                 **os.environ,
                 _GUARD: ",".join(sorted({*done, cause})),
                 **handed,
             }
+            handed_on.pop(_SYNCING, None)
             if sys.platform == "win32":
                 completed = subprocess.run(cmd, check=False, env=handed_on)
                 # The successful handoff: SystemExit derives from
