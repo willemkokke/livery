@@ -49,16 +49,20 @@ dependencies = [
     # runs. The dependency belongs to the docs extension, and moves
     # with it when it ships as a wheel of its own.
     "griffelib>=2.2.0",
+    # The coverage extension rides in this wheel, and highlights each
+    # file's source on its pages with Pygments, imported when the pages
+    # are drawn. The floor is the lock's.
+    "pygments>=2.21.0",
 ]
 
 [project.optional-dependencies]
 # What this package's own dev loop needs beyond its dependencies: its
 # tests parse the emitted CI files as YAML, with the stubs so mypy stays
-# strict. The pyyaml floor is the oldest release whose wheels cover
+# strict, and the coverage pages' Pygments calls are typed by its stubs. The pyyaml floor is the oldest release whose wheels cover
 # every Python this package supports; 6.0.0's sdist no longer builds
 # under a current Cython. The workspace's dev group installs the member
 # as `livery-workshop[dev]`.
-dev = ["pyyaml>=6.0.3", "types-pyyaml"]
+dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"

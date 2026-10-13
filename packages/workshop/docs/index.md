@@ -440,9 +440,19 @@ pages of the packages that declare an `htmlcov` report, one answer,
 the nearest; with none, each such report's page states the absence.
 The coverage extension, `livery.extensions.coverage`, ships in the
 workshop wheel, listed as `coverage`, and answers it in its
-`[for.docs]` table: coverage.py's own HTML report of each such
-package, drawn from main's coverage record in the merge point's gate
-job and from the local `.coverage` a gate run left anywhere else. An
+`[for.docs]` table. It draws each such package's pages itself, from
+parts in its line format: per file, the statements and the lines that
+ran, the branches with the sentence that says why an untaken one never
+ran, the functions and classes, and the tests that reached each line.
+The numbers are coverage.py's own, and the source is highlighted by
+Pygments, so every language draws alike. The pages read main's
+coverage record in the merge point's gate job and the data a gate run
+left anywhere else. A native suite's lines are read by the extension
+itself; a measurer's rows it cannot read are reduced by the extension
+that answers its `coverage.measurers` query for that measurer, the
+pytest extension for coverage.py's arcs. A measured file the checkout
+no longer has is red in CI and named on the index on a machine, and a
+file at other content keeps its numbers and says so. An
 extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before

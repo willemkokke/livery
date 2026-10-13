@@ -23,6 +23,13 @@ and `fm check` runs both with the rest of the gate:
 - `examples.pytest` runs each python package's documentation examples, the
   files under `docs/examples/`, one test per file.
 
+While the coverage extension is listed, this extension reduces coverage.py's
+measurements for the coverage pages: each stored row of a suite's arcs, and
+the data a gate run left at the root, becomes a part in the coverage
+extension's line format, per file coverage.py's own analysis of it. Each
+file's numbers are checked against coverage.py's before the part is handed
+over, and a file whose numbers differ stops the pages, named.
+
 `fm test.pytest -- -k name` hands pytest the words after `--`, and
 `fm examples.pytest` takes them the same way.
 

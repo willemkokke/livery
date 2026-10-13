@@ -1,0 +1,575 @@
+/* The coverage pages' stylesheet, the workshop's own: an index of a
+   package's files, functions or classes, and a page per file with its
+   source drawn line by line. Colours are custom properties, with a dark
+   set for a reader who prefers dark pages. */
+
+:root {
+  color-scheme: light dark;
+  --ink: #1f2328;
+  --ink-soft: #59636e;
+  --paper: #ffffff;
+  --paper-raised: #f6f8fa;
+  --rule: #d1d9e0;
+  --accent: #0b5cad;
+  --run: #dafbe1;
+  --run-mark: #1a7f37;
+  --mis: #ffebe9;
+  --mis-mark: #cf222e;
+  --exc: #eef0f2;
+  --exc-mark: #818b98;
+  --par: #fff8c5;
+  --par-mark: #9a6700;
+  --selected: #0b5cad;
+  --tip: #24292f;
+  --tip-ink: #ffffff;
+  --token-keyword: #a626a4;
+  --token-name: #1f2328;
+  --token-function: #4078f2;
+  --token-class: #c18401;
+  --token-builtin: #0184bc;
+  --token-string: #50a14f;
+  --token-number: #986801;
+  --token-comment: #6e7781;
+  --token-operator: #383a42;
+  --token-decorator: #b35900;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6edf3;
+    --ink-soft: #9198a1;
+    --paper: #0d1117;
+    --paper-raised: #151b23;
+    --rule: #3d444d;
+    --accent: #58a6ff;
+    --run: #11331d;
+    --run-mark: #3fb950;
+    --mis: #3d1518;
+    --mis-mark: #f85149;
+    --exc: #1f242c;
+    --exc-mark: #768390;
+    --par: #3a2e05;
+    --par-mark: #d29922;
+    --selected: #58a6ff;
+    --tip: #e6edf3;
+    --tip-ink: #0d1117;
+    --token-keyword: #d2a8ff;
+    --token-name: #e6edf3;
+    --token-function: #79c0ff;
+    --token-class: #ffa657;
+    --token-builtin: #56d4dd;
+    --token-string: #a5d6ff;
+    --token-number: #f2cc60;
+    --token-comment: #8b949e;
+    --token-operator: #e6edf3;
+    --token-decorator: #ffa657;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+code,
+kbd,
+.source {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* --- the heading every page shares ------------------------------------- */
+
+header.top {
+  position: relative;
+  padding: 16px 20px 12px;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule);
+}
+
+header.top h1 {
+  margin: 0 40px 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.figure {
+  font-variant-numeric: tabular-nums;
+}
+
+.about {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.views,
+.toggles,
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.view,
+.toggle,
+.pager a {
+  padding: 3px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.view.current {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: default;
+}
+
+.toggle[aria-pressed="false"] {
+  opacity: 0.55;
+}
+
+.toggle.run {
+  border-left: 4px solid var(--run-mark);
+}
+
+.toggle.mis {
+  border-left: 4px solid var(--mis-mark);
+}
+
+.toggle.exc {
+  border-left: 4px solid var(--exc-mark);
+}
+
+.toggle.par {
+  border-left: 4px solid var(--par-mark);
+}
+
+.statements {
+  margin-right: 4px;
+  font-size: 13px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.filters input[type="search"] {
+  min-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
+.help-toggle {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+  cursor: pointer;
+}
+
+.help {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  z-index: 2;
+  padding: 8px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 18%);
+  font-size: 13px;
+}
+
+.help h2 {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+.help ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help li {
+  margin: 4px 0;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 4px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper-raised);
+  text-align: center;
+}
+
+/* --- an index ---------------------------------------------------------- */
+
+main {
+  padding: 12px 20px 40px;
+}
+
+table.index {
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+table.index th,
+table.index td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.index .name {
+  text-align: left;
+}
+
+table.index tr.groups th {
+  border-bottom: none;
+  color: var(--ink-soft);
+  font-weight: 500;
+  font-size: 12px;
+  text-align: center;
+}
+
+table.index tr.columns th {
+  text-align: right;
+}
+
+table.index tr.columns th:first-child,
+table.index tr.columns th[data-type="text"] {
+  text-align: left;
+}
+
+table.index th button {
+  padding: 0;
+  border: none;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+table.index th[aria-sort="ascending"] button::after {
+  content: " \25b2";
+}
+
+table.index th[aria-sort="descending"] button::after {
+  content: " \25bc";
+}
+
+table.index tbody tr:hover {
+  background: var(--paper-raised);
+}
+
+table.index .outside a {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+table.index tfoot td {
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.no-rows {
+  color: var(--ink-soft);
+}
+
+.absent {
+  margin-top: 24px;
+  font-size: 14px;
+}
+
+.absent h2 {
+  font-size: 16px;
+}
+
+/* --- a file's page ----------------------------------------------------- */
+
+main.source {
+  padding: 8px 0 40px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+main.moved .notice {
+  max-width: 70ch;
+}
+
+.ln {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-height: 1.5em;
+  padding-right: 12px;
+  border-left: 4px solid transparent;
+}
+
+.ln .no {
+  flex: 0 0 4.5em;
+  padding-right: 1em;
+  color: var(--ink-soft);
+  text-align: right;
+  text-decoration: none;
+  user-select: none;
+}
+
+.ln .src {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ln.run {
+  border-left-color: var(--run-mark);
+  background: var(--run);
+}
+
+.ln.run2 {
+  border-left-color: var(--run-mark);
+}
+
+.ln.mis {
+  border-left-color: var(--mis-mark);
+  background: var(--mis);
+}
+
+.ln.mis2 {
+  border-left-color: var(--mis-mark);
+}
+
+.ln.exc {
+  border-left-color: var(--exc-mark);
+  background: var(--exc);
+}
+
+.ln.exc2 {
+  border-left-color: var(--exc-mark);
+}
+
+.ln.par {
+  border-left-color: var(--par-mark);
+  background: var(--par);
+}
+
+.ln.par2 {
+  border-left-color: var(--par-mark);
+}
+
+body.hide-run .ln.run,
+body.hide-run .ln.run2,
+body.hide-mis .ln.mis,
+body.hide-mis .ln.mis2,
+body.hide-exc .ln.exc,
+body.hide-exc .ln.exc2,
+body.hide-par .ln.par,
+body.hide-par .ln.par2 {
+  border-left-color: transparent;
+  background: none;
+}
+
+.ln.selected {
+  box-shadow: inset 2px 0 0 var(--selected);
+}
+
+.ln .runs,
+.ln .ctx {
+  margin-left: 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.ln button.ctx {
+  padding: 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ln .jumps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.ln .jump {
+  position: relative;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--par-mark);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.ln .jump .why {
+  display: none;
+  position: absolute;
+  top: 1.6em;
+  right: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: 48ch;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--tip-ink);
+  background: var(--tip);
+  font-weight: 400;
+  white-space: normal;
+}
+
+.ln .jump:hover .why,
+.ln .jump:focus .why {
+  display: block;
+}
+
+.ln .ctx-list {
+  flex: 1 0 100%;
+  margin: 2px 0 6px 5.5em;
+  padding: 4px 8px 4px 28px;
+  border-left: 2px solid var(--rule);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+/* Pygments' token classes, coloured by family. */
+.k,
+.kc,
+.kd,
+.kn,
+.kp,
+.kr,
+.ow {
+  color: var(--token-keyword);
+}
+
+.kt,
+.nb,
+.bp {
+  color: var(--token-builtin);
+}
+
+.nf,
+.fm {
+  color: var(--token-function);
+}
+
+.nc,
+.nn,
+.ne {
+  color: var(--token-class);
+}
+
+.nd {
+  color: var(--token-decorator);
+}
+
+.s,
+.s1,
+.s2,
+.sa,
+.sb,
+.sc,
+.sd,
+.se,
+.sh,
+.si,
+.sr,
+.ss,
+.sx,
+.dl {
+  color: var(--token-string);
+}
+
+.m,
+.mb,
+.mf,
+.mh,
+.mi,
+.mo,
+.il {
+  color: var(--token-number);
+}
+
+.c,
+.c1,
+.ch,
+.cm,
+.cp,
+.cpf,
+.cs {
+  color: var(--token-comment);
+  font-style: italic;
+}
+
+.o,
+.p {
+  color: var(--token-operator);
+}
+
+@media (max-width: 640px) {
+  header.top {
+    padding: 12px;
+  }
+
+  main {
+    padding: 8px 8px 32px;
+  }
+
+  table.index th,
+  table.index td {
+    padding: 4px 6px;
+  }
+
+  .ln .no {
+    flex-basis: 3.5em;
+  }
+}
