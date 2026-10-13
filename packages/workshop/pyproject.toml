@@ -73,6 +73,7 @@ cmake = "livery.extensions.cmake"
 conan = "livery.extensions.conan"
 cpp = "livery.extensions.cpp"
 docs = "livery.extensions.docs"
+nanobind = "livery.extensions.nanobind"
 python = "livery.extensions.python"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
@@ -132,6 +133,7 @@ module-name = [
     "livery.extensions.conan",
     "livery.extensions.cpp",
     "livery.extensions.docs",
+    "livery.extensions.nanobind",
     "livery.extensions.python",
 ]
 namespace = true

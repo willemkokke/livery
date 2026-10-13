@@ -825,6 +825,31 @@ def test_a_refresh_that_could_not_look_does_not_report_nothing_new(
     assert "ruff" in result.stderr
 
 
+def test_a_refresh_asked_to_submit_off_the_default_branch_observes_nothing(
+    tmp_path, monkeypatch
+):
+    """A rehearsal runs the nightly on a branch: the refresh would read
+    every tool's releases for minutes and then submit nothing, since it
+    submits from the default branch alone. It stops before it looks.
+    """
+    from livery.toolroom.bench import _tasks as tools
+
+    isolate(tools, monkeypatch, tmp_path)
+    monkeypatch.setattr(tools, "_on_default_branch", lambda run: False)
+
+    def looked(**kwargs: Any) -> None:
+        raise AssertionError("the refresh observed off the default branch")
+
+    monkeypatch.setattr(tools, "gather", looked)
+
+    result = tools_run("refresh --submit")
+    assert result.ok, result.stderr
+    assert (
+        "the checkout is not on origin's default branch, so the refresh observes"
+        " nothing: it submits from the default branch alone" in result.stdout
+    )
+
+
 def test_a_refresh_writes_its_own_events_into_the_changelog(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks as tools
 

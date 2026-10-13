@@ -187,6 +187,18 @@ def test_the_kind_chains_from_python(python_steps: object) -> None:
     assert record.host_tools == ("cc", "c++")
 
 
+def test_a_package_of_the_kind_that_lists_nothing_holds_python_cpp_and_conan() -> None:
+    """Python's extension through the chain, then cpp and conan.
+
+    A nanobind package is a python distribution whose extension module
+    is C++ (cpp), and it consumes conan's packages without being a
+    recipe (conan, for the provider that resolves them).
+    """
+    from livery.workshop._kinds import kind_stands_for
+
+    assert kind_stands_for("python-nanobind") == ("python", "cpp", "conan")
+
+
 # The chain's seeds: the parent's first, the leaf's over them.
 
 

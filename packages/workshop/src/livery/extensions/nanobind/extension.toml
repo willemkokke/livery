@@ -1,0 +1,10 @@
+# nanobind: a python package whose extension module is C++, bound to
+# python through nanobind and built into one wheel per platform. It
+# declares nothing: a package of the python-nanobind kind lists no
+# extension and holds python, cpp and conan through its kind, whose
+# backend builds, tests and releases it until the package kinds go.
+
+[extension]
+api-version = 1
+# Listed in a package's extensions.
+levels = ["package"]

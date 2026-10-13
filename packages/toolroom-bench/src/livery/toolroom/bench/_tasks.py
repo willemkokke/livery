@@ -1880,10 +1880,23 @@ def refresh(
     committed on the day's branch and submitted as a pull request:
     armed when every change only added to a surface, the graded
     trigger's green light, and left for a person otherwise. A day's
-    branch that origin already holds is built on, and a refresh that
-    adds nothing to it says so and commits nothing. Nothing moved means
-    no branch and no pull request.
+    branch that origin already holds with every file this refresh
+    wrote means the day's refresh is already submitted. Nothing moved
+    means no branch and no pull request. A refresh asked to submit
+    submits from the history of origin's default branch alone, so on
+    another checkout, a branch a rehearsal runs on among them, it
+    observes nothing and says so.
     """
+    import livery.toolroom.tools as toolroom
+
+    if submit and not _on_default_branch(
+        toolroom.git.opts(nofail=True, recorded=False)
+    ):
+        print(
+            "  the checkout is not on origin's default branch, so the refresh"
+            " observes nothing: it submits from the default branch alone"
+        )
+        return Refreshed(read={}, events={}, unreachable={}, skipped=[])
     found = gather(only=only, prefix=prefix)
     finished = _finish(_assemble_documents([found.document()]), changelog)
     if submit:
