@@ -68,10 +68,11 @@ numbering: a set holds a context by its place in the list. A record
 keeps a unit's numbering from one reading to the next (`numbering`): a
 context keeps its index whether or not the next reading names it
 again, and a context the record has not numbered yet takes the next
-index. Two readings of a unit a run apart then differ only where the
-tests that reached a line did, and git can store the second as its
-small difference from the first; a numbering sorted afresh would move
-the index of every context after a new test's. `renumbered` moves a part
+index. Two readings of a unit a run apart then keep a line's set of
+tests byte for byte wherever the same tests reached it, and git can
+store the second as a small difference from the first; a numbering
+sorted afresh would move the index of every context after a new
+test's. `renumbered` moves a part
 to another numbering.
 
 A record keeps each part in its stored form, which `stored` writes and

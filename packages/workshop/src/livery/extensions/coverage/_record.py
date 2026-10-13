@@ -36,11 +36,12 @@ row names the tests that reached each line, and its numbering of them
 lives in the row: each write numbers them as the row it replaces did,
 so a test keeps its index from run to run, a new test takes the next,
 and a test that is gone keeps its index, reached by no line (the line
-format's `numbering`). Two rows of a unit a run apart then differ only
-where the tests that reached a line did. One run's writes append the
-same tests on every leg (`run_contexts`), so a test has one index in
-its unit's rows on every leg, and the legs' rows differ only where
-their lines did. Reach for
+format's `numbering`). Two rows of a unit a run apart then keep a
+line's set of tests byte for byte wherever the same tests reached it.
+One run's writes append the same tests on every leg (`run_contexts`),
+so a test has one index in its unit's rows on every leg, and the legs'
+rows keep a line's set alike wherever the same tests reached it. Reach
+for
 `recorded` to read a record on a leg, `leave_run` to leave a leg's
 parts for its write, `run_legs` to read them in the gate job, and
 `put_record` to write the record. A read of a record parses its
@@ -175,8 +176,8 @@ def kept_name(path: str, closure: str, when: datetime) -> str:
     It ends in the unit's own row name (`row_name`), the moment and the
     closure before it: git chooses which files to store as the
     difference from another by the last sixteen characters of their
-    names, so a kept row is stored against its unit's other rows, of
-    every leg and every run, where the stable numbering of the tests
+    names, so a kept row can be stored against its unit's other rows,
+    of every leg and every run, where the stable numbering of the tests
     keeps that difference small.
     """
     moment = f"{when.astimezone(UTC):{KEPT_STAMP}}"
