@@ -55,8 +55,7 @@ def builtin_points(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
     monkeypatch.setattr(footman, "prog", lambda: "fm")
     with jobs_restored():
-        _points._CONTRIBUTED_JOBS.clear()
-        _points._JOINED_JOBS.clear()
+        _points.restore(_points.snapshot(initial=True))
         yield
 
 

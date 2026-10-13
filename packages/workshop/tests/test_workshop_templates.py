@@ -864,13 +864,11 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
     state = _steps.snapshot()
     try:
         with jobs_restored():
-            assert "nanobind" not in mounted_now(monkeypatch, root)
-            handed = wired_here(
-                monkeypatch, root, starting=lambda: mounted_now(monkeypatch, root)
-            )
+            assert "nanobind" not in mounted_now(root)
+            handed = wired_here(monkeypatch, root, starting=lambda: mounted_now(root))
             new_package("ext", kind="package-python-nanobind")
             # The next command mounts nanobind too, and nothing drifts.
-            assert "nanobind" in mounted_now(monkeypatch, root)
+            assert "nanobind" in mounted_now(root)
             assert shipped_drift(root) + project_drift(root) == []
             assert "\n  wheels:\n" in release.read_text()
             assert len(handed) == 1

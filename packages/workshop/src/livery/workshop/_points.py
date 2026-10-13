@@ -780,7 +780,9 @@ def withdraw_job(point: str, name: str) -> None:
         del _JOINED_JOBS[key]
 
 
-def snapshot() -> tuple[
+def snapshot(
+    *, initial: bool = False
+) -> tuple[
     dict[tuple[str, str], JobContribution],
     dict[tuple[str, str, str], JobContribution],
     Tasks | None,
@@ -788,8 +790,11 @@ def snapshot() -> tuple[
     """The jobs the extensions added and joined, and the kept task tree, for restore.
 
     Judges ride their joins' entries. [livery.workshop._points.restore][]
-    puts all three back.
+    puts all three back. With *initial*, the state a process starts with
+    instead: no job added or joined, and no task tree kept.
     """
+    if initial:
+        return {}, {}, None
     return dict(_CONTRIBUTED_JOBS), dict(_JOINED_JOBS), MOUNTED
 
 

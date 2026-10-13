@@ -449,7 +449,7 @@ def _seed_gitea() -> None:
             "--username",
             _ADMIN,
             "--password",
-            "livery-dev-password",
+            footman.Secret("livery-dev-password"),
             "--email",
             "admin@livery.local",
             "--admin",
@@ -542,7 +542,9 @@ def _seed_gitlab() -> None:
         print("  seed: existing gitlab token still works, keeping it")
     else:
         token = f"livery-{secrets.token_hex(24)}"
-        script = (
+        # The script names the token, so the whole script is a Secret:
+        # a shown command line carries *** in its place.
+        script = footman.Secret(
             "u = User.find_by_username('root'); "
             "t = u.personal_access_tokens.build("
             'scopes: [:api], name: "livery-seed-" + Time.now.to_i.to_s, '
@@ -613,7 +615,7 @@ def _register_gitlab_runner() -> None:
         "--url",
         "http://gitlab:8929/",
         "--token",
-        runner_token,
+        footman.Secret(runner_token),
         "--executor",
         "shell",
         "--clone-url",

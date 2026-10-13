@@ -1330,7 +1330,11 @@ live test reading the dev containers' credentials through
 `livery.forge.testing.shared_env_path`, which skips without the file.
 The plugin also guards the process-global task registry: a test that
 leaves tasks there fails at its teardown naming them, and the next
-test never inherits them.
+test never inherits them. What an extension mount writes goes back
+after every test as well: the listed extensions' steps, the jobs they
+add to the CI points and join, the task tree a run keeps, and the
+mount's record. A step one test mounted therefore never judges the
+changes of a later test on the same worker.
 
 The forge lane belongs to `livery.forge`; the workshop orchestrates
 local, git, and forge steps and never hands a raw forge verb to a

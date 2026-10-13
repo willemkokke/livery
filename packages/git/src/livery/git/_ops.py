@@ -89,7 +89,10 @@ def call(root: Path, *args: str) -> tools.Result:
 
     The one door every git call takes. A caller that treats a non-zero
     exit as an answer reads the code; one that treats it as a failure
-    calls [livery.git.run][] instead.
+    calls [livery.git.run][] instead. Each argument reaches the tool
+    handle as the object it is, so a [livery.footman.Secret][] stays
+    marked, and every command line footman shows, a profile trace
+    included, carries ``***`` in its place.
     """
     return tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
 
@@ -98,15 +101,28 @@ def run(root: Path, *args: str) -> str:
     """Run git with *args* in *root* and return its standard output.
 
     Raises:
-        GitError: On a non-zero exit, with git's words.
+        GitError: On a non-zero exit, with git's words. The message
+            names the call with ``***`` for an argument that redacts
+            itself.
     """
     result = call(root, *args)
     if result.code != 0:
         raise GitError(
-            f"git {' '.join(args)} exited {result.code}:"
+            f"git {_spelled(args)} exited {result.code}:"
             f"\n{result.stdout}{result.stderr}"
         )
     return result.stdout
+
+
+def _spelled(args: Sequence[str]) -> str:
+    """*args* as an error message names them, ``***`` for one that redacts itself.
+
+    A value that redacts itself carries ``reveal``, as
+    [livery.footman.Secret][] does; the method is the test, so this
+    package imports no footman. A plain join would write the value
+    into the message.
+    """
+    return " ".join("***" if hasattr(arg, "reveal") else arg for arg in args)
 
 
 def main_checkout(root: Path) -> Path:

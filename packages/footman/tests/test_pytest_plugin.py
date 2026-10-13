@@ -283,6 +283,35 @@ def test_a_test_never_inherits_the_drop_box_but_the_suite_still_reports(
     assert fragment.name.startswith("pytest-")
 
 
+def test_what_a_test_writes_into_the_environment_is_gone_before_the_next_test(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hard case first: a run writes a variable, and the test's own
+    `monkeypatch.setenv` takes that written value as the one to put back.
+    The next test finds the variable as the first test found it, absent,
+    and finds one the test removed and one it changed as they were."""
+    monkeypatch.setenv("FM_PLUGIN_REMOVED", "kept")
+    monkeypatch.setenv("FM_PLUGIN_CHANGED", "before")
+    monkeypatch.delenv("FM_PLUGIN_WRITTEN", raising=False)
+    pytester.makepyfile(
+        """
+        import os
+
+        def test_writes(monkeypatch):
+            os.environ["FM_PLUGIN_WRITTEN"] = "from-the-run"
+            monkeypatch.setenv("FM_PLUGIN_WRITTEN", "from-the-test")
+            del os.environ["FM_PLUGIN_REMOVED"]
+            os.environ["FM_PLUGIN_CHANGED"] = "after"
+
+        def test_after():
+            assert "FM_PLUGIN_WRITTEN" not in os.environ
+            assert os.environ["FM_PLUGIN_REMOVED"] == "kept"
+            assert os.environ["FM_PLUGIN_CHANGED"] == "before"
+        """
+    )
+    pytester.runpytest_inprocess().assert_outcomes(passed=2)
+
+
 def test_a_submodule_a_test_imports_first_stays_on_the_package(
     pytester: pytest.Pytester,
 ):
