@@ -574,7 +574,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     declared = declared_targets(start)
     active = resolved_targets(start)
     enabled = enabled_steps(start)
-    asleep = frozenset(_dormant(tuple(active), _contributing(active)))
+    contributes = _contributing(active)
+    asleep = frozenset(_dormant(tuple(active), contributes))
     for entry in _listed(start):
         if why := _bracketed(_spelling(entry)):
             _note(f"{why}; the mount reads the name alone")
@@ -593,7 +594,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             found = _readable(extension)
             if found is not None:
                 check_api_version(extension, found)
-                check_phase_declarers(extension, found, present)
+                check_phase_declarers(
+                    extension, found, present, contributes.get(extension, ())
+                )
                 if (
                     extension not in asleep
                     and register_declared(extension, found.additions, enabled=enabled)
@@ -635,7 +638,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 " list it in each package's `extensions` instead"
             )
             continue
-        check_phase_declarers(extension, found, present)
+        check_phase_declarers(extension, found, present, contributes.get(extension, ()))
         if (
             extension not in asleep
             and register_declared(extension, found.additions, enabled=enabled)
@@ -712,14 +715,22 @@ def _note(text: str) -> None:
 
 
 def check_phase_declarers(
-    extension: str, found: Declaration, present: Iterable[str]
+    extension: str,
+    found: Declaration,
+    present: Iterable[str],
+    applies: Iterable[str] = (),
 ) -> None:
     """Refuse a step of *extension* into a phase whose declarer is not mounted.
 
     A phase is declared by the base, by *extension* itself, or by an
     extension among *present*, the ones mounted before it; a step into
     an installed but unlisted extension's phase names the declarer to
-    list.
+    list. A ``[for.<target>]`` table's steps count only while the table
+    applies, for each target among *applies*, the targets `contributing`
+    names for *extension*; there the target counts as mounted too, since
+    the table's steps register once both are, whichever the list names
+    first. A table for a target the workspace does not list adds no
+    step, so it refuses nothing.
 
     Raises:
         Failed: naming the extension, the phase and its declarer.
@@ -727,18 +738,22 @@ def check_phase_declarers(
     from livery.footman import fail
     from livery.workshop import _phases
 
-    mounted = {SELF, extension, *present}
-    added = {record.phase for record in found.additions.steps}
-    added |= {
-        record.phase
-        for additions in found.targets.values()
-        for record in additions.steps
+    mounted = frozenset({SELF, extension, *present})
+    added = {
+        (phase, mounted)
+        for phase in (
+            *(record.phase for record in found.additions.steps),
+            *found.phases,
+        )
     }
-    added |= set(found.phases)
+    for target in applies:
+        additions = found.targets.get(target)
+        if additions is not None:
+            added |= {(record.phase, mounted | {target}) for record in additions.steps}
     specs = _phases.declared_phases()
-    for phase in sorted(added):
+    for phase, allowed in sorted(added, key=lambda pair: (pair[0], sorted(pair[1]))):
         declarer = specs[phase].extension if phase in specs else SELF
-        if declarer not in mounted:
+        if declarer not in allowed:
             fail(
                 f"extension {extension!r} adds steps to the {phase} phase, which"
                 f" {declarer} declares and the workspace does not list; list"

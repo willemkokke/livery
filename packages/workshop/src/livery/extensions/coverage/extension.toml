@@ -38,13 +38,21 @@ doc = "how far, in percentage points, coverage may fall below the floor; 0.5 whe
 types = ["bool"]
 doc = "whether anything judges the package's coverage; true when absent, and false gives no verdict, records no mark and takes no floor"
 
-# While docs is listed, the function that draws the coverage pages of
-# the packages that declare an htmlcov report: each file's lines,
-# branches, functions and classes as coverage.py counts them, from the
-# parts main's record stores in the merge point's gate job and from the
-# data a gate run left anywhere else.
-[for.docs.queries]
-"docs.coverage-pages" = "livery.extensions.coverage._pages:renderer"
+# While docs is listed, the coverage pages of each package whose [docs]
+# coverage names an htmlcov report: each file's lines, branches,
+# functions and classes as coverage.py counts them. In the docs phase,
+# before the site builds, they are drawn from the data a gate run left
+# on the machine; a package no data reaches gets no tree, and its page
+# states the absence.
+[for.docs.phases.docs.coverage]
+main = "livery.extensions.coverage._pages:pages_run"
+
+# In the deploy phase, which docs.publish runs on the built site, they
+# are drawn again from main's coverage record, the union main's gate
+# judged, for the publish to put into the site. A drawing failure fails
+# the publish and leaves the verdict as it was.
+[for.docs.phases.deploy.coverage]
+main = "livery.extensions.coverage._pages:redraw_run"
 
 # Each check leg leaves its measured suites' parts for the leg's one
 # write, after the gate and before that write: the suites no record

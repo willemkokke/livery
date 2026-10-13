@@ -19,6 +19,3 @@ floor = 87
 # these declarations.
 [owners]
 users = ["willemkokke"]
-
-[docs]
-generators = ["docs.task-reference"]

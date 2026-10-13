@@ -232,12 +232,7 @@ def test_the_docs_extension_declares_the_build_and_joins_the_merge_points_jobs(
     gate_tasks = [
         task for point, job, task in tasks if (point, job) == ("merge", "gate")
     ]
-    assert gate_tasks == [
-        "workflow.release.dispatch",
-        "docs.coverage-pages",
-        "docs.publish",
-        "janitor",
-    ]
+    assert gate_tasks == ["workflow.release.dispatch", "docs.publish", "janitor"]
     verdict = next(entry for entry in entries if entry.task == "ci.verdict")
     assert verdict.args == ("--needs=check,docs",)
     assert all(

@@ -680,6 +680,55 @@ def test_a_workspace_listing_coverage_without_docs_mounts(tmp_path: Path) -> Non
         assert _extensions.mount_extensions(tmp_path) == stack
 
 
+#: A phase outside the gate, declared by an extension that adds no step to it.
+_BOOK = """\
+[phases.book]
+level = "workspace"
+gated = false
+verb = false
+"""
+
+#: Steps into that phase: one while its declarer is listed, and one while
+#: a third extension, which declares nothing, is.
+_DRAWER = """\
+[for."acme.book".phases.book.draw]
+main = "{package}._steps:noop"
+
+[for."acme.shelf".phases.book.shelve]
+main = "{package}._steps:noop"
+"""
+
+
+def test_a_for_table_s_step_into_an_unlisted_target_s_phase_is_silent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, book=_BOOK, drawer=_DRAWER, shelf="")
+    # Listed without its targets, no table applies: the mount refuses none
+    # of their steps, says nothing of them and registers none.
+    root_contract(tmp_path, '["acme.drawer"]')
+    _mount(tmp_path)
+    assert not {"book.draw", "book.shelve"} & set(_steps.steps_by_name())
+    assert capsys.readouterr().err == ""
+    # A table applies while its target is listed, and refuses a step into
+    # a phase whose declarer the workspace does not list.
+    root_contract(tmp_path, '["acme.shelf", "acme.drawer"]')
+    with pytest.raises(
+        _FAILURES,
+        match=r"extension 'acme\.drawer' adds steps to the book phase, which"
+        r" acme\.book declares and the workspace does not list",
+    ):
+        _mount(tmp_path)
+    # Listed with the declarer, its step registers whichever of the two
+    # the list names first.
+    for listed in ('["acme.book", "acme.drawer"]', '["acme.drawer", "acme.book"]'):
+        if "book.draw" in _steps.steps_by_name():
+            _steps.unregister_step("book.draw")
+        root_contract(tmp_path, listed)
+        _mount(tmp_path)
+        assert _steps.steps_by_name()["book.draw"].extension == "acme.drawer"
+        assert "book.shelve" not in _steps.steps_by_name()
+
+
 #: An extension that judges what another measures for it: dormant until
 #: a listed extension contributes a table to it, with a step, a CI entry
 #: and a judge of its own, and a step it adds to a python extension.

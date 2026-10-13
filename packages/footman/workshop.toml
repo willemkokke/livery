@@ -10,7 +10,7 @@ description = "A task runner with typed commands, nested groups, and instant she
 dev-extras = ["test"]
 
 [docs]
-generators = ["footman.pages", "docs.task-reference"]
+generators = ["footman.pages"]
 # The curated, generated api page is the API reference, exactly as the
 # original site shipped it; the per-module mkdocstrings pages would
 # document the same surface twice.

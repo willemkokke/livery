@@ -149,7 +149,10 @@ def test_the_docs_extension_has_its_own_entry_point_and_the_docs_group() -> None
 
         assert _tasks.docs_group.name == "docs"
         names = set(_tasks.docs_group.tasks)
-    assert {"build", "publish", "serve", "coverage-pages", "task-reference"} <= names
+    assert {"build", "publish", "serve"} <= names
+    # Steps of the docs phase draw the task reference and the coverage
+    # pages; no verb does.
+    assert not {"coverage-pages", "task-reference"} & names
 
 
 def test_the_base_task_module_does_not_import_the_site() -> None:
