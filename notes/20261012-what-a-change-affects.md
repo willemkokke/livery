@@ -75,10 +75,9 @@ Each is a consumer of the one engine with its own influence rule.
 - In CI the test runner arms `COVERAGE_PROCESS_START`, the `.pth`
   meters every child, `patch = subprocess` follows the `fm` children a
   test spawns, the ctrace core keeps every context complete, and the
-  contexts plugin (`livery.workshop._pytest_contexts`) names each
-  test's phases by node id; 12e's P2c makes it one context per test,
-  the node id (ruled 2026-10-13). The footprint is a second reading of
-  data the full run already collects.
+  contexts plugin (`livery.extensions.pytest._contexts`) records one
+  context per test, its node id (ruled 2026-10-13). The footprint is a
+  second reading of data the full run already collects.
 - The nightly point and a dispatch pay the whole gate
   (`ci_affected_base` in `livery.workshop._quality`). A push to main
   narrows from the nearest tree CI's record proves (`ci_push_base`), so
