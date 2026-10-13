@@ -1298,19 +1298,16 @@ substitution. `[generators.<name>]` and the members policy in
 `livery.extensions.docs` (the extension is still in the wheel);
 `zensical.toml` becomes a composed file of the fragment engine, the
 docs extension's dynamic fragment with contributed tables; `Extractor`
-and `KindRecord.coverage_pages` go. `livery-extensions-mkdocstrings`,
+goes. `livery-extensions-mkdocstrings`,
 its own distribution requiring `docs`: the python generator, the
 handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
 `griffelib`, the generator's `paths` option at `[generators.mkdocstrings]`
 (`[docs] api` stays docs'); the
-workshop wheel drops `griffelib`. The coverage extension,
-`livery.extensions.coverage`, starts in the workshop wheel the way
-docs did: its `[for.docs]` table declares the coverage pages
-generator, one renderer for every kind that reads the line format,
-and pytest's `[for.coverage]` table reduces coverage.py's data to
-that format. Open item 3 decides whether a line carries its branch
-counts. The docs extension reads both generators through
-`contributions_for("docs")` and names no language. The
+workshop wheel drops `griffelib`. The coverage pages, which 12e gives
+the coverage extension as its answer to a query the docs extension
+declares, become coverage's step of the docs phase. The docs
+extension reads its generators through `contributions_for("docs")`
+and names no language. The
 `REFERENCES` query replaces the base's python parse in the layering
 check, python's extension answering it. This repository and
 `fm new.project`'s stock list add `mkdocstrings` after `docs`.
@@ -1376,11 +1373,17 @@ first: `test_a_curated_package_with_an_unplaced_export_refuses_naming_it`,
 renders footman's reference with every exported name present;
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
 
-**12e, coverage.** `livery-extensions-coverage` leaves the workshop
-wheel and takes what the base holds today: the floors (a percentage
-or `auto-ratchet`), the epsilon, the ratchet's marks, the line
-format and its union across legs, `coverage.leg`, `coverage.union`,
-`coverage.enforce` and `coverage.accept`, and their CI entries. Its
+**12e, coverage** (issue #1538, before 11c). The coverage extension,
+`livery.extensions.coverage`, starts in the workshop wheel the way docs
+did and later ships as `livery-extensions-coverage`. It takes what the
+base holds today: the floors (a percentage or `auto-ratchet`), the
+epsilon, the ratchet's marks, the line format and its union across
+legs, `coverage.leg`, `coverage.union`, `coverage.enforce` and
+`coverage.accept`, their CI entries, and the coverage pages, which
+`KindRecord.coverage_pages` draws today: one renderer draws every
+language's pages from the line format, which carries the most detail
+a measurer gives (decision record, 2026-10-12), and pytest's
+`[for.coverage]` table reduces coverage.py's data to it. Its
 `[coverage]` table replaces `[qa]`: `floor` and `epsilon` as
 before, and `required = false` for a package whose coverage nothing
 judges. Such a package is still measured, and its page still
@@ -1390,13 +1393,26 @@ coverage.py's configuration and the reduction to lines, and a C++
 test extension brings llvm-cov's or gcov's. A workspace that does
 not list `coverage` runs no coverage leg, so a project born with
 ruff alone is green (#1225); a listing with no measuring extension
-is dormant and named, like any `[for]`-only listing. Acceptance,
-refusals first:
-`test_a_package_with_coverage_not_required_is_never_judged`,
+is dormant and named, like any `[for]`-only listing. New projects list
+`coverage` in the stock list. The parts, each mergeable alone: P0
+pins in today's spelling; P1 the extension owns the pages, still drawn
+by coverage.py, through a query the docs extension declares and
+coverage answers in `[for.docs]`; P2a `[coverage]` replaces `[qa]`;
+P2b the machinery moves, with the base seams it needs (`judges` on a
+join of the verdict job, the leg's one write as a spool, the
+`store.series` query, a seam that runs a phase's steps over named
+packages), which closes #1225; P2c dormancy and the measurers'
+`[for.coverage]` tables; P3 the line format and the one renderer,
+parity-tested against coverage.py's own pages before they go; P4 the
+record and the union in the line format; P5 the tests that reached
+each line; P6, later, the distribution apart. Acceptance, refusals
+first: `test_a_package_with_coverage_not_required_is_never_judged`,
 `test_a_workspace_without_coverage_runs_no_coverage_leg`,
 `test_a_coverage_listing_with_no_measurer_is_dormant_and_named`;
-`fm ci.e2e --extension=ruff --fresh` is green; `fm check` on this
-repository judges every package's floor as before.
+`test_the_pages_show_what_coverage_py_shows`; `fm ci.e2e
+--extension=ruff --fresh` is green once, on 12e's branch, as #1225's
+proof; `fm check` on this repository judges every package's floor as
+before.
 
 ### Phase 13: the release train through phases
 
@@ -2747,6 +2763,27 @@ neither needs nor rules out).
   claims and inputs lack, and `[tests] reads` must use the one spelling.
   Phase 16 is that plan's phases 1 and 2, in its place here; the
   selection phases still wait for Willem's go.
+
+- 2026-10-13, Willem, on 12e's plan (#1538): new projects list
+  `coverage`; Pygments joins the workshop's dependencies, imported when
+  pages render, so every language's pages are highlighted; the ruff-only
+  loop pass runs once on 12e's branch as #1225's proof and is no nightly
+  entry, since the gate's tests guard it after (coverage's verbs among
+  the vocabulary test's words, a workspace without coverage running no
+  coverage entry, a golden of a ruff-only workspace's rendered
+  workflows). The tests that reached each line go into every row on
+  every leg, measured on 2026-10-13 rather than estimated: the workshop
+  suite's per-test contexts in the line format are 2.36 MB raw and
+  0.35 MB with git's zlib (6,272 contexts over 45,689 lines, 5,496
+  distinct sets of tests), against an estimate of tens of MB, and a
+  run a day's commits later packs against it for 0.08 MB more (both
+  0.43 MB packed), as the CI profile traces did. Contexts are numbered
+  stably across runs, since a sorted numbering shifts with every new
+  test and spoils the delta. Taken as
+  the plan recommends: JSON parts with range strings for line sets and
+  the sentence of each untaken branch, 12e before 11c through a query
+  the docs extension declares, the renderer proved against coverage.py's
+  pages before the record switches, 100 as the default floor.
 
 ## Open
 

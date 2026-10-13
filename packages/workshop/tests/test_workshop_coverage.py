@@ -1305,8 +1305,7 @@ joined = separator.join(["a", "b"])
 """
 
 
-# A function's name cannot wrap, and this one is two columns too long.
-def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_stays_partial(  # noqa: E501
+def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_is_partial(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     package = _suite(tmp_path, "x")
