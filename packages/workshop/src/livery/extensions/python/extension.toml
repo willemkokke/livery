@@ -15,6 +15,14 @@ requirements = "livery.extensions.python._answers:requirements"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 
+# Who prints a machine's coverage preview after its suites ran, a query
+# a listed extension answers with the function that prints it, given
+# the workspace root and the packages the run tested: one answer, the
+# nearest. With no answer, a machine's run prints no preview.
+[queries."python.test.preview"]
+level = "workspace"
+combine = "nearest"
+
 # The steps this extension adds to a package's lifecycle phases, one
 # per phase, each named for the extension, and the test phase's
 # isolated side, which the release train runs once per resolution it

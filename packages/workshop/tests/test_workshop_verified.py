@@ -226,7 +226,8 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
     )
     trace = _trace(work / "fm-profile.json")
     assert (
-        _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace) == ""
+        _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace)[1]
+        == ""
     )
     found = git.read(state_store(work), _metrics.run_ref(RUN, "check-a"))
     assert found.files is not None

@@ -19,8 +19,8 @@ from livery.extensions.coverage._format import (
     Part,
     Region,
 )
+from livery.extensions.coverage._record import LINES, Unit
 from livery.footman import Failed
-from livery.workshop._coverage_store import LINES, Unit
 from workshop_coverage_pages import read_page
 from workshop_extension_fakes import fake_extensions, fake_steps
 
@@ -247,7 +247,7 @@ def test_a_source_written_with_crlf_draws_the_lines_and_the_digest_of_its_lf_for
 def test_a_name_written_with_backslashes_is_drawn_with_forward_slashes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._coverage_lines import write_part
+    from livery.extensions.coverage._lines import write_part
 
     root = _workspace(tmp_path, monkeypatch)
     native = "packages/core/src/native.cpp"

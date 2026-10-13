@@ -345,6 +345,7 @@ or the rule's answer over nothing. The base declares:
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
 | `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
+| `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
 
 A name no extension declares refuses with the nearest one; an answer
 refuses when the extension's levels lack the query's, and when it is
@@ -565,7 +566,11 @@ job of its point that waits for it, else before the point's verdict
 job, else last. A table naming a job the point already has, declared,
 inherited or contributed, joins it instead of adding one; a join's
 `needs` join the needs of a job the point has of its own, and a join
-of a job the point inherits names none. `[ci.jobs.merge.docs]` keeps
+of a job the point inherits names none. A join of a point's own
+verdict job may name `judges`, tasks that judge the run: they run
+before the job collects the run's rows, and a red one stops the job
+before the verdict and the stamp, as a red builtin entry does; `judges`
+on any other job refuses. `[ci.jobs.merge.docs]` keeps
 the built site as the run's artifact on a push, and
 `[ci.jobs.merge.gate]` collects it into the gate job, adds the
 coverage pages and the publish to the gate job's entries after its
@@ -1146,6 +1151,11 @@ each process a test starts included and the gate's own driver never,
 so a line counts only when a test reached it, and the gate job
 combines all platforms before enforcing, so the floors are
 deterministic per change and never depend on one machine's view.
+The extension brings its own CI: its entry `coverage.leg` joins each
+check leg before the leg's own write, and its judge `coverage.union`
+joins the gate job before the run's rows are collected, so a package
+below its floor stops the job before the verdict and the stamp. A
+workspace that does not list `coverage` runs neither.
 Measurement is the kind's answer, reduced to one shape before
 anything is stored. A python suite's is coverage.py's arcs. A native
 suite's is lines: the gate build is instrumented for the compiler
@@ -1173,15 +1183,17 @@ under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the workshop's own pytest
 plugin, quiet outside a measured run), the leg splits the run's data
-per suite and puts each suite's lines on its per-run ref of the
-state store, with the identity of the suite's dependency closure
+per suite and leaves each suite's lines for the leg's one write,
+which puts them on its per-run ref of the state store, with the
+identity of the suite's dependency closure
 (the tree ids of the package and of every package it depends on,
 plus the root's `pyproject.toml` and `uv.lock`). Main has a
 coverage record, and so does every branch with a pull request run:
 per check leg, one row per suite, the arcs the last run judged and
-the closure each was measured at. A leg skips a suite only when its
-branch's record or main's holds it at the suite's current closure;
-otherwise the suite runs, and the leg says why. The workspace's own
+the closure each was measured at. The gate narrows on what the change
+affects alone; after it, the coverage leg runs every suite neither
+its branch's record nor main's holds at the suite's current closure,
+measured for its lines, and says why. The workspace's own
 `tests/` directory is a unit too, keyed by every package's tree, and
 every leg that runs a suite runs it. The gate job unions the legs'
 lines with every skipped suite carried from the records before it
@@ -1202,7 +1214,11 @@ main's without measuring; a squash of a stale branch has another
 tree and pays the full gate. A suite neither record holds is
 measured on the spot. The janitor drops a branch's record once the
 branch is gone from origin. A local `fm check` prints its own
-lower-biased preview beside the floor, for information. Raise a
+lower-biased preview beside the floor, for information: the same
+figure over the machine's own run, a file the meter named with no line
+run left out as the union leaves it out. The python extension asks for
+it as the answer to `python.test.preview`, which the coverage
+extension gives while it is listed. Raise a
 committed floor as the suite grows; lower it only deliberately, in a
 reviewed change or an accepted row. The release legs publish a
 further, informational union that includes the live-only code.
@@ -1272,15 +1288,19 @@ so the gate job lists once for its union, collect, judge, stamp, and
 janitor. A write keeps its compare-and-swap on the listed sha, its
 push's own report is its verdict, and it records the sha it pushed
 for the reads and the entries after it. A check leg writes its
-per-run ref once, its timing row beside its measured suites.
+per-run ref once, in its last entry, `ci.leg`: its timing row and
+every file the leg's other entries left for it, the coverage
+extension's measured suites among them. The gate job's collect folds
+the sections its judges left into the run's row, a number per
+package each, which `fm ci.timings` renders as a trend.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
-| `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
-| `run/<id>/<leg>` | a check leg's half of its timing row, and the suites it measured with the scope it ran, until the gate job collects it | none | the leg |
+| `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
+| `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
-| `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
+| `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
+| `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `fetched` (local) | when origin's namespace was last mirrored into `refs/workshop-origin/*`, and how many refs | 1 | `fm sync`, `fm start` |

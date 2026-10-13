@@ -284,7 +284,7 @@ def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]
     from livery.git import WHOLE, remote_snapshot
     from livery.git import sweep as sweep_series
     from livery.workshop._ci_context import run_context, state_store
-    from livery.workshop._series import DECLARED
+    from livery.workshop._series import declared
 
     if root is None:
         return ["state store: no checkout here; nothing swept"]
@@ -293,7 +293,7 @@ def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]
     scope = remote_snapshot(state_store(root), fetch=WHOLE) if remote else nullcontext()
     with scope:
         lines = sweep_series(
-            state_store(root), DECLARED, remote=remote, dry_run=dry_run, now=now
+            state_store(root), declared(root), remote=remote, dry_run=dry_run, now=now
         )
     return [f"state store: {line.strip()}" for line in lines]
 

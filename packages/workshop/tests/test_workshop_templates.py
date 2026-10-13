@@ -111,13 +111,19 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     )
 
 
-def _composed(tmp_path: Path, name: str) -> str:
-    """*name* as the base composes it into a workspace listing no extension."""
+def _composed(tmp_path: Path, name: str, extensions: tuple[str, ...] = ()) -> str:
+    """*name* as the engine composes it into a workspace listing *extensions*."""
     from livery.workshop._shipped_files import outputs
 
     workspace = tmp_path / "composed"
     workspace.mkdir(exist_ok=True)
-    (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    # A listed extension's templates read the project's identity, which
+    # a named workspace has.
+    named = 'name = "composed"\n' if extensions else ""
+    (workspace / "workshop.toml").write_text(
+        f"[workspace]\n{named}extensions = [{listed}]\n"
+    )
     (output,) = [o for o in outputs(workspace) if o.path == name]
     return output.body.decode()
 
@@ -524,25 +530,58 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
 ) -> None:
     # A gate writes the data at the root, and a file it leaves untracked
     # makes the tree dirty, which a workflow verb refuses; coverage's own
-    # configuration, `.coveragerc`, is a tracked file beside them.
+    # configuration, `.coveragerc`, is a tracked file beside them. The
+    # extensions that write the data ship its lines: the meter's data is
+    # pytest's, the rest coverage's, and the base names none of them.
     import subprocess
 
-    from livery.workshop._coverage_lines import PART_PREFIX
+    from livery.extensions.coverage._lines import PART_PREFIX
 
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
-    data = (".coverage", ".coverage.host.1.2", f"{PART_PREFIX}packages-geometry.json")
+    metered = (".coverage", ".coverage.host.1.2")
+    data = (
+        *metered,
+        f"{PART_PREFIX}packages-geometry.json",
+        "coverage-data/check-a/fresh.coverage",
+        "packages/geometry/htmlcov/index.html",
+    )
     for name in (*data, ".coveragerc"):
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text("x\n")
 
     def ignored(name: str) -> bool:
         done = subprocess.run(["git", "check-ignore", "-q", name], cwd=repo)
         return done.returncode == 0
 
+    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
+    assert [name for name in data if ignored(name)] == []
+    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", ("pytest",)))
+    assert [name for name in data if ignored(name)] == list(metered)
+    listed = ("pytest", "coverage")
+    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", listed))
     assert [name for name in data if not ignored(name)] == []
     assert not ignored(".coveragerc")
+
+
+def test_a_native_package_s_lines_part_is_ignored_with_coverage_unlisted(
+    tmp_path: Path,
+) -> None:
+    # The cmake extension's test leaves a lines part at the root whether
+    # coverage is listed or not, so the extension that writes it ships
+    # its ignore line, delivered while a package's kind holds cmake.
+    from livery.extensions.coverage._lines import PART_PREFIX
+    from livery.workshop._shipped_files import outputs
+
+    workspace = tmp_path / "native"
+    member = workspace / "packages" / "lib"
+    member.mkdir(parents=True)
+    (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-lib"\n')
+    (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
+    assert f"{PART_PREFIX}*" in ignored.body.decode().splitlines()
+    assert f"{PART_PREFIX}*" not in _composed(tmp_path, ".gitignore").splitlines()
 
 
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:

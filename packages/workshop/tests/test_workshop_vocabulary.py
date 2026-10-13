@@ -1,10 +1,11 @@
-"""The base names no package kind and no extension's tool: the vocabulary test.
+"""The vocabulary test: the base names no kind, no extension's tool, no coverage verb.
 
 The workshop's base (``livery.workshop`` outside ``_backends``) reaches
 a kind through the kind registry, never by importing a backend or by
-spelling the kind's words, and names no tool a listed extension's
-steps bring. This test scans the base's sources for all three, and
-every extension's (``livery.extensions``) for an import of a backend.
+spelling the kind's words, names no tool a listed extension's steps
+bring, and names none of the coverage extension's verbs. This test
+scans the base's sources for each, and every extension's
+(``livery.extensions``) for an import of a backend.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
@@ -31,7 +32,6 @@ BACKEND_IMPORT = "import a backend"
 #: The base's own python runtime: (module, word) to (count, reason).
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
-    ("_coverage_store", "pyproject.toml"): (1, "the root pins the gate reads"),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
     ("_points", "python"): (1, "a runner's interpreter version"),
     ("_pythons", "pyproject.toml"): (1, "the root's requires-python"),
@@ -281,6 +281,77 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
     assert dict(found) == allowed
+
+
+#: The coverage extension's verbs the base still names:
+#: (module, verb) to (count, reason).
+VERB_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
+    ("_e2e", "coverage.accept"): (
+        1,
+        "the loop's ratchet scenario lowers a mark through the extension's verb",
+    ),
+}
+
+
+def _coverage_verbs() -> set[str]:
+    """The coverage extension's verbs, read from its plugin's group."""
+    from livery.footman import _registry as registry
+
+    with registry.capture():
+        from livery.extensions.coverage import _tasks
+
+        group = _tasks.coverage_group
+        return {f"{group.name}.{name}" for name in group.tasks}
+
+
+def verb_scan(src: Path, verbs: set[str]) -> Counter[tuple[str, str]]:
+    """The base's string constants naming one of *verbs*, by (module, verb).
+
+    A constant names a verb when the verb's dotted name is one of its
+    words: ``coverage.union`` and ``fm coverage.accept packages/x`` do,
+    ``the coverage union`` does not. Docstrings are prose and left out.
+    """
+    import re
+
+    found: Counter[tuple[str, str]] = Counter()
+    for path in sorted((src / "livery" / "workshop").rglob("*.py")):
+        module = ".".join(
+            path.relative_to(src / "livery" / "workshop").with_suffix("").parts
+        )
+        tree = ast.parse(path.read_text("utf-8"))
+        skip = _docstrings(tree)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in skip
+            ):
+                words = {
+                    word.rstrip(".")
+                    for word in re.split(r"[^A-Za-z0-9_.-]+", node.value)
+                }
+                for verb in verbs & words:
+                    found[(module, verb)] += 1
+    return found
+
+
+def test_the_base_names_no_verb_of_the_coverage_extension() -> None:
+    verbs = _coverage_verbs()
+    # The scan has something to look for: the leg's entry and the judge.
+    assert {"coverage.leg", "coverage.union", "coverage.accept"} <= verbs
+    found = verb_scan(SRC, verbs)
+    allowed = {key: count for key, (count, _reason) in VERB_ALLOWANCE.items()}
+    assert dict(found) == allowed
+
+
+def test_a_base_module_naming_a_coverage_verb_refuses(tmp_path: Path) -> None:
+    src = _base_module(
+        tmp_path,
+        "_fresh.py",
+        '"""Prose naming coverage.union is left out."""\n'
+        'ENTRY = "coverage.union"\nPROSE = "the coverage union"\n',
+    )
+    assert dict(verb_scan(src, {"coverage.union"})) == {("_fresh", "coverage.union"): 1}
 
 
 def _base_module(tmp_path: Path, name: str, text: str) -> Path:

@@ -131,7 +131,7 @@ def test_the_scoped_gate_runs_every_verb(
 def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     ran, calls = _record(monkeypatch, tmp_path)
     (tmp_path / "tests").mkdir()

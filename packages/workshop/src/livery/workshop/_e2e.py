@@ -1830,27 +1830,6 @@ def members_for(kinds: Sequence[str] = ()) -> tuple[tuple[str, str], ...]:
     )
 
 
-def metering_extension() -> str:
-    """The installed extension whose step runs the tests; empty when none does.
-
-    Found through its registration, the step of the test phase, since
-    the base names no extension's tool. A gate that meters no suite is
-    refused by the coverage leg and the union (#1225), so until coverage
-    is its own extension an extension pass lists this extension beside
-    the extension under test and lands the loop's first member, the one
-    it meters, and proves the extension beside them rather than alone.
-    """
-    from livery.workshop._extensions import declaration, installed_extensions
-
-    for candidate in installed_extensions():
-        found = declaration(candidate)
-        if found is not None and any(
-            record.phase == "test" for record in found.additions.steps
-        ):
-            return candidate
-    return ""
-
-
 def steps_declared_off(name: str) -> tuple[str, ...]:
     """The steps extension *name* declares ``enabled = false``, by ``<phase>.<step>``.
 
@@ -1869,14 +1848,11 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The stack a pass births to test extension *name*, and the member kinds it lands.
 
     The stack is what *name* requires, each before what needs it, then
-    *name* itself; the steps it declares off are turned on in the
-    newborn's contract ([livery.workshop._e2e.steps_declared_off][]),
-    so each of its steps registers; the test extension
-    ([livery.workshop._e2e.metering_extension][]) is listed before
-    *name* unless *name* is it or requires it. The members are the
-    loop's of the kinds *name*'s steps declare, so each step has
-    something of its own to judge, and the loop's first member besides,
-    which the test extension meters.
+    *name* itself, and nothing else; the steps it declares off are
+    turned on in the newborn's contract
+    ([livery.workshop._e2e.steps_declared_off][]), so each of its steps
+    registers. The members are the loop's of the kinds *name*'s steps
+    declare, so each step has something of its own to judge.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
@@ -1922,12 +1898,6 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         for _member, seed in LOOP_MEMBERS
         if named & set(kind_for(member_kind(seed)).stands_for)
     )
-    metering = metering_extension()
-    if metering and metering not in stack and name != metering:
-        stack.insert(len(stack) - 1, metering)
-    metered = member_kind(LOOP_MEMBERS[0][1])
-    if metering and metered not in kinds:
-        kinds = (metered, *kinds)
     return tuple(stack), kinds
 
 
@@ -2185,8 +2155,7 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     # neither yet (the members and the tests land through their own
     # pull requests afterwards), and then the union has no unit and
     # judges nothing, which the run says in as many words.
-    from livery.workshop._coverage_store import workspace_suite
-    from livery.workshop._packages import discover_packages
+    from livery.workshop._packages import discover_packages, workspace_suite
 
     members = [package.path for package in discover_packages(root)]
     units = [*members, *(["tests"] if workspace_suite(root) is not None else [])]
@@ -2339,7 +2308,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     # The workspace's own tests are a unit once the tests leg landed
     # them, and the member's change moves their closure, so the leg
@@ -3398,9 +3367,7 @@ if _WORKSHOP_TESTS.is_dir():
         needs run first, once. ``--extension`` tests one extension in
         isolation, ``extension`` the default set: the birth lists that
         extension and what it requires instead of the loop's stack, and
-        the members are those of the kinds its steps declare, the test
-        extension and the loop's first member beside them so each gate
-        meters a suite (#1225). ``birth`` builds
+        the members are those of the kinds its steps declare. ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a
         birth lists into a local index, births or resumes the loop's
         workspace through ``fm new.project`` from that index (so an

@@ -49,22 +49,15 @@ MARKER = "fm-gate.json"
 
 #: The scope names a leg records: the whole gate; the gate narrowed
 #: to the affected packages; nothing, for a prose-only diff; the tree
-#: already proved, nothing run; the tree already proved and the named
-#: suites run measured for their lines alone, because main's coverage
-#: record could not supply them at their current closure.
+#: already proved, so nothing to stamp, whatever the entries after the
+#: gate ran.
 FULL = "full"
 AFFECTED = "affected"
 NOTHING = "nothing"
 VERIFIED = "verified"
-MEASURED = "measured"
 
 #: The scopes a leg can leave; anything else means the leg said nothing.
-KNOWN = (FULL, AFFECTED, NOTHING, VERIFIED, MEASURED)
-
-#: The scopes of a leg whose tree the record already names: nothing
-#: to stamp, whether the leg ran nothing or measured suites for
-#: their lines.
-PROVED = (VERIFIED, MEASURED)
+KNOWN = (FULL, AFFECTED, NOTHING, VERIFIED)
 
 
 @dataclass(frozen=True)
@@ -80,9 +73,9 @@ class Verified:
         legs: The check legs' names, as the forge lists them.
         base_tree: The tree a composed row rests on; empty otherwise.
         base_run: The run that proved that base; empty otherwise.
-        branch: The pull request branch whose run proved the tree, the
-            base of the coverage record main's run copies at the merge;
-            empty for main's own run and for a row that never said.
+        branch: The pull request branch whose run proved the tree, whose
+            records main's run reads at the merge; empty for main's own
+            run and for a row that never said.
         head_sha: On a run that tested a merge, the pull request's head
             it merged; empty otherwise.
         base_sha: On a run that tested a merge, the base branch's
@@ -118,11 +111,10 @@ def write_marker(
 ) -> None:
     """Leave the leg's scope, the suites it ran, and its label beside its trace.
 
-    The metrics row, the stamp, and the coverage union read it back:
-    *packages* are the suites the leg ran under a narrowed or a
-    measured scope, *leg* the label the record keys the leg's
-    measurements by, and *base_tree* the tree a narrowed gate measured
-    from, which the stamp composes with.
+    The metrics row, the stamp, and the entries after the gate read it
+    back: *packages* are the suites the leg ran under a narrowed scope,
+    *leg* the label the leg's rows are keyed by, and *base_tree* the
+    tree a narrowed gate measured from, which the stamp composes with.
     """
     (root / MARKER).write_text(
         json.dumps(
@@ -237,7 +229,7 @@ def stamp(
     ran narrowed on top of *base*, a full row the caller read from
     the record; a composed row names that base and its run. *branch*
     is the pull request branch the run came from, so main's run after
-    the squash finds the branch's coverage record to copy. *merged*
+    the squash knows whose records the tree carries. *merged*
     are the base branch's commit and the head a merge checkout joined,
     so the branch's next run can rebuild the merge.
     """
@@ -300,13 +292,13 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     if unknown:
         return f"  verified: no stamp, {', '.join(unknown)} left no scope"
     tree = tree_id(root)
-    if all(scope in PROVED for scope in scopes.values()):
+    if all(scope == VERIFIED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
     try:
         merged = git.merge_parents(root)
     except git.GitError as error:
         return f"  verified: no stamp, HEAD's parents could not be read ({error})"
-    if all(scope in (FULL, *PROVED) for scope in scopes.values()):
+    if all(scope in (FULL, VERIFIED) for scope in scopes.values()):
         why = stamp(
             root,
             run,
@@ -325,7 +317,7 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     # proves the rest, since those packages and every root file the
     # gate reads are the base's bytes, or the legs would have widened.
     narrowed = {
-        name: scope for name, scope in scopes.items() if scope not in (FULL, *PROVED)
+        name: scope for name, scope in scopes.items() if scope not in (FULL, VERIFIED)
     }
     bases = {
         name: str((jobs[name].get("scope") or {}).get("base_tree", "") or "")

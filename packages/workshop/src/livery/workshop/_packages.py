@@ -297,6 +297,31 @@ def member_of(relative: str, members: Iterable[str]) -> str:
     return found
 
 
+#: The workspace's own test directory, a unit of the gate like a
+#: package's suite. Its tests reach any package, so every run of a test
+#: step runs them, and a change under it affects that unit alone.
+WORKSPACE_TESTS = "tests"
+
+
+def workspace_suite(root: Path) -> Package | None:
+    """The workspace's own tests, the ``tests`` directory at its root, as a unit.
+
+    ``None`` when the workspace has none. The unit's kind,
+    ``workspace``, is no registered kind, so no step judges it by
+    kind; a test step runs it beside the members it judges.
+    """
+    directory = root / WORKSPACE_TESTS
+    if not directory.is_dir():
+        return None
+    return Package(
+        directory=directory,
+        path=WORKSPACE_TESTS,
+        name="workspace-tests",
+        kind="workspace",
+        depends=(),
+    )
+
+
 def root_marks(src: Path) -> list[Path]:
     """The files that mark an importable root under *src*, shallowest first.
 
@@ -313,8 +338,6 @@ def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
     The workspace's own tests, a unit whose directory is the tests
     themselves, contribute that directory.
     """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
-
     paths = []
     for package in packages:
         if package.path == WORKSPACE_TESTS:
@@ -1059,9 +1082,6 @@ BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
     ),
     ("livery.workshop._backends._python_nanobind", "livery.extensions.python"): (
         "the nanobind kind builds on the python kind's functions"
-    ),
-    ("livery.workshop._quality", "livery.extensions.python"): (
-        "runs the python kind's suites and reads their coverage"
     ),
     ("livery.workshop._backends._cpp_conan", "livery.extensions.cmake"): (
         "the cpp-conan kind's gate build and tests are cmake's code"

@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.workshop import _ci_context, _coverage_store
+from livery.extensions.coverage import _record as coverage_record
+from livery.workshop import _ci_context
 from livery.workshop._ci_context import state_store
 from livery.workshop._packages import Edge, Package
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -92,56 +93,61 @@ def _unit(
     closure: str = "a" * 64,
     run: str = "1013",
     files: dict[str, list[tuple[int, int]]] | None = None,
-) -> _coverage_store.Unit:
-    return _coverage_store.Unit(path, closure, run, "b" * 40, files or {})
+) -> coverage_record.Unit:
+    return coverage_record.Unit(path, closure, run, "b" * 40, files or {})
 
 
 # --- the refusals and misses first --------------------------------------------
 
 
 def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
-    why = _coverage_store.put_run(
+    why = coverage_record.leave_run(
         work, RUN, leg="", scope="full", packages=(), units={}
     )
     assert why == "refusing: the leg has no label, so its lines have no key"
-    held = _coverage_store.recorded(work, leg="")
+    held = coverage_record.recorded(work, leg="")
     assert held.failed and held.reason == "this leg has no label"
-    why = _coverage_store.put_record(work, RUN, leg="", fresh={})
+    why = coverage_record.put_record(work, RUN, leg="", fresh={})
     assert why == "refusing: the leg has no label, so the record has no key"
 
 
-def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(work: Path) -> None:
-    from livery.workshop._metrics import ROW_FILE, RUNS
+def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop._metrics import ROW_FILE, RUNS, put_leg
     from workshop_spawns import counting_spawns
 
+    why = coverage_record.leave_run(
+        work, RUN, leg=LEG, scope="full", packages=(), units={}
+    )
+    assert why == ""
+    trace = tmp_path / "fm-profile-check.json"
+    task = {"ph": "X", "cat": "task", "name": "check", "pid": 1, "tid": 1}
+    trace.write_text(json.dumps({"traceEvents": [{**task, "ts": 0, "dur": 12000}]}))
     with counting_spawns() as spawned:
-        why = _coverage_store.put_run(
-            work,
-            RUN,
-            leg=LEG,
-            scope="full",
-            packages=(),
-            units={},
-            timing={"job": "check (a, b)", "total_ms": 12.0, "tasks": {}},
-        )
+        _lines, why = put_leg(work, RUN, job="check (a, b)", label=LEG, trace=trace)
     assert why == ""
     assert spawned["git push"] == 1
     series = RUNS.series(RUN.run_id, LEG)
     row, why = series.row(state_store(work), ROW_FILE)
     assert why == "" and row is not None and row.data["total_ms"] == 12.0
-    lines, why = series.row(state_store(work), _coverage_store.RUN_FILE)
+    lines, why = series.row(state_store(work), coverage_record.RUN_FILE)
     assert why == "" and lines is not None and lines.data["scope"] == "full"
 
 
 def test_the_puts_refuse_outside_ci(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._metrics import put_leg
+
     monkeypatch.delenv("GITHUB_ACTIONS")
-    why = _coverage_store.put_run(
+    why = coverage_record.leave_run(
         work, RUN, leg=LEG, scope="full", packages=(), units={}
     )
+    assert why == ""
+    _lines, why = put_leg(work, RUN, job="check", label=LEG, trace=work / "none.json")
     assert "only a CI run writes" in why
-    assert "only a CI run writes" in _coverage_store.put_record(
+    assert "only a CI run writes" in coverage_record.put_record(
         work, RUN, leg=LEG, fresh={}
     )
 
@@ -150,33 +156,33 @@ def test_only_mains_run_writes_mains_record_and_only_a_branchs_own_run_its_own(
     work: Path,
 ) -> None:
     fresh = {"packages/base": _unit("packages/base")}
-    why = _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh)
+    why = coverage_record.put_record(work, PULL, leg=LEG, fresh=fresh)
     assert why == "refusing: a pull_request run reads main's record and never writes it"
     local = _ci_context.RunContext("gitea", "", "", "", leg=LEG)
-    assert "a local run reads main's record" in _coverage_store.put_record(
+    assert "a local run reads main's record" in coverage_record.put_record(
         work, local, leg=LEG, fresh=fresh
     )
-    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
+    assert coverage_record.recorded(work, leg=LEG) == coverage_record.Record({})
     # A branch's record: its own pull request run writes it, no other run.
-    why = _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/y")
+    why = coverage_record.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/y")
     assert why == (
         "refusing: feat/y's record is written by that branch's own pull request"
         " run, not a pull_request run of feat/x"
     )
-    why = _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh, base="feat/x")
+    why = coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh, base="feat/x")
     assert why.endswith("not a push run of no branch")
-    assert _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="") == (
+    assert coverage_record.put_record(work, PULL, leg=LEG, fresh=fresh, base="") == (
         "refusing: no branch to write a record for"
     )
     assert (
-        _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
+        coverage_record.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
         == ""
     )
-    assert _coverage_store.recorded(work, leg=LEG, base="feat/x").units == fresh
-    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
-    empty = _coverage_store.recorded(work, leg=LEG, base="")
+    assert coverage_record.recorded(work, leg=LEG, base="feat/x").units == fresh
+    assert coverage_record.recorded(work, leg=LEG) == coverage_record.Record({})
+    empty = coverage_record.recorded(work, leg=LEG, base="")
     assert empty.failed and empty.reason == "no branch to read a record for"
-    assert _coverage_store.record_ref(LEG, "feat/x") == (
+    assert coverage_record.record_ref(LEG, "feat/x") == (
         git.NAMESPACE + "coverage/feat-x/" + git.slug(LEG)
     )
 
@@ -184,21 +190,21 @@ def test_only_mains_run_writes_mains_record_and_only_a_branchs_own_run_its_own(
 def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
     work: Path, tmp_path: Path
 ) -> None:
-    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
-    assert _coverage_store.run_legs(work, RUN) == ([], "")
+    assert coverage_record.recorded(work, leg=LEG) == coverage_record.Record({})
+    assert coverage_record.run_legs(work, RUN) == ([], "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    held = _coverage_store.recorded(work, leg=LEG)
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.failed and "could not be read" in held.reason and held.units == {}
-    legs, why = _coverage_store.run_legs(work, RUN)
+    legs, why = coverage_record.run_legs(work, RUN)
     assert legs == [] and why.endswith("the remote could not be listed")
 
 
 def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None:
-    ref = _coverage_store.record_ref(LEG)
+    ref = coverage_record.record_ref(LEG)
     rows = {
         "odd.json": json.dumps({"schema": 99}),
         "bare.json": json.dumps(
-            {"schema": _coverage_store.SCHEMA, "unit": "packages/x"}
+            {"schema": coverage_record.SCHEMA, "unit": "packages/x"}
         ),
         "junk.json": "not json",
         # A row of lines, written before the record held arcs: another
@@ -208,7 +214,7 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
         ),
     }
     assert git.put(state_store(work), ref, rows, message="foreign") == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.units == {} and not held.failed
     assert sorted(str(item) for item in held.skipped) == [
         "bare.json: carries no unit; skipped",
@@ -233,13 +239,13 @@ def test_a_per_run_ref_without_the_file_or_with_a_foreign_one_is_named(
     assert (
         half.put(state_store(work), {ROW_FILE: {"job": "check"}}, message="half") == ""
     )
-    legs, why = _coverage_store.run_legs(work, RUN)
+    legs, why = coverage_record.run_legs(work, RUN)
     assert why == "" and len(legs) == 1
     assert legs[0].key == git.slug(LEG) and legs[0].units == {}
-    assert legs[0].why == f"{half.ref} carries no {_coverage_store.RUN_FILE}"
-    foreign = {_coverage_store.RUN_FILE: json.dumps({"schema": 99})}
+    assert legs[0].why == f"{half.ref} carries no {coverage_record.RUN_FILE}"
+    foreign = {coverage_record.RUN_FILE: json.dumps({"schema": 99})}
     assert git.put(state_store(work), half.ref, foreign, message="foreign") == ""
-    legs, _why = _coverage_store.run_legs(work, RUN)
+    legs, _why = coverage_record.run_legs(work, RUN)
     assert legs[0].why.startswith(half.ref) and "this reader speaks" in legs[0].why
 
 
@@ -253,17 +259,17 @@ def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
         depends=(),
     )
     with pytest.raises(git.GitError):
-        _coverage_store.closure_id(work, (base, ghost), ghost)
+        coverage_record.closure_id(work, (base, ghost), ghost)
 
 
 def test_the_closure_id_answers_without_a_root_pin(work: Path) -> None:
     # A tree that holds no lock is not an error: the pin contributes
     # nothing and the rest of the identity still stands.
     base, top = _packages(work)
-    pinned = _coverage_store.closure_id(work, (base, top), base)
+    pinned = coverage_record.closure_id(work, (base, top), base)
     _git(work, "rm", "-q", "uv.lock")
     _git(work, "commit", "-qm", "the lock goes")
-    unpinned = _coverage_store.closure_id(work, (base, top), base)
+    unpinned = coverage_record.closure_id(work, (base, top), base)
     assert unpinned and unpinned != pinned
 
 
@@ -280,7 +286,7 @@ def test_the_closure_id_reads_the_tree_in_one_process(
     del monkeypatch
     base, top = _packages(work)
     with counting_spawns() as spawned:
-        _coverage_store.closure_id(work, (base, top), top)
+        coverage_record.closure_id(work, (base, top), top)
     assert spawned["git"] == 0, spawned
 
 
@@ -291,36 +297,36 @@ def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> Non
     base, top = _packages(work)
     packages = (base, top)
     before = {
-        "base": _coverage_store.closure_id(work, packages, base),
-        "top": _coverage_store.closure_id(work, packages, top),
+        "base": coverage_record.closure_id(work, packages, base),
+        "top": coverage_record.closure_id(work, packages, top),
     }
-    assert _coverage_store.closure(packages, top) == (base, top)
-    assert _coverage_store.closure(packages, base) == (base,)
+    assert coverage_record.closure(packages, top) == (base, top)
+    assert coverage_record.closure(packages, base) == (base,)
     # A change inside the dependency moves the dependant's identity too.
     (work / "packages" / "base" / "src" / "base" / "mod.py").write_text("a = 2\n")
     _git(work, "commit", "-qam", "base changes")
     after = {
-        "base": _coverage_store.closure_id(work, packages, base),
-        "top": _coverage_store.closure_id(work, packages, top),
+        "base": coverage_record.closure_id(work, packages, base),
+        "top": coverage_record.closure_id(work, packages, top),
     }
     assert after["base"] != before["base"] and after["top"] != before["top"]
     # A change inside the dependant leaves the dependency's identity alone.
     (work / "packages" / "top" / "src" / "top" / "mod.py").write_text("a = 3\n")
     _git(work, "commit", "-qam", "top changes")
     again = {
-        "base": _coverage_store.closure_id(work, packages, base),
-        "top": _coverage_store.closure_id(work, packages, top),
+        "base": coverage_record.closure_id(work, packages, base),
+        "top": coverage_record.closure_id(work, packages, top),
     }
     assert again["base"] == after["base"] and again["top"] != after["top"]
     # A pin change is a dependency change for every suite.
     (work / "uv.lock").write_text("version = 2\n")
     _git(work, "commit", "-qam", "lock moves")
-    pinned = _coverage_store.closure_id(work, packages, base)
+    pinned = coverage_record.closure_id(work, packages, base)
     assert pinned != again["base"]
     # Files outside the closure are not the suite's to store.
-    assert _coverage_store.in_closure(packages, top, "packages/base/src/base/mod.py")
-    assert not _coverage_store.in_closure(packages, base, "packages/top/src/top/mod.py")
-    assert _coverage_store.in_closure(packages, top, "packages\\top\\src\\top\\mod.py")
+    assert coverage_record.in_closure(packages, top, "packages/base/src/base/mod.py")
+    assert not coverage_record.in_closure(packages, base, "packages/top/src/top/mod.py")
+    assert coverage_record.in_closure(packages, top, "packages\\top\\src\\top\\mod.py")
 
 
 # --- the reads and the writes -------------------------------------------------
@@ -333,7 +339,7 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
         "packages/base",
         files={"packages/base/src/base/mod.py": [(3, -1), (-1, 1), (1, 3)]},
     )
-    why = _coverage_store.put_run(
+    why = coverage_record.leave_run(
         work,
         RUN,
         leg=LEG,
@@ -342,10 +348,15 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
         units={"packages/base": unit},
     )
     assert why == ""
+    # The leg's write puts the file; no trace, so no row beside it.
+    _lines, why = _metrics.put_leg(
+        work, RUN, job="check (a)", label=LEG, trace=work / "none.json"
+    )
+    assert why == ""
     ref = _metrics.run_ref(RUN, LEG)
     held = git.read(state_store(work), ref).files
-    assert held is not None and set(held) == {_coverage_store.RUN_FILE}
-    legs, why = _coverage_store.run_legs(work, RUN)
+    assert held is not None and set(held) == {coverage_record.RUN_FILE}
+    legs, why = coverage_record.run_legs(work, RUN)
     assert why == "" and len(legs) == 1
     leg = legs[0]
     assert (leg.key, leg.label, leg.scope, leg.packages, leg.why) == (
@@ -356,7 +367,7 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
         "",
     )
     assert leg.units == {
-        "packages/base": _coverage_store.Unit(
+        "packages/base": coverage_record.Unit(
             "packages/base",
             "a" * 64,
             "1013",
@@ -366,42 +377,42 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
     }
     # Another run's refs are another run's; the lines go with the ref.
     other = _ci_context.RunContext("gitea", "9", "push", "refs/heads/main", leg=LEG)
-    assert _coverage_store.run_legs(work, other) == ([], "")
+    assert coverage_record.run_legs(work, other) == ([], "")
     assert git.drop(state_store(work), ref) == ""
-    assert _coverage_store.run_legs(work, RUN) == ([], "")
+    assert coverage_record.run_legs(work, RUN) == ([], "")
 
 
 def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     work: Path,
 ) -> None:
-    series = _coverage_store.RECORD.series(_coverage_store.MAIN, LEG)
-    assert series.ref == _coverage_store.record_ref(LEG)
+    series = coverage_record.RECORD.series(coverage_record.MAIN, LEG)
+    assert series.ref == coverage_record.record_ref(LEG)
     assert series.ref == git.NAMESPACE + "coverage/main/" + git.slug(LEG)
     base = _unit("packages/base", run="1", files={"packages/base/src/b.py": [(-1, 1)]})
     top = _unit("packages/top", closure="c" * 64, run="1")
     ghost = _unit("packages/ghost", run="1")
     fresh = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
-    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.units == fresh and held.skipped == ()
     first = {row.name: row.when for row in series.rows(state_store(work)).rows}
     # The next merge: base fresh again, top carried untouched, ghost gone.
     again = _unit("packages/base", closure="d" * 64, run="2")
     later = _ci_context.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
     stale = held.stale(["packages/base", "packages/top"])
-    assert stale == [_coverage_store.row_name("packages/ghost")]
-    why = _coverage_store.put_record(
+    assert stale == [coverage_record.row_name("packages/ghost")]
+    why = coverage_record.put_record(
         work, later, leg=LEG, fresh={"packages/base": again}, remove=stale
     )
     assert why == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.units == {"packages/base": again, "packages/top": top}
     rows = {row.name: row.when for row in series.rows(state_store(work)).rows}
-    assert rows[_coverage_store.row_name("packages/top")] == first["packages-top.json"]
+    assert rows[coverage_record.row_name("packages/top")] == first["packages-top.json"]
     assert rows["packages-base.json"] > first["packages-base.json"]
     # Another leg's record is another ref.
-    assert _coverage_store.recorded(work, leg="check-macos-3.13") == (
-        _coverage_store.Record({})
+    assert coverage_record.recorded(work, leg="check-macos-3.13") == (
+        coverage_record.Record({})
     )
 
 
@@ -409,8 +420,8 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
 
 
 def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(work: Path) -> None:
-    down = _coverage_store.Record({}, failed=True, reason="remote down")
-    why = _coverage_store.put_record(work, RUN, leg=LEG, fresh={}, held=down)
+    down = coverage_record.Record({}, failed=True, reason="remote down")
+    why = coverage_record.put_record(work, RUN, leg=LEG, fresh={}, held=down)
     assert why == (
         f"refusing: main's record on {LEG} could not be read (remote down), so"
         " the rows it keeps are unknown"
@@ -420,16 +431,16 @@ def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(work: Path) -
 def test_a_kept_row_past_the_day_or_without_a_stamp_expires() -> None:
     now = datetime(2026, 10, 1, 12, tzinfo=UTC)
     unit = _unit("packages/base")
-    record = _coverage_store.Record(
+    record = coverage_record.Record(
         {},
         kept=(
-            _coverage_store.Kept(
+            coverage_record.Kept(
                 "young.json", unit, (now - timedelta(hours=23)).isoformat()
             ),
-            _coverage_store.Kept(
+            coverage_record.Kept(
                 "old.json", unit, (now - timedelta(hours=25)).isoformat()
             ),
-            _coverage_store.Kept("unstamped.json", unit, ""),
+            coverage_record.Kept("unstamped.json", unit, ""),
         ),
     )
     assert record.expired(now) == ["old.json", "unstamped.json"]
@@ -441,8 +452,8 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     top = _unit("packages/top", closure=old, run="1")
     ghost = _unit("packages/ghost", run="1")
     first = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
-    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=first) == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=first) == ""
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.units == first and held.kept == ()
     # Another merge's run: base moves on, top is measured again at its
     # own closure, and ghost's unit is gone.
@@ -450,7 +461,7 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     moved = _unit("packages/base", closure=new, run="2")
     again = _unit("packages/top", closure=old, run="2")
     stale = held.stale(["packages/base", "packages/top"])
-    why = _coverage_store.put_record(
+    why = coverage_record.put_record(
         work,
         later,
         leg=LEG,
@@ -459,11 +470,11 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
         held=held,
     )
     assert why == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.units == {"packages/base": moved, "packages/top": again}
     assert sorted(kept.name for kept in held.kept) == [
-        _coverage_store.kept_name("packages/base", old),
-        _coverage_store.kept_name("packages/ghost", "a" * 64),
+        coverage_record.kept_name("packages/base", old),
+        coverage_record.kept_name("packages/ghost", "a" * 64),
     ]
     # The union asks at the closure its leg skipped on.
     assert held.at("packages/base", old) == base
@@ -472,11 +483,11 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     assert held.at("packages/base", "e" * 64) is None
     # A day on, the next write lets the kept rows go.
     tomorrow = datetime.now(UTC) + timedelta(days=1, minutes=1)
-    why = _coverage_store.put_record(
+    why = coverage_record.put_record(
         work, later, leg=LEG, fresh={}, held=held, now=tomorrow
     )
     assert why == ""
-    held = _coverage_store.recorded(work, leg=LEG)
+    held = coverage_record.recorded(work, leg=LEG)
     assert held.kept == ()
     assert held.units == {"packages/base": moved, "packages/top": again}
 
@@ -496,16 +507,16 @@ def test_the_current_keys_are_main_and_every_branch_with_every_check_leg_or_none
 ) -> None:
     # No contract at the root: the keys cannot be told, and the janitor
     # drops nothing.
-    assert _coverage_store.current_keys(work) is None
+    assert coverage_record.current_keys(work) is None
     _contract(work, '"ubuntu-latest", "macos-latest"')
-    assert _coverage_store.current_keys(work) == {
+    assert coverage_record.current_keys(work) == {
         ("main", "check-ubuntu-latest-3-14"),
         ("main", "check-macos-latest-3-14"),
     }
     # A branch on origin is a base while it lives, spelled ref-safe.
     _git(work, "push", "-q", "origin", "main:refs/heads/feat/x")
-    assert _coverage_store.branches(work) == ["feat/x", "main"]
-    assert _coverage_store.current_keys(work) == {
+    assert coverage_record.branches(work) == ["feat/x", "main"]
+    assert coverage_record.current_keys(work) == {
         ("main", "check-ubuntu-latest-3-14"),
         ("main", "check-macos-latest-3-14"),
         ("feat-x", "check-ubuntu-latest-3-14"),
@@ -513,8 +524,8 @@ def test_the_current_keys_are_main_and_every_branch_with_every_check_leg_or_none
     }
     # A remote that cannot be listed tells no keys, and nothing is dropped.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    assert _coverage_store.branches(work) is None
-    assert _coverage_store.current_keys(work) is None
+    assert coverage_record.branches(work) is None
+    assert coverage_record.current_keys(work) is None
 
 
 def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_marks(
@@ -529,17 +540,17 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     assert git.put(state_store(work), marks, {"m": "{}"}, message="marks") == ""
     _contract(work, '"linux"')
     fresh = {"packages/base": _unit("packages/base")}
-    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
     # A branch's record lives while the branch does, and goes with it.
     _git(work, "push", "-q", "origin", "main:refs/heads/feat/x")
     assert (
-        _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
+        coverage_record.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
         == ""
     )
-    branch_ref = _coverage_store.record_ref(LEG, "feat/x")
+    branch_ref = coverage_record.record_ref(LEG, "feat/x")
     # An orphan lingers a day first: main's run for a merged squash reads
     # the merged branch's record after the merge deleted the branch.
-    lines = git.sweep(state_store(work), (_coverage_store.RECORD,), remote=True)
+    lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
     assert any(
         line.startswith(f"  {old}: no current base and leg produces it; kept ")
         for line in lines
@@ -547,27 +558,27 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     assert git.read(state_store(work), old).files == {"x": "{}"}
     later = datetime.now(UTC) + timedelta(days=2)
     lines = git.sweep(
-        state_store(work), (_coverage_store.RECORD,), remote=True, now=later
+        state_store(work), (coverage_record.RECORD,), remote=True, now=later
     )
     assert f"  {old}: no current base and leg produces it; dropped" in lines
-    assert f"  {_coverage_store.record_ref(LEG)}: 1 row(s), within its bounds" in lines
+    assert f"  {coverage_record.record_ref(LEG)}: 1 row(s), within its bounds" in lines
     assert f"  {branch_ref}: 1 row(s), within its bounds" in lines
     assert git.read(state_store(work), old).files is None
     assert git.read(state_store(work), marks).files == {"m": "{}"}
-    assert _coverage_store.recorded(work, leg=LEG).units == fresh
+    assert coverage_record.recorded(work, leg=LEG).units == fresh
     _git(work, "push", "-q", "origin", ":refs/heads/feat/x")
-    lines = git.sweep(state_store(work), (_coverage_store.RECORD,), remote=True)
+    lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
     assert any(
         line.startswith(f"  {branch_ref}: no current base and leg produces it; kept ")
         for line in lines
     )
     assert git.read(state_store(work), branch_ref).files is not None
     lines = git.sweep(
-        state_store(work), (_coverage_store.RECORD,), remote=True, now=later
+        state_store(work), (coverage_record.RECORD,), remote=True, now=later
     )
     assert f"  {branch_ref}: no current base and leg produces it; dropped" in lines
     assert git.read(state_store(work), branch_ref).files is None
-    assert _coverage_store.recorded(work, leg=LEG).units == fresh
+    assert coverage_record.recorded(work, leg=LEG).units == fresh
 
 
 def test_the_stored_rows_are_every_recorded_unit_and_the_misses_are_named(
@@ -583,7 +594,7 @@ def test_the_stored_rows_are_every_recorded_unit_and_the_misses_are_named(
             "packages/top", files={"packages/top/src/x.py": [(-1, 1), (1, 2), (2, -1)]}
         ),
     }
-    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
     held, misses = stored_rows(work, [LEG, "check-other"])
     assert held == {LEG: fresh}
     assert misses == ["main/check-other: nothing recorded"]
@@ -602,31 +613,33 @@ def test_the_workspace_tests_are_a_unit_keyed_by_the_tree(work: Path) -> None:
     from livery.workshop._packages import Package
 
     base, top = _packages(work)
-    assert _coverage_store.workspace_suite(work / "nowhere") is None
+    from livery.workshop._packages import workspace_suite
+
+    assert workspace_suite(work / "nowhere") is None
     (work / "tests").mkdir()
-    unit = _coverage_store.workspace_suite(work)
+    unit = workspace_suite(work)
     assert unit is not None and unit.path == "tests" and unit.name == "workspace-tests"
     (work / "tests" / "test_all.py").write_text("def test_it():\n    pass\n")
     _git(work, "add", "tests")
     _git(work, "commit", "-qm", "workspace tests")
-    before = _coverage_store.closure_id(work, (base, top), unit)
+    before = coverage_record.closure_id(work, (base, top), unit)
     # Prose leaves the key alone; a package or a pin moves it.
     (work / "notes").mkdir()
     (work / "notes" / "plan.md").write_text("# plan\n")
     _git(work, "add", "notes")
     _git(work, "commit", "-qm", "a note")
-    assert _coverage_store.closure_id(work, (base, top), unit) == before
+    assert coverage_record.closure_id(work, (base, top), unit) == before
     (work / "packages" / "top" / "src" / "top" / "mod.py").write_text("a = 9\n")
     _git(work, "commit", "-qam", "top changes")
-    after = _coverage_store.closure_id(work, (base, top), unit)
+    after = coverage_record.closure_id(work, (base, top), unit)
     assert after != before
     (work / "uv.lock").write_text("version = 3\n")
     _git(work, "commit", "-qam", "lock moves")
-    assert _coverage_store.closure_id(work, (base, top), unit) != after
+    assert coverage_record.closure_id(work, (base, top), unit) != after
     # Any file is the unit's to store: its tests reach every package.
-    assert _coverage_store.in_closure(
+    assert coverage_record.in_closure(
         (base, top), unit, "packages/base/src/base/mod.py"
     )
-    assert _coverage_store.in_closure((base, top), unit, "tests/test_x.py")
+    assert coverage_record.in_closure((base, top), unit, "tests/test_x.py")
     assert isinstance(unit, Package)
-    assert _coverage_store.row_name(unit.path) == "tests.json"
+    assert coverage_record.row_name(unit.path) == "tests.json"

@@ -17,9 +17,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from livery.workshop._coverage_store import workspace_suite
 from livery.workshop._invoke import run_batched
-from livery.workshop._packages import Package
+from livery.workshop._packages import Package, workspace_suite
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
     PACKAGES,

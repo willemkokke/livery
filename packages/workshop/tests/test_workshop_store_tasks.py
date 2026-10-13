@@ -86,10 +86,16 @@ def test_an_unreadable_series_fails_with_the_stores_reason(
 
 def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> None:
     assert _verified.stamp(work, _RUN, tree="a" * 40, sha="b" * 40, legs=("c",)) == ""
+    # A workspace that lists no extension keeping a series lists the base's.
+    listed = _store_tasks.ls_flow(work)
+    assert not [line for line in listed if line.startswith("  coverage")]
+    # An extension's answer to store.series joins them while it is listed.
+    (work / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     listed = _store_tasks.ls_flow(work)
     assert "  metrics: remote, window 300; 0 row(s)" in listed
     assert "  verified: remote, window 200; 1 row(s)" in listed
     assert "  coverage/<base>/<leg>: remote, no window; 0 key(s)" in listed
+    assert "  coverage/marks: remote, window 400; 0 row(s)" in listed
     assert "  gate-record: local, window 200; 0 row(s)" in listed
     assert "  diagnostics: local, window 20; 0 row(s)" in listed
 

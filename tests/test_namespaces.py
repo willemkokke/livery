@@ -460,6 +460,7 @@ EXPORTS: dict[str, list[str]] = {
         "registry",
         "release_notes",
         "run_batched",
+        "run_phase_over",
         "run_suites",
         "scoped_files",
         "scoped_packages",

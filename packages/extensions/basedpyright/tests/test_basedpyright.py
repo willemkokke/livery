@@ -174,7 +174,7 @@ def test_type_completeness_verifies_each_judged_member_s_public_modules(
     capsys: pytest.CaptureFixture[str],
     registered: None,
 ) -> None:
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     verified: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     monkeypatch.setattr(

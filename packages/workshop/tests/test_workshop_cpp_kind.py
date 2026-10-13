@@ -382,12 +382,12 @@ def test_the_cpp_template_seeds_no_floor_and_the_default_judges_it(
     tmp_path: Path,
 ) -> None:
     """A native member is judged like the others: at the default floor, 100."""
-    from livery.extensions.python import _backend as _python
+    from livery.extensions.coverage import _floors as coverage_floors
     from livery.workshop._contract import load_contract
 
     package = _render_cpp(tmp_path)
     assert "coverage" not in load_contract(package.directory / "workshop.toml")
-    assert _python.coverage_policy(package) == _python.FloorPolicy(
+    assert coverage_floors.coverage_policy(package) == coverage_floors.FloorPolicy(
         100.0, False, 0.5, default=True
     )
 
@@ -792,13 +792,13 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     builds with, the part names the package's source with hit
     counts, and the local preview reads a number from it.
     """
-    from livery.extensions.python import _backend as _python
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _floors as coverage_floors
+    from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)
     compiler_id, compiler = _cpp_conan.compiler_of(package)
-    assert lines_.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
+    assert _cmake.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
     assert compiler
     _cpp_conan.test(package, tmp_path)
     parts = lines_.read_parts(tmp_path)
@@ -812,7 +812,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     assert any(
         hits > 0 for name in sources for hits in parts["packages/native"][name].values()
     )
-    measured = _python.measured_coverage(tmp_path, (package,))
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert 0.0 < measured["packages/native"] <= 100.0
     assert "coverage: " in capsys.readouterr().out
     # The selected arm measures its run too, afresh: the counters of
@@ -1130,7 +1130,7 @@ def _leftovers(exe: Path) -> list[str]:
 def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN, deployed=False)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1156,7 +1156,7 @@ def test_the_msvc_measurer_refuses_a_build_naming_no_test_executable(
 def test_the_msvc_measurer_refuses_an_instrumentation_that_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN, instrument_code=1)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1175,7 +1175,7 @@ def test_a_red_ctest_under_the_engine_is_read_from_ctest_s_own_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The collector's exit code is its own: the verdict is ctest's JUnit report."""
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_RED, collect_code=0)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1237,7 +1237,7 @@ def test_the_msvc_measurer_refuses_a_green_run_without_a_report(
 def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1295,8 +1295,8 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The Windows leg: enter MSVC, build, instrument, collect, read; then a red run."""
-    from livery.extensions.python import _backend as _python
-    from livery.workshop import _coverage_lines as lines_
+    from livery.extensions.coverage import _floors as coverage_floors
+    from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)
@@ -1314,7 +1314,7 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     assert any(
         hits > 0 for name in sources for hits in parts["packages/native"][name].values()
     )
-    measured = _python.measured_coverage(tmp_path, (package,))
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert 0.0 < measured["packages/native"] <= 100.0
     assert "measured by msvc" in capsys.readouterr().out
     build_dir = package.directory / _cpp_conan.GATE_BUILD_DIR

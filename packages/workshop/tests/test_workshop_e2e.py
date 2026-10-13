@@ -658,14 +658,11 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
         },
     )
     stack, kinds = _e2e.extension_under_test("top")
-    # No test extension installed: nothing rides along, and the pass
-    # lands the members the steps name alone.
-    assert _e2e.metering_extension() == ""
     assert stack == ("base", "mid", "top")
     assert kinds == ("cpp-conan",)
-    # With one installed it rides before the extension under test, and
-    # the loop's first member lands beside the C++ one, so the gate
-    # meters a suite.
+    # An extension that runs the tests installed beside it rides along no
+    # more: a gate that meters no suite runs no coverage leg, so the pass
+    # lands the members the steps name alone.
     _fake_declarations(
         monkeypatch,
         {
@@ -675,10 +672,9 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "pytest": _declared("python", phase="test"),
         },
     )
-    assert _e2e.metering_extension() == "pytest"
     stack, kinds = _e2e.extension_under_test("top")
-    assert stack == ("base", "mid", "pytest", "top")
-    assert kinds == ("python", "cpp-conan")
+    assert stack == ("base", "mid", "top")
+    assert kinds == ("cpp-conan",)
 
 
 def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
@@ -732,9 +728,9 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_steps_name(
     # The nanobind kind stands for conan beside cpp, as a consumer of
     # its packages, so a step naming conan lands that member too.
     assert kinds == ("python", "python-nanobind", "cpp-conan")
-    # The test extension's own pass lists it once, as the extension
-    # under test; one that requires it lists it where the requirement
-    # puts it; any other lists it just before itself.
+    # The test extension is listed as any other: once, as the extension
+    # under test, or where a requirement puts it, and never beside an
+    # extension that does not require it.
     _fake_declarations(
         monkeypatch,
         {
@@ -745,7 +741,7 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_steps_name(
     )
     assert _e2e.extension_under_test("pytest")[0] == ("pytest",)
     assert _e2e.extension_under_test("wrap")[0] == ("pytest", "wrap")
-    assert _e2e.extension_under_test("typed") == (("pytest", "typed"), ("python",))
+    assert _e2e.extension_under_test("typed") == (("typed",), ("python",))
     assert [name for name, _seed in _e2e.members_for(kinds)] == [
         "loop-echo",
         "loop-native",
@@ -1416,9 +1412,9 @@ def test_a_scenario_is_timed_with_its_runs_and_a_failure_is_marked() -> None:
 
 
 def test_the_loop_series_is_declared_with_the_others() -> None:
-    from livery.workshop._series import DECLARED
+    from livery.workshop._series import BASE
 
-    assert _e2e.LOOP_SERIES in DECLARED and _e2e.LOOP_SERIES.local
+    assert _e2e.LOOP_SERIES in BASE and _e2e.LOOP_SERIES.local
     assert not _e2e.LOOP_SERIES.ci_only
 
 

@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from livery.workshop._verified import Verified
 
 import livery.footman as footman
-from livery.extensions.python import _backend as _python
 from livery.footman import Forward, doc, fail, group, task
 from livery.workshop import _steps
 from livery.workshop._backends import require_backends
@@ -239,7 +238,7 @@ def verified_already(root: Path) -> Verified | None:
     another shape); an absent entry or a narrowed scope is the
     ordinary case and stays quiet. Never skips on anything but a
     full entry for this exact tree. The row names the branch whose
-    run proved it, the coverage record main's run copies.
+    run proved it.
     """
     from livery.workshop import _verified
 
@@ -461,7 +460,7 @@ def _check_files(
     if not files:
         print("  nothing to check: no file under the named paths")
         return
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
     from livery.workshop._provenance import unit_of
 
     packages = _packages()
@@ -542,6 +541,26 @@ def run_on_packages(
     walk(_context(subset=packages), only=frozenset(names), inputs=inputs)
 
 
+def run_phase_over(phase: str, packages: tuple[Package, ...]) -> None:
+    """Run the steps of *phase* over *packages* whole; nothing recorded as proved.
+
+    The gate's walk ([livery.workshop._quality.walk][]) narrowed to the
+    steps the extensions register for *phase*, and the steps they run
+    after, over the named packages alone, with the gate's inputs. A
+    package no step of the phase judges is skipped by the walk, and a
+    phase with no step runs nothing. An extension runs a phase this
+    way over packages the gate did not run it on.
+    """
+    names = tuple(
+        record.name
+        for record in _steps.steps_by_name().values()
+        if record.phase == phase
+    )
+    if not names:
+        return
+    run_on_packages(names, packages)
+
+
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
     """Run the gate's fixers over *paths*, judging nothing.
 
@@ -589,11 +608,10 @@ def _run_check(
     if not (nightly or dispatched) and root_for_ci is not None and run is not None:
         from livery.git import remote_snapshot
 
-        # The verified record and the records a skip reads: one listing.
-        with remote_snapshot(state_store(root_for_ci), fetch=("verified", "coverage/")):
+        with remote_snapshot(state_store(root_for_ci), fetch=("verified",)):
             proved = verified_already(root_for_ci)
             if proved is not None:
-                _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
+                _verified.write_marker(root_for_ci, _verified.VERIFIED, leg=run.leg)
                 return
     ci_base = push_base = ""
     if not nightly and root_for_ci is not None and run is not None:
@@ -613,7 +631,6 @@ def _run_check(
         if subset is not None:
             packages = _packages()
             changes = Changes(root_for_ci, step.paths, step.base_tree)
-            subset = _with_unstored_suites(root_for_ci, run, packages, subset)
             if not subset:
                 # The same walk as a local run: the workspace steps whose
                 # inputs changed judge, and no package's steps run.
@@ -629,7 +646,7 @@ def _run_check(
                     base_tree=step.base_tree,
                 )
                 return
-            from livery.workshop._coverage_store import WORKSPACE_TESTS
+            from livery.workshop._packages import WORKSPACE_TESTS
 
             members = [p for p in subset if p.path != WORKSPACE_TESTS]
             if len(members) < len(packages):
@@ -674,8 +691,8 @@ def _run_check(
                     before=reflex.base_tree,
                 )
                 if scope is not None:
-                    from livery.workshop._coverage_store import WORKSPACE_TESTS
                     from livery.workshop._influence import Changes
+                    from livery.workshop._packages import WORKSPACE_TESTS
 
                     subset = scope.packages
                     members = [p for p in subset if p.path != WORKSPACE_TESTS]
@@ -834,137 +851,6 @@ def _nothing_reason(changed: tuple[str, ...]) -> str:
     return "the branch changes no files"
 
 
-def record_bases(branch: str) -> tuple[str, ...]:
-    """The records a leg reads, in order: the branch's own if any, then main's."""
-    from livery.workshop._coverage_store import MAIN
-
-    return (branch, MAIN) if branch and branch != MAIN else (MAIN,)
-
-
-def _unrecorded(
-    root: Path,
-    run: RunContext,
-    packages: tuple[Package, ...],
-    units: tuple[Package, ...],
-    *,
-    bases: tuple[str, ...],
-) -> tuple[Package, ...]:
-    """Of *units*, those no record in *bases* can supply on this leg; each says why.
-
-    One read per record. A unit a record holds at its current closure
-    identity is supplied, the branch's record asked before main's; a
-    unit every record lacks or holds at another closure, an unreadable
-    record, a leg without a label, or a closure git cannot identify
-    runs the suite fresh and says why, so the union never lacks a
-    suite and the records need no backfill.
-    """
-    from livery.workshop._coverage_store import closure_id, recorded
-
-    if not units:
-        return ()
-    if not run.leg:
-        for unit in units:
-            print(
-                f"  coverage store: {unit.path} runs, nothing to reuse (this leg"
-                " has no label)"
-            )
-        return units
-    held = {base: recorded(root, leg=run.leg, base=base) for base in bases}
-    out: list[Package] = []
-    for unit in units:
-        try:
-            key = closure_id(root, packages, unit)
-        except git.GitError as error:
-            print(
-                f"  coverage store: {unit.path} runs, nothing to reuse (its closure"
-                f" has no identity: {error})"
-            )
-            out.append(unit)
-            continue
-        states: list[str] = []
-        for base in bases:
-            record = held[base]
-            if record.failed:
-                states.append(f"{base}'s record could not be read ({record.reason})")
-                continue
-            row = record.units.get(unit.path)
-            if row is not None and row.closure == key:
-                break
-            states.append(
-                f"{base}'s record holds it at closure {row.closure[:12]}, not"
-                f" {key[:12]}"
-                if row is not None
-                else f"{base}'s record holds no measurement of it"
-            )
-        else:
-            print(
-                f"  coverage store: {unit.path} runs, nothing to reuse (on this leg"
-                f" {', '.join(states)})"
-            )
-            out.append(unit)
-    return tuple(out)
-
-
-def _with_unstored_suites(
-    root: Path,
-    run: RunContext,
-    packages: tuple[Package, ...],
-    subset: tuple[Package, ...],
-) -> tuple[Package, ...]:
-    """*subset* plus every suite no record can supply for this leg.
-
-    A leg skips a suite only when its branch's record or main's holds
-    the suite's lines at its current closure on this leg; the rest run
-    fresh, and the line says why.
-    """
-    from livery.extensions.python._backend import suites_of
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
-
-    kept = {package.path for package in subset}
-    skipped = tuple(
-        package for package in suites_of(packages) if package.path not in kept
-    )
-    bases = record_bases(run.head_ref)
-    extra = {
-        unit.path for unit in _unrecorded(root, run, packages, skipped, bases=bases)
-    }
-    if not extra:
-        return subset
-    # The workspace's own tests ride the subset as a unit of their own,
-    # outside the packages, and stay in it.
-    unit = tuple(package for package in subset if package.path == WORKSPACE_TESTS)
-    return tuple(package for package in packages if package.path in kept | extra) + unit
-
-
-def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) -> None:
-    """On a proved tree, run the units no record in *bases* can supply, for their lines.
-
-    The gate's steps already passed for this tree, so none reruns.
-    The coverage union still needs every unit at its current closure;
-    the branch whose run proved the tree recorded them, so a tree the
-    records supply in full leaves the ``verified`` scope and runs
-    nothing. A unit neither record holds, a row written before the
-    record named branches, say, runs metered, and nothing else.
-    """
-    from livery.extensions.python._backend import units_of
-    from livery.workshop import _verified
-
-    packages = _packages()
-    # Only a suite a listed test step runs has a record to miss: a
-    # workspace that lists no python test step measures nothing here.
-    tested = _steps.tested(units_of(root, packages))
-    units = _unrecorded(root, run, packages, tested, bases=bases)
-    if not units:
-        _verified.write_marker(root, _verified.VERIFIED, leg=run.leg)
-        return
-    names = ", ".join(unit.path for unit in units)
-    print(f"  measuring: {names} run for their lines alone; the gate is proved")
-    _verified.write_marker(
-        root, _verified.MEASURED, tuple(unit.path for unit in units), leg=run.leg
-    )
-    _python.run_test(packages=units, root=root)
-
-
 def _scoped_check(
     subset: tuple[Package, ...],
     *,
@@ -998,169 +884,6 @@ def _scoped_check(
         ),
         between=between,
     )
-
-
-coverage = group("coverage", help="The measured union and its floors")
-
-
-@coverage.task(name="leg", hidden=True)
-def coverage_leg(
-    *,
-    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
-    trace: Annotated[Path, doc("the trace the gate wrote")] = Path(
-        "fm-profile-check.json"
-    ),
-) -> None:
-    """Put this leg's measured suites and its timing row on its per-run ref, once.
-
-    Runs at the end of a check leg whose tests ran metered: the run
-    left one data file per process; each suite the leg ran is split
-    out and put on the leg's per-run ref with the scope the gate ran,
-    and the parts combine into one ``.coverage``. With ``--job`` the
-    leg's timing row, read from the trace the profiled gate wrote,
-    rides the same write for the gate job to collect; a trace that
-    cannot be read prints its reason and the write goes on without
-    the row. Refuses when a leg that ran its gate left no data, naming
-    the variable that arms the meter, and when the lines could not be
-    put, so a leg that measured is never judged as an empty union.
-    """
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
-    timing = None
-    if job:
-        from livery.workshop._metrics import leg_row
-
-        timing, why = leg_row(trace if trace.is_absolute() else root / trace, job=job)
-        if timing is None:
-            print(f"  {job}: {why}; the timing row stays unwritten")
-    _python.combine_leg(root, _packages(), timing=timing)
-    if timing is not None:
-        print(f"  {job}: timing row on the leg's ref")
-
-
-@coverage.task(name="union", hidden=True)
-def coverage_union() -> None:
-    """Union the run's legs' lines with main's record and enforce the floors.
-
-    Runs in the gate job: every check leg's lines are read from its
-    per-run ref, every suite no leg ran is carried from main's record
-    on that leg at the suite's current closure, and the union judges
-    every package. On main's run the record is then written back.
-    Refuses when no leg left its lines, when a leg that ran its gate
-    left none, and when a suite neither the run nor the record can
-    supply, so nothing passes as a smaller union; the report and the
-    verdicts print, so the numbers on screen are the numbers enforced.
-    """
-    from contextlib import nullcontext
-
-    from livery.git import remote_snapshot
-    from livery.workshop._ci_context import run_context
-
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
-    run = run_context()
-    # The legs' per-run refs and every record the union may carry
-    # from: one listing and one fetch.
-    scope = (
-        remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "coverage/"))
-        if run is not None
-        else nullcontext()
-    )
-    with scope:
-        judged = _python.combine_union(root, _packages())
-    if judged:
-        from livery.workshop._metrics import write_coverage_row
-
-        measured = _python.enforce_coverage(root, judged)
-        print(f"  {write_coverage_row(root, measured)}")
-
-
-@coverage.task(name="enforce")
-def coverage_enforce() -> None:
-    """Enforce every package's floor on the combined coverage data.
-
-    Runs where a merged ``.coverage`` file already exists, the
-    aggregating CI job after it combines every leg's data; the same
-    floors `fm test` checks quickly on one machine, here judged on
-    the cross-platform union.
-    """
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
-    _python.enforce_coverage(root, _packages())
-
-
-@coverage.task(name="accept")
-def coverage_accept(
-    package: Annotated[str, doc("the package path, as packages/forge")],
-    value: Annotated[float, doc("the new mark, in percent")],
-    reason: Annotated[str, doc("why the mark comes down; goes on the record")] = "",
-) -> None:
-    """Lower a package's coverage mark deliberately, with the reason on the record.
-
-    The mark rises on its own when a run clears it; lowering it is a
-    person's act, so this writes a dated row naming who and why, and
-    the next gated run judges from it. Refuses without a reason, for
-    a package not under auto-ratchet, at or above the current mark,
-    or when the marks cannot be read.
-    """
-    from livery.workshop import _coverage_marks
-
-    root = workspace_root()
-    if root is None:
-        raise ValueError("no workspace: no workshop.toml above the working directory")
-    if not reason.strip():
-        fail(
-            "a reason is required: --reason=<why the mark comes down> goes on the"
-            " record beside the new mark"
-        )
-    packages = _packages()
-    found = next((item for item in packages if item.path == package), None)
-    if found is None:
-        fail(
-            f"no package at {package!r}; the packages are "
-            + ", ".join(item.path for item in packages)
-        )
-    policy = _python.coverage_policy(found)
-    if policy is None or not policy.ratchet:
-        fail(
-            f"{package} is not under auto-ratchet: its workshop.toml sets its"
-            " floor under [coverage], so change it there"
-        )
-    if not 0 <= value <= 100:
-        fail(f"the mark is a percentage; {value!r} is not")
-    current, why = _coverage_marks.marks(root)
-    if current is None:
-        fail(f"refusing: {why}; a write from an unread store would erase its rows")
-    mark = current.get(package)
-    if mark is None:
-        fail(
-            f"{package} has no mark yet: the next gated run records one, and"
-            " there is nothing to lower"
-        )
-    if value >= mark.value:
-        fail(
-            f"{package}'s mark is {mark.value:.2f}%; {value:.2f}% does not lower"
-            " it. Raising is the ratchet's own move, when a run clears the mark."
-        )
-    who = _git_identity(root)
-    written = _coverage_marks.write_mark(
-        root,
-        package=package,
-        value=value,
-        kind="accept",
-        by=who,
-        reason=reason.strip(),
-    )
-    if written:
-        fail(f"the mark was not written: {written}")
-    print(
-        f"  coverage {package}: mark {mark.value:.2f}% -> {value:.2f}%"
-        f" accepted by {who}"
-    )
-    print(f"    reason: {reason.strip()}")
 
 
 def _git_identity(root: Path) -> str:

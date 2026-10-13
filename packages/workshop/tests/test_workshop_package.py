@@ -72,6 +72,7 @@ def test_the_surface_is_declared() -> None:
         "registry",
         "release_notes",
         "run_batched",
+        "run_phase_over",
         "run_suites",
         "scoped_files",
         "scoped_packages",

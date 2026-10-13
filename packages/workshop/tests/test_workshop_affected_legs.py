@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.extensions.python import _backend as _python
-from livery.workshop import _coverage_store, _quality, _verified
+from livery.extensions.coverage import _leg as coverage_leg
+from livery.extensions.coverage import _record as coverage_record
+from livery.workshop import _quality, _verified
 from livery.workshop._ci_context import RunContext
 from livery.workshop._gate_record import Plan
 from livery.workshop._packages import Package
@@ -447,6 +448,18 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
 # --- the coverage store decides which skipped suites run anyway ---------------
 
 
+def _measured(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Stand in for the run-a-phase seam: each run's units, by path."""
+    ran: list[tuple[str, ...]] = []
+
+    def _run_phase(phase: str, packages: tuple[Package, ...]) -> None:
+        assert phase == "test"
+        ran.append(tuple(package.path for package in packages))
+
+    monkeypatch.setattr("livery.workshop.run_phase_over", _run_phase)
+    return ran
+
+
 def test_a_leg_skips_a_suite_on_a_current_row_and_never_on_a_kept_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -455,19 +468,19 @@ def test_a_leg_skips_a_suite_on_a_current_row_and_never_on_a_kept_one(
     # leg reads the current rows alone and the union finds the rest.
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    unit = _coverage_store.Unit("packages/y", "k" * 64, "5", "a" * 40, {})
-    kept = _coverage_store.Kept(
-        _coverage_store.kept_name("packages/y", "k" * 64),
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    unit = coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, {})
+    kept = coverage_record.Kept(
+        coverage_record.kept_name("packages/y", "k" * 64),
         unit,
         "2026-10-01T02:05:00+00:00",
     )
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record({}, kept=(kept,)),
+        lambda root, *, leg, base="main": coverage_record.Record({}, kept=(kept,)),
     )
-    widened = _quality._with_unstored_suites(
+    widened = coverage_leg.with_unstored_suites(
         root, _run("pull_request", "main"), (x, y), (x,)
     )
     assert widened == (x, y)
@@ -483,8 +496,8 @@ def test_a_leg_without_a_label_or_an_identity_runs_every_suite(
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
     z = _member(root, "z", suite=False)
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    widened = _quality._with_unstored_suites(
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    widened = coverage_leg.with_unstored_suites(
         root, _run("pull_request", "main", ""), (x, y, z), (x,)
     )
     assert widened == (x, y)  # z has no suite to run
@@ -493,16 +506,16 @@ def test_a_leg_without_a_label_or_an_identity_runs_every_suite(
         in capsys.readouterr().out
     )
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record({}),
+        lambda root, *, leg, base="main": coverage_record.Record({}),
     )
 
     def _no_identity(root: object, ps: object, p: object) -> str:
         raise git.GitError("HEAD:packages/y is not in HEAD")
 
-    monkeypatch.setattr(_coverage_store, "closure_id", _no_identity)
-    widened = _quality._with_unstored_suites(
+    monkeypatch.setattr(coverage_record, "closure_id", _no_identity)
+    widened = coverage_leg.with_unstored_suites(
         root, _run("pull_request", "main"), (x, y, z), (x,)
     )
     assert widened == (x, y)
@@ -521,22 +534,22 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     )
     _stepping(monkeypatch, "packages/x/a.py")
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: (x,))
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     # The record holds y at the current closure and z at another: one
     # read decides both, and only z runs.
     held = {
-        "packages/y": _coverage_store.Unit("packages/y", "k" * 64, "5", "a" * 40, {}),
-        "packages/z": _coverage_store.Unit("packages/z", "j" * 64, "4", "a" * 40, {}),
+        "packages/y": coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, {}),
+        "packages/z": coverage_record.Unit("packages/z", "j" * 64, "4", "a" * 40, {}),
     }
     reads: list[tuple[str, str]] = []
 
     def _recorded(
         root: Path, *, leg: str, base: str = "main"
-    ) -> _coverage_store.Record:
+    ) -> coverage_record.Record:
         reads.append((leg, base))
-        return _coverage_store.Record(held)
+        return coverage_record.Record(held)
 
-    monkeypatch.setattr(_coverage_store, "recorded", _recorded)
+    monkeypatch.setattr(coverage_record, "recorded", _recorded)
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
@@ -544,33 +557,41 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
             tuple(p.path for p in subset)
         ),
     )
+    # The gate judges what the change affects and reads no record.
     _quality.check()
     out = capsys.readouterr().out
-    assert gated == [("packages/x", "packages/z")]
+    assert gated == [("packages/x",)]
+    assert reads == []
+    assert "affected: packages/x" in out
+    marker = read_marker(root)
+    assert marker == {
+        "scope": "affected",
+        "packages": ["packages/x"],
+        "leg": "check-a",
+        "base_tree": "b" * 40,
+    }
+    # The coverage leg then measures the suite no record can supply.
+    ran = _measured(monkeypatch)
+    measured = coverage_leg.top_up(root, (x, y, z), marker)
+    out = capsys.readouterr().out
+    assert ran == [("packages/z",)]
     assert reads == [("check-a", "main")]  # no branch on this run: main's alone
     assert (
         "coverage store: packages/z runs, nothing to reuse (on this leg main's"
         " record holds it at closure jjjjjjjjjjjj, not kkkkkkkkkkkk)" in out
     )
     assert "packages/y runs" not in out
-    assert "affected: packages/x, packages/z" in out
-    assert read_marker(root) == {
-        "scope": "affected",
-        "packages": ["packages/x", "packages/z"],
-        "leg": "check-a",
-        "base_tree": "b" * 40,
-    }
-    # An unreadable record runs every skipped suite and names the reason;
-    # every suite widened is the whole gate, so the widening is asked
-    # directly here.
+    assert "measuring: packages/z run for their lines alone\n" in out
+    assert measured == {**marker, "packages": ["packages/x", "packages/z"]}
+    # An unreadable record runs every skipped suite and names the reason.
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record(
+        lambda root, *, leg, base="main": coverage_record.Record(
             {}, failed=True, reason="down"
         ),
     )
-    widened = _quality._with_unstored_suites(
+    widened = coverage_leg.with_unstored_suites(
         root, _run("pull_request", "main"), (x, y, z), (x,)
     )
     out = capsys.readouterr().out
@@ -595,28 +616,28 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
         head_ref="feat/x",
     )
     by_base = {
-        "feat/x": _coverage_store.Record(
+        "feat/x": coverage_record.Record(
             {
-                "packages/y": _coverage_store.Unit(
+                "packages/y": coverage_record.Unit(
                     "packages/y", "k" * 64, "9", "a" * 40, {}
                 )
             }
         ),
-        "main": _coverage_store.Record(
+        "main": coverage_record.Record(
             {
-                "packages/z": _coverage_store.Unit(
+                "packages/z": coverage_record.Unit(
                     "packages/z", "k" * 64, "5", "a" * 40, {}
                 )
             }
         ),
     }
 
-    def _by_base(root: Path, *, leg: str, base: str = "main") -> _coverage_store.Record:
+    def _by_base(root: Path, *, leg: str, base: str = "main") -> coverage_record.Record:
         reads.append((leg, base))
         return by_base[base]
 
-    monkeypatch.setattr(_coverage_store, "recorded", _by_base)
-    assert _quality._with_unstored_suites(root, own, (x, y, z), (x,)) == (x,)
+    monkeypatch.setattr(coverage_record, "recorded", _by_base)
+    assert coverage_leg.with_unstored_suites(root, own, (x, y, z), (x,)) == (x,)
     assert reads == [("check-a", "feat/x"), ("check-a", "main")]
     assert "runs, nothing to reuse" not in capsys.readouterr().out
 
@@ -627,7 +648,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
 def test_a_workspace_tests_change_narrows_to_that_unit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
@@ -643,15 +664,15 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     monkeypatch.setattr(
         "livery.workshop._quality._affected", lambda root, step: (unit,)
     )
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     held = {
-        path: _coverage_store.Unit(path, "k" * 64, "5", "a" * 40, {})
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, {})
         for path in ("packages/x", "packages/y")
     }
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record(held),
+        lambda root, *, leg, base="main": coverage_record.Record(held),
     )
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
@@ -670,12 +691,16 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
         "leg": "check-a",
         "base_tree": "b" * 40,
     }
-    # A suite the records cannot supply widens the subset, and the unit
-    # stays in it.
+    # A suite the records cannot supply runs in the coverage leg, beside
+    # the unit, which stays in the scope its file names.
     del held["packages/y"]
     gated.clear()
     _quality.check()
-    assert gated == [("packages/y", "tests")]
+    assert gated == [("tests",)]
+    ran = _measured(monkeypatch)
+    measured = coverage_leg.top_up(root, (x, y), read_marker(root))
+    assert ran == [("packages/y",)]
+    assert measured["packages"] == ["packages/y", "tests"]
     assert (
         "coverage store: packages/y runs, nothing to reuse" in capsys.readouterr().out
     )
@@ -686,7 +711,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
 
 def _proved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[Path, list[tuple[str, ...]]]:
+) -> tuple[Path, tuple[Package, ...], list[tuple[str, ...]]]:
     """A root whose tree a check leg proved, two members in it; the runs measured."""
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
@@ -702,31 +727,27 @@ def _proved(
     monkeypatch.setattr(
         "livery.workshop._quality.verified_already", lambda root: proved
     )
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    ran: list[tuple[str, ...]] = []
-
-    def _run_test(*args: str, **kw: object) -> None:
-        packages = kw["packages"]
-        assert isinstance(packages, tuple)
-        ran.append(tuple(p.path for p in packages))
-        assert kw["root"] == root
-
-    monkeypatch.setattr(_python, "run_test", _run_test)
-    return root, ran
+    monkeypatch.setattr(_verified, "tree_id", lambda root, ref="HEAD": "t")
+    monkeypatch.setattr(_verified, "record", lambda root, tree: (proved, ""))
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    return root, (x, y), _measured(monkeypatch)
 
 
 def test_a_proved_tree_with_no_test_step_listed_measures_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A suite no listed step runs has no record to miss.
-    root, ran = _proved(tmp_path, monkeypatch)
+    root, packages, ran = _proved(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record({}),
+        lambda root, *, leg, base="main": coverage_record.Record({}),
     )
     _quality.check()
-    assert ran == [] and read_marker(root)["scope"] == "verified"
+    marker = read_marker(root)
+    assert marker["scope"] == "verified"
+    assert coverage_leg.top_up(root, packages, marker) == marker
+    assert ran == []
 
 
 def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
@@ -735,40 +756,45 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     capsys: pytest.CaptureFixture[str],
     python_steps: object,
 ) -> None:
-    root, ran = _proved(tmp_path, monkeypatch)
+    root, packages, ran = _proved(tmp_path, monkeypatch)
     # Every unit recorded at its closure: the leg runs nothing.
     every = {
-        path: _coverage_store.Unit(path, "k" * 64, "5", "a" * 40, {})
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, {})
         for path in ("packages/x", "packages/y", "tests")
     }
     reads: list[tuple[str, str]] = []
 
-    def _every(root: Path, *, leg: str, base: str = "main") -> _coverage_store.Record:
+    def _every(root: Path, *, leg: str, base: str = "main") -> coverage_record.Record:
         reads.append((leg, base))
-        return _coverage_store.Record(every)
+        return coverage_record.Record(every)
 
-    monkeypatch.setattr(_coverage_store, "recorded", _every)
+    monkeypatch.setattr(coverage_record, "recorded", _every)
     _quality.check()
-    assert ran == [] and read_marker(root)["scope"] == "verified"
+    marker = read_marker(root)
+    assert marker["scope"] == "verified"
+    assert coverage_leg.top_up(root, packages, marker) == marker
+    assert ran == []
     # The branch the verified row names is asked first, then main.
     assert reads == [("check-a", "feat/x"), ("check-a", "main")]
     # y and the workspace tests moved: the leg runs their tests alone,
-    # measured, and leaves the measured scope naming them.
+    # measured, and its file names the measured scope.
     moved = dict(every)
-    moved["packages/y"] = _coverage_store.Unit(
+    moved["packages/y"] = coverage_record.Unit(
         "packages/y", "j" * 64, "4", "a" * 40, {}
     )
     del moved["tests"]
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": _coverage_store.Record(moved),
+        lambda root, *, leg, base="main": coverage_record.Record(moved),
     )
     _quality.check()
+    assert read_marker(root)["scope"] == "verified"
+    measured = coverage_leg.top_up(root, packages, read_marker(root))
     out = capsys.readouterr().out
     assert ran == [("packages/y", "tests")]
     assert "measuring: packages/y, tests run for their lines alone" in out
-    assert read_marker(root) == {
+    assert measured == {
         "scope": "measured",
         "packages": ["packages/y", "tests"],
         "leg": "check-a",

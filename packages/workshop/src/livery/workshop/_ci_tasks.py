@@ -17,8 +17,8 @@ runs one job of a point
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
 that store (livery.workshop._metrics); the hidden ``ci.metrics.collect``
-is the gate job's writer ``ci.run`` schedules, and a check leg's row
-rides ``coverage.leg``'s one write.
+is the gate job's writer ``ci.run`` schedules, and the hidden
+``ci.leg`` is each check leg's one write of its row.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from livery.forge import (
 )
 from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
+from livery.workshop._points import TRACE
 from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_PENDING,
@@ -928,6 +929,53 @@ def ci_verified_stamp() -> None:
     """
     _repo, root = _resolved()
     verified_stamp_flow(root)
+
+
+def leg_flow(root: Path, *, job: str, trace: Path) -> None:
+    """Put this leg's row and its spool on its per-run ref; red when the write fails."""
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._metrics import put_leg
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: a check leg's row is put by CI only")
+        return
+    lines, why = put_leg(
+        root,
+        run,
+        job=job,
+        label=run.leg,
+        trace=trace if trace.is_absolute() else root / trace,
+    )
+    for line in lines:
+        print(line)
+    if why:
+        fail(
+            f"the leg's row could not be put on its per-run ref ({why}): a leg"
+            " whose write fails is red, since the gate job would judge it by"
+            " what it never put"
+        )
+
+
+@ci.task(name="leg", hidden=True)
+def ci_leg(
+    *,
+    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
+    trace: Annotated[Path, doc("the trace the gate wrote")] = Path(TRACE),
+) -> None:
+    """Put this check leg's row and the files its entries left on its ref, in one write.
+
+    The check leg's last entry. The row is the leg's timing half, read
+    from the trace the profiled gate wrote, with the scope the gate
+    ran; beside it go the files the leg's other entries left in its
+    spool, ``.workshop/leg/``, each under its own name. A trace that
+    cannot be read prints its reason and the write goes on without
+    the row. A write that fails is red.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    leg_flow(root, job=job, trace=trace)
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)

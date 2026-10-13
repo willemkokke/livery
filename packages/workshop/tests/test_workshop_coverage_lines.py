@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.python import _backend as _python
+from livery.extensions.cmake import _build as _cmake
+from livery.extensions.coverage import _floors as coverage_floors
+from livery.extensions.coverage import _lines as lines_
+from livery.extensions.coverage import _record as coverage_record
 from livery.footman import Failed
-from livery.workshop import _coverage_lines as lines_
-from livery.workshop import _coverage_store
 from livery.workshop._packages import Package
 
 _FAILURES = (SystemExit, Failed)
@@ -78,30 +79,30 @@ def test_a_part_that_is_not_one_refuses_naming_it(tmp_path: Path) -> None:
 
 def test_a_reading_that_is_not_the_tools_format_refuses() -> None:
     with pytest.raises(_FAILURES, match="not JSON"):
-        lines_.from_gcov_json("nope")
+        _cmake.from_gcov_json("nope")
     with pytest.raises(_FAILURES, match="no files table"):
-        lines_.from_gcov_json('{"a": 1}')
+        _cmake.from_gcov_json('{"a": 1}')
     with pytest.raises(_FAILURES, match="not XML"):
-        lines_.from_cobertura("<not xml")
-    assert lines_.measurer_for("Intel") == ""
-    assert lines_.measurer_for("") == ""
-    assert lines_.from_lcov("garbage\nDA:1,1\n") == {}
+        _cmake.from_cobertura("<not xml")
+    assert _cmake.measurer_for("Intel") == ""
+    assert _cmake.measurer_for("") == ""
+    assert _cmake.from_lcov("garbage\nDA:1,1\n") == {}
 
 
 def test_each_measurers_reading_reduces_to_lines() -> None:
-    assert lines_.from_gcov_json(GCOV) == {"../../src/x.cpp": {3: 2, 4: 0}}
+    assert _cmake.from_gcov_json(GCOV) == {"../../src/x.cpp": {3: 2, 4: 0}}
     # Two gcov documents on their own lines, one per counter file.
-    assert lines_.from_gcov_json(GCOV + "\n" + GCOV) == {
+    assert _cmake.from_gcov_json(GCOV + "\n" + GCOV) == {
         "../../src/x.cpp": {3: 4, 4: 0}
     }
-    assert lines_.from_lcov(LCOV) == {"/w/packages/n/src/x.cpp": {3: 1, 4: 0, 7: 0}}
-    assert lines_.from_cobertura(COBERTURA) == {
+    assert _cmake.from_lcov(LCOV) == {"/w/packages/n/src/x.cpp": {3: 1, 4: 0, 7: 0}}
+    assert _cmake.from_cobertura(COBERTURA) == {
         "D:\\a\\w\\packages\\n\\src\\x.cpp": {3: 1, 4: 0}
     }
-    assert lines_.measurer_for("GNU") == "gcov"
-    assert lines_.measurer_for("AppleClang") == "llvm"
-    assert lines_.measurer_for("Clang") == "llvm"
-    assert lines_.measurer_for("MSVC") == "msvc"
+    assert _cmake.measurer_for("GNU") == "gcov"
+    assert _cmake.measurer_for("AppleClang") == "llvm"
+    assert _cmake.measurer_for("Clang") == "llvm"
+    assert _cmake.measurer_for("MSVC") == "msvc"
 
 
 def test_relativise_keys_by_the_repository_path_and_drops_strangers(
@@ -113,7 +114,7 @@ def test_relativise_keys_by_the_repository_path_and_drops_strangers(
         "packages\\n\\src\\z.cpp": {2: 0},
         str(tmp_path.parent / "elsewhere.cpp"): {3: 1},
     }
-    assert lines_.relativise(read, tmp_path) == {
+    assert _cmake.relativise(read, tmp_path) == {
         "packages/n/src/x.cpp": {1: 1},
         "packages/n/src/z.cpp": {2: 0},
     }
@@ -129,7 +130,7 @@ def test_percent_counts_source_lines_alone_and_the_union_adds_hits(
         "packages/other/src/y.cpp": {1: 0},
     }
     assert lines_.percent(measured, package) == 50.0
-    assert lines_.within(measured, package) == {
+    assert _cmake.within(measured, package) == {
         "packages/n/src/x.cpp": {1: 1, 2: 0},
         "packages/n/tests/test_x.cpp": {1: 0, 2: 0, 3: 0},
     }
@@ -150,25 +151,29 @@ def test_percent_counts_source_lines_alone_and_the_union_adds_hits(
     lines_.write_part(tmp_path, "packages/n", measured)
     assert lines_.read_parts(tmp_path) == {"packages/n": measured}
     assert lines_.pairs(first) == {"packages/n/src/x.cpp": [(1, 1), (2, 0)]}
+    # The cmake extension's test leaves the part byte for byte as the
+    # coverage extension writes and reads it: the shape is their contract.
+    written = (tmp_path / f"{lines_.PART_PREFIX}packages-n.json").read_bytes()
+    assert _cmake.write_part(tmp_path, "packages/n", measured).read_bytes() == written
     lines_.remove_parts(tmp_path)
     assert lines_.read_parts(tmp_path) == {}
 
 
 def test_the_unit_row_carries_its_measurer_and_an_older_row_reads_as_arcs() -> None:
-    unit = _coverage_store.Unit(
+    unit = coverage_record.Unit(
         "packages/n",
         "k" * 64,
         "7",
         "a" * 40,
         {"packages/n/src/x.cpp": [(1, 1), (2, 0)]},
-        measurer=_coverage_store.LINES,
+        measurer=coverage_record.LINES,
     )
-    fields = _coverage_store._unit_fields(unit)
+    fields = coverage_record._unit_fields(unit)
     assert fields["measurer"] == "lines"
-    assert _coverage_store._parse_unit(fields) == unit
+    assert coverage_record._parse_unit(fields) == unit
     older = {k: v for k, v in fields.items() if k != "measurer"}
-    parsed = _coverage_store._parse_unit(older)
-    assert parsed is not None and parsed.measurer == _coverage_store.ARCS
+    parsed = coverage_record._parse_unit(older)
+    assert parsed is not None and parsed.measurer == coverage_record.ARCS
 
 
 def test_a_native_package_unmeasured_refuses_and_below_its_floor_shares_the_prose(
@@ -176,29 +181,33 @@ def test_a_native_package_unmeasured_refuses_and_below_its_floor_shares_the_pros
 ) -> None:
     package = _native(tmp_path)
     # The refusal first: a suite nobody measured never passes as measured.
-    assert _python.measured_coverage(tmp_path, (package,)) == {}
+    assert coverage_floors.measured_coverage(tmp_path, (package,)) == {}
     with pytest.raises(_FAILURES, match="packages/n: not measured; its tests ran"):
-        _python.enforce_coverage(tmp_path, (package,))
-    _python.report_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
+    coverage_floors.report_coverage(tmp_path, (package,))
     assert "coverage packages/n: not measured here" in capsys.readouterr().out
     # Half the source lines reached, against a floor of 100: the same
     # sentence a python package gets.
     lines_.write_part(tmp_path, "packages/n", {"packages/n/src/x.cpp": {1: 1, 2: 0}})
-    assert _python.measured_coverage(tmp_path, (package,)) == {"packages/n": 50.0}
+    assert coverage_floors.measured_coverage(tmp_path, (package,)) == {
+        "packages/n": 50.0
+    }
     with pytest.raises(
         _FAILURES,
         match=r"packages/n: 50\.0% is below the committed floor of 100\.0% by more"
         r" than the 0\.5% epsilon",
     ):
-        _python.enforce_coverage(tmp_path, (package,))
-    _python.report_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
+    coverage_floors.report_coverage(tmp_path, (package,))
     assert (
         "coverage packages/n: 50.0% here (floor 100.0% judges"
         in capsys.readouterr().out
     )
     # At its floor it passes, with the numbers on screen.
     package = _native(tmp_path, "floor = 50")
-    assert _python.enforce_coverage(tmp_path, (package,)) == {"packages/n": 50.0}
+    assert coverage_floors.enforce_coverage(tmp_path, (package,)) == {
+        "packages/n": 50.0
+    }
     assert (
         "coverage packages/n: 50.0% (floor 50.0%, epsilon 0.5%)"
         in capsys.readouterr().out

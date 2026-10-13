@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from livery import git
-from livery.extensions.python import _backend as _python
+from livery.extensions.coverage import _floors as coverage_floors
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._packages import Package
@@ -307,14 +307,14 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
         kind="python",
         depends=(),
     )
-    measured = _python.measured_coverage(tmp_path, (package,))
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert measured["packages/thing"] > 0
-    _python.enforce_coverage(tmp_path, (package,))  # above its floor
+    coverage_floors.enforce_coverage(tmp_path, (package,))  # above its floor
     (package_dir / "workshop.toml").write_text(
         'kind = "python"\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
     )
     with pytest.raises(_FAILURES):
-        _python.enforce_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
 
 
 def test_a_newborn_workspace_has_zero_packages(tmp_path: Path) -> None:

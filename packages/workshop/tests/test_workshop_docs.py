@@ -1407,8 +1407,8 @@ _DRAWN = 'extensions = ["docs", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.extensions.coverage._lines import write_part
     from livery.extensions.docs import _site as _docs
-    from livery.workshop._coverage_lines import write_part
 
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     root = _workspace(tmp_path)
@@ -1442,8 +1442,8 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.extensions.coverage._record import LINES, Unit
     from livery.extensions.docs import _site as _docs
-    from livery.workshop._coverage_store import LINES, Unit
 
     root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(

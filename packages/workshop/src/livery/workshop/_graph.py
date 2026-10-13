@@ -139,7 +139,7 @@ def affected_packages(root: Path, *, base: str = "main") -> tuple[Package, ...] 
     they live, so a diff confined to them affects nothing. A change
     under the workspace's own ``tests/`` affects that unit alone,
     which the answer then carries as a package of its own
-    ([livery.workshop._coverage_store.workspace_suite][]): its tests
+    ([livery.workshop.workspace_suite][]): its tests
     reach every package, and every leg that runs a suite runs them
     anyway, so no package's suite has to run for it. An empty tuple
     means the branch changes nothing a gate reads.
@@ -237,7 +237,7 @@ def affected_from_paths(
     ``None`` means everything, an empty scope nothing a gate reads.
     """
     from livery.workshop._categories import EXAMPLE, TEST, category_of
-    from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
+    from livery.workshop._packages import WORKSPACE_TESTS, workspace_suite
 
     seeds: set[str] = set()
     # A package whose test files changed runs its whole suite; nothing

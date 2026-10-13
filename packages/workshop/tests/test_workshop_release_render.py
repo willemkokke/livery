@@ -1,11 +1,13 @@
-"""The release render, byte for byte: a workspace with a native member, and a pure one.
+"""The CI render, byte for byte, of three workspaces on every forge.
 
 A workspace with a nanobind member renders every workflow file on
-GitHub, Gitea and GitLab, and a workspace with none renders its
-release; each file is compared with its golden under ``fixtures/``.
-The render reads the builtin points, and for the native workspace the
-jobs nanobind's declaration adds, as the mount adds them for a
-workspace whose packages hold nanobind, with the runner named ``fm``:
+GitHub, Gitea and GitLab, a workspace with none renders its release,
+and a workspace that lists ruff alone renders every workflow file with
+no coverage entry at any point; each file is compared with its golden
+under ``fixtures/``. The render reads the builtin points, and for the
+native workspace the jobs nanobind's declaration adds, as the mount
+adds them for a workspace whose packages hold nanobind, with the
+runner named ``fm``:
 the jobs an earlier mount in the worker contributed and the name a
 host started the runner under are no part of a golden, so a golden is
 the same bytes on every host. A render that moves fails here until
@@ -58,15 +60,18 @@ def builtin_points(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         yield
 
 
-def _workspace(root: Path, forge: str, members: dict[str, str]) -> Path:
+def _workspace(
+    root: Path, forge: str, members: dict[str, str], extensions: str = ""
+) -> Path:
     """A workspace at *root* on *forge* with *members*, each directory to its contract.
 
     The check runners are not the wheel platforms, so a golden shows
-    which of the two each job fans out to.
+    which of the two each job fans out to. *extensions* is the list's
+    entries, spelled as the contract spells them.
     """
     root.mkdir()
     (root / "workshop.toml").write_text(
-        "[workspace]\nextensions = []\n\n[forge]\n"
+        f"[workspace]\nextensions = [{extensions}]\n\n[forge]\n"
         f'kind = "{forge}"\nowner = "acme"\n\n[ci]\n'
         'runners = ["ubuntu-latest", "windows-latest"]\n'
         'python-versions = ["3.13", "3.14"]\n'
@@ -148,3 +153,24 @@ def test_a_native_workspace_renders_every_workflow_as_its_golden(
 ) -> None:
     root = _workspace(tmp_path / "workspace", forge, NATIVE)
     _match(_workflows(root), FIXTURES / "release-native" / forge, tmp_path / "render")
+
+
+@pytest.mark.parametrize("forge", FORGES)
+def test_a_workspace_listing_ruff_alone_renders_no_coverage_entry(
+    tmp_path: Path, forge: str
+) -> None:
+    from livery.workshop import _points
+    from livery.workshop._extensions import declaration, register_jobs
+
+    root = _workspace(tmp_path / "workspace", forge, PURE, '"ruff"')
+    # The mount adds the jobs of what the workspace lists: ruff alone.
+    found = declaration("ruff")
+    assert found is not None
+    register_jobs("ruff", found.additions.jobs)
+    for point in _points.point_by_name(root):
+        for job in _points.jobs_of(root, point):
+            tasks = [entry.task for entry in _points.entries_for(root, point, job)]
+            assert not [task for task in tasks if task.startswith("coverage.")]
+    rendered = _workflows(root)
+    assert not [name for name, text in rendered.items() if "coverage." in text]
+    _match(rendered, FIXTURES / "ruff-alone" / forge, tmp_path / "render")

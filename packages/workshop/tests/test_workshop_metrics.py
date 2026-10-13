@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from livery import git
+from livery.footman import Failed
 from livery.forge import Step
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_context, _metrics
@@ -23,6 +24,8 @@ from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 JOB = "check (ubuntu-latest, 3.14)"
+
+_FAILURES = (SystemExit, Failed)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -139,10 +142,44 @@ def test_a_trace_without_tasks_is_a_reason(tmp_path: Path) -> None:
 
 
 def test_put_leg_writes_nothing_without_a_trace(work: Path, tmp_path: Path) -> None:
-    why = _metrics.put_leg(
+    lines, why = _metrics.put_leg(
         work, RUN, job=JOB, label="check-a", trace=tmp_path / "none.json"
     )
-    assert "did not run under --profile" in why
+    assert why == ""
+    assert any("did not run under --profile" in line for line in lines)
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+
+
+def test_a_leg_whose_files_cannot_be_put_is_red(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._ci_tasks import leg_flow
+
+    monkeypatch.setenv("WORKSHOP_LEG", "check-a")
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    # The refusals first: a spool file no reader takes, and the leg's own
+    # row's name, fail the write by name before anything is put.
+    spool = work / _metrics.LEG_SPOOL
+    spool.mkdir(parents=True)
+    (spool / "odd.json").write_text("[1, 2]")
+    with pytest.raises(
+        _FAILURES, match=r"\.workshop/leg/odd\.json is not a JSON object"
+    ):
+        leg_flow(work, job=JOB, trace=trace)
+    (spool / "odd.json").unlink()
+    (spool / _metrics.ROW_FILE).write_text("{}")
+    with pytest.raises(_FAILURES, match=r"row\.json is the leg's own row"):
+        leg_flow(work, job=JOB, trace=trace)
+    (spool / _metrics.ROW_FILE).unlink()
+    # A write the store refuses is red, naming the store's reason.
+    _metrics.leave_leg_file(work, "coverage.json", {"scope": "full"})
+    origin = _git(work, "remote", "get-url", "origin").strip()
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(
+        _FAILURES, match=r"the leg's row could not be put on its per-run ref \("
+    ):
+        leg_flow(work, job=JOB, trace=trace)
+    _git(work, "remote", "set-url", "origin", origin)
     assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
 
@@ -278,7 +315,7 @@ def test_collect_names_a_job_the_forge_does_not_know(
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace) == ""
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  run {RUN.run_id}: the forge lists no such run" in "\n".join(lines)
     assert f"  {JOB}: unknown to the forge; its trace half rides alone" in lines
@@ -350,7 +387,8 @@ def test_collect_keeps_the_halves_while_a_completed_job_is_red(
 
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
     assert (
-        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace) == ""
+        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace)[1]
+        == ""
     )
     ref = _metrics.run_ref(run, "check-a")
     lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
@@ -384,7 +422,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
         Step("Gate", "success", "2026-09-09T00:49:37Z", "2026-09-09T00:49:42Z"),
     )
     trace = _trace(tmp_path / "t.json", tasks={"check": 4100.0})
-    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
+    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
     assert f"  {_metrics.run_ref(run, 'gate')}: dropped" in lines
@@ -457,7 +495,8 @@ def test_collect_records_every_job_and_the_runs_wall(
 
     trace = _trace(tmp_path / "t.json", tasks={"check": 4100.0})
     assert (
-        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace) == ""
+        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace)[1]
+        == ""
     )
     lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run 77 recorded, 4 job(s)" in lines
@@ -511,7 +550,7 @@ def test_collect_finds_a_pull_requests_run_under_the_events_head(
         "github", str(run_state.id), "pull_request", "refs/pull/1/merge", head
     )
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
+    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     merge_commit = "e" * 40
     lines = _metrics.collect(work, repo, run, sha=merge_commit)
     assert not any("lists no such run" in line for line in lines)
@@ -614,7 +653,7 @@ def test_collect_measures_a_job_still_running_to_the_collection(
         Step("Post", "", "", ""),
     )
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
+    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
     rows = git.read(state_store(work), _metrics.SERIES.ref).files
@@ -660,28 +699,28 @@ def test_a_job_the_forge_has_not_started_carries_no_times() -> None:
 def test_collect_drops_the_legs_measured_lines_with_its_half(
     work: Path, tmp_path: Path
 ) -> None:
-    from livery.workshop import _coverage_store
+    from livery.extensions.coverage import _record as coverage_record
 
     fake = FakeForge()
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace) == ""
-    why = _coverage_store.put_run(
+    why = coverage_record.leave_run(
         work, RUN, leg="check-a", scope="verified", packages=(), units={}
     )
     assert why == ""
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
     ref = _metrics.run_ref(RUN, "check-a")
     held = git.read(state_store(work), ref).files
     assert held is not None
-    assert set(held) == {_metrics.ROW_FILE, _coverage_store.RUN_FILE}
+    assert set(held) == {_metrics.ROW_FILE, coverage_record.RUN_FILE}
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {ref}: dropped" in lines
     assert git.read(state_store(work), ref).files is None
-    assert _coverage_store.run_legs(work, RUN) == ([], "")
+    assert coverage_record.run_legs(work, RUN) == ([], "")
 
 
-# --- the coverage row: folded into the run's file, rendered as a trend ---------
+# --- the run's sections: folded into the run's file, rendered as a trend ------
 
 
 def test_collect_folds_the_coverage_row_the_gate_left(
@@ -691,12 +730,15 @@ def test_collect_folds_the_coverage_row_the_gate_left(
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
     trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace) == ""
-    assert _metrics.read_coverage_row(work) is None
-    (work / _metrics.COVERAGE_ROW).write_text("not json")
-    assert _metrics.read_coverage_row(work) is None
-    line = _metrics.write_coverage_row(
-        work, {"packages/x": 91.234, "packages/y": 100.0}
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
+    # The fallbacks first: no section, and a file that is none, fold nothing.
+    assert _metrics.sections(work) == {}
+    (work / _metrics.RUN_ROW).mkdir(parents=True)
+    (work / _metrics.RUN_ROW / "odd.json").write_text("not json")
+    (work / _metrics.RUN_ROW / "bare.json").write_text('{"unit": "%"}')
+    assert _metrics.sections(work) == {}
+    line = _metrics.leave_section(
+        work, "coverage", {"packages/x": 91.23, "packages/y": 100.0}, unit="%"
     )
     assert line == "coverage row: 2 package(s) for the run's record"
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
@@ -704,20 +746,27 @@ def test_collect_folds_the_coverage_row_the_gate_left(
     rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
-    assert entry["coverage"] == {"packages/x": 91.23, "packages/y": 100.0}
+    assert entry["sections"]["coverage"] == {
+        "unit": "%",
+        "packages": {"packages/x": 91.23, "packages/y": 100.0},
+    }
 
 
 def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> None:
     files = {}
     for n in range(1, 4):
-        entry = {
+        entry: dict[str, object] = {
             "schema": _metrics.SCHEMA,
             "run": str(n),
             "sha": "a" * 40,
             "jobs": {"gate": {"wall_ms": 1000.0 * n}},
         }
-        if n > 1:
-            entry["coverage"] = {"packages/x": 90.0 + n, "packages/y": 100.0}
+        values = {"packages/x": 90.0 + n, "packages/y": 100.0}
+        if n == 2:
+            # A row collected before the run's file named its sections.
+            entry["coverage"] = values
+        if n == 3:
+            entry["sections"] = {"coverage": {"unit": "%", "packages": values}}
         files[_metrics.run_file(str(n))] = json.dumps(entry)
     assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
     lines = _metrics.render(work)

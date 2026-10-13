@@ -4,20 +4,15 @@
 dist/
 .venv/
 __pycache__/
-.coverage
-.coverage.*
-.coverage-lines.*
 fm-profile*.json
 fm-gate.json
 .claude/worktrees/
 .workshop/
 typings/
 .repo.env.local
-packages/**/htmlcov/
 # The python build copies a package's docs into its source for the
 # wheel, whole, on every build.
 packages/**/src/**/_docs/
-coverage-data/
 # Finder writes .DS_Store into any directory it opens; a workflow verb
 # refuses a dirty tree, so the file is never a change.
 .DS_Store
