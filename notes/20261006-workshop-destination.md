@@ -1289,54 +1289,73 @@ slices, each mergeable alone:
    phase declarations of slices 2 to 4 are re-spelled here, a rename
    of tables and nothing else.
 6. **11c, the docs phase**, before the registry goes, since the docs
-   extension reads the extractor and the coverage pages from the kinds
-   until then: the generators become steps of the docs phase the docs
-   extension declares.
+   extension reads the extractor from the kinds until then (12e moved
+   the coverage pages to the coverage extension): the generators become
+   steps of the docs phase the docs extension declares.
 7. **The kinds go**: the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
    the python extension; `fm new.package` takes a combination,
    completed from the installed package-level extensions, since the
-   combinations listing goes with #1377.
+   combinations listing goes with #1377. With it and phase 13, the
+   vocabulary test's allowance names only the runtime.
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
    base's public API in the same move (decision record, 2026-10-13).
 
-**11c, the docs phase.** Ruled 2026-10-10: the generators below are
-steps of the docs phase the docs extension declares, and
-`[generators.<name>]` goes with #1377; read the paragraph with that
-substitution. `[generators.<name>]` and the members policy in
-`livery.extensions.docs` (the extension is still in the wheel);
-`zensical.toml` becomes a composed file of the fragment engine, the
-docs extension's dynamic fragment with contributed tables; `Extractor`
-goes. `livery-extensions-mkdocstrings`,
-its own distribution requiring `docs`: the python generator, the
-handler tables as its fragment, `lint.docrefs` and `lint.docstrings`,
-`griffelib`, the generator's `paths` option at `[generators.mkdocstrings]`
-(`[docs] api` stays docs'); the
-workshop wheel drops `griffelib`. The coverage pages, which 12e gives
-the coverage extension as its answer to a query the docs extension
-declares, become coverage's step of the docs phase. The docs
-extension reads its generators through `contributions_for("docs")`
-and names no language. The
-`REFERENCES` query replaces the base's python parse in the layering
-check, python's extension answering it. This repository and
-`fm new.project`'s stock list add `mkdocstrings` after `docs`.
+**11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
+site's generators are steps of a docs phase the docs extension
+declares. Ruled 2026-10-13, on the plan: seven parts, each mergeable
+alone.
+
+- P0: pins in today's spelling, and a control pair of site builds that
+  fixes what every later same-site comparison excludes.
+- PA2: the `references` query, which the python extension answers from
+  its own parse, replaces the base's python parse in the layering
+  checks; a package that lists nothing is answered through its kind
+  until the kinds go.
+- PA1: the terminal rule becomes the python extension's layering step,
+  and a general rule of the python extension replaces forge's
+  stdlib-only rule: at import time a source imports only the standard
+  library, its own package and the distributions its `pyproject.toml`
+  declares; an optional extra's distributions only lazily, inside a
+  function; a module footman loads as a plugin what footman brings.
+  Forge's stdlib-only property follows from its declaring no runtime
+  dependency.
+- PB: the docs extension declares the docs phase, and the task
+  reference, the package verbs and coverage's pages become its steps.
+  A second docs phase, which `docs.publish` runs on the built site
+  just before it publishes, takes coverage's redraw from main's merged
+  record through coverage's `[for.docs]` table; it is named apart from
+  the release lifecycle's `publish`.
+- PC1: an mkdocstrings extension, inside the workshop wheel until step
+  8, takes the API pages, the handler tables (through the docs-declared
+  query `docs.config`), `lint.docrefs` and `lint.docstrings`; the
+  kind's `Extractor` goes; this repository and `fm new.project`'s stock
+  list name `mkdocstrings` after `docs`.
+- PC2: the base's docs contract module leaves: `[docs]` and its `api`
+  key are the docs extension's, the docs a python wheel embeds the
+  python extension's.
+- PD: the `docs` dependency group follows what a workspace lists, and
+  `griffelib` leaves the workshop's runtime dependencies.
+
+`zensical.toml` stays the build's own file: its nav reads pages the
+generators write during the build, so it cannot be rendered by `fm
+sync`. The docs extension names no language.
 
 Acceptance, refusals first:
 
-- the plan's 11 refusals, as #1377 leaves them:
-  `test_two_providers_of_one_key_refuse`,
-  `test_two_extensions_naming_one_executable_refuse`; the pair and the
-  post refusals go with the pair check and `post`;
+- `test_two_providers_of_one_key_refuse` and
+  `test_two_extensions_naming_one_executable_refuse`, as #1377 leaves
+  them;
 - `test_a_docs_step_for_an_unlisted_extension_is_never_asked`,
   `test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_block`;
-- `fm run` of a C++ application rebuilds only what changed (a counting
-  seam);
-- `fm docs.build` renders the same site before and after 11c: the two
-  `site/` trees compared by `diff -r`, provenance headers excluded;
-- the vocabulary test's allowance names only the runtime (the plan's
-  11d, which 11b and 11c complete together).
+- `fm docs.build` renders the same site before and after each part,
+  compared by P0's command, apart from what the part's own source
+  changes show: their API pages, their coverage pages, the search
+  index, `llms-full.txt` and `objects.inv`, and the nav of every page
+  when a part adds or removes a module;
+- 11c adds no entry to the vocabulary test's allowance.
 
 ### Phase 12: docs and housekeeping ship apart
 
@@ -1483,13 +1502,12 @@ neither needs nor rules out).
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
-| `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
+| `KindRecord.extractor` and `[docs] generators` as two mechanisms | the docs phase's steps, mkdocstrings' among them (phase 11c) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
-| the assembled `zensical.toml` the docs build writes | a composed file of the fragment engine, generators contributing their tables (phase 11c) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
@@ -2968,6 +2986,26 @@ neither needs nor rules out).
   per test, reviewed later (#1591); per test file would serve the
   selection and the union as well, and per test is what lets the pages
   name the test that reached a line.
+
+- 2026-10-13, Willem, on 11c's plan (#1594): mkdocstrings starts
+  inside the workshop wheel and ships apart at step 8, as coverage
+  does, since a separate distribution cannot reach the kind bridge
+  that five packages here get their API pages through, and would make
+  the docs extension's public names before step 8; `lint.docrefs` and
+  `lint.docstrings` move to it, since zensical resolves references only
+  while mkdocstrings is configured; `zensical.toml` stays the build's
+  own file, mkdocstrings contributing its tables through a query, which
+  replaces the 2026-10-06 composed file; coverage's merge-time redraw
+  is a step of a docs phase that `docs.publish` runs before it
+  publishes (Willem's shape, in place of a `merged` input); forge's
+  stdlib-only rule generalises into the python extension's
+  declared-imports rule; the C++ `fm run` line leaves 11c for the plan
+  of what a change affects (phase 2), and the vocabulary line becomes
+  "adds no allowance entry", "names only the runtime" moving to step 7
+  with phase 13. P0 found that two builds of one tree are byte-identical
+  but for the lines that name what wrote a page, and that a part's own
+  source changes reach the site through the API pages and the nav, so
+  the same-site line excludes what those changes show.
 
 ## Open
 

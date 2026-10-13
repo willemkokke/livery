@@ -32,6 +32,9 @@ from workshop_measured import measure
 
 _FAILURES = (SystemExit, Failed)
 
+#: This repository's root, which the tests named for this workspace read.
+ROOT = Path(__file__).resolve().parents[3]
+
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root = tmp_path / "ws"
@@ -1936,23 +1939,30 @@ def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) ->
     ]
 
 
+@pytest.fixture
+def no_development_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Assemble this repository's site config without its development section.
+
+    The development section renders the verbs fragment through this
+    repository's own fm, which syncs a checkout that never synced: a
+    release leg's fresh clone, whose links would then point into the
+    leg's scratch venv. The tests that take this read the packages'
+    sections and the handler, never the development section.
+    """
+    monkeypatch.setattr(
+        "livery.extensions.docs._site.development_nav_lines", lambda root: []
+    )
+
+
 def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api(
-    monkeypatch: pytest.MonkeyPatch,
+    no_development_section: None,
 ) -> None:
     """The order holds among the sections a checkout has.
 
     The tasks block is emitted by its generator, so a fresh checkout
     may not carry it yet.
     """
-    # The development section renders the verbs fragment through this
-    # repository's own fm, which syncs a checkout that never synced: a
-    # release leg's fresh clone, whose links would then point into the
-    # leg's scratch venv. The packages' sidebars are what this reads.
-    monkeypatch.setattr(
-        "livery.extensions.docs._site.development_nav_lines", lambda root: []
-    )
-    root = Path(__file__).resolve().parents[3]
-    config = zensical_config(root)
+    config = zensical_config(ROOT)
     for name in ("footman", "workshop", "forge"):
         labels = _nav_labels(config, name)
         present = [label for label in ("Changelog", "Tasks", "API") if label in labels]
@@ -1960,6 +1970,76 @@ def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api(
         assert [labels.index(label) for label in present] == sorted(
             labels.index(label) for label in present
         ), (name, labels)
+
+
+#: The python handler's options as this repository's site renders them.
+_HANDLER_OPTIONS = {
+    "docstring_style": "google",
+    "show_if_no_docstring": True,
+    "show_root_heading": True,
+    "show_root_full_path": True,
+    "separate_signature": True,
+    "show_signature_annotations": True,
+    "signature_crossrefs": True,
+    "members_order": "source",
+    "merge_init_into_class": True,
+    "summary": True,
+    "heading_level": 2,
+}
+
+#: The inventory every python reference here resolves against.
+_PYTHON_INVENTORY = "https://docs.python.org/3/objects.inv"
+
+
+def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stubs(
+    no_development_section: None,
+) -> None:
+    """The handler of this repository's site, and of toolroom's preview.
+
+    A path for each member that ships python modules, in the packages'
+    order, with toolroom's rendered stubs after its sources. footman
+    declines its reference, and the members that ship no module give
+    no path: clang-format, mypy, pyrefly, ruff and ty. No extension here
+    answers the members policy, so the options carry no filter.
+    """
+    site = tomllib.loads(zensical_config(ROOT))
+    assert site["project"]["plugins"]["mkdocstrings"]["handlers"] == {
+        "python": {
+            "paths": [
+                "packages/extensions/basedpyright/src",
+                "packages/extensions/changelog/src",
+                "packages/extensions/clang-tidy/src",
+                "packages/extensions/claude/src",
+                "packages/extensions/pytest/src",
+                "packages/forge/src",
+                "packages/git/src",
+                "packages/strongroom/src",
+                "packages/toolroom/src",
+                "packages/toolroom/docs/_generated/stubs",
+                "packages/toolroom-bench/src",
+                "packages/toolroom-store/src",
+                "packages/workshop/src",
+            ],
+            "inventories": [_PYTHON_INVENTORY],
+            "options": _HANDLER_OPTIONS,
+        }
+    }
+    # The preview reads the same paths from two levels down, and
+    # resolves the rest of the site through its published inventory.
+    preview = tomllib.loads(scoped_config(ROOT, named_package(ROOT, "toolroom")))
+    assert preview["project"]["plugins"]["mkdocstrings"]["handlers"] == {
+        "python": {
+            "paths": [
+                "../../packages/toolroom/src",
+                "../../packages/toolroom/docs/_generated/stubs",
+            ],
+            "inventories": [
+                _PYTHON_INVENTORY,
+                "https://docs.willem.net/livery/objects.inv",
+            ],
+            "options": _HANDLER_OPTIONS,
+        }
+    }
 
 
 # Phase 3 of the modular docs plan: the section is the package's, the site assembles.
@@ -2312,6 +2392,48 @@ def test_the_tree_places_packages_and_orders_them_by_their_dependencies(
     assert core.package is not None and core.package.member == "core"
     bare = core.children["extras"].children["bare"]
     assert bare.package is not None and bare.package.member == "bare"
+
+
+def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> None:
+    """Each member at its place in the Packages tree, a golden for this repository.
+
+    A python package sits at its import path less the shared
+    ``livery``; each extension package names its place inside the
+    workshop's entry. A member added here, or moved, moves this golden
+    in the same change.
+    """
+    from livery.extensions.docs._packages_page import Node, package_tree
+
+    found: dict[str, str] = {}
+
+    def walk(node: Node, place: tuple[str, ...]) -> None:
+        for child in node.ordered():
+            here = (*place, child.label)
+            if child.package is not None:
+                found[child.package.member] = ".".join(here)
+            walk(child, here)
+
+    walk(package_tree(discover_packages(ROOT)), ())
+    assert found == {
+        "footman": "footman",
+        "forge": "forge",
+        "git": "git",
+        "strongroom": "strongroom",
+        "toolroom": "toolroom.tools",
+        "toolroom-bench": "toolroom.bench",
+        "toolroom-store": "toolroom.store",
+        "workshop": "workshop",
+        "extensions/basedpyright": "workshop.extensions.basedpyright",
+        "extensions/changelog": "workshop.extensions.changelog",
+        "extensions/clang-format": "workshop.extensions.clang-format",
+        "extensions/clang-tidy": "workshop.extensions.clang-tidy",
+        "extensions/claude": "workshop.extensions.claude",
+        "extensions/mypy": "workshop.extensions.mypy",
+        "extensions/pyrefly": "workshop.extensions.pyrefly",
+        "extensions/pytest": "workshop.extensions.pytest",
+        "extensions/ruff": "workshop.extensions.ruff",
+        "extensions/ty": "workshop.extensions.ty",
+    }
 
 
 def test_the_nav_has_one_packages_entry_with_its_landing_page(tmp_path: Path) -> None:
