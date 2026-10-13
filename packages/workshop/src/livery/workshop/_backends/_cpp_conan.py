@@ -137,9 +137,6 @@ from livery.extensions.cpp._language import (
 from livery.extensions.cpp._language import (
     public_modules as public_modules,
 )
-from livery.extensions.cpp._language import (
-    referenced_siblings as referenced_siblings,
-)
 
 #: The extensions a ``cpp-conan`` package that lists none is taken to
 #: hold: the three a new one lists, ``cmake`` and ``conan`` and the

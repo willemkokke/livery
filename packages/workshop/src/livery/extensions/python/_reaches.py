@@ -11,8 +11,8 @@ roots one wheel ships are one distribution's.
 
 The rule is a step of the layering phase,
 ``[phases.layering.private-reaches]``, judged over the one parse of
-the python sources ([livery.workshop._ast_rules.parsed_modules][]):
-the files a narrowed run reaches, every source otherwise.
+the python sources (``parsed_modules``): the files a narrowed run
+reaches, every source otherwise.
 
 The scan reads names, not types: a private read through a value
 (``current()._x``) or named in a string (an entry point,
@@ -30,9 +30,9 @@ from livery.workshop import selected_files
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from livery.extensions.python._parse import ParsedModule
     from livery.workshop import Changes, PhaseContext
-    from livery.workshop._ast_rules import ParsedModule, RuleContext
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import Package, RuleContext
 
 #: Where the allowance lives in the root contract.
 ALLOWANCE = "[[python.private-reaches]]"
@@ -45,7 +45,8 @@ def private_reaches(ctx: PhaseContext) -> None:
     judged over the one parse; an unused entry is judged on a run over
     every source alone.
     """
-    from livery.workshop._ast_rules import RuleContext, parsed_modules
+    from livery.extensions.python._parse import parsed_modules
+    from livery.workshop._packages import RuleContext
 
     files = selected_files(ctx)
     context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)

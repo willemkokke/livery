@@ -19,7 +19,7 @@ import sys
 import tempfile
 import tomllib
 from collections.abc import Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import livery.footman as footman
@@ -28,7 +28,7 @@ from livery.footman import fail
 from livery.toolroom.tools import pytest
 from livery.workshop import Query
 from livery.workshop._contract import load_contract
-from livery.workshop._packages import Neighbours, Package
+from livery.workshop._packages import Neighbours, Package, SourceReferences
 
 if TYPE_CHECKING:
     from livery.workshop._kinds import Extractor
@@ -511,55 +511,75 @@ def _extra_distributions(package: Package) -> frozenset[str]:
     return frozenset(found)
 
 
-def _references_in(source: Path) -> list[str]:
-    """The dotted names *source* imports, guarded ones left out.
+def references(package: Package) -> tuple[SourceReferences, ...]:
+    """What each python source of *package* references, one record per file.
 
-    Read through the layering phase's one parse, so a file another
-    rule also reads is parsed once per gate; a file that does not
-    parse contributes nothing, since the syntax gate names it.
+    Every ``.py`` file under ``src``, then under ``tests``, in path
+    order, read through the layering phase's one parse, so a file
+    another rule also reads is parsed once per gate; a file that does
+    not parse is left out, since the syntax gate names it. A source
+    under ``src`` is referenced by its dotted path, and a test by
+    nothing. Two of this kind's conventions account for a name: each
+    name a module the package declares as a footman task entry point
+    references, since the runner that loads the module brings what it
+    imports, and each name of a sibling one of its optional extras
+    names, since an extra is a declaration of its own.
     """
-    from livery.workshop._ast_rules import parsed_source
+    from livery.extensions.python._parse import dotted_name, parsed_source
 
-    parsed = parsed_source(source)
-    return [] if parsed is None else list(parsed.imports)
-
-
-def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
-    """Which siblings *package* uses and has not accounted for, by area.
-
-    The area is ``src`` or ``tests``, which is what decides a runtime
-    edge from a test one: the import site answers the kind, so nothing
-    has to guess it. Three of this kind's own conventions account for
-    a reference without an edge, and it is left out here: an import
-    inside a module the package declares as a footman task entry
-    point, a sibling named in one of its optional extras, and an
-    import guarded by ``try``/``except ImportError``.
-    """
-    exempt_dists = _extra_distributions(package)
     plugins = plugin_modules(package)
-    found: dict[str, str] = {}
-    for area in ("tests", "src"):
+    around, named = _extra_siblings(package)
+    records: list[SourceReferences] = []
+    for area in ("src", "tests"):
         base = package.directory / area
         if not base.is_dir():
             continue
         for source in sorted(base.rglob("*.py")):
-            inside_plugin = False
-            if area == "src":
-                dotted = ".".join(source.relative_to(base).parts)
-                dotted = dotted.removesuffix(".py").removesuffix(".__init__")
-                inside_plugin = any(
-                    dotted == module or dotted.startswith(module + ".")
-                    for module in plugins
+            parsed = parsed_source(source)
+            if parsed is None:
+                continue
+            module = dotted_name(source, base) if area == "src" else ""
+            names = dict.fromkeys(reference.name for reference in parsed.references)
+            loaded = bool(module) and any(
+                module == plugin or module.startswith(plugin + ".")
+                for plugin in plugins
+            )
+            accounted = tuple(
+                name for name in names if loaded or around.owner_of(name) in named
+            )
+            relative = source.relative_to(package.directory).as_posix()
+            records.append(
+                SourceReferences(
+                    path=f"{package.path}/{relative}",
+                    module=module,
+                    references=parsed.references,
+                    accounted=accounted,
                 )
-            for reference in _references_in(source):
-                owner = around.owner_of(reference)
-                if not owner or owner == package.path:
-                    continue
-                if inside_plugin or around.by_path[owner].name in exempt_dists:
-                    continue
-                found[owner] = area
-    found.pop(package.path, None)
-    return found
+            )
+    return tuple(records)
+
+
+def _extra_siblings(package: Package) -> tuple[Neighbours, frozenset[str]]:
+    """Who owns each name in the workspace, and the siblings *package*'s extras name.
+
+    The siblings are the other members whose distribution an optional
+    extra of the package names, by path; a name is theirs when the
+    longest member prefix it matches is one of their roots. Empty for a
+    package that declares no extra, which then reads no other member.
+    """
+    from livery.workshop._packages import discover_packages, neighbours
+
+    extras = _extra_distributions(package)
+    if not extras:
+        return Neighbours(owners={}, by_path={}), frozenset()
+    root = package.directory.parents[len(PurePosixPath(package.path).parts) - 1]
+    around = neighbours(discover_packages(root))
+    named = frozenset(
+        path
+        for path, member in around.by_path.items()
+        if member.name in extras and path != package.path
+    )
+    return around, named
 
 
 def declared_requirements(package: Package) -> dict[str, str]:

@@ -13,19 +13,12 @@ from __future__ import annotations
 import ast
 import re
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from itertools import takewhile
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._ast_rules import (
-    Judge,
-    ParsedModule,
-    RuleContext,
-    parsed_modules,
-    parsed_source,
-)
 from livery.workshop._contract import load_contract
 
 
@@ -537,6 +530,69 @@ def verify_graph(root: Path) -> tuple[Package, ...]:
     return packages
 
 
+@dataclass(frozen=True)
+class RuleContext:
+    """What a rule of the layering phase judges: the workspace and its sources.
+
+    Attributes:
+        root: The workspace root.
+        packages: Every package the workspace carries.
+        files: The root-relative sources the run judges; None for every
+            one. A rule over the sources keeps to these, and a rule over
+            a package's references judges each package holding one
+            (`packages_in_scope`).
+    """
+
+    root: Path
+    packages: tuple[Package, ...]
+    files: frozenset[str] | None = None
+
+    def in_scope(self, path: Path) -> bool:
+        """Whether *path*, absolute, is a source this run judges."""
+        if self.files is None:
+            return True
+        try:
+            relative = path.relative_to(self.root).as_posix()
+        except ValueError:
+            return False
+        return relative in self.files
+
+    def packages_in_scope(self) -> tuple[Package, ...]:
+        """The packages holding a source this run judges, every one without a scope."""
+        if self.files is None:
+            return self.packages
+        files = self.files
+        return tuple(
+            package
+            for package in self.packages
+            if any(path.startswith(f"{package.path}/") for path in files)
+        )
+
+    def sources(self) -> tuple[SourceReferences, ...]:
+        """What each source this run judges references, one record per source.
+
+        Read from the ``references`` answer of each package in scope,
+        in package order; a package whose kind is not registered is
+        left out, since ``layering.graph`` names it.
+        """
+        from livery.workshop import _lifecycle
+        from livery.workshop._kinds import kind_names
+
+        known = kind_names()
+        return tuple(
+            source
+            for package in self.packages_in_scope()
+            if package.kind in known
+            for source in _lifecycle.references(package)
+            if self.files is None or source.path in self.files
+        )
+
+
+#: A rule's judge: the context, to the problems, empty when the rule
+#: holds.
+Judge = Callable[[RuleContext], list[str]]
+
+
 def import_problems(
     root: Path, packages: tuple[Package, ...], files: frozenset[str] | None = None
 ) -> list[str]:
@@ -557,13 +613,11 @@ def rule_problems(
     """What the base's layering step *step* finds over the sources in scope.
 
     *files* names the root-relative sources a narrowed run judges;
-    None judges every one. The modules come from the one parse
-    ([livery.workshop._ast_rules.parsed_modules][]). A rule over a
-    module judges the named ones, and a rule over a package's
-    references judges each package holding one.
+    None judges every one. A rule over the sources judges the named
+    ones, and a rule over a package's references judges each package
+    holding one.
     """
-    context = RuleContext(root=root, packages=packages, files=files)
-    return RULES[step](parsed_modules(root, packages, files), context)
+    return RULES[step](RuleContext(root=root, packages=packages, files=files))
 
 
 def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
@@ -651,13 +705,56 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
 
 
 @dataclass(frozen=True)
+class ReferencedName:
+    """One name a source references, and how the source makes the reference.
+
+    Attributes:
+        name: The dotted name, as the source spells it.
+        lazy: Whether only a function or a method body makes the
+            reference, so importing the source does not.
+        type_checking: Whether only a type checker makes it, so no run
+            of the source does.
+        optional: Whether the source handles the name being absent, so
+            it runs without it.
+    """
+
+    name: str
+    lazy: bool = False
+    type_checking: bool = False
+    optional: bool = False
+
+
+@dataclass(frozen=True)
+class SourceReferences:
+    """What one source references: one record of a package's ``references`` answer.
+
+    Attributes:
+        path: The source, relative to the workspace root, posix: a file
+            inside the package the answer is about.
+        module: The name other code references the source by; empty for
+            a source nothing references by name, such as a test.
+        references: Every name the source references, in source order,
+            once for each way the source makes the reference.
+        accounted: The names among them that the conventions of the
+            source's language account for, so they need no dependency
+            edge.
+    """
+
+    path: str
+    module: str = ""
+    references: tuple[ReferencedName, ...] = ()
+    accounted: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Neighbours:
-    """What a kind needs to judge one package's references to its siblings.
+    """What resolving one package's references to its siblings needs.
 
     Attributes:
         owners: Each package's own import prefixes, mapped to its
-            path. The kinds answer these; the core collects them, so
-            a reference is resolved the same way whoever made it.
+            path. The packages' extensions or kinds answer these; the
+            core collects them, so a reference is resolved the same way
+            whoever made it.
         by_path: Every package by its identity path.
     """
 
@@ -740,9 +837,10 @@ def undeclared_references(
 ) -> tuple[list[tuple[Package, Package, str, str]], list[tuple[Package, Package]]]:
     """Sibling references no edge declares, split by what the graph reaches.
 
-    Each kind answers which siblings a package's sources reference and
-    which of those its own conventions already explain; this walks the
-    graph over the answers. A reference the declared graph already
+    Each package's ``references`` answer says what its sources
+    reference and which names its language's conventions account for;
+    this resolves each other name to the sibling that owns it and walks
+    the graph over them. A reference the declared graph already
     reaches can be declared without changing what the graph reaches,
     so it can introduce neither a cycle nor an upward edge, and it is
     returned as (package, dependency, edge kind, floor). Anything else
@@ -750,7 +848,6 @@ def undeclared_references(
     (package, dependency). *only* judges the packages at those paths
     and walks the graph over every one.
     """
-    from livery.workshop import _lifecycle
     from livery.workshop._kinds import kind_names
 
     around = neighbours(packages)
@@ -761,22 +858,50 @@ def undeclared_references(
             continue
         if only is not None and package.path not in only:
             continue
-        referenced = _lifecycle.referenced_siblings(package, around)
-        if referenced is None:
-            continue
+        referenced = _referenced_siblings(package, around)
         declared = {edge.path for edge in package.depends}
         reach = _reachable(around.by_path, package.path)
-        for dep_path, area in sorted(referenced.items()):
+        for dep_path, kind in sorted(referenced.items()):
             if dep_path in declared or dep_path not in around.by_path:
                 continue
             dependency = around.by_path[dep_path]
             if dep_path in reach:
-                kind = "test" if area == "tests" else "runtime"
                 floor = inherited_floor(around.by_path, reach, dep_path)
                 writable.append((package, dependency, kind, floor))
             else:
                 refused.append((package, dependency))
     return writable, refused
+
+
+def _referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
+    """The siblings *package*'s sources reference that nothing accounts for.
+
+    Each to the edge it asks for. A name the source runs without, or
+    one the conventions of its language account for, needs no edge. A
+    sibling that only test and test-support files reference, by their
+    category, asks for a ``test`` edge; one that any other file
+    references asks for a ``runtime`` edge.
+    """
+    from livery.workshop import _lifecycle
+    from livery.workshop._categories import TEST, TEST_SUPPORT, category_of
+
+    found: dict[str, str] = {}
+    for source in _lifecycle.references(package):
+        accounted = set(source.accounted)
+        owners = {
+            owner
+            for reference in source.references
+            if not reference.optional and reference.name not in accounted
+            if (owner := around.owner_of(reference.name)) not in ("", package.path)
+        }
+        if not owners:
+            continue
+        relative = source.path.removeprefix(f"{package.path}/")
+        tested = category_of(package, relative).name in (TEST, TEST_SUPPORT)
+        for owner in owners:
+            if found.get(owner) != "runtime":
+                found[owner] = "test" if tested else "runtime"
+    return found
 
 
 def declare_edge(
@@ -929,6 +1054,8 @@ def _terminal_is_asked_through_the_runner(
     The runner's own sources implement that answer and are exempt, and
     a module that never imports it is the workspace's own business.
     """
+    from livery.extensions.python._parse import parsed_source
+
     problems: list[str] = []
     sources = [root / "tasks.py"]
     for package in packages:
@@ -967,6 +1094,7 @@ def _forge_is_stdlib_only(
     """
     stdlib = sys.stdlib_module_names
     allowed = set(stdlib) | {"livery"} | _FORGE_LAZY_EXTRAS
+    from livery.extensions.python._parse import parsed_source
     from livery.workshop import _lifecycle
     from livery.workshop._kinds import kind_names
 
@@ -1019,32 +1147,25 @@ def _forge_is_stdlib_only(
     return problems
 
 
-def _runner_terminal(
-    modules: tuple[ParsedModule, ...], context: RuleContext
-) -> list[str]:
-    """The one-answer rule as a registered rule; its own walk reads the shared parse."""
-    del modules
+def _runner_terminal(context: RuleContext) -> list[str]:
+    """The one-answer rule as a registered rule, over the python parse."""
     return _terminal_is_asked_through_the_runner(
         context.root, context.packages, context
     )
 
 
-def _forge_stdlib(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
-    """The forge's stdlib rule as a registered rule."""
-    del modules
+def _forge_stdlib(context: RuleContext) -> list[str]:
+    """The forge's stdlib rule as a registered rule, over the python parse."""
     return _forge_is_stdlib_only(context.root, context.packages, context)
 
 
-def _sibling_references(
-    modules: tuple[ParsedModule, ...], context: RuleContext
-) -> list[str]:
+def _sibling_references(context: RuleContext) -> list[str]:
     """The undeclared sibling references, by what the graph reaches.
 
     A package's references come from all of its sources, so a package
     holding a source in scope is judged whole, and one holding none
     keeps its verdict.
     """
-    del modules
     problems: list[str] = []
     judged = {package.path for package in context.packages_in_scope()}
     writable, refused = undeclared_references(context.packages, only=judged)
@@ -1071,14 +1192,20 @@ BASE_MODULE = "livery.workshop"
 EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
-#: The base modules that import an extension while the package kinds
-#: live in the base: each module and the extension it imports, to why.
-#: The package kinds' code is the extensions', and the base takes it as
-#: the kinds' backends. The list only shrinks, a test keeps it exact,
-#: and it is empty once the package kinds go.
+#: The base modules that import an extension: each module and the
+#: extension it imports, to why. The package kinds' code is the
+#: extensions', and the base takes it as the kinds' backends while the
+#: kinds live in the base; the runner's one-answer rule and the forge's
+#: stdlib rule walk the python extension's parse while the base holds
+#: them. A test keeps the list exact, and it is empty once the package
+#: kinds and those two rules leave the base.
 BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
     ("livery.workshop._kinds", "livery.extensions.python"): (
         "registers the python kind with the extension's code as its backend"
+    ),
+    ("livery.workshop._packages", "livery.extensions.python"): (
+        "the runner's one-answer rule and the forge's stdlib rule walk the"
+        " syntax trees of the python extension's parse"
     ),
     ("livery.workshop._backends._python_nanobind", "livery.extensions.python"): (
         "the nanobind kind builds on the python kind's functions"
@@ -1108,7 +1235,7 @@ def allowed_extension_import(module: str, imported: str) -> bool:
     )
 
 
-def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str]:
+def extension_imports_in_the_base(sources: Iterable[SourceReferences]) -> list[str]:
     """Each base module that imports an extension, with the extension named.
 
     The base (``livery.workshop``) imports no extension under
@@ -1117,39 +1244,41 @@ def extension_imports_in_the_base(modules: tuple[ParsedModule, ...]) -> list[str
     registries the extension fills at mount. The one exception is
     [livery.workshop._packages.BASE_EXTENSION_IMPORTS][]: a module it names may
     import the extensions it names beside it, and nothing else under the
-    namespace.
+    namespace. *sources* are records of the ``references`` answers; a
+    module that runs without the name it imports is left alone, and
+    one importing it lazily or for a type checker is judged.
     """
     problems: list[str] = []
-    for module in modules:
-        if not module.dotted.startswith(BASE_MODULE + "."):
+    for source in sources:
+        if not source.module.startswith(BASE_MODULE + "."):
             continue
-        for imported in module.imports:
-            if allowed_extension_import(module.dotted, imported):
+        for reference in source.references:
+            imported = reference.name
+            if reference.optional or allowed_extension_import(source.module, imported):
                 continue
             if imported == EXTENSIONS_NAMESPACE or imported.startswith(
                 EXTENSIONS_NAMESPACE + "."
             ):
                 problems.append(
-                    f"{module.relative}: the base imports the extension {imported}; the"
+                    f"{source.path}: the base imports the extension {imported}; the"
                     " base reaches an extension through a registry it fills at mount,"
                     " never by import"
                 )
     return problems
 
 
-def _base_imports_no_extension(
-    modules: tuple[ParsedModule, ...], context: RuleContext
-) -> list[str]:
-    """The base-imports-no-extension rule."""
-    del context
-    return extension_imports_in_the_base(modules)
+def _base_imports_no_extension(context: RuleContext) -> list[str]:
+    """The base-imports-no-extension rule, over the ``references`` answers in scope."""
+    return extension_imports_in_the_base(context.sources())
 
 
-#: The base's rules over the one parse, each the layering step of its
+#: The base's rules over the sources, each the layering step of its
 #: name, which [livery.workshop._steps][] registers beside the base's
-#: other steps: the runner's one-answer rule, the base importing no
-#: extension, the forge's stdlib rule, and the sibling references, whose
-#: step's fix writes the edges ([livery.workshop._packages.write_edges][]).
+#: other steps: the runner's one-answer rule and the forge's stdlib
+#: rule over the python extension's parse, and the base importing no
+#: extension and the sibling references over the ``references``
+#: answers. The sibling step's fix writes the edges
+#: ([livery.workshop._packages.write_edges][]).
 RULES: dict[str, Judge] = {
     "runner-terminal": _runner_terminal,
     "base-imports-no-extension": _base_imports_no_extension,

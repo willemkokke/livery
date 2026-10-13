@@ -6,7 +6,7 @@ version its manifest declares, the files a version is written into,
 writing a version, testing the built artifact in isolation, publishing
 what it built, verifying a released version, its declared
 requirements, writing one, the names other packages reference its code
-by, and the siblings its sources use. A question that is a query
+by, and what its sources reference. A question that is a query
 ([livery.workshop._queries.Query][]) is answered by the package's
 extensions when one of them answers it, and a build, a stamp, an
 isolated test, a publish or a verification runs as the package's phase
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
 
-    from livery.workshop._packages import Neighbours, Package
+    from livery.workshop._packages import Package, SourceReferences
     from livery.workshop._phases import PhaseContext
     from livery.workshop._queries import Query
     from livery.workshop._registries import RegistryTarget
@@ -309,14 +309,57 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     return () if reader is None else tuple(reader(package))
 
 
-def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str] | None:
-    """The siblings *package*'s sources use and nothing accounts for, by area.
+def references(package: Package) -> tuple[SourceReferences, ...]:
+    """What each of *package*'s sources references, one record per source.
 
-    The area is ``src`` or ``tests``, which tells a runtime edge from
-    a test one. None for a package whose kind reads no references.
+    The ``references`` answer of the package's extensions where one of
+    them answers it, and its kind backend's otherwise; the answers
+    combine as their union. Empty for a package nothing answers for,
+    such as one whose language no extension reads sources of. Each
+    record names a file inside the package, and one extension answers
+    for each file.
+
+    Raises:
+        QueryError: when an answer names a file outside the package,
+            naming the extension and the file, or when two extensions
+            answer for one file, naming both.
     """
-    reader = _optional(package, "referenced_siblings")
-    return None if reader is None else reader(package, around)
+    from livery.workshop._queries import REFERENCES, QueryError, answers
+
+    found: Mapping[str, Iterable[SourceReferences]]
+    if _answered(package, REFERENCES):
+        found = answers(package, REFERENCES)
+    else:
+        reader = _optional(package, "references")
+        if reader is None:
+            return ()
+        found = {f"the {package.kind} kind": reader(package)}
+    owners: dict[str, str] = {}
+    union: dict[SourceReferences, None] = {}
+    for name, answered in found.items():
+        for source in answered:
+            if not _inside(package, source.path):
+                raise QueryError(
+                    f"{package.path}: {REFERENCES.name}: {name} answers for"
+                    f" {source.path}, a file outside the package; an answer"
+                    " names the package's own sources"
+                )
+            held = owners.setdefault(source.path, name)
+            if held != name:
+                raise QueryError(
+                    f"{package.path}: {REFERENCES.name}: {held} and {name} both"
+                    f" answer for {source.path}; one extension of a package"
+                    " answers for each source"
+                )
+            union[source] = None
+    return tuple(union)
+
+
+def _inside(package: Package, path: str) -> bool:
+    """Whether *path*, relative to the workspace root, is a file inside *package*."""
+    from pathlib import PurePosixPath
+
+    return path.startswith(f"{package.path}/") and ".." not in PurePosixPath(path).parts
 
 
 def _run_steps(
@@ -381,21 +424,32 @@ def _extensions_answer(package: Package, query: Query[T]) -> T | None:
     The bridge while package kinds remain: a package whose extensions
     answer a query in a place asked now, at the top level or in a
     ``[for.<target>]`` table whose target is listed, takes their
-    answer, and any other takes its kind backend's. The places are the
-    ones the query asks ([livery.workshop._queries.answered_at][]),
-    read from the declarations alone, so no answer is computed twice.
+    answer, and any other takes its kind backend's.
+    """
+    if not _answered(package, query):
+        return None
+    from livery.workshop._queries import answer
+
+    return answer(package, query)
+
+
+def _answered(package: Package, query: Query[T]) -> bool:
+    """Whether an extension of *package*'s set answers *query* in a place asked now.
+
+    The places are the ones the query asks (``answered_at``), read from
+    the declarations alone, so deciding computes no answer.
     """
     if not package.extensions:
-        return None
+        return False
     from livery.workshop._composition import package_set
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._queries import answer, answered_at
+    from livery.workshop._queries import answered_at
 
     for name in package_set(package.extensions, installed_declaration):
         declared = installed_declaration(name)
         if declared is not None and answered_at(package, name, declared, query.name):
-            return answer(package, query)
-    return None
+            return True
+    return False
 
 
 def _optional(package: Package, name: str) -> Any:

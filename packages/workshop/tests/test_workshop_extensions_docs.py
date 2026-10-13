@@ -11,8 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop._ast_rules import ParsedModule
-from livery.workshop._packages import extension_imports_in_the_base
+from livery.workshop._packages import (
+    ReferencedName,
+    SourceReferences,
+    extension_imports_in_the_base,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -20,15 +23,11 @@ ROOT = Path(__file__).resolve().parents[3]
 # The refusal first: a base module importing an extension.
 
 
-def _module(dotted: str, imports: tuple[str, ...]) -> ParsedModule:
-    return ParsedModule(
-        package=None,
-        path=ROOT / "x.py",
-        relative=dotted.replace(".", "/") + ".py",
-        area="src",
-        dotted=dotted,
-        tree=ast.parse(""),
-        imports=imports,
+def _module(dotted: str, imports: tuple[str, ...]) -> SourceReferences:
+    return SourceReferences(
+        path=dotted.replace(".", "/") + ".py",
+        module=dotted,
+        references=tuple(ReferencedName(name) for name in imports),
     )
 
 
@@ -56,6 +55,28 @@ def test_an_allowed_base_module_importing_another_extension_refuses() -> None:
     problems = extension_imports_in_the_base(modules)
     assert len(problems) == 1
     assert "livery.extensions.docs._site" in problems[0]
+
+
+def test_a_base_module_s_optional_import_is_left_alone_and_any_other_refuses() -> None:
+    # An import the module runs without is a declaration of its own; one
+    # made lazily or for a type checker still ties the base to the
+    # extension.
+    source = SourceReferences(
+        path="livery/workshop/_quality.py",
+        module="livery.workshop._quality",
+        references=(
+            ReferencedName("livery.extensions.docs._site", optional=True),
+            ReferencedName("livery.extensions.docs._refs", lazy=True),
+            ReferencedName("livery.extensions.docs._llms", type_checking=True),
+        ),
+    )
+    problems = extension_imports_in_the_base((source,))
+    assert [problem.split(";")[0] for problem in problems] == [
+        "livery/workshop/_quality.py: the base imports the extension"
+        " livery.extensions.docs._refs",
+        "livery/workshop/_quality.py: the base imports the extension"
+        " livery.extensions.docs._llms",
+    ]
 
 
 def test_the_base_extension_import_allowance_is_exact() -> None:

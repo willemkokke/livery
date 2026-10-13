@@ -24,7 +24,7 @@ from livery.workshop._kinds import (
     register_kind,
     template_chain,
 )
-from livery.workshop._packages import Neighbours, Package, discover_packages
+from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext
 from livery.workshop._registries import RegistryTarget
 from livery.workshop._steps import (
@@ -681,11 +681,6 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
 
         def compile_commands(self, package: Package) -> Path | None:
             return None
-
-        def referenced_siblings(
-            self, package: Package, around: Neighbours
-        ) -> dict[str, str]:
-            return {}
 
         def publish_artifact(
             self,

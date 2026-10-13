@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from livery.git import Keyed, Series
     from livery.workshop._composition import Lookup
     from livery.workshop._declaration import Declaration, DeclaredValue, Reference
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import Package, SourceReferences
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -213,6 +213,10 @@ COMPILE_COMMANDS: Query[Path | None] = Query("compile-commands")
 
 #: The names other packages reference this one's code by.
 MODULE_ROOTS: Query[tuple[str, ...]] = Query("module-roots")
+
+#: What each of the package's sources references, one record per
+#: source, which the layering phase's rules over references read.
+REFERENCES: Query[tuple[SourceReferences, ...]] = Query("references")
 
 #: The version the package's own manifests declare.
 CURRENT_VERSION: Query[str] = Query("current-version")

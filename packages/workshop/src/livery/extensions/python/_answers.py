@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import Package, SourceReferences
 
 
 def current_version(package: Package) -> str:
@@ -36,3 +36,8 @@ def module_roots(package: Package) -> tuple[str, ...]:
 def public_modules(package: Package) -> tuple[str, ...]:
     """The modules that declare the package's public API."""
     return tuple(_backend.public_modules(package))
+
+
+def references(package: Package) -> tuple[SourceReferences, ...]:
+    """What each python source under ``src`` and ``tests`` references, one per file."""
+    return _backend.references(package)
