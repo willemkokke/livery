@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import sys
 import sysconfig
@@ -294,15 +295,21 @@ def conan_environment(root: Path) -> dict[str, str]:
     `CMAKE_PROJECT_TOP_LEVEL_INCLUDES`, which CMake reads from no
     environment variable of its own, so every configure resolves
     `find_package` through conan. `CONAN_HOME` is made explicit so a
-    container build shares this machine's cache. On Linux cibuildwheel
-    builds in a container with its own filesystem, so the workspace,
-    the store, the provider and the conan home are mounted at their
-    host paths. The store's conan is the host's frozen binary, linked
-    against the host's libc, which a manylinux or musllinux container
-    cannot run, so the container installs conan at the same version
-    before any wheel builds
+    container build shares this machine's cache, and the home is
+    created here when it is missing: a mount of a missing directory
+    would create it owned by root. On Linux cibuildwheel builds in a
+    container with its own filesystem, so the workspace, the store, the
+    provider and the conan home are mounted at their host paths. The
+    store's conan is the host's frozen binary, linked against the
+    host's libc, which a manylinux or musllinux container cannot run,
+    so the container installs conan at the same version before any
+    wheel builds
     ([livery.workshop._backends._python_nanobind.container_conan_install][])
-    and the store's one stays off its PATH. The package itself is
+    and the store's one stays off its PATH. The container runs as root,
+    and the conan it runs gives what it writes in the home back to the
+    home's owner after every call
+    ([livery.workshop._backends._python_nanobind.container_conan_wrapper][]).
+    The package itself is
     copied to ``/project`` there, outside the workspace, so the
     container also mounts a workspace file of its own beside it
     ([livery.workshop._backends._python_nanobind.container_workspace][]),
@@ -322,6 +329,7 @@ def conan_environment(root: Path) -> dict[str, str]:
     if gap:
         fail(gap)
     conan_home = os.environ.get("CONAN_HOME") or str(Path.home() / ".conan2")
+    Path(conan_home).mkdir(parents=True, exist_ok=True)
     env = {"CMAKE_CONAN_PROVIDER": provider, "CONAN_HOME": conan_home}
     if sys.platform.startswith("linux"):
         mounts = container_mounts(
@@ -375,20 +383,64 @@ def conan_version(root: Path, conan: str) -> str:
 #: Where a Linux build container keeps the conan it installs for itself.
 CONTAINER_CONAN = "/opt/workshop-conan"
 
+#: What a Linux build container runs as ``conan``: a script on every
+#: build's PATH, in front of the container's own install.
+CONTAINER_CONAN_COMMAND = "/usr/local/bin/conan"
+
 
 def container_conan_install(version: str) -> str:
     """The shell line a Linux build container runs before any wheel builds.
 
     A virtual environment of the container's own python, conan at
-    *version* installed into it from the index, and the executable
-    linked into ``/usr/local/bin``, which every build's PATH holds; the
-    store's conan, the host's frozen binary, is never run there.
+    *version* installed into it from the index, and the script that
+    runs it written to `CONTAINER_CONAN_COMMAND`
+    ([livery.workshop._backends._python_nanobind.container_conan_wrapper][]);
+    the store's conan, the host's frozen binary, is never run there.
     """
     return (
         f"python -m venv {CONTAINER_CONAN}"
         f" && {CONTAINER_CONAN}/bin/pip install --quiet conan=={version}"
-        f" && ln -sf {CONTAINER_CONAN}/bin/conan /usr/local/bin/conan"
+        f" && {write_script(CONTAINER_CONAN_COMMAND, container_conan_wrapper())}"
     )
+
+
+def container_conan_wrapper(conan: str = f"{CONTAINER_CONAN}/bin/conan") -> str:
+    """The script a Linux build container runs as ``conan``: *conan*, then a chown.
+
+    The container runs as root and mounts the host's conan home, so a
+    file its conan writes there belongs to root on the host, where the
+    host's user cannot remove it: the host's conan then fails to replace
+    that package's folder, and a removal of the home stops at it. After
+    every call the script gives the whole home to the user who owns the
+    home's directory, as the container sees it, which is the host's user
+    under docker; under rootless docker it is the container's own root,
+    and nothing changes. The script exits with *conan*'s code. A build
+    killed during a call leaves that call's files with root.
+    """
+    return "\n".join(
+        (
+            "#!/bin/sh",
+            f'{conan} "$@"',
+            "code=$?",
+            'if [ -d "$CONAN_HOME" ]; then',
+            '  chown -R "$(stat -c %u:%g "$CONAN_HOME")" "$CONAN_HOME"',
+            "fi",
+            'exit "$code"',
+            "",
+        )
+    )
+
+
+def write_script(path: str, text: str) -> str:
+    """The shell line that writes *text* to *path* as an executable script.
+
+    Each line of *text* is one single-quoted argument to ``printf``, so
+    the shell that runs the line expands nothing in it. Whatever is at
+    *path* goes first, so the line never writes through a link.
+    """
+    lines = " ".join(shlex.quote(line) for line in text.splitlines())
+    target = shlex.quote(path)
+    return f"rm -f {target} && printf '%s\\n' {lines} > {target} && chmod 755 {target}"
 
 
 #: Where a Linux build container finds the conan workspace file: beside

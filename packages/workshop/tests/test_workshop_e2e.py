@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getpass
 import os
 import re
 import shutil
@@ -12,12 +13,13 @@ from pathlib import Path
 import pytest
 
 from livery import git
+from livery.footman import Failed
 from livery.forge import Conclusion, Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _devenv, _e2e
 from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
-from workshop_rig import Machine, machine_fixture, rig_fixture  # noqa: F401
+from workshop_rig import Machine, machine_fixture, modes_bind, rig_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -1607,6 +1609,76 @@ def pass_environment(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return task_env
 
 
+@modes_bind
+def test_a_fresh_pass_stops_at_a_home_it_may_not_empty_and_changes_nothing(
+    rig: Path,
+    machine: Machine,
+    pass_environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The first pass's release built its native wheel in a container that
+    # runs as root and mounts the pass's conan home: fmt's sources stayed
+    # there owned by root, and the fresh pass after it could not remove
+    # them, so it built on a half-removed home.
+    ports = iter((47615, 57713))
+    monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
+    first = _e2e.enter_environment("e2e")
+    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "src" / "support"
+    held.mkdir(parents=True)
+    (held / "build.gradle").write_text("written by root\n")
+    held.chmod(0o555)
+    try:
+        with pytest.raises(Failed) as refused:
+            _e2e.enter_environment("e2e", fresh=True)
+        said = str(refused.value)
+        assert f"e2e: {held} belongs to {getpass.getuser()}" in said
+        assert "nothing was stopped or removed" in said
+        assert f"sudo chown -R {getpass.getuser()} {first.directory}" in said
+        # The environment is as it was: its forge runs on its own port.
+        assert machine.stopped == []
+        assert _devenv.environment("e2e").url == "http://localhost:47615"
+    finally:
+        held.chmod(0o755)
+    # Handed back, the fresh pass takes the whole environment and a new forge.
+    second = _e2e.enter_environment("e2e", fresh=True)
+    assert second.url == "http://localhost:57713"
+    assert not held.exists()
+
+
+def test_a_fresh_pass_finishes_a_removal_an_earlier_one_could_not(
+    rig: Path,
+    machine: Machine,
+    pass_environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A delete refused after the check, a file held open or written while
+    # the removal ran: the pass stops, and what stayed holds no environment.
+    ports = iter((47615, 57713))
+    monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
+    first = _e2e.enter_environment("e2e")
+    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
+    held.parent.mkdir(parents=True)
+    held.write_text("held\n")
+
+    def refusing(path: str) -> None:
+        if Path(path) == held:
+            raise PermissionError(1, "Operation not permitted", path)
+        os.unlink(path)
+
+    monkeypatch.setattr(_devenv, "UNLINK", refusing)
+    with pytest.raises(Failed, match=r"is not removed whole"):
+        _e2e.enter_environment("e2e", fresh=True)
+    assert held.is_file() and not first.env_file.exists()
+    # A pass that is not fresh refuses to bring an environment up there.
+    with pytest.raises(Failed, match=r"holds what a refused removal left"):
+        _e2e.enter_environment("e2e")
+    # A fresh pass removes what stayed, though no environment is named there.
+    monkeypatch.setattr(_devenv, "UNLINK", os.unlink)
+    second = _e2e.enter_environment("e2e", fresh=True)
+    assert second.url == "http://localhost:57713"
+    assert not held.exists()
+
+
 def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     rig: Path,
     machine: Machine,
@@ -1714,8 +1786,6 @@ def test_a_docker_pass_runs_conan_with_the_docker_environment_s_own_home(
     assert (_e2e.CURRENT.name, _e2e.CURRENT.mode) == ("dev", "docker")
     assert os.environ["CONAN_HOME"] == str(docker.conan_home)
     assert pass_environment["CONAN_HOME"] == str(docker.conan_home)
-    # Made before anything mounts it into a container.
-    assert docker.conan_home.is_dir()
 
 
 def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(

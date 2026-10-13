@@ -9,16 +9,37 @@ test's own; the `machine` fixture replaces every seam, so an
 environment comes up, goes down and is removed with no process
 started. A test module imports `rig_fixture` and `machine_fixture` to
 register them; this is not a conftest, for the reason `workshop_seeds`
-gives.
+gives. `modes_bind` marks a test that makes a directory this user may
+not change.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from livery.workshop import _devenv
+
+
+def _modes_bind() -> bool:
+    """Whether a directory's mode stops this process removing what it holds.
+
+    Linux and macOS honour it for every user but root; Windows decides by
+    other rules.
+    """
+    if sys.platform == "win32":
+        return False
+    return os.geteuid() != 0
+
+
+#: The mark of a test that makes a directory this user may not change: it
+#: runs where a directory's mode binds the process, and skips elsewhere.
+modes_bind = pytest.mark.skipif(
+    not _modes_bind(), reason="a directory's mode binds only a POSIX user, not root"
+)
 
 
 @pytest.fixture(name="rig")

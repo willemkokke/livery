@@ -377,10 +377,12 @@ def enter_environment(name: str, *, fresh: bool = False) -> Environment:
     """Run the pass on environment *name*, brought up first; the environment.
 
     A host-mode environment is brought up; with *fresh* it is removed
-    first, so the pass gets a new forge. The forge's URL and token then
-    go into the pass's environment
-    ([livery.workshop._e2e._enter_host][]). A docker-mode environment
-    is the compose rig, used as it is, fresh or not.
+    first, so the pass gets a new forge, and so is a directory that a
+    refused removal left. A removal that cannot take the whole
+    directory refuses, and the pass stops there
+    ([livery.workshop._devenv.remove][]). The forge's URL and token then
+    go into the pass's environment (`_enter_host`). A docker-mode
+    environment is the compose rig, used as it is, fresh or not.
 
     In both modes the pass and every process it starts then run conan
     with the environment's own home. A release writes the ``workshop``
@@ -394,7 +396,7 @@ def enter_environment(name: str, *, fresh: bool = False) -> Environment:
     from livery.workshop import _devenv
 
     place = _devenv.environment(name)
-    if fresh and place.mode == "host":
+    if fresh and place.mode != "docker" and place.directory.is_dir():
         for line in _devenv.remove(place):
             print(line)
         place = _devenv.environment(name)
@@ -404,10 +406,6 @@ def enter_environment(name: str, *, fresh: bool = False) -> Environment:
         _devenv.up_host(place, ("host",))
         place = _devenv.environment(name)
         _enter_host(place.values(), name)
-    # Made here, before a native wheel build mounts it into a container
-    # with `docker -v`, which creates a missing source directory owned
-    # by root.
-    place.conan_home.mkdir(parents=True, exist_ok=True)
     edit_environments({"CONAN_HOME": str(place.conan_home)})
     print(f"  conan home: {place.conan_home}")
     return place
