@@ -131,13 +131,23 @@ def test_the_git_plugin_mount_tolerates_a_missing_entry_point_and_mounts_otherwi
 def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> None:
     from livery.footman import _registry as registry
 
-    # A scratch contract naming the extension the workshop's own wheel
+    # Scratch contracts naming the extensions the workshop's own wheel
     # ships, so the suite needs nothing beyond the package's own
-    # dependencies when it runs against the wheel.
-    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    # dependencies when it runs against the wheel. Coverage answers its
+    # one query in its [for.docs] table and declares nothing else: it
+    # mounts all the same, with docs unlisted too, since the mount counts
+    # what a declaration answers and the query decides what it asks.
+    contract = tmp_path / "workshop.toml"
+    contract.write_text('[workspace]\nextensions = ["coverage"]\n')
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("docs",)
+        assert mount_extensions(tmp_path) == ("coverage",)
+    # As this repository lists them.
+    contract.write_text(
+        '[workspace]\nextensions = ["docs", { name = "coverage", for = ["docs"] }]\n'
+    )
+    with registry.capture():
+        assert mount_extensions(tmp_path) == ("docs", "coverage")
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:

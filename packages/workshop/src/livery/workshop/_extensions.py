@@ -530,8 +530,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     ``fm extensions`` refuse the same problems. An extension
     whose declaration names no ``plugin`` registers what it declares
     and mounts no verbs, and one that declares nothing but answers to
-    queries is mounted all the same, since the listed extensions'
-    answers are read while they are listed. A plugin a branded App already mounts as a
+    queries, at its top level or in a ``[for.<target>]`` table, is
+    mounted all the same, since the listed extensions' answers are read
+    while they are listed. A plugin a branded App already mounts as a
     builtin is not mounted again, since claiming its tasks again puts
     the same task in one rung twice; what its declaration adds
     registers as any other extension's does.
@@ -571,10 +572,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             if found is not None:
                 check_api_version(extension, found)
                 check_phase_declarers(extension, found, present)
-                if (
-                    register_declared(extension, found.additions, enabled=enabled)
-                    or found.queries
-                ):
+                if register_declared(
+                    extension, found.additions, enabled=enabled
+                ) or _answers_queries(found):
                     mounted.append(extension)
             present.append(extension)
             _graft_contributions(present, declared, active, grafted, enabled)
@@ -613,10 +613,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             )
             continue
         check_phase_declarers(extension, found, present)
-        if (
-            register_declared(extension, found.additions, enabled=enabled)
-            or found.queries
-        ):
+        if register_declared(
+            extension, found.additions, enabled=enabled
+        ) or _answers_queries(found):
             mounted.append(extension)
         name = found.plugin
         if name and name not in builtin:
@@ -748,6 +747,16 @@ def _graft_contributions(
                 continue
             register_declared(owner, additions, enabled=enabled)
             grafted.add((owner, target))
+
+
+def _answers_queries(found: Declaration) -> bool:
+    """Whether *found* answers a query, at its top level or in a ``[for]`` table.
+
+    A ``[for]`` table's answer counts whether its target is listed or
+    not: the mount counts what the declaration answers, and the query
+    decides which places it asks.
+    """
+    return bool(found.queries or found.target_queries)
 
 
 def register_declared(

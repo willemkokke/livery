@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 if TYPE_CHECKING:
     from livery.workshop._composition import Lookup
-    from livery.workshop._declaration import DeclaredValue, Reference
+    from livery.workshop._declaration import Declaration, DeclaredValue, Reference
     from livery.workshop._packages import Package
 
 T = TypeVar("T")
@@ -331,8 +331,8 @@ def _walk(subject: Package | Path, spec: QuerySpec, lookup: Lookup) -> tuple[str
         return tuple(sorted(members))
 
 
-def _contributing(subject: Package | Path) -> dict[str, frozenset[str]]:
-    """Each listed extension to the listed targets its listing contributes to.
+def _contributed(subject: Package | Path, extension: str) -> frozenset[str]:
+    """The listed targets *extension*'s listing contributes to in *subject*'s workspace.
 
     The rule [livery.workshop.contributions_for][] reads a target's
     tables by: the entry's ``for`` list when it has one, otherwise every
@@ -342,10 +342,40 @@ def _contributing(subject: Package | Path) -> dict[str, frozenset[str]]:
 
     start = subject if isinstance(subject, Path) else subject.directory
     listed = frozenset(extension_names(start))
-    return {
-        owner: listed.intersection(targets)
-        for owner, targets in resolved_targets(start).items()
-    }
+    return listed.intersection(resolved_targets(start).get(extension, ()))
+
+
+def answered_at(
+    subject: Package | Path, extension: str, declared: Declaration, query: str
+) -> list[tuple[tuple[str, ...], Reference | DeclaredValue]]:
+    """Where *extension* answers *query* about *subject* now, each place and answer.
+
+    A place is a key path in *declared*'s file: the top level,
+    ``queries.<query>``, always, and a ``[for.<target>]`` table's,
+    ``for.<target>.queries.<query>``, while *target* is listed and the
+    extension's listing contributes to it. Decided from the
+    declarations and the contracts' lists alone, asking nothing; empty
+    when no place answers now. [livery.workshop._queries.answers][]
+    asks the places it names, and a package's lifecycle decides through
+    it whether its extensions answer a query or its kind does.
+    """
+    held: list[tuple[tuple[str, ...], Reference | DeclaredValue]] = []
+    if query in declared.queries:
+        held.append((("queries", query), declared.queries[query]))
+    targets = [
+        target
+        for target, answered in declared.target_queries.items()
+        if query in answered
+    ]
+    if targets:
+        # The lists are read only when a [for] table answers the query.
+        contributed = _contributed(subject, extension)
+        held += [
+            (("for", target, "queries", query), declared.target_queries[target][query])
+            for target in targets
+            if target in contributed
+        ]
+    return held
 
 
 def _one_answer(
@@ -407,8 +437,8 @@ def answers(
     the installed ones when absent. An extension answers at the top
     level of its declaration file, and in a ``[for.<target>]`` table
     while *target* is listed and the extension's listing contributes to
-    it; answering in two of those places, it answers a ``union`` query
-    with every item of both.
+    it ([livery.workshop._queries.answered_at][]); answering in two of
+    those places, it answers a ``union`` query with every item of both.
 
     Raises:
         QueryError: when no extension declares the query, when *subject*
@@ -422,23 +452,11 @@ def answers(
         lookup = installed_declaration
     spec = query_spec(query.name)
     found: dict[str, T] = {}
-    contributing: dict[str, frozenset[str]] | None = None
     for name in _walk(subject, spec, lookup):
         declared = lookup(name)
         if declared is None:
             continue
-        held: list[tuple[tuple[str, ...], Reference | DeclaredValue]] = []
-        if query.name in declared.queries:
-            held.append((("queries", query.name), declared.queries[query.name]))
-        for target, answered in declared.target_queries.items():
-            if query.name not in answered:
-                continue
-            if contributing is None:
-                # Read once, and only when a [for] table answers.
-                contributing = _contributing(subject)
-            if target in contributing.get(name, frozenset()):
-                place = ("for", target, "queries", query.name)
-                held.append((place, answered[query.name]))
+        held = answered_at(subject, name, declared, query.name)
         if held:
             found[name] = cast("T", _one_answer(name, held, subject, spec))
     return found

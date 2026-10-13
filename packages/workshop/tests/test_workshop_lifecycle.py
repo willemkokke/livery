@@ -11,7 +11,12 @@ from livery.workshop import _kinds, _lifecycle
 from livery.workshop._kinds import KindRecord
 from livery.workshop._packages import Neighbours, Package, graph_problems
 from livery.workshop._registries import RegistryTarget
-from workshop_extension_fakes import fake_package_extensions, fake_steps
+from workshop_extension_fakes import (
+    fake_package_extensions,
+    fake_steps,
+    package_contract,
+    root_contract,
+)
 
 if TYPE_CHECKING:
     from livery.workshop._kinds import Backend
@@ -115,6 +120,29 @@ def test_a_package_listing_no_extension_takes_its_kinds_answers(
     package = _listing(tmp_path)
     assert _lifecycle.current_version(package) == "1.0.0"
     assert _lifecycle.declared_requirements(package) == {"acme-base": ">=0.2"}
+
+
+def test_a_for_table_s_answer_waits_for_its_target_and_the_kind_answers_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        answering=PACKAGE
+        + '\n[for."acme.other".queries]\n'
+        + 'current-version = "{package}._steps:version"\n',
+        other=PACKAGE,
+    )
+    fake_steps(tmp_path, "answering", "def version(package):\n    return '9.9.9'\n")
+    root_contract(tmp_path, "[]")
+    package_contract(tmp_path, "core", '["acme.answering"]')
+    package = _listing(tmp_path, "acme.answering")
+    # The target unlisted: the [for] table's answer is never asked, and
+    # the kind's backend answers from the manifest.
+    assert _lifecycle.current_version(package) == "1.0.0"
+    # Listed, by another package: the [for] table's answer is taken.
+    package_contract(tmp_path, "other", '["acme.other"]')
+    assert _lifecycle.current_version(package) == "9.9.9"
 
 
 def test_an_extension_that_answers_no_query_leaves_each_to_the_kind(
