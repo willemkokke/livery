@@ -91,7 +91,8 @@ class Reading:
         branch_counts: For a measurer that counts a line's branches
             without naming them: the line's branches, and how many ran.
         functions: Each function's last line and calls, by its name and
-            first line.
+            first line; the calls are None for a measurer that counts
+            none.
         ranges: How many times each stretch of code ran, by its start
             line and column and its end line and the column after its
             last; columns count bytes from 1.
@@ -101,7 +102,9 @@ class Reading:
     excluded: set[int] = field(default_factory=set)
     branches: dict[tuple[int, int], tuple[int, str]] = field(default_factory=dict)
     branch_counts: dict[int, tuple[int, int]] = field(default_factory=dict)
-    functions: dict[tuple[str, int], tuple[int, int]] = field(default_factory=dict)
+    functions: dict[tuple[str, int], tuple[int, int | None]] = field(
+        default_factory=dict
+    )
     ranges: dict[tuple[int, int, int, int], int] = field(default_factory=dict)
 
     def add(self, other: Reading) -> None:
@@ -128,10 +131,19 @@ class Reading:
         was, was_tag = self.branches.get((line, index), (0, ""))
         self.branches[(line, index)] = (was + taken, was_tag or tag)
 
-    def add_function(self, name: str, start: int, end: int, calls: int) -> None:
-        """Count *calls* of the function *name* from line *start* to line *end*."""
-        was_end, was_calls = self.functions.get((name, start), (end, 0))
-        self.functions[(name, start)] = (max(was_end, end), was_calls + calls)
+    def add_function(self, name: str, start: int, end: int, calls: int | None) -> None:
+        """Count *calls* of the function *name* from line *start* to line *end*.
+
+        Calls a measurer counts add up; a function no reading counted
+        the calls of keeps None.
+        """
+        was_end, was_calls = self.functions.get((name, start), (end, None))
+        total = (
+            None
+            if was_calls is None and calls is None
+            else (was_calls or 0) + (calls or 0)
+        )
+        self.functions[(name, start)] = (max(was_end, end), total)
 
 
 # --- gcov ---------------------------------------------------------------------------
@@ -465,7 +477,8 @@ def _cobertura_class(klass: ElementTree.Element) -> Reading:
         if signature and "(" not in name:
             name += signature
         if name and lines and min(lines) >= 1:
-            found.add_function(name, min(lines), max(lines), 0)
+            # A Cobertura report counts no calls.
+            found.add_function(name, min(lines), max(lines), None)
     return found
 
 
@@ -576,7 +589,8 @@ def _entry(source: Path, reading: Reading, *, columns: bool) -> dict[str, Any]:
     if counted:
         entry["branch-counts"] = counted
     functions = [
-        ["function", name, start, _ranges(range(start, end + 1)), calls]
+        ["function", name, start, _ranges(range(start, end + 1))]
+        + ([calls] if calls is not None else [])
         for (name, start), (end, calls) in sorted(
             reading.functions.items(), key=lambda item: (item[0][1], item[0][0])
         )

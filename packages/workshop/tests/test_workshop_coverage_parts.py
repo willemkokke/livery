@@ -379,7 +379,9 @@ def test_a_fresh_gcov_run_reads_branches_and_functions(tmp_path: Path) -> None:
     assert ("clamp(int, int)", 5) in read[name].functions
 
 
-def test_a_cobertura_report_reads_how_many_of_a_line_s_branches_ran() -> None:
+def test_a_cobertura_report_reads_how_many_of_a_line_s_branches_ran(
+    tmp_path: Path,
+) -> None:
     report = (
         '<?xml version="1.0"?><coverage><sources><source>/w</source></sources>'
         '<packages><package name="p"><classes>'
@@ -397,7 +399,19 @@ def test_a_cobertura_report_reads_how_many_of_a_line_s_branches_ran() -> None:
     # A line named under its method and again under its class counts once.
     assert read.lines == {5: 1, 6: 1, 9: 0}
     assert read.branch_counts == {6: (2, 1)}
-    assert read.functions == {("clamp(int, int)", 5): (6, 0)}
+    # A Cobertura report counts no calls, so the method's are left out.
+    assert read.functions == {("clamp(int, int)", 5): (6, None)}
+    root = tmp_path / "w"
+    (root / "packages" / "n" / "src").mkdir(parents=True)
+    part = read_part(
+        _readings.write_part(
+            root, "packages/n", {"packages/n/src/x.cpp": read}, "msvc"
+        ),
+        root,
+    )
+    (method,) = part.files["packages/n/src/x.cpp"].regions
+    assert (method.name, method.start, method.calls) == ("clamp(int, int)", 5, None)
+    assert part.files["packages/n/src/x.cpp"].branch_counts == ((6, 2, 1),)
 
 
 def test_relativise_keys_by_the_repository_path_and_drops_strangers(
