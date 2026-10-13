@@ -598,7 +598,10 @@ def test_a_kept_row_past_the_day_or_without_a_stamp_expires() -> None:
         "packages/base", closure, now - timedelta(hours=23)
     )
     old = coverage_record.kept_name("packages/base", closure, now - timedelta(hours=25))
-    assert young == f"packages-base.{closure}.20260930T130000Z.json"
+    assert young == f"20260930T130000Z.{closure}.packages-base.json"
+    # It ends in its unit's own row name: git pairs files to store one
+    # as the difference from another by the end of their names.
+    assert young.endswith(coverage_record.row_name("packages/base"))
     record = coverage_record.Record(
         {},
         kept=(
@@ -614,6 +617,7 @@ def test_a_kept_row_past_the_day_or_without_a_stamp_expires() -> None:
         f"packages-base.{closure}.yesterday.json",
     ]
     assert record.kept[0].closure == closure
+    assert record.kept[0].slug == "packages-base"
     assert record.kept[0].when == now - timedelta(hours=23)
 
 
@@ -645,7 +649,7 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     assert held.units == {"packages/base": moved, "packages/top": again}
     # A read names the kept rows and reads none of them.
     assert all(kept.unit is None for kept in held.kept)
-    assert sorted((kept.name.split(".")[0], kept.closure) for kept in held.kept) == [
+    assert sorted((kept.slug, kept.closure) for kept in held.kept) == [
         ("packages-base", old),
         ("packages-ghost", "a" * 64),
     ]

@@ -16,9 +16,9 @@ rows it carries from the records, judges the floors on that union, and
 writes the union back: a pull request's run onto its branch's record,
 main's run onto main's, each replaced in place, the units that no
 longer exist removed. A row a write replaces at another closure, or
-removes, stays for a day under its closure's name and the moment it
-was kept: a run whose leg skipped a suite on it, while another run
-moved the record on, still unions it. At the merge main's run finds its
+removes, stays for a day under the moment it was kept and its
+closure's name: a run whose leg skipped a suite on it, while another
+run moved the record on, still unions it. At the merge main's run finds its
 tree on the verified record, which names the branch, and copies the
 branch's rows into main's without measuring; a squash of a stale
 branch has another tree, and main pays the full gate. A unit neither
@@ -172,8 +172,15 @@ def kept_name(path: str, closure: str, when: datetime) -> str:
 
     The name carries the moment *when* the write kept it, so a reader
     tells a kept row's age from its name and reads no kept row for it.
+    It ends in the unit's own row name (`row_name`), the moment and the
+    closure before it: git chooses which files to store as the
+    difference from another by the last sixteen characters of their
+    names, so a kept row is stored against its unit's other rows, of
+    every leg and every run, where the stable numbering of the tests
+    keeps that difference small.
     """
-    return f"{git.slug(path)}.{closure}.{when.astimezone(UTC):{KEPT_STAMP}}.json"
+    moment = f"{when.astimezone(UTC):{KEPT_STAMP}}"
+    return f"{moment}.{closure}.{row_name(path)}"
 
 
 def _current_row(name: str) -> bool:
@@ -259,8 +266,8 @@ class Kept:
     """A row a write replaced at another closure, or removed, kept for a day.
 
     Attributes:
-        name: The row's file on the ref: its unit's slug, the closure it
-            was measured at, and the moment the write kept it
+        name: The row's file on the ref: the moment the write kept it,
+            the closure it was measured at, and its unit's slug
             (`kept_name`).
         unit: The measurement, once read. A read of a record names its
             kept rows and reads none; the union reads the one it asks
@@ -277,13 +284,19 @@ class Kept:
         return pieces[1] if len(pieces) > 1 else ""
 
     @property
+    def slug(self) -> str:
+        """The slug of the kept row's unit, from its name; empty for none."""
+        pieces = self.name.removesuffix(".json").split(".")
+        return pieces[2] if len(pieces) == 3 else ""
+
+    @property
     def when(self) -> datetime | None:
         """When the write kept the row, from its name; ``None`` when it names none."""
         pieces = self.name.removesuffix(".json").split(".")
         if len(pieces) != 3:
             return None
         try:
-            return datetime.strptime(pieces[2], KEPT_STAMP).replace(tzinfo=UTC)
+            return datetime.strptime(pieces[0], KEPT_STAMP).replace(tzinfo=UTC)
         except ValueError:
             return None
 
@@ -330,10 +343,12 @@ class Record:
         row = self.units.get(path)
         if row is not None and row.closure == closure:
             return row
-        prefix = f"{git.slug(path)}.{closure}."
-        for kept in sorted(self.kept, key=attrgetter("name"), reverse=True):
-            if not kept.name.startswith(prefix):
-                continue
+        slug = git.slug(path)
+        held = [
+            kept for kept in self.kept if (kept.slug, kept.closure) == (slug, closure)
+        ]
+        # A kept row's name starts with its moment: newest first by name.
+        for kept in sorted(held, key=attrgetter("name"), reverse=True):
             unit = kept.unit
             if unit is None and self.read_kept is not None:
                 unit = self.read_kept(kept.name)
