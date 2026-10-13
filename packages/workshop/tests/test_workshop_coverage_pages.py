@@ -148,7 +148,7 @@ def _render_pages(root: Path) -> list[str]:
 # --- refusals ----------------------------------------------------------------
 
 
-def test_a_measured_file_the_checkout_no_longer_has_states_the_absence_on_a_desk_and_is_red_in_ci(  # noqa: E501 - the plan names this refusal
+def test_a_measured_file_the_checkout_lacks_is_named_on_a_desk_and_red_in_ci(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
