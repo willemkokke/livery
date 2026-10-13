@@ -1,6 +1,8 @@
 """The per-package task reference: footman's renderer, one mechanism.
 
-Every package that advertises ``footman.tasks`` entry points gets its
+The docs phase's ``task-reference`` step renders it
+(`task_reference_run`), declared off until the root contract turns it
+on. Every package that advertises ``footman.tasks`` entry points gets its
 tasks documented in its own site section, and the section documents
 the package's whole offering: each advertised provider renders in
 isolation (a one-line tasks file mounting only that provider, no
@@ -27,11 +29,14 @@ import shutil
 import tempfile
 import tomllib
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from livery.extensions.docs._navblocks import nav_block_markers, write_nav_block
 from livery.footman import fail
 from livery.workshop._packages import Package, discover_packages
+
+if TYPE_CHECKING:
+    from livery.workshop import PhaseContext
 
 #: The nav marker block the reference generator owns in a providing
 #: package's ``nav.toml``.
@@ -45,10 +50,10 @@ ALIASES = "tasks"
 #: publish under, one directory per group.
 PAGES = "tasks"
 
-#: The verb that writes the task reference. A providing package
-#: declares it among its docs generators, and one declaration renders
-#: the tasks of every providing package.
-GENERATOR = "docs.task-reference"
+#: The docs phase's step that writes the task reference, declared off:
+#: the root contract turns it on, and it renders the tasks of every
+#: providing package.
+STEP = "docs.task-reference"
 
 
 def task_page(owner: str, address: str) -> str:
@@ -296,3 +301,18 @@ def generate_task_reference(root: Path) -> list[str]:
             )
         rendered.append(owner)
     return sorted(rendered)
+
+
+def task_reference_run(ctx: PhaseContext) -> None:
+    """Render every providing package's task reference: the docs phase's step.
+
+    An index per group and a page per public task into each owner's
+    generated tree, the owner's ``tasks`` nav block emitted beside
+    them, and the alias tree the runner's task links go through
+    refreshed (`generate_task_reference`).
+    """
+    rendered = generate_task_reference(ctx.root)
+    if rendered:
+        print(f"  task reference for {', '.join(rendered)}")
+    else:
+        print("  no workspace package provides tasks")

@@ -368,6 +368,8 @@ def test_every_declaration_is_in_the_step_spelling() -> None:
 
     from livery.workshop._declaration import declaration_file
 
+    # The keys that declare a phase sit beside its steps in its table.
+    declaring = {"level", "gated", "after", "verb", "keys"}
     removed = {
         "narrowing",
         "transport",
@@ -391,6 +393,8 @@ def test_every_declaration_is_in_the_step_spelling() -> None:
             assert "options" not in table, path
             for phase, steps in table.get("phases", {}).items():
                 for step, declared in steps.items():
+                    if step in declaring:
+                        continue
                     assert isinstance(declared, dict), (path, phase, step)
                     assert not removed & set(declared), (path, phase, step)
                     found += 1

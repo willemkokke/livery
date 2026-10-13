@@ -237,13 +237,13 @@ def test_a_shared_verb_declared_twice_runs_once(
     import shutil as shutil_module
 
     import livery.footman as footman
-    from livery.extensions.docs._site import run_generators
+    from livery.extensions.docs._steps import run_generators
 
     root = _workspace(tmp_path)
     for name in ("core", "bare"):
         (root / "packages" / name / "workshop.toml").write_text(
             f'kind = "python"\nname = "acme-{name}"\n'
-            '[docs]\ngenerators = ["docs.task-reference"]\n'
+            '[docs]\ngenerators = ["docsgen.shared"]\n'
         )
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     calls: list[str] = []
@@ -253,5 +253,41 @@ def test_a_shared_verb_declared_twice_runs_once(
         return 0
 
     monkeypatch.setattr(footman, "run", _record)
-    assert run_generators(root) == ["docs.task-reference"]
-    assert calls == ["docs.task-reference"]
+    assert run_generators(root) == ["docsgen.shared"]
+    assert calls == ["docsgen.shared"]
+
+
+def test_the_task_reference_renders_nothing_until_the_root_turns_it_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.extensions.docs import _taskref
+    from livery.extensions.docs._site import DOCS_PHASE, run_site_phase
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_extensions
+    from livery.workshop._steps import steps_by_name
+
+    root = _workspace(tmp_path)
+    tree: dict[str, object] = {"help": "", "groups": {}, "tasks": {"sync": _row()}}
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    pages = root / "packages/core/docs/_generated/tasks"
+    # Listed, docs declares the step off: the docs phase runs without it,
+    # and no package's tasks are rendered.
+    with registry.capture():
+        mount_extensions(root)
+    assert _taskref.STEP not in steps_by_name()
+    run_site_phase(root, DOCS_PHASE)
+    assert not pages.exists()
+    assert not (root / "docs" / "tasks").exists()
+    # Turned on at its address in the root contract, it registers, and
+    # the phase renders the providing package's reference.
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text() + "\n[phases.docs.task-reference]\nenabled = true\n"
+    )
+    with registry.capture():
+        mount_extensions(root)
+    assert _taskref.STEP in steps_by_name()
+    run_site_phase(root, DOCS_PHASE)
+    assert (pages / "sync.md").is_file()
+    assert (root / "docs" / "tasks" / "sync.md").is_file()
+    assert "  task reference for core\n" in capsys.readouterr().out

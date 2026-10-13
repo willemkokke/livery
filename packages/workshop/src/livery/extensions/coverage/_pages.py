@@ -1,26 +1,26 @@
 """Draw the site's coverage pages from the measured data, in the line format.
 
-The docs extension asks its ``docs.coverage-pages`` query for the
-function that draws the coverage pages. This extension answers in its
-``[for.docs]`` table, so the answer is asked only while docs is listed:
-`renderer` answers with `render_coverage_pages`.
+This extension adds a step to each of the docs extension's two phases
+in its ``[for.docs]`` table, so the pages are drawn only while docs is
+listed, for each package whose ``[docs] coverage`` names a report at
+`TREE`. `pages_run`, the docs phase's step, draws them before the site
+builds, from the data the last gate run left on this machine: the
+parts a native suite's measurer left in the workspace, and the parts
+each listed extension's reduction makes of its measurer's data, the
+pytest extension's of coverage.py's (`_parts`). `redraw_run`, the
+deploy phase's step, draws them again just before the site publishes,
+from main's coverage record on every check leg, read from their stored
+form with the fixed facts the record holds, as the legs made them.
 
 The pages are drawn from parts in the line format (`_format`) by
-`_render`. In the merge point's gate job the parts are main's coverage
-record on every check leg, read from their stored form with the fixed
-facts the record holds, as the legs made them. Anywhere else
-they are the data the last gate run left on this machine: the parts a
-native suite's measurer left in the workspace, and the parts each
-listed extension's reduction makes of its measurer's data, the pytest
-extension's of coverage.py's (`_parts`). Each package's index states
-its floor (`_floors.floor_status`).
+`_render`. Each package's index states its floor
+(`_floors.floor_status`).
 """
 
 from __future__ import annotations
 
-import os
 import shutil
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -46,31 +46,78 @@ from livery.workshop import answer
 if TYPE_CHECKING:
     from livery.extensions.coverage._marks import Mark
     from livery.extensions.coverage._record import Unit
-    from livery.workshop._packages import Package
+    from livery.workshop import Package, PhaseContext
 
 #: The tree each package's pages are drawn into, beside its contract.
 TREE = "htmlcov"
 
 
-def renderer(root: Path) -> Callable[[Path, tuple[Package, ...]], list[str]]:
-    """Answer ``docs.coverage-pages`` with the function that draws the pages.
+def pages_run(ctx: PhaseContext) -> None:
+    """Draw the coverage pages from this machine's data: the docs phase's step.
 
-    The docs extension asks with the workspace root, which the answer
-    does not depend on, and calls the answer with the root and the
-    packages that declare an ``htmlcov`` report.
+    Before the site builds, from the data the last gate run left; where
+    no gate ran first, as in a CI job of its own, nothing is drawn and
+    each page states the absence.
     """
-    del root
-    return render_coverage_pages
+    draw(ctx.root, merged=False)
 
 
-def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str]:
+def redraw_run(ctx: PhaseContext) -> None:
+    """Draw the coverage pages from main's coverage record: the deploy phase's step.
+
+    ``docs.publish`` runs it on the built site just before it publishes
+    the site, in the merge point's gate job after the union wrote the
+    record, and then puts each declared report's tree into the site. A
+    failure here fails the publish; the verdict was given before it.
+    """
+    draw(ctx.root, merged=True)
+
+
+def draw(root: Path, *, merged: bool) -> list[str]:
+    """Draw the pages of every package that declares a `TREE` report; the members.
+
+    From main's coverage record with *merged*, else from the data the
+    last gate run left on this machine (`render_coverage_pages`). A
+    workspace where no package declares one draws nothing.
+    """
+    packages = declaring(root)
+    if not packages:
+        return []
+    drawn = render_coverage_pages(root, packages, merged=merged)
+    if drawn:
+        print(f"  coverage: pages drawn for {', '.join(drawn)}")
+    return drawn
+
+
+def declaring(root: Path) -> tuple[Package, ...]:
+    """The packages whose ``[docs] coverage`` names a report at `TREE`, in order.
+
+    Read from each package's contract, the table the docs extension
+    owns and frames each declared report from.
+    """
+    from livery.workshop import discover_packages, read_contract
+
+    found: list[Package] = []
+    for package in discover_packages(root):
+        table = read_contract(package.directory).get("docs") or {}
+        reports = table.get("coverage") if isinstance(table, dict) else None
+        if isinstance(reports, list) and any(
+            isinstance(entry, dict) and entry.get("path") == TREE for entry in reports
+        ):
+            found.append(package)
+    return tuple(found)
+
+
+def render_coverage_pages(
+    root: Path, packages: tuple[Package, ...], *, merged: bool = False
+) -> list[str]:
     """Draw each of *packages*' coverage pages from the measured data.
 
     Each package's tree goes to its ``htmlcov`` directory, drawn from
-    the parts of its files: main's record on every check leg in the
-    merge point's gate job, and the data the last gate run left on this
-    machine anywhere else. A package no measurement reaches gets no
-    tree, and its coverage page states the absence.
+    the parts of its files: main's record on every check leg with
+    *merged*, and the data the last gate run left on this machine
+    without it. A package no measurement reaches gets no tree, and its
+    coverage page states the absence.
 
     A measured file the checkout no longer has is red inside CI, where
     the measurement is the record of the tree being built; on a
@@ -81,14 +128,14 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
     the checkout's content with a range outside its text refuses,
     naming the file and the range. Each package's index states its
     floor: the floor its contract names, the mark it ratchets to, read
-    in the merge point's gate job, or that nothing judges it. Returns
-    the members drawn.
+    beside main's record, or that nothing judges it. Returns the
+    members drawn.
     """
     from livery.extensions.coverage._floors import floor_status
     from livery.workshop._ci_context import run_context
 
     prefixes = tuple(f"{package.path}/" for package in packages)
-    measured = _measured(root, prefixes)
+    measured = _measured(root, prefixes, merged=merged)
     for miss in measured.misses:
         print(f"  coverage: {miss}")
     names = {name for part in measured.parts for name in part.files}
@@ -114,7 +161,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
             f" `{footman.prog()} check` measures again"
         )
     head = _head(root)
-    marks = _marks_read(root, packages)
+    marks = _marks_read(root, packages) if merged else None
     rendered: list[str] = []
     for package in packages:
         prefix = f"{package.path}/"
@@ -155,10 +202,13 @@ class _Measured:
     notes: tuple[str, ...] = ()
 
 
-def _measured(root: Path, prefixes: tuple[str, ...]) -> _Measured:
-    """The parts of the files under *prefixes*: main's record, or this machine's."""
-    stored = _stored(root)
-    found = _local(root) if stored is None else _from_record(*stored, prefixes=prefixes)
+def _measured(root: Path, prefixes: tuple[str, ...], *, merged: bool) -> _Measured:
+    """The parts of the files under *prefixes*: main's record, or this machine's.
+
+    Main's record with *merged*; without it, the data the last gate run
+    left on this machine.
+    """
+    found = _from_record(*_stored(root), prefixes=prefixes) if merged else _local(root)
     found.parts = [_within(part, prefixes) for part in found.parts]
     return found
 
@@ -177,24 +227,12 @@ def _within(part: Part, prefixes: tuple[str, ...]) -> Part:
     )
 
 
-def _deploying() -> bool:
-    """Whether this is the merge point's gate job, which publishes the site."""
-    from livery.workshop._ci_context import LEG_VARIABLE, POINT_VARIABLE, run_context
-
-    return (
-        run_context() is not None
-        and os.environ.get(POINT_VARIABLE) == "merge"
-        and os.environ.get(LEG_VARIABLE) == "gate"
-    )
-
-
 def _marks_read(root: Path, packages: tuple[Package, ...]) -> Mapping[str, Mark] | None:
-    """The marks on the state store, read where the record is; else None.
+    """The marks on the state store, for a package under auto-ratchet; else None.
 
-    Read in the merge point's gate job, and only for a package under
-    auto-ratchet: anywhere else the pages name the mode without its
-    value, as a machine's preview does. A store that cannot be read is
-    None too.
+    Read beside main's record, where the pages draw it: anywhere else
+    the pages name the mode without its value, as a machine's preview
+    does. A store that cannot be read is None too.
     """
     from livery.extensions.coverage._floors import coverage_policy
     from livery.extensions.coverage._marks import marks
@@ -203,26 +241,23 @@ def _marks_read(root: Path, packages: tuple[Package, ...]) -> Mapping[str, Mark]
         policy is not None and policy.ratchet
         for policy in (coverage_policy(package) for package in packages)
     )
-    if not ratcheted or not _deploying():
+    if not ratcheted:
         return None
     return marks(root)[0]
 
 
-def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]] | None:
-    """In the merge point's gate job, main's record on every check leg; else None.
+def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]]:
+    """Main's record on every check leg: the units by leg, and the misses.
 
-    Returns the units by leg and the misses. The gate job draws the
-    pages after its union wrote the record, for the site it publishes.
-    Anywhere else nothing is pulled: a pull request's docs job builds
-    without the legs' data by design, and a machine's build draws the
-    local data a gate run left, or states the absence.
+    Read for the deploy phase's step alone, which the merge point's
+    gate job runs after its union wrote the record, for the site it
+    publishes. The docs phase's step pulls nothing: a pull request's
+    docs job builds without the legs' data by design, and a machine's
+    build draws the local data a gate run left, or states the absence.
     """
+    from livery.git import remote_snapshot
     from livery.workshop._ci_context import state_store
     from livery.workshop._points import check_legs
-
-    if not _deploying():
-        return None
-    from livery.git import remote_snapshot
 
     with remote_snapshot(state_store(root), fetch=("coverage/main/",)):
         return stored_rows(root, check_legs(root))

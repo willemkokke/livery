@@ -51,9 +51,6 @@ def _workspace(
     (core / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
     (root / MODULE).write_text(SOURCE)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    # A leg's job runner names its point and leg; this is no gate job.
-    monkeypatch.delenv("WORKSHOP_POINT", raising=False)
-    monkeypatch.delenv("WORKSHOP_LEG", raising=False)
     return root
 
 
@@ -89,9 +86,13 @@ def _left(root: Path, *parts: Part) -> None:
 
 
 def _render_pages(root: Path) -> list[str]:
-    from livery.extensions.docs import _site as _docs
+    """The pages the docs phase's step draws, from this machine's data."""
+    return _pages.draw(root, merged=False)
 
-    return _docs.render_coverage_pages(root)
+
+def _redraw_pages(root: Path) -> list[str]:
+    """The pages the deploy phase's step draws, from main's coverage record."""
+    return _pages.draw(root, merged=True)
 
 
 # --- refusals ----------------------------------------------------------------
@@ -357,11 +358,10 @@ def test_each_index_states_the_package_s_floor(
     assert index.floor == f"Floor: 90.0%, with an epsilon of 0.5%{_JUDGED}"
 
 
-def test_the_marks_are_read_for_a_ratcheted_package_in_the_merge_gate_job_alone(
+def test_the_marks_are_read_for_a_ratcheted_package_beside_main_s_record_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.coverage import _marks
-    from livery.workshop._packages import discover_packages
 
     root = _workspace(tmp_path, monkeypatch)
     (root / "packages/core/tests").mkdir()
@@ -372,18 +372,19 @@ def test_the_marks_are_read_for_a_ratcheted_package_in_the_merge_gate_job_alone(
         return {}, ""
 
     monkeypatch.setattr(_marks, "marks", _read)
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    # A fixed floor reads nothing, nor does a ratchet outside that job.
+    measured = Part("packages/core", COVERAGE_PY, {MODULE: _entry(root)})
+    _left(root, measured)
+    held = {"check-a": {"packages/core": _unit("packages/core", measured)}}
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    # A fixed floor reads nothing, nor does a ratchet drawn from this
+    # machine's data.
     _core(root, "floor = 90\n")
-    assert _pages._marks_read(root, discover_packages(root)) is None
+    assert _redraw_pages(root) == ["core"]
     _core(root, 'floor = "auto-ratchet"\n')
-    monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _pages._marks_read(root, discover_packages(root)) is None
+    assert _render_pages(root) == ["core"]
     assert read == []
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    assert _pages._marks_read(root, discover_packages(root)) == {}
+    # Drawn from main's record, a ratchet reads the marks beside it.
+    assert _redraw_pages(root) == ["core"]
     assert read == [root]
 
 
@@ -441,7 +442,7 @@ def test_main_s_record_is_drawn_from_the_parts_the_legs_stored(
     monkeypatch.setattr(
         _pages, "_stored", lambda root: (held, ["main/check-b: nothing recorded"])
     )
-    assert _render_pages(root) == ["core"]
+    assert _redraw_pages(root) == ["core"]
     assert "  coverage: main/check-b: nothing recorded\n" in capsys.readouterr().out
     tree = root / "packages/core/htmlcov"
     index = read_page(tree / "index.html")
@@ -473,7 +474,7 @@ def test_main_s_record_is_drawn_from_the_parts_the_legs_stored(
             r" that are no statements: 5-9"
         ),
     ):
-        _render_pages(root)
+        _redraw_pages(root)
 
 
 def test_each_line_s_tests_are_drawn_from_the_parts_main_s_record_stores(
@@ -512,7 +513,7 @@ def test_each_line_s_tests_are_drawn_from_the_parts_main_s_record_stores(
         },
     }
     monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
-    assert _render_pages(root) == ["core"]
+    assert _redraw_pages(root) == ["core"]
     tree = root / "packages/core/htmlcov"
     (row, _total) = read_page(tree / "index.html").rows
     page = read_page(tree / row["href"])
@@ -540,7 +541,7 @@ def test_each_line_s_tests_are_drawn_from_the_parts_main_s_record_stores(
             r" names context 7, and the part names 3"
         ),
     ):
-        _render_pages(root)
+        _redraw_pages(root)
 
 
 def test_a_count_only_line_is_drawn_without_claiming_which_branch_ran(
@@ -572,7 +573,7 @@ def test_a_count_only_line_is_drawn_without_claiming_which_branch_ran(
         "check-b": {"packages/native": _leg(2)},
     }
     monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
-    assert _render_pages(root) == ["core"]
+    assert _redraw_pages(root) == ["core"]
     tree = root / "packages/core/htmlcov"
     index = read_page(tree / "index.html")
     (row, _total) = index.rows
@@ -626,7 +627,7 @@ def test_a_line_with_an_unrun_range_is_drawn_partial(
             r" ranges\[0\]: 4:1-4:2 lies outside the file: the file has 3 lines"
         ),
     ):
-        _render_pages(root)
+        _redraw_pages(root)
     # Every line ran, and line 2's `if` arm never did: the line is drawn
     # partial, and the arm's code alone is marked.
     held = _clamp(
@@ -636,7 +637,7 @@ def test_a_line_with_an_unrun_range_is_drawn_partial(
         Range(2, 14, 2, 27, 0),
         Range(2, 33, 2, 46, 1),
     )
-    assert _render_pages(root) == ["core"]
+    assert _redraw_pages(root) == ["core"]
     tree = root / "packages/core/htmlcov"
     (row, _total) = read_page(tree / "index.html").rows
     page = read_page(tree / row["href"])
@@ -650,8 +651,8 @@ def test_a_line_with_an_unrun_range_is_drawn_partial(
     assert "".join(marked) == "{ return h; }"
 
 
-def test_the_store_is_read_only_in_the_merge_point_s_gate_job(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_store_is_read_only_where_the_pages_draw_main_s_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import contextlib
 
@@ -661,27 +662,23 @@ def test_the_store_is_read_only_in_the_merge_point_s_gate_job(
         calls.append(labels)
         return {"check-a": {}}, ["main/check-b: nothing recorded"]
 
+    root = _workspace(tmp_path, monkeypatch)
     monkeypatch.setattr(_pages, "stored_rows", _rows)
     monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
     monkeypatch.setattr(
         "livery.git.remote_snapshot", lambda *a, **k: contextlib.nullcontext()
     )
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    assert _pages._stored(tmp_path) is None
+    # The docs phase's step draws this machine's data, inside CI as on a
+    # desk, and pulls nothing.
+    assert _render_pages(root) == []
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
-    for point, leg in (("gate", "docs"), ("merge", "docs")):
-        monkeypatch.setenv("WORKSHOP_POINT", point)
-        monkeypatch.setenv("WORKSHOP_LEG", leg)
-        assert _pages._stored(tmp_path) is None
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    assert _pages._stored(tmp_path) == (
-        {"check-a": {}},
-        ["main/check-b: nothing recorded"],
-    )
+    assert _render_pages(root) == []
+    assert calls == []
+    # The deploy phase's step reads main's record on every check leg,
+    # and names a leg that holds nothing.
+    assert _redraw_pages(root) == []
     assert calls == [["check-a"]]
+    assert "  coverage: main/check-b: nothing recorded\n" in capsys.readouterr().out
 
 
 # --- what the pages draw -----------------------------------------------------

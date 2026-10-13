@@ -40,11 +40,7 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery import git
-from livery.extensions.docs._contract import (
-    docs_table,
-    package_generators,
-    publish_seam,
-)
+from livery.extensions.docs._contract import docs_table, publish_seam
 from livery.extensions.docs._navblocks import (
     NAV_BEGIN,
     NAV_END,
@@ -60,6 +56,7 @@ from livery.extensions.docs._theme import THEME
 from livery.footman import doc, fail, group
 from livery.workshop import (
     HUMAN,
+    PhaseContext,
     Query,
     _extensions,
     answer,
@@ -151,10 +148,11 @@ def generate_coverage_pages(root: Path) -> list[str]:
     that is missing renders its section saying so and the build stays
     green: on a machine that has not measured, the absence is stated
     rather than failing the site. On a push to main the page carries
-    its iframe whether or not the tree exists yet: the gate job
-    renders the trees after its union and puts them into the built
-    site (`refresh_site_coverage`), so a missing tree there is one the
-    gate job will have written, or one its page states the absence of.
+    its iframe whether or not the tree exists yet: the gate job's
+    ``docs.publish`` runs the deploy phase after the union and puts the
+    trees into the built site (`refresh_site_coverage`), so a missing
+    tree there is one the deploy phase will have drawn, or one its page
+    states the absence of.
     """
     from livery.workshop import ci_run
 
@@ -204,11 +202,11 @@ def refresh_site_coverage(root: Path) -> list[str]:
 
     The site publishes a package's section at ``packages/<member>/``
     and the trees its page frames under ``coverage/<slug>/`` beside
-    it, where the mount put them. A tree rendered after the build,
-    the merge point's from the union its gate judged, is copied over
-    the one the build carried; a declared report with no tree gets a
-    page stating the absence, so the section's iframe never points at
-    nothing. Nothing is done without a built site.
+    it, where the mount put them. ``docs.publish`` calls it after the
+    deploy phase, so a tree a step of that phase drew after the build
+    is copied over the one the build carried; a declared report with
+    no tree gets a page stating the absence, so the section's iframe
+    never points at nothing. Nothing is done without a built site.
     """
     site = root / "site"
     if not (site / "index.html").is_file():
@@ -233,43 +231,6 @@ def refresh_site_coverage(root: Path) -> list[str]:
             )
         refreshed.append(package.member)
     return refreshed
-
-
-def run_generators(root: Path) -> list[str]:
-    """Run every package's declared docs generators; the verbs run.
-
-    Each verb runs as its own runner invocation at the workspace
-    root, so a generator is exactly the task a person would type. A
-    failing generator turns the build red with the verb and its
-    package named; its own output has already streamed. Generators
-    must be idempotent: a second run on unchanged input is a no-op.
-    """
-    import shutil as _shutil
-
-    import livery.footman as footman
-
-    ran: list[str] = []
-    runner = ""
-    for package in discover_packages(root):
-        for verb, _requires in package_generators(package):
-            if verb in ran:
-                continue  # two declarations of one shared verb run it once
-            if not runner:
-                runner = _shutil.which(footman.prog()) or ""
-                if not runner:
-                    fail(
-                        f"{footman.prog()} is not on PATH, so the declared"
-                        f" docs generators cannot run; enter the"
-                        " environment (source setup.sh) first"
-                    )
-            code = footman.run([runner, verb], cwd=root, nofail=True)
-            if int(code) != 0:
-                fail(
-                    f"docs generator `{footman.prog()} {verb}`"
-                    f" ({package.name}) exited {int(code)}"
-                )
-            ran.append(verb)
-    return ran
 
 
 def _root_pages(root: Path) -> list[str]:
@@ -1718,39 +1679,29 @@ def _publish_ssh(root: Path) -> None:
     print(f"  deployed to {destination}:{target}")
 
 
-#: Who draws the coverage pages: a listed extension answers with the
-#: function that draws them, given the workspace root and the packages
-#: that declare an ``htmlcov`` report, which returns the members it drew.
-#: One answer, the nearest; None while no listed extension answers.
-COVERAGE_PAGES: Query[Callable[[Path, tuple[Package, ...]], list[str]] | None] = Query(
-    "docs.coverage-pages"
-)
+#: The phase whose steps write the site's generated pages, which every
+#: docs verb runs before it assembles the config.
+DOCS_PHASE = "docs"
+
+#: The phase whose steps change the built site, which ``docs.publish``
+#: runs just before it publishes the site.
+DEPLOY_PHASE = "deploy"
 
 
-def render_coverage_pages(root: Path) -> list[str]:
-    """Draw the coverage pages of the packages that declare an ``htmlcov`` report.
+def run_site_phase(root: Path, phase: str) -> None:
+    """Run the steps registered for *phase* over the workspace at *root*.
 
-    The function that draws them is the answer to ``docs.coverage-pages``,
-    called once for all of them, since it reads the measured data once.
-    With no listed extension answering, each such package's page states
-    the absence. Returns the names of the packages rendered.
+    Through the walk every phase runs through, its steps side by side:
+    the docs extension's own and those a listed extension adds in its
+    ``[for.docs]`` table, each registered while it applies. A failing
+    step turns the verb red once every step ran, the step named in the
+    walk's lines. A phase with no registered step runs nothing.
     """
-    declaring = tuple(
-        package
-        for package in discover_packages(root)
-        if any(path == "htmlcov" for _label, path in package_coverage_reports(package))
+    from livery.workshop._phases import run_registered
+
+    run_registered(
+        PhaseContext(root=root, packages=discover_packages(root), phase=phase)
     )
-    if not declaring:
-        return []
-    draw = answer(root, COVERAGE_PAGES)
-    if draw is None:
-        for package in declaring:
-            print(
-                f"  coverage: {package.member}: no listed extension draws coverage"
-                " pages; its page states the absence"
-            )
-        return []
-    return draw(root, declaring)
 
 
 docs_group = group("docs", help="The workspace's documentation site")
@@ -1816,14 +1767,12 @@ def write_site_config(root: Path) -> Path:
 def _generate_all(root: Path, *, full: bool = False) -> None:
     """Run the generation passes, saying what was made.
 
-    Declared package generators run first, then the workshop's own
-    pages and the section nav into each package's generated tree, so
-    the mount copies everything a section holds; then the config the
-    build reads.
+    The docs phase's steps run first (`run_site_phase`), then the
+    workshop's own pages and the section nav into each package's
+    generated tree, so the mount copies everything a section holds;
+    then the config the build reads.
     """
-    generated = run_generators(root)
-    if generated:
-        print(f"  generators: {', '.join(generated)}")
+    run_site_phase(root, DOCS_PHASE)
     logged = generate_changelog_pages(root)
     if logged:
         print(f"  changelogs for {', '.join(logged)}")
@@ -1963,16 +1912,25 @@ def require_site(root: Path) -> None:
 
 @docs_group.task(name="publish")
 def docs_publish() -> None:
-    """Publish the built site through the contract's seam.
+    """Run the deploy phase on the built site, then publish it through the seam.
 
-    ``pages`` is the forge workflow's own act and skips here;
-    ``container`` pushes the site image to the forge registry;
-    ``ssh`` tars the site to the configured host, skipping when
-    unconfigured; ``none`` skips by declaration.
+    The deploy phase's steps run first, the ones the listed extensions
+    add in their ``[for.docs]`` tables, each drawing a page from what
+    the merge left behind; a failing step stops the publish, naming the
+    step. Each declared coverage report's tree then goes into the site
+    (`refresh_site_coverage`). Then the contract's seam: ``pages`` is
+    the forge workflow's own act and skips here; ``container`` pushes
+    the site image to the forge registry; ``ssh`` tars the site to the
+    configured host, skipping when unconfigured; ``none`` skips by
+    declaration.
     """
     root = _root()
     if not (root / "site" / "index.html").is_file():
         fail(f"no built site at {root / 'site'}: run `docs.build` first")
+    run_site_phase(root, DEPLOY_PHASE)
+    refreshed = refresh_site_coverage(root)
+    if refreshed:
+        print(f"  site refreshed for {', '.join(refreshed)}")
     seam = publish_seam(root)
     if seam == "container":
         _publish_container(root)
@@ -1982,49 +1940,6 @@ def docs_publish() -> None:
         print("  pages seam: the forge's own workflow deploys; nothing to do here")
     else:
         print("  publish seam is none: skipping by declaration")
-
-
-@docs_group.task(name="coverage-pages")
-def docs_coverage_pages() -> None:
-    """Render the coverage report pages the packages declare.
-
-    The generator verb a package declares beside an ``htmlcov`` report.
-    The packages that declare one are handed to the listed extension
-    that answers ``docs.coverage-pages``, the coverage extension; with
-    none listed, each such page states the absence. A built site at
-    ``site/`` gets its copy of every tree refreshed as well, so a tree
-    rendered after the build is what the site publishes. Idempotent:
-    re-rendering from the same data rewrites the same tree.
-    """
-    root = _root()
-    rendered = render_coverage_pages(root)
-    if rendered:
-        print(f"  coverage pages for {', '.join(rendered)}")
-    else:
-        print("  no coverage pages rendered: declared reports will state the absence")
-    refreshed = refresh_site_coverage(root)
-    if refreshed:
-        print(f"  site refreshed for {', '.join(refreshed)}")
-
-
-@docs_group.task(name="task-reference")
-def docs_task_reference() -> None:
-    """Render every providing package's task reference.
-
-    The generator verb a task-providing package declares: an index
-    per group and a page per public task into the owner's generated
-    tree, the owner's ``tasks`` nav block rewritten, and the alias
-    tree the runner's ``docs_url`` links through refreshed.
-    Idempotent: re-rendering the same tree rewrites the same pages.
-    """
-    from livery.extensions.docs._taskref import generate_task_reference
-
-    root = _root()
-    rendered = generate_task_reference(root)
-    if rendered:
-        print(f"  task reference for {', '.join(rendered)}")
-    else:
-        print("  no workspace package provides tasks")
 
 
 @docs_group.task(name="serve", infinite=True)

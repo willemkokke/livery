@@ -381,6 +381,10 @@ def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_rea
             "acme-native", "lint", _noop, extensions=("cpp",), extension="acme.test"
         )
     )
+    # A step of a phase the gate does not run is never among them.
+    register_step(StepRecord("acme-tree", "configure", _noop, extension="acme.test"))
+    assert "acme-tree" not in render_gate(root, AGENT)
+    assert "acme-tree" not in render_gate(root, HUMAN)
     # Without a package only the workspace's own steps are in the gate:
     # neither the test extension's nor the python formatter, which judges
     # no package present.

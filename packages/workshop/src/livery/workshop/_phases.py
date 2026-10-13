@@ -781,6 +781,38 @@ def run_phase(
     return held
 
 
+def run_registered(ctx: PhaseContext) -> PhaseContext:
+    """Run the steps registered for the phase *ctx* names, through the walk.
+
+    The steps the mount registered for ``ctx.phase``, in registration
+    order: each listed extension's own, and those of the
+    ``[for.<target>]`` tables that apply. They run as `run_phase` runs
+    any steps, so a phase the gate never runs, one declared with
+    ``gated = false``, runs this way over the workspace its context
+    names. A phase with no registered step runs nothing.
+
+    Returns:
+        The context the steps shared.
+
+    Raises:
+        PhaseError: when *ctx* names no phase, or one nobody declares.
+        Exception: the first failing step's, raised again once every
+            step ran.
+    """
+    from livery.workshop._steps import steps_by_name
+
+    if not ctx.phase:
+        raise PhaseError(
+            "a run of the registered steps names its phase, and this context names none"
+        )
+    return run_phase(
+        ctx,
+        tuple(
+            record for record in steps_by_name().values() if record.phase == ctx.phase
+        ),
+    )
+
+
 def _judge_inputs(given: Mapping[str, Mapping[str, object]], where: str) -> None:
     """Refuse an undeclared phase, a key it does not take, or a mistyped value."""
     for phase, keys in given.items():

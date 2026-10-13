@@ -324,7 +324,7 @@ every kind the check judges"). What changes:
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; its own renderer draws every language's pages from the parts the record stores, each check leg having reduced its suites through `coverage.measurers`, which pytest answers in `[for.coverage]`, and cmake writing its own parts | coverage's step of the docs phase, reading the parts the record stores |
+| coverage pages | coverage's two steps in its `[for.docs]` table: one in the docs phase, which frames the pages in the site build, and one in the `deploy` phase, which `docs.publish` runs and which draws them from main's record; its own renderer draws every language's pages from the parts the record stores, each check leg having reduced its suites through `coverage.measurers`, which pytest answers in `[for.coverage]`, and cmake writing its own parts | as today |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | the coverage extension's `[coverage]` table and pages; the base's `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
@@ -1324,12 +1324,13 @@ alone.
   function; a module footman loads as a plugin what footman brings.
   Forge's stdlib-only property follows from its declaring no runtime
   dependency.
-- PB: the docs extension declares the docs phase, and the task
-  reference, the package verbs and coverage's pages become its steps.
-  A second docs phase, which `docs.publish` runs on the built site
-  just before it publishes, takes coverage's redraw from main's merged
-  record through coverage's `[for.docs]` table; it is named apart from
-  the release lifecycle's `publish`.
+- PB (built, #1599): the docs extension declares the docs phase, and
+  the task reference (turned on in the root contract), the package
+  verbs and coverage's pages become its steps. A second phase,
+  `deploy`, which `docs.publish` runs on the built site just before it
+  publishes, takes coverage's redraw from main's merged record through
+  coverage's `[for.docs]` table. The verbs `docs.coverage-pages` and
+  `docs.task-reference` are gone with the query.
 - PC1: an mkdocstrings extension, inside the workshop wheel until step
   8, takes the API pages, the handler tables (through the docs-declared
   query `docs.config`), `lint.docrefs` and `lint.docstrings`; the
@@ -1504,7 +1505,7 @@ neither needs nor rules out).
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
-| `KindRecord.extractor` and `[docs] generators` as two mechanisms | the docs phase's steps, mkdocstrings' among them (phase 11c) |
+| `KindRecord.extractor` | mkdocstrings' step of the docs phase (11c's PC1) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
@@ -1522,7 +1523,6 @@ neither needs nor rules out).
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
-| `[generators]` | the docs phase's steps (#1377) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
 
 ## Decision record

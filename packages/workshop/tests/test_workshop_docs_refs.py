@@ -128,8 +128,8 @@ def _advertise(
 ) -> None:
     """The thing advertises the tool's verbs, installed where the child finds them.
 
-    With *reference*, the thing declares the task reference among its
-    docs generators, so the site renders a page per task.
+    With *reference*, the root contract turns the docs phase's task
+    reference step on, so the site renders a page per task.
     """
     member = root / "packages" / "thing"
     tasks = member / "src" / "acme" / "extensions" / "tool" / "_tasks.py"
@@ -139,9 +139,9 @@ def _advertise(
         '"acme.extensions.tool" = "acme.extensions.tool._tasks"\n'
     )
     if reference:
-        (member / "workshop.toml").write_text(
-            'kind = "python"\nname = "acme-thing"\n\n'
-            '[docs]\ngenerators = ["docs.task-reference"]\n'
+        contract = root / "workshop.toml"
+        contract.write_text(
+            contract.read_text() + "\n[phases.docs.task-reference]\nenabled = true\n"
         )
     site = root.parent / "site-packages"
     dist = site / "acme_thing-0.1.dist-info"

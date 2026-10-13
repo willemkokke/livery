@@ -447,38 +447,52 @@ extensions, they answer through workspace-level queries: the `dev`
 dependency group's tool lines and pytest's `addopts` are the union of
 the answers in list order, and a rendered template reads any
 workspace-level query by its name, `queries['python.dev-group']`. The
-docs extension declares three more. The site's private-members policy,
+docs extension declares two more. The site's private-members policy,
 `docs.members`: `public` keeps each extractor's default filter, `all`
 documents every member, the nearest answer wins, and any other value
 refuses naming both. The theme block, `docs.theme`: a table of the
 block's values (`language`, `font.text`, `font.code`, `features`,
 `palette`) a theme extension answers in part, merged key by key in
-list order over the base's block, an unknown key refusing. The
-coverage pages, `docs.coverage-pages`: the function that draws the
-pages of the packages that declare an `htmlcov` report, one answer,
-the nearest; with none, each such report's page states the absence.
+list order over the base's block, an unknown key refusing.
+
+The docs extension also declares two phases of its own, both at the
+workspace level, outside the gate and with no verb; their steps run
+side by side, and a failing one is named and stops the verb. Every docs
+verb runs the `docs` phase before it assembles the site's config: its
+`generators` step runs the verbs each package names under `[docs]
+generators`, each once, at the root, and its `task-reference` step
+writes the task reference of every package that advertises
+`footman.tasks` entry points, declared off until the root contract
+turns it on with `[phases.docs.task-reference] enabled = true`.
+`fm docs.publish` runs the `deploy` phase on the built site just before
+it publishes it, then puts each declared coverage report's tree into
+the site. A listed extension adds its steps to either phase in its
+`[for.docs]` table, while docs is listed.
+
 The coverage extension, `livery.extensions.coverage`, ships in the
-workshop wheel, listed as `coverage`, and answers it in its
-`[for.docs]` table. It draws each such package's pages itself, from
-parts in its line format: per file, the statements and the lines that
+workshop wheel, listed as `coverage`, and adds a step to each of those
+phases in its `[for.docs]` table, for each package whose `[docs]
+coverage` names an `htmlcov` report. It draws each such package's pages
+itself, from parts in its line format: per file, the statements and the lines that
 ran, the branches with the sentence that says why an untaken one never
 ran, the functions and classes, the tests that reached each line, and,
 for a measurer that reads columns, each stretch of code with its
 count, so a line that ran with code that never did is drawn partial
 and that code is marked. The numbers are coverage.py's own, and the
-source is highlighted by Pygments, so every language draws alike. The
-pages read the parts
-main's coverage record stores in the merge point's gate job, as the
-legs made them, and the data a gate run left anywhere else: the parts
-a native suite's measurer left in the workspace, and the parts the
-extension that answers the `coverage.measurers` query for a measurer
-makes of that measurer's data, the pytest extension of coverage.py's.
-A measured file the checkout
+source is highlighted by Pygments, so every language draws alike. In
+the docs phase the pages read the data a gate run left on the machine:
+the parts a native suite's measurer left in the workspace, and the
+parts the extension that answers the `coverage.measurers` query for a
+measurer makes of that measurer's data, the pytest extension of
+coverage.py's. In the deploy phase they read the parts main's coverage
+record stores, as the legs made them. A measured file the checkout
 no longer has is red in CI and named on the index on a machine, and a
 file at other content keeps its numbers and says so. Each index states
 the package's floor: the one its contract names or the default, the
-mark it ratchets to, read in the merge point's gate job, or that
-nothing judges it. An
+mark it ratchets to, read beside main's record, or that nothing judges
+it. While nothing listed measures, the coverage extension is dormant
+and adds no step, and each declared report's page states the absence.
+An
 extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before
@@ -562,11 +576,12 @@ The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
 table naming `livery-workshop` as its distribution. It owns the site's
 assembly, the `docs` verbs, the `docs.members` and `docs.theme` queries,
-the staged extension css, the generators a package declares and the
-seam the site publishes through, and it arrives through its own task
-entry point. The base keeps what it reads of a package's docs for its
-own reasons (a package's `[docs] api` and the layout of the `docs/`
-tree) and the nav blocks generators write; it imports no extension,
+the `docs` and `deploy` phases, the staged extension css, the generators
+a package declares and the seam the site publishes through, and it
+arrives through its own task entry point. The base keeps what it reads
+of a package's docs for its own reasons (a package's `[docs] api` and
+the layout of the `docs/` tree) and the nav blocks generators write;
+it imports no extension,
 which `layering.base-imports-no-extension` enforces. It lives under
 `livery.extensions`, a namespace any distribution can add an extension
 to.
@@ -598,11 +613,11 @@ before the verdict and the stamp, as a red builtin entry does; `judges`
 on any other job refuses. `[ci.jobs.merge.docs]` keeps
 the built site as the run's artifact on a push, and
 `[ci.jobs.merge.gate]` collects it into the gate job, adds the
-coverage pages and the publish to the gate job's entries after its
-verdict, and names the function that answers the
-publish seam. So the site is built once per run, this run's coverage
-trees are rendered into it from the union the gate judged, and it is
-published from the gate job: through the container and ssh seams
+publish to the gate job's entries after its verdict, and names the
+function that answers the publish seam. So the site is built once per
+run, its deploy phase draws this run's coverage trees into it from the
+union the gate judged, and it is published from the gate job: through
+the container and ssh seams
 directly, and through the forge's pages by uploading it for the
 forge's own pages deploy, a job with no checkout and no entry. The
 extension
@@ -1416,8 +1431,8 @@ and `--json` for the rows as they are. `fm ci.timings` renders the
 `metrics` series: per job and metric the latest, p50, and p90 over
 the window, then the movers. `fm janitor` bounds every series in the
 scope it runs in, windows, ages, and orphans, the remote ones from
-the merge point's gate job after every green run. The deploy renders
-the site's coverage pages from main's coverage record, the union
+the merge point's gate job after every green run. The site's deploy
+phase draws its coverage pages from main's coverage record, the union
 main's gate judged whatever its legs ran.
 
 ## Where a test lives
