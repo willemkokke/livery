@@ -352,6 +352,28 @@ def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
     assert len(seen) == 1
 
 
+def test_a_red_union_stops_the_gate_job_before_the_stamp(tmp_path: Path) -> None:
+    root = _root(tmp_path)
+    seen: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        task = next(word for word in argv[1:] if not word.startswith("--"))
+        seen.append(task)
+        return 3 if task == "coverage.union" else 0
+
+    with pytest.raises(_FAILURES, match=r"gate/gate: coverage\.union exited 3"):
+        _points.run_point(root, "gate", "gate", spawn=spawn)
+    # The union judges the floors, so a red union ends the job: the
+    # run's row is never collected, no verdict is reached, and no stamp
+    # records the tree as proved.
+    tasks = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
+    union = tasks.index("coverage.union")
+    assert {"ci.metrics.collect", "ci.verdict", "ci.verified.stamp"} <= set(
+        tasks[union + 1 :]
+    )
+    assert seen == tasks[: union + 1]
+
+
 def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

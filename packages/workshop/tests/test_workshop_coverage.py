@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePath
+from typing import Any
 
 import pytest
 
@@ -15,6 +17,7 @@ from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.workshop import _coverage_store, _verified
 from livery.workshop._packages import Package
+from workshop_measured import measure
 
 _FAILURES = (SystemExit, Failed)
 
@@ -283,6 +286,24 @@ def _unarmed() -> dict[str, str]:
     }
 
 
+def _coverage_json(root: Path) -> dict[str, Any]:
+    """coverage.py's own JSON report of *root*'s data, its files named with slashes."""
+    written = root / "coverage.json"
+    subprocess.run(
+        [sys.executable, "-m", "coverage", "json", "-o", str(written)],
+        cwd=root,
+        capture_output=True,
+        check=True,
+        env=_unarmed(),
+        timeout=60,
+    )
+    report: dict[str, Any] = json.loads(written.read_text("utf-8"))
+    report["files"] = {
+        PurePath(name).as_posix(): entry for name, entry in report["files"].items()
+    }
+    return report
+
+
 def test_an_unarmed_python_of_the_venv_imports_no_coverage(tmp_path: Path) -> None:
     # Every fm start, test worker and subprocess pays for what the
     # venv's startup hooks import. Coverage's own hook imports coverage
@@ -344,6 +365,25 @@ def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
     data.write()
     measured = _python.measured_coverage(tmp_path, (package,))
     assert measured == {"packages/thing": 50.0}
+
+
+def test_a_python_figure_is_coverage_py_s_own_total(tmp_path: Path) -> None:
+    package = _package(tmp_path, "thing")
+    measure(package.directory / "src" / "measured.py", tmp_path)
+    report = _coverage_json(tmp_path)
+    figure = _python.measured_coverage(tmp_path, (package,))["packages/thing"]
+    assert figure == report["totals"]["percent_covered"]
+    # By hand, from the fixture's lines: 18 statements, the three-line
+    # one counted once and the two lines of the `# pragma: no cover`
+    # block left out, of which 16 ran, all but the body of the loop
+    # that never started and the body of the `if` never true. 8
+    # branches, two jumps from each of the three `if` lines and the
+    # `for`, of which 4 ran; the untaken jump `# pragma: no branch`
+    # waives counts as covered, as coverage.py counts it.
+    summary = report["files"]["packages/thing/src/measured.py"]["summary"]
+    assert (summary["num_statements"], summary["covered_lines"]) == (18, 16)
+    assert (summary["num_branches"], summary["covered_branches"]) == (8, 4 + 1)
+    assert figure == 100.0 * (16 + 4 + 1) / (18 + 8)
 
 
 def test_without_a_parent_the_meter_and_the_preview_run(
@@ -1249,6 +1289,98 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
     _python.enforce_coverage(
         tmp_path, (package,)
     )  # each leg alone: 50%; the union: 100%
+
+
+#: Two branches: the platform decides line 2's, and line 6's condition is
+#: true on no platform.
+_PLATFORM_SPLIT = """\
+import sys
+if sys.platform == "win32":
+    separator = ";"
+else:
+    separator = ":"
+if not separator:
+    separator = ","
+joined = separator.join(["a", "b"])
+"""
+
+
+# A function's name cannot wrap, and this one is two columns too long.
+def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_stays_partial(  # noqa: E501
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = _suite(tmp_path, "x")
+    source = tmp_path / "packages" / "x" / "src" / "livery" / "x" / "split.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(_PLATFORM_SPLIT)
+    _in_ci(monkeypatch, "gate")
+    # One leg took line 2's true side and the other its false side; both
+    # took line 6's false side, and neither its true side.
+    windows = _unit("packages/x", {str(source): [1, 2, 3, 6, 8]})
+    linux = _unit("packages/x", {str(source): [1, 2, 5, 6, 8]})
+    legs = [
+        _leg("check-a", "full", units={"packages/x": windows}),
+        _leg("check-b", "full", units={"packages/x": linux}, label="check-b"),
+    ]
+    _union(monkeypatch, legs)
+    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    union = _coverage_json(tmp_path)["files"]["packages/x/src/livery/x/split.py"]
+    assert union["executed_branches"] == [[2, 3], [2, 5], [6, 8]]
+    assert union["missing_branches"] == [[6, 7]]
+    assert union["summary"]["num_partial_branches"] == 1
+    assert union["missing_lines"] == [7]
+    # 6 of the 7 statements ran, all but line 7, and 3 of the 4
+    # branches; each leg alone ran 5 statements and 2 branches.
+    assert _python.measured_coverage(tmp_path, (package,)) == {
+        "packages/x": 100.0 * (6 + 3) / (7 + 4)
+    }
+
+
+def test_a_source_file_no_test_reached_is_left_out_of_the_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from coverage import CoverageData
+
+    from livery.workshop._verified import FULL, write_marker
+
+    x = _suite(tmp_path, "x")
+    reached = _source(tmp_path, "x")
+    unreached = reached.with_name("unreached.py")
+    unreached.write_text("e = 5\nf = 6\n")
+    # A leg puts each file's name relative to the root, and coverage.py
+    # reads a relative name only under `relative_files`, which the
+    # pytest extension's .coveragerc sets: without it the union finds no
+    # lines under the name.
+    (tmp_path / ".coveragerc").write_text("[run]\nrelative_files = true\n")
+    # The meter names a file under its source that nothing imported,
+    # with no lines; coverage.py's own report counts such a file at 0%.
+    part = CoverageData(basename=str(tmp_path / ".coverage"), suffix="host.1.X")
+    part.set_context("packages/x/tests/test_mod.py::test_one|run")
+    part.add_arcs({str(reached): set(_arcs([1, 2, 3, 4]))})
+    part.touch_files([str(unreached)])
+    part.write()
+    write_marker(tmp_path, FULL, leg="check-a")
+    put: list[dict[str, object]] = []
+
+    def _capture(root: Path, run: object, **kw: object) -> str:
+        put.append(kw)
+        return ""
+
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
+    _in_ci(monkeypatch, "check-a")
+    _python.combine_leg(tmp_path, (x,))
+    units = _units(put[0])
+    assert units["packages/x"].files == {
+        "packages/x/src/livery/x/mod.py": _arcs([1, 2, 3, 4])
+    }
+    # The gate job unions on a machine of its own, from what the leg put.
+    (tmp_path / ".coverage").unlink()
+    _in_ci(monkeypatch, "gate")
+    _union(monkeypatch, [_leg("check-a", "full", units=units)])
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 
 def _native_suite(tmp_path: Path, name: str) -> Package:
