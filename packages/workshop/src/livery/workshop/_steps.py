@@ -44,7 +44,7 @@ import weakref
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from livery import git
 from livery.footman import Group, doc, fail, prog, root_group
@@ -80,8 +80,8 @@ class Option:
 
     Attributes:
         name: The option's key, kebab-case.
-        kind: ``bool``, ``str`` or ``int``; a value of another type
-            refuses naming the option.
+        kind: ``bool``, ``str``, ``int`` or ``strs``, a list of
+            strings; a value of another type refuses naming the option.
         default: What the step reads when the package says nothing.
         doc: One line saying what the option changes.
     """
@@ -348,6 +348,10 @@ def register_step(record: StepRecord) -> None:
 
 
 def _typed(option: Option, value: object) -> bool:
+    if option.kind == "strs":
+        return isinstance(value, list) and all(
+            isinstance(item, str) for item in cast("list[object]", value)
+        )
     expected = {"bool": bool, "str": str, "int": int}[option.kind]
     if option.kind == "int" and isinstance(value, bool):
         return False

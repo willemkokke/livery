@@ -3,7 +3,7 @@
 The site's assembly is an extension's (``livery.extensions.docs``), and
 so is the root contract's ``[docs]`` table. These are the facts the base
 reads for its own reasons: a package contract's ``[docs] api``, which
-the API extractor reads, and the layout of a package's ``docs/`` tree
+the API reference reads, and the layout of a package's ``docs/`` tree
 the mount and the wheel build copy.
 """
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +90,21 @@ def _package_entry(nav: Any, name: str) -> Any:
     return next(entry for entry in _package_entries(nav) if name in entry)
 
 
+def _referenced(root: Path) -> list[str]:
+    """Write each package's API reference as the docs phase's step writes it.
+
+    The members whose reference was written: the API pages and the
+    ``api`` nav block the section reads.
+    """
+    from livery.extensions.mkdocstrings._pages import documented, write_reference
+
+    return [
+        package.member
+        for package in discover_packages(root)
+        if documented(package) and write_reference(package)
+    ]
+
+
 # The fallbacks first: an undeclared table, a package without docs.
 
 
@@ -106,7 +120,7 @@ def test_the_config_defaults_without_a_docs_table(tmp_path: Path) -> None:
 
 def test_a_package_without_docs_mounts_nothing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    # bare still appears in nav for its API, but mounts no docs pages.
+    # bare ships no pages: the nav names none of its, and nothing mounts.
     assert '= "packages/bare/index.md"' not in zensical_config(root)
     assert mount_package_docs(root) == ["core"]
     assert not (root / "docs/packages/bare").exists()
@@ -250,115 +264,8 @@ def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> N
     assert tomllib.loads(text)["project"]["site_name"] == "acme-home"
 
 
-# Phase 2: the API reference. Fallbacks first.
-
-
-def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
-    import shutil
-
-    from livery.extensions.docs._site import api_modules
-
-    root = _workspace(tmp_path)
-    bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
-    shutil.rmtree(bare.directory / "src")
-    assert api_modules(bare) == []
-    assert "_generated/api/bare" not in zensical_config(root)
-
-
-def test_api_modules_sort_public_first_and_skip_the_machinery(
-    tmp_path: Path,
-) -> None:
-    from livery.extensions.docs._site import api_modules
-
-    root = _workspace(tmp_path)
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
-    module = core.directory / "src" / "acme" / "core"
-    (module / "_private.py").write_text('"""Private."""\n')
-    (module / "public.py").write_text('"""Public."""\n')
-    (module / "__main__.py").write_text("")
-    (module / "_docs").mkdir()
-    (module / "_docs" / "index.md").write_text("# stale\n")
-    (module / "sub").mkdir()
-    (module / "sub" / "__init__.py").write_text('"""Sub."""\n')
-    (module / "sub" / "_inner.py").write_text('"""Inner."""\n')
-    modules = api_modules(core)
-    pages = [page for page, _dotted in modules]
-    dotted = [d for _page, d in modules]
-    # The package index first, then public before private per level;
-    # __main__ and the machine _docs never appear.
-    assert pages[0] == "index.md" and dotted[0] == "acme.core"
-    assert pages.index("public.md") < pages.index("_private.md")
-    assert pages.index("sub/index.md") < pages.index("_private.md")
-    assert "__main__.md" not in pages
-    assert all("_docs" not in page for page in pages)
-    assert ("sub/_inner.md", "acme.core.sub._inner") in modules
-
-
-def test_a_package_shipping_two_roots_documents_both(tmp_path: Path) -> None:
-    from livery.extensions.docs._site import api_modules
-
-    root = _workspace(tmp_path)
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
-    # A second root on its own branch: acme/extras carries no __init__.py.
-    second = core.directory / "src" / "acme" / "extras" / "site"
-    second.mkdir(parents=True)
-    (second / "__init__.py").write_text('"""The second root."""\n')
-    (second / "_inner.py").write_text('"""Inner."""\n')
-    modules = api_modules(core)
-    # The shallowest root keeps the reference's top; the further one sits
-    # under its dotted path, after it.
-    assert modules[0] == ("index.md", "acme.core")
-    assert modules[-2:] == [
-        ("acme.extras.site/index.md", "acme.extras.site"),
-        ("acme.extras.site/_inner.md", "acme.extras.site._inner"),
-    ]
-
-
-def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
-    from livery.extensions.docs._site import API_DIR, generate_api_pages
-    from livery.workshop._docs_contract import GENERATED_DIR
-
-    root = _workspace(tmp_path)
-    generated = root / "packages" / "core" / "docs" / GENERATED_DIR
-    stale = generated / API_DIR / "gone.md"
-    stale.parent.mkdir(parents=True)
-    stale.write_text("stale\n")
-    assert generate_api_pages(root) == ["bare", "core"]
-    assert not stale.exists()
-    index = (generated / API_DIR / "index.md").read_text()
-    assert "::: acme.core" in index
-
-
-def test_the_config_wires_mkdocstrings_only_when_modules_exist(
-    tmp_path: Path,
-) -> None:
-    from livery.extensions.python._backend import INVENTORIES
-
-    root = _workspace(tmp_path)
-    config = zensical_config(root)
-    parsed = tomllib.loads(config)
-    handler = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"]
-    assert handler["paths"] == ["packages/bare/src", "packages/core/src"]
-    assert list(handler["inventories"]) == list(INVENTORIES)
-    assert handler["options"]["docstring_style"] == "google"
-    assert handler["options"]["show_if_no_docstring"] is True
-    core = _package_entry(parsed["project"]["nav"], "core")
-    api = next(part for part in core["core"] if "API" in part)
-    assert api["API"][0] == {"acme.core": "packages/core/api/index.md"}
-
-
-# The private-members policy, a slot the extensions fill: the refusal
-# first, then the default, then a contribution and the nearest rule.
-
-
-def _python_options(config: str) -> dict[str, object]:
-    """The python handler's options table of an assembled config."""
-    parsed = tomllib.loads(config)
-    options = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"][
-        "options"
-    ]
-    assert isinstance(options, dict)
-    return options
+# The site's config: the docs extension's tables, then each listed
+# extension's answer to docs.config. The refusals first.
 
 
 def _answering(query: str, value: str, requires: str = "") -> str:
@@ -373,6 +280,93 @@ def _answering(query: str, value: str, requires: str = "") -> str:
 def _relist(root: Path, extensions: str) -> None:
     """Rewrite *root*'s contract listing *extensions*, a TOML list as written."""
     (root / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
+
+
+#: An extension answering docs.config with its _steps module's writer.
+_WRITER = (
+    '[extension]\nlevels = ["workspace"]\n'
+    '[queries]\n"docs.config" = "{package}._steps:writer"\n'
+)
+
+#: The writer's module: its tables, the scope's root path and its
+#: members, as a TOML list, put in for ``{anchor}`` and ``{members}``.
+_WRITES = """
+def writer(root):
+    del root
+    return write
+
+
+def write(scope):
+    members = [scope.anchor + package.member for package in scope.packages]
+    listed = "[" + ", ".join(f'"{member}"' for member in members) + "]"
+    return TABLES.replace("{anchor}", scope.anchor).replace("{members}", listed)
+"""
+
+
+def _writing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **tables: str) -> None:
+    """Fake extensions ``acme.<name>`` answering docs.config, each writing *tables*.
+
+    ``{anchor}`` in a table stands for the scope's path to the root and
+    ``{members}`` for the members it covers, as a TOML list.
+    """
+    from workshop_extension_fakes import fake_steps
+
+    fake_extensions(tmp_path, monkeypatch, **dict.fromkeys(tables, _WRITER))
+    for name, text in tables.items():
+        fake_steps(tmp_path, name, f"TABLES = {text!r}\n" + _WRITES)
+
+
+def test_two_answers_writing_one_config_table_refuse_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    table = '[project.plugins.carve]\nstyle = "chisel"\n'
+    _writing(tmp_path, monkeypatch, one=table, two=table)
+    root = _workspace(
+        tmp_path, docs_table='extensions = ["docs", "acme.one", "acme.two"]\n'
+    )
+    refusal = (
+        r"acme\.one and acme\.two both write \[project\.plugins\.carve\] in the"
+        r" site's config; one extension writes a table"
+    )
+    with pytest.raises(_FAILURES, match=refusal):
+        zensical_config(root)
+    with pytest.raises(_FAILURES, match=refusal):
+        scoped_config(root, named_package(root, "core"))
+
+
+def test_an_answer_that_breaks_the_config_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._queries import QueryError
+
+    # A table the docs extension writes itself, and text that is no TOML.
+    _writing(
+        tmp_path,
+        monkeypatch,
+        theme='[project.theme]\nlanguage = "fr"\n',
+        broken="[project.plugins.carve\n",
+    )
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "acme.theme"]\n')
+    with pytest.raises(
+        _FAILURES,
+        match=r"the site's config does not parse once acme\.theme's tables join it",
+    ):
+        zensical_config(root)
+    _relist(root, '["docs", "acme.broken"]')
+    with pytest.raises(
+        _FAILURES,
+        match=r"acme\.broken writes tables for the site's config that are not TOML",
+    ):
+        zensical_config(root)
+    # An answer is the function that writes the tables, never a value.
+    fake_extensions(tmp_path, monkeypatch, value=_answering("docs.config", '"tables"'))
+    _relist(root, '["docs", "acme.value"]')
+    with pytest.raises(
+        QueryError,
+        match=r"docs\.config: acme\.value answers 'tables', and an answer is the"
+        r" function that writes the extension's tables for a config",
+    ):
+        zensical_config(root)
 
 
 def test_a_members_policy_outside_public_and_all_refuses_naming_them(
@@ -390,34 +384,64 @@ def test_a_members_policy_outside_public_and_all_refuses_naming_them(
     )
 
 
-def test_without_an_answer_the_handler_keeps_its_default_filter(
-    tmp_path: Path,
-) -> None:
-    root = _workspace(tmp_path)
-    assert "filters" not in _python_options(zensical_config(root))
-    preview = scoped_config(root, named_package(root, "core"))
-    assert "filters" not in _python_options(preview)
-
-
-def test_all_members_writes_an_empty_filter_and_the_nearest_extension_wins(
+def test_a_second_generator_s_tables_reach_the_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_extensions(
+    _writing(
         tmp_path,
         monkeypatch,
-        base=_answering("docs.members", '"all"'),
-        site=_answering("docs.members", '"public"', requires="acme.base"),
+        carve="[project.plugins.mkdocstrings.handlers.carve]\n"
+        "paths = {members}\n\n"
+        "[project.plugins.mkdocstrings.handlers.carve.options]\n"
+        'depth = 2\nstyle = "chisel"\nstrict = true\n',
     )
-    root = _workspace(tmp_path, docs_table='extensions = ["docs", "acme.base"]\n')
-    assert _python_options(zensical_config(root))["filters"] == []
-    preview = scoped_config(root, named_package(root, "core"))
-    assert _python_options(preview)["filters"] == []
-    # The nearest extension decides: the one that requires the other
-    # wins over it, and taking it off the list restores the other's.
-    _relist(root, '["docs", "acme.base", "acme.site"]')
-    assert "filters" not in _python_options(zensical_config(root))
-    _relist(root, '["docs", "acme.base"]')
-    assert _python_options(zensical_config(root))["filters"] == []
+    root = _workspace(
+        tmp_path, docs_table='extensions = ["docs", "mkdocstrings", "acme.carve"]\n'
+    )
+    _referenced(root)
+    config = zensical_config(root)
+    handlers = tomllib.loads(config)["project"]["plugins"]["mkdocstrings"]["handlers"]
+    assert handlers["carve"]["paths"] == ["bare", "core"]
+    assert handlers["carve"]["options"] == {
+        "depth": 2,
+        "style": "chisel",
+        "strict": True,
+    }
+    assert handlers["python"]["paths"] == ["packages/bare/src", "packages/core/src"]
+    # The answers join in list order, after the docs extension's own tables.
+    assert (
+        config.index("[project.markdown_extensions.pymdownx.snippets]")
+        < config.index("[project.plugins.mkdocstrings.handlers.python]")
+        < config.index("[project.plugins.mkdocstrings.handlers.carve]")
+    )
+    # A preview hands the answers its one package, read from two levels down.
+    preview = tomllib.loads(scoped_config(root, named_package(root, "core")))
+    carved = preview["project"]["plugins"]["mkdocstrings"]["handlers"]["carve"]
+    assert carved["paths"] == ["../../core"]
+
+
+def test_a_package_no_generator_documents_has_no_api_entry(tmp_path: Path) -> None:
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "mkdocstrings"]\n')
+    bare = root / "packages" / "bare"
+    (bare / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-bare"\n')
+    (bare / "pyproject.toml").unlink()
+    (bare / "docs").mkdir()
+    (bare / "docs" / "index.md").write_text("# bare\n")
+    assert _referenced(root) == ["core"]
+    # No page states an absence: the section carries its own pages alone.
+    assert not (bare / "docs" / "_generated").exists()
+    config = tomllib.loads(zensical_config(root))
+    section = _package_entry(config["project"]["nav"], "bare")
+    assert section["bare"] == [{"Index": "packages/bare/index.md"}]
+    core = _package_entry(config["project"]["nav"], "core")
+    assert any("API" in part for part in core["core"])
+    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
+    assert list(handlers) == ["python"]
+    assert handlers["python"]["paths"] == ["packages/core/src"]
+    # Without its pages a package has no section at all.
+    (bare / "docs" / "index.md").unlink()
+    config = tomllib.loads(zensical_config(root))
+    assert not any("bare" in e for e in _package_entries(config["project"]["nav"]))
 
 
 # Phase 3: changelogs and the release view. Fallbacks first.
@@ -821,7 +845,8 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
 
     root = _workspace(
         tmp_path,
-        docs_table='[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
+        docs_table='extensions = ["docs", "mkdocstrings"]\n'
+        '[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
     )
     config = scoped_config(root, named_package(root, "core"))
     parsed = toml.loads(config)
@@ -843,7 +868,6 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
 
 def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> None:
     from livery.extensions.docs._site import (
-        generate_api_pages,
         generate_changelog_pages,
         materialise_preview,
         named_package,
@@ -851,7 +875,7 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
 
     root = _workspace(tmp_path)
     generate_changelog_pages(root)
-    generate_api_pages(root)
+    _referenced(root)
     mount_package_docs(root)
     core = named_package(root, "core")
     stale = root / ".docs-preview" / "core" / "stale.md"
@@ -1844,7 +1868,7 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
     from livery.extensions.docs._site import RELEASES, generate_release_pages
 
     root = _workspace(tmp_path)
-    (root / "packages/core/docs/_generated").mkdir()
+    _referenced(root)
     (root / "packages/core/docs/_generated/tool.md").write_text("# tool\n")
     config = zensical_config(root)
     parsed = tomllib.loads(config)
@@ -1900,6 +1924,7 @@ def test_a_generators_own_block_renders_its_entries_where_placed(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path)
+    _referenced(root)
     (root / "packages/core/docs/_generated/tools").mkdir(parents=True)
     (root / "packages/core/docs/nav.toml").write_text(
         'nav = [\n    { "Index" = "index.md" },\n'
@@ -1917,6 +1942,7 @@ def test_a_generators_own_block_renders_its_entries_where_placed(
 
 def test_a_placed_block_fills_where_its_markers_sit(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
+    _referenced(root)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     (root / "packages/core/docs/nav.toml").write_text(
         'nav = [\n    { "Index" = "index.md" },\n'
@@ -1936,6 +1962,7 @@ def test_a_placed_block_fills_where_its_markers_sit(tmp_path: Path) -> None:
 def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) -> None:
     """Changelog and Coverage ahead of the tasks block, the API after everything."""
     root = _workspace(tmp_path)
+    _referenced(root)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
@@ -2129,14 +2156,13 @@ def test_the_workshops_pages_land_in_the_packages_generated_tree(
 ) -> None:
     from livery.extensions.docs._site import (
         emit_section_navs,
-        generate_api_pages,
         generate_changelog_pages,
     )
 
     root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     assert generate_changelog_pages(root) == ["core"]
-    assert generate_api_pages(root) == ["bare", "core"]
+    assert _referenced(root) == ["bare", "core"]
     generated = root / "packages/core/docs/_generated"
     assert (generated / "changelog.md").is_file()
     assert (generated / "api" / "index.md").is_file()
@@ -2166,16 +2192,18 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
 
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path)
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "mkdocstrings"]\n')
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
-    # The rules under test are the ones the base and the docs extension
-    # compose, so a build output the docs extension forgets to ignore
-    # fails here instead of dirtying every checkout.
+    # The rules under test are the ones the base and the listed
+    # extensions compose, so a build output an extension forgets to
+    # ignore fails here instead of dirtying every checkout.
     from livery.workshop._shipped_files import outputs
 
     listing = tmp_path / "listing"
     listing.mkdir()
-    (listing / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    (listing / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["docs", "mkdocstrings"]\n'
+    )
     (ignore,) = [o for o in outputs(listing) if o.path == ".gitignore"]
     (root / ".gitignore").write_bytes(ignore.body)
     git = [
@@ -2186,109 +2214,14 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     subprocess.run([*git, "init", "-q"], cwd=root, check=True)
     subprocess.run([*git, "add", "-A"], cwd=root, check=True)
     subprocess.run([*git, "commit", "-qm", "seed"], cwd=root, check=True)
+    # The listed extensions' steps of the docs phase run as a verb runs them.
+    _mount(root)
     _docs._generate_all(root)
+    assert (root / "packages/core/docs/_generated/api/index.md").is_file()
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
     ).stdout.decode()
     assert status == "", status
-
-
-# Phase 6: extraction belongs to the kind. The absence first.
-
-
-@pytest.fixture
-def stone_kind() -> Iterator[None]:
-    """A concrete kind with no extractor, registered for one test and replaced after."""
-    from livery.workshop import _kinds
-    from livery.workshop._kinds import KindRecord, all_kinds, kind_for, register_kind
-
-    before = {record.name: record for record in all_kinds()}
-    python = kind_for("python")
-    register_kind(
-        KindRecord(name="stone", backend=python.backend, template=python.template)
-    )
-    yield
-    _kinds._KINDS.clear()  # pyright: ignore[reportPrivateUsage]
-    _kinds._KINDS.update(before)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_a_kind_without_an_extractor_names_the_absence_never_an_empty_page(
-    tmp_path: Path, stone_kind: None
-) -> None:
-    from livery.extensions.docs._site import (
-        API_DIR,
-        api_modules,
-        generate_api_pages,
-    )
-    from livery.workshop._docs_contract import GENERATED_DIR
-
-    root = _workspace(tmp_path)
-    bare = root / "packages" / "bare"
-    (bare / "workshop.toml").write_text('kind = "stone"\nname = "acme-bare"\n')
-    stone = next(p for p in discover_packages(root) if p.directory.name == "bare")
-    assert api_modules(stone) == []
-    assert generate_api_pages(root) == ["bare", "core"]
-    page = bare / "docs" / GENERATED_DIR / API_DIR / "index.md"
-    assert page.read_text() == (
-        "# API reference\n\nNo API reference: the `stone` kind declares no extractor.\n"
-    )
-    config = tomllib.loads(zensical_config(root))
-    section = _package_entry(config["project"]["nav"], "bare")
-    assert {"API": "packages/bare/api/index.md"} in section["bare"]
-    # Only the python kind's handler is configured, over the python package.
-    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
-    assert list(handlers) == ["python"]
-    assert handlers["python"]["paths"] == ["packages/core/src"]
-    # Declining the reference declines the absence page too.
-    (bare / "workshop.toml").write_text(
-        'kind = "stone"\nname = "acme-bare"\n\n[docs]\napi = false\n'
-    )
-    assert generate_api_pages(root) == ["core"]
-    assert not page.exists()
-    config = tomllib.loads(zensical_config(root))
-    assert not any("bare" in e for e in _package_entries(config["project"]["nav"]))
-
-
-def test_a_second_extractor_reaches_the_config_through_the_kind_record(
-    tmp_path: Path, stone_kind: None
-) -> None:
-    from dataclasses import replace
-
-    from livery.workshop._kinds import (
-        Extractor,
-        kind_extractor,
-        kind_for,
-        register_kind,
-    )
-
-    root = _workspace(tmp_path)
-    (root / "packages" / "bare" / "workshop.toml").write_text(
-        'kind = "stone"\nname = "acme-bare"\n'
-    )
-    stone = kind_for("stone")
-    carved = Extractor(
-        "carve",
-        pages=lambda package: [("index.md", "acme.bare")],
-        sources=lambda package: [f"packages/{package.directory.name}/carved"],
-        options={"depth": 2, "style": "chisel", "strict": True},
-    )
-    register_kind(replace(stone, extractor=carved))
-    assert kind_extractor("stone") is carved
-    config = tomllib.loads(zensical_config(root))
-    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
-    assert handlers["carve"]["paths"] == ["packages/bare/carved"]
-    assert handlers["carve"]["options"] == {
-        "depth": 2,
-        "style": "chisel",
-        "strict": True,
-    }
-    assert handlers["python"]["paths"] == ["packages/core/src"]
-    section = _package_entry(config["project"]["nav"], "bare")
-    api = next(part for part in section["bare"] if "API" in part)
-    assert api["API"] == [{"acme.bare": "packages/bare/api/index.md"}]
-    # A child kind takes the nearest ancestor's extractor.
-    register_kind(replace(stone, name="pebble", parent="stone", extractor=None))
-    assert kind_extractor("pebble") is carved
 
 
 # The development section. The fallback first: no fragments, no pages.
@@ -2477,6 +2410,8 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
 
 def test_the_nav_has_one_packages_entry_with_its_landing_page(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
+    # bare's section is its API reference alone.
+    _referenced(root)
     _name(root, "bare", "core.extras.bare")
     nav = tomllib.loads(zensical_config(root))["project"]["nav"]
     (packages,) = [entry for entry in nav if "Packages" in entry]

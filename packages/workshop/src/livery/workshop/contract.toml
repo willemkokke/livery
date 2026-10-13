@@ -380,10 +380,6 @@ doc = "how the site documents the package"
 types = ["bool"]
 doc = "whether the package's modules get API reference pages; true when absent"
 
-[contract.package.docs.python-paths]
-types = ["strs"]
-doc = "directories the API reference also reads modules from, relative to the package"
-
 [contract.package.extensions]
 types = ["strs"]
 doc = "the package-level extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"
@@ -793,8 +789,8 @@ doc = "one line saying what the option changes"
 
 [contract.extension.phases."*"."*".options."*".type]
 types = ["str"]
-doc = "the option's type, which a package's value must have: bool, str or int"
-values = ["bool", "str", "int"]
+doc = "the option's type, which a package's value must have: bool, str, int or strs, a list of strings"
+values = ["bool", "str", "int", "strs"]
 
 [contract.extension.phases."*"."*".provides]
 types = ["table"]

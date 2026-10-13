@@ -11,8 +11,11 @@ dev-extras = ["test"]
 
 [docs]
 generators = ["toolroom.docs"]
-# The stubs the tool pages point at, rendered by the generator.
-python-paths = ["docs/_generated/stubs"]
+
+# The stubs the tool pages point at, rendered by the generator, which
+# the API reference's handler reads beside the package's sources.
+[phases.docs.mkdocstrings]
+paths = ["docs/_generated/stubs"]
 
 [release]
 # The line continues past the origin's last index release (0.6.1);

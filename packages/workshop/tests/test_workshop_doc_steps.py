@@ -7,16 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.docs._steps import (
-    assignment_docstrings,
-    doclinks_run,
-    docstrings_run,
-    link_problems,
-    undocumented_exports,
-)
+from livery.extensions.docs._steps import doclinks_run, link_problems
 from livery.footman import Failed
 from livery.workshop import _steps as registry
-from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import steps_by_name
 
@@ -36,14 +29,6 @@ def registered() -> Iterator[None]:
         yield
     finally:
         registry.restore(state)
-
-
-def _member(root: Path, init: str, *, name: str = "thing") -> Path:
-    member = root / "packages" / name
-    package = member / "src" / "acme" / name
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text(init)
-    return member
 
 
 def test_a_broken_link_and_a_dead_anchor_are_named(tmp_path: Path) -> None:
@@ -87,71 +72,11 @@ def test_a_mounted_link_maps_to_its_package_and_a_built_one_is_skipped(
     ]
 
 
-def test_an_undocumented_assignment_is_seen_as_such(tmp_path: Path) -> None:
-    src = tmp_path / "src"
-    src.mkdir()
-    (src / "mod.py").write_text(
-        'A: int = 1\n"""Documented."""\n\nB = 2\n"""Also documented."""\n\nC = 3\n'
-    )
-    assert assignment_docstrings(src) == {"A", "B"}
-
-
-def test_an_undocumented_export_is_named(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    member = _member(
-        tmp_path,
-        '__all__ = ["documented", "bare", "ALIAS"]\n\n'
-        'ALIAS = int\n"""An alias, documented under its assignment."""\n\n\n'
-        'def documented() -> None:\n    """Say something."""\n\n\n'
-        "def bare() -> None:\n    pass\n",
-    )
-    monkeypatch.setenv("PYTHONPATH", str(member / "src"))
-    assert undocumented_exports(tmp_path, [member]) == ["acme.thing.bare"]
-    package = Package(
-        directory=member,
-        path="packages/thing",
-        name="acme-thing",
-        kind="python",
-        depends=(),
-    )
-    ctx = PhaseContext(root=tmp_path, packages=(package,))
-    with pytest.raises(Failed, match=r"exports without a docstring: acme\.thing\.bare"):
-        docstrings_run(ctx)
-    # A scoped gate judges its subset alone.
-    docstrings_run(PhaseContext(root=tmp_path, packages=(package,), subset=()))
-
-
-def test_a_member_that_does_not_import_refuses_naming_the_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    member = _member(tmp_path, "raise RuntimeError('no import here')\n")
-    monkeypatch.setenv("PYTHONPATH", str(member / "src"))
-    with pytest.raises(Failed, match="no import here"):
-        undocumented_exports(tmp_path, [member])
-
-
-def test_a_member_that_is_not_installed_is_named_and_passed_over(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    member = _member(
-        tmp_path, '__all__ = ["bare"]\n\n\ndef bare() -> None:\n    pass\n'
-    )
-    assert undocumented_exports(tmp_path, [member]) == []
-    assert "acme.thing skips (not installed;" in capsys.readouterr().out
-
-
-def test_a_member_without_a_package_is_passed_over(tmp_path: Path) -> None:
-    member = tmp_path / "packages" / "native"
-    (member / "src").mkdir(parents=True)
-    (member / "src" / "geometry.cpp").write_text("int x;\n")
-    assert undocumented_exports(tmp_path, [member]) == []
-
-
 def test_the_steps_are_declared_under_the_lint_phase() -> None:
     registered = steps_by_name()
-    for name in ("lint.docrefs", "lint.doclinks", "lint.docstrings"):
-        assert registered[name].extension == "docs"
+    assert registered["lint.doclinks"].extension == "docs"
+    # The docstrings' steps are the API reference's.
+    assert not {"lint.docrefs", "lint.docstrings"} & set(registered)
 
 
 def test_this_workspaces_links_resolve() -> None:

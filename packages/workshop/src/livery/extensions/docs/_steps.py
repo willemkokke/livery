@@ -1,16 +1,10 @@
-"""The docs extension's steps: generators run, links resolve, exports have docstrings.
+"""The docs extension's steps: generators run, and links resolve.
 
 `docs.generators`, a step of the docs phase, runs the verbs each
 package names under ``[docs] generators`` before the site builds.
 `lint.doclinks` reads the authored markdown of the workspace's `docs/`
 and of every member's `docs/`, and refuses a link to a file that does
-not exist or an anchor no heading of the target makes. `lint.docrefs`
-refuses a cross-reference in a docstring the site renders that names no
-anchor the site renders ([livery.extensions.docs._refs][]).
-`lint.docstrings` imports each python member's top package in a child
-process and refuses a name in its `__all__` whose object has no
-docstring, nor a string literal under its assignment (a type alias
-carries no runtime `__doc__`, and the API pages read the source).
+not exist or an anchor no heading of the target makes.
 
 The strict site build judges what they leave out: the links into the
 pages generated at build time, the pages a package's own generators
@@ -19,11 +13,7 @@ write, and the nav.
 
 from __future__ import annotations
 
-import ast
-import itertools
-import json
 import re
-import sys
 from pathlib import Path
 
 from livery.footman import fail
@@ -122,99 +112,6 @@ def link_problems(root: Path, pages: frozenset[str] | None = None) -> list[str]:
     return problems
 
 
-def assignment_docstrings(src: Path) -> set[str]:
-    """The names under *src* documented by a string literal under their assignment."""
-    documented: set[str] = set()
-    for module in sorted(src.rglob("*.py")):
-        body = ast.parse(module.read_text("utf-8")).body
-        for first, second in itertools.pairwise(body):
-            if not (
-                isinstance(second, ast.Expr)
-                and isinstance(second.value, ast.Constant)
-                and isinstance(second.value.value, str)
-                and second.value.value.strip()
-            ):
-                continue
-            if isinstance(first, ast.AnnAssign) and isinstance(first.target, ast.Name):
-                documented.add(first.target.id)
-            elif isinstance(first, ast.Assign):
-                documented.update(
-                    target.id
-                    for target in first.targets
-                    if isinstance(target, ast.Name)
-                )
-    return documented
-
-
-#: Run in the workspace's interpreter: imports each named package and
-#: prints, as JSON, the exports with neither a docstring nor a
-#: documented assignment, and the packages that are not installed.
-_PROBE = """
-import importlib, json, sys
-missing = []
-absent = []
-for dotted, documented in json.loads(sys.stdin.read()):
-    try:
-        module = importlib.import_module(dotted)
-    except ModuleNotFoundError as error:
-        if error.name is None or not dotted.startswith(error.name):
-            raise
-        absent.append(dotted)
-        continue
-    for name in getattr(module, "__all__", ()):
-        if name in documented:
-            continue
-        if not (getattr(getattr(module, name), "__doc__", None) or "").strip():
-            missing.append(f"{dotted}.{name}")
-print(json.dumps({"missing": missing, "absent": absent}))
-"""
-
-
-def _top_package(src: Path) -> str:
-    """The dotted name of the shallowest package under *src*, or empty."""
-    inits = sorted(src.rglob("__init__.py"), key=lambda path: len(path.parts))
-    return ".".join(inits[0].parent.relative_to(src).parts) if inits else ""
-
-
-def undocumented_exports(root: Path, members: list[Path]) -> list[str]:
-    """The exports of *members* that carry no docstring, as dotted names.
-
-    Each member's top package is imported in one child process of the
-    interpreter running this one, which is the workspace's own, so a
-    package's import-time effects stay out of the gate's process.
-    """
-    import livery.footman as footman
-
-    targets: list[tuple[str, list[str]]] = []
-    for member in members:
-        src = member / "src"
-        dotted = _top_package(src) if src.is_dir() else ""
-        if dotted:
-            targets.append((dotted, sorted(assignment_docstrings(src))))
-    if not targets:
-        return []
-    result = footman.run(
-        [sys.executable, "-c", _PROBE],
-        cwd=root,
-        input=json.dumps(targets),
-        nofail=True,
-    )
-    if result.code != 0:
-        fail(
-            f"the docstring probe exited {result.code} importing the members:\n"
-            f"{result.stderr.rstrip()}"
-        )
-    found = json.loads(result.stdout)
-    for dotted in found["absent"]:
-        # Not installed is the environment's fault, not the docs': the
-        # sync installs every member.
-        print(
-            f"  lint.docstrings: {dotted} skips (not installed;"
-            f" `{footman.prog()} sync` installs it)"
-        )
-    return [str(name) for name in found["missing"]]
-
-
 def headings_removed(changes: Changes) -> bool:
     """Whether a changed markdown file lost a heading, an anchor a link may name.
 
@@ -286,34 +183,7 @@ def generators_run(ctx: PhaseContext) -> None:
         print(f"  generators: {', '.join(ran)}")
 
 
-def docrefs_run(ctx: PhaseContext) -> None:
-    from livery.extensions.docs._refs import reference_problems
-
-    problems = reference_problems(ctx.root)
-    if problems:
-        fail("cross-references the site cannot link:\n  " + "\n  ".join(problems))
-
-
 def doclinks_run(ctx: PhaseContext) -> None:
     problems = link_problems(ctx.root, selected_files(ctx))
     if problems:
         fail("links that resolve nothing:\n  " + "\n  ".join(problems))
-
-
-def docstrings_run(ctx: PhaseContext) -> None:
-    from livery.workshop._kinds import kind_chain, kind_names
-
-    members = [
-        package.directory
-        for package in (ctx.subset if ctx.subset is not None else ctx.packages)
-        # The workspace unit is a package of no registered kind.
-        if package.kind in kind_names()
-        and "python" in {record.name for record in kind_chain(package.kind)}
-    ]
-    missing = undocumented_exports(ctx.root, members)
-    if missing:
-        fail(
-            "exports without a docstring: "
-            + ", ".join(missing)
-            + "; the published API page shows each one"
-        )

@@ -462,6 +462,22 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     )
     assert "- python-nanobind (packages/nb): derives from python; gate phases" in agent
     assert "| python-nanobind | python | packages/nb |" in render_kinds(root, HUMAN)
+    # A step of a phase the gate never runs is no gate phase of a kind,
+    # whatever extensions it names.
+    register_step(
+        StepRecord(
+            "pages",
+            "docs",
+            _noop,
+            scope="package",
+            extensions=("cpp",),
+            extension="acme.pages",
+        )
+    )
+    assert (
+        "- cpp-conan (packages/cpp): derives from nothing;"
+        " gate phases build, test\n" in render_kinds(root, AGENT)
+    )
     assert render_tools(root, AGENT) == ""
     lock = SimpleNamespace(
         hosts=("macos-arm", "linux-x64", "windows-x64"),

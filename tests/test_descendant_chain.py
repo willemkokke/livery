@@ -375,8 +375,8 @@ def _chain(
     contract = (home / "workshop.toml").read_text()
     # Stock fm's births list the stock extensions; the home adds itself.
     assert (
-        'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
-        ' "coverage", "dummy.brandx"]' in contract
+        'extensions = ["changelog", "docs", "mkdocstrings", "ruff", "basedpyright",'
+        ' "pytest", "coverage", "dummy.brandx"]' in contract
     )
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
@@ -511,8 +511,8 @@ def _chain(
     # first one listed.
     added = "".join(f'"{name}", ' for name in (AGENT, *NATIVE)) if resumed else ""
     assert (
-        'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
-        f' "coverage", {added}'
+        'extensions = ["changelog", "docs", "mkdocstrings", "ruff", "basedpyright",'
+        f' "pytest", "coverage", {added}'
         '"dummy.brandx"]' in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()

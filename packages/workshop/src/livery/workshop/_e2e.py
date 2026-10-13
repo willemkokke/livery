@@ -3192,19 +3192,41 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
     return pass_.stack or tuple(birth_extensions([SELF]))
 
 
-def loop_stack() -> tuple[str, ...]:
-    """The extensions a plain pass's birth lists: the stock list without ``docs``.
+#: The extension that builds the site, which a plain pass's birth leaves out.
+SITE = "docs"
 
-    The docs extension puts a docs job on every run of the loop's
-    project, for a site nothing in a pass reads; the pass proves the
-    gate, the release train and the points, and
-    ``fm ci.e2e --extension=docs`` proves the docs extension on its
-    own.
+
+def loop_stack() -> tuple[str, ...]:
+    """The extensions a plain pass's birth lists: the stock list without the site.
+
+    The site is the docs extension and every stock entry whose
+    declaration requires it, directly or through another: the docs
+    extension puts a docs job on every run of the loop's project, for a
+    site nothing in a pass reads, and an extension that requires it
+    cannot be listed without it. The pass proves the gate, the release
+    train and the points, and ``fm ci.e2e --extension=docs`` proves the
+    docs extension on its own. A stock entry no installed distribution
+    declares requires nothing and stays.
     """
-    from livery.workshop._extensions import SELF
+    from livery.workshop._extensions import SELF, installed_declaration
     from livery.workshop._new_project import birth_extensions
 
-    return tuple(entry for entry in birth_extensions([SELF]) if entry != "docs")
+    def builds_the_site(name: str, seen: frozenset[str]) -> bool:
+        if name == SITE:
+            return True
+        found = installed_declaration(name)
+        needed = found.requires if found is not None else ()
+        return any(
+            builds_the_site(other, seen | {name})
+            for other in needed
+            if other not in seen
+        )
+
+    return tuple(
+        entry
+        for entry in birth_extensions([SELF])
+        if not builds_the_site(entry, frozenset())
+    )
 
 
 def _listed_extensions(root: Path) -> tuple[str, ...]:

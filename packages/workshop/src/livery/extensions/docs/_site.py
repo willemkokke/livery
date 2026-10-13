@@ -7,22 +7,25 @@ section per package from the nav each package emits into its own
 generated tree. Nothing committed enumerates the packages. Authors
 write ``packages/<name>/docs/`` and the root ``docs/`` tree; every
 underscore path this module writes is machine territory, refreshed by
-the verbs and never edited by a person. Whether private members are
-documented is the extensions' decision through the ``docs.members``
-query: ``public`` keeps each extractor's default filter, ``all``
-documents every member.
+the verbs and never edited by a person. The tables a listed extension
+adds to the config, the handler of an API reference among them, are its
+answer to the ``docs.config`` query, joined after the docs extension's
+own.
 
 A package owns the shape of its own site section through
 ``docs/nav.toml``: a hand-authored tree the emitter merges under
 that package's section of the rendered root config, checked both
 ways (an entry naming a missing page refuses, and so does an
 authored page absent from the nav). A generator owns a block between
-markers in that tree (``tasks``, ``tools``), and the emitter's own
+markers in that tree (``tasks``, ``tools``), and the emitter's
 sections, Changelog, Coverage and API, are marker blocks too, which
 the author may place; one the author did not place lands in that
 order, the changelog and coverage entries ahead of the tasks block
-and the API after everything. A package without a ``nav.toml`` gets its pages
-enumerated, index first, and the machine sections in the same order.
+and the API after everything. The API entries are the block a step of
+the docs phase emits into the package's generated tree, as a
+generator emits its own. A package without a ``nav.toml`` gets its
+pages enumerated, index first, and the machine sections in the same
+order.
 ``fm docs.build --package <name>``
 builds a scoped preview of one section into the gitignored
 ``.docs-preview/`` directory; the workspace site stays the only
@@ -40,6 +43,7 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery import git
+from livery.extensions.docs._config import Scope, joined
 from livery.extensions.docs._contract import docs_table, publish_seam
 from livery.extensions.docs._navblocks import (
     NAV_BEGIN,
@@ -57,7 +61,6 @@ from livery.footman import doc, fail, group
 from livery.workshop import (
     HUMAN,
     PhaseContext,
-    Query,
     _extensions,
     answer,
     guidance,
@@ -68,9 +71,7 @@ from livery.workshop._docs_contract import (
     GENERATED_DIR,
     MOUNT,
     NAV_TOML,
-    declines_api,
 )
-from livery.workshop._kinds import ALL_MEMBERS, Extractor
 from livery.workshop._packages import Package, discover_packages, release_tag
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
@@ -81,15 +82,6 @@ SITE_CONFIG = "zensical.toml"
 #: gitignored: the mounts, the release view, the runner's task aliases
 #: and the tool index. A root page never enumerates them.
 SITE_TREES = ("packages", "releases", "tasks", "tools", "development")
-
-#: Where the generated API pages live, per package directory name.
-#: Where a package's generated API pages live: inside its mount, so
-#: they publish under the package's own path.
-API_DIR = "api"
-
-#: The page a package whose kind extracts nothing gets instead of a
-#: reference: the section names the absence, never an empty page.
-NO_REFERENCE = "index.md"
 
 
 def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
@@ -275,12 +267,17 @@ def _label(page: str) -> str:
     return "Index" if Path(page).name == "index.md" else Path(page).stem
 
 
-#: The sections the emitter itself renders into a package's nav, in the
-#: order they land when the author places none: a placed block fills
-#: where its markers sit. Any other marker pair is a generator's block
-#: (`tasks`, `tools`): its entries are what sits between the markers,
-#: rendered where the author put them.
+#: The sections the emitter places into a package's nav when the author
+#: places none, in the order they land; a placed block fills where its
+#: markers sit. The changelog and coverage entries are the emitter's
+#: own, and the API entries are the block a step of the docs phase
+#: emits into the package's generated tree, as a generator emits its
+#: own. Any other marker pair is a generator's block (`tasks`, `tools`),
+#: rendered where the author put it and nowhere else.
 EMITTED_BLOCKS = ("changelog", "coverage", "api")
+
+#: The emitted block that holds a package's API entries.
+API_BLOCK = "api"
 
 #: How a placed block travels through the parsed tree: a leaf whose
 #: label and path both read `nav:<name>`, never a page.
@@ -346,8 +343,8 @@ def _lift_blocks(
         match = _MARKER.match(line)
         if match is None:
             continue
-        indent, kind, name = match.groups()
-        if kind == "begin":
+        indent, edge, name = match.groups()
+        if edge == "begin":
             if open_name is not None or name in found:
                 fail(f"{path}: the nav block {name!r} begins twice")
             open_name, open_at = name, index
@@ -365,22 +362,38 @@ def _lift_blocks(
         found.items(), key=lambda item: -item[1][0]
     ):
         emitted = nav_block_file(generated, name)
-        source = emitted if emitted.is_file() else path
-        inner = (
-            emitted.read_text("utf-8")
+        blocks[name] = (
+            _emitted_entries(emitted, name)
             if emitted.is_file()
-            else f"nav = [\n{chr(10).join(lines[begin + 1 : end])}\n]"
+            else _block_entries(
+                path, name, f"nav = [\n{chr(10).join(lines[begin + 1 : end])}\n]"
+            )
         )
-        try:
-            parsed = tomllib.loads(inner)
-        except tomllib.TOMLDecodeError as error:
-            fail(f"{source}: the nav block {name!r} is not valid TOML: {error}")
-        entries = parsed.get("nav")
-        blocks[name] = list(entries) if isinstance(entries, list) else []
         lifted[begin : end + 1] = [
             f'{indent}{{ "{SENTINEL}{name}" = "{SENTINEL}{name}" }},'
         ]
     return "\n".join(lifted) + "\n", blocks
+
+
+def _emitted_entries(path: Path, name: str) -> list[object]:
+    """The entries of the *name* block its generator emitted at *path*; empty without.
+
+    The file a generator writes, a ``nav`` list of one-key tables;
+    a file that is not TOML refuses naming it.
+    """
+    if not path.is_file():
+        return []
+    return _block_entries(path, name, path.read_text("utf-8"))
+
+
+def _block_entries(source: Path, name: str, text: str) -> list[object]:
+    """The ``nav`` list of a block's *text*; refuses naming *source* when not TOML."""
+    try:
+        parsed = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        fail(f"{source}: the nav block {name!r} is not valid TOML: {error}")
+    entries = parsed.get("nav")
+    return list(entries) if isinstance(entries, list) else []
 
 
 def _check_nav_shape(path: Path, entries: list[object]) -> None:
@@ -525,18 +538,6 @@ def abbreviation_files(root: Path) -> list[str]:
                 )
             definitions.setdefault(term, (definition, package.name))
     return files
-
-
-#: The query deciding whether private members are documented: ``public``
-#: keeps each extractor's default filter, ``all`` documents every
-#: member. The nearest answering extension decides; the base answers
-#: nothing, so the declared default stands until an extension answers.
-MEMBERS: Query[str] = Query("docs.members")
-
-
-def members_policy(root: Path) -> str:
-    """The members policy the listed extensions answer, ``public`` or ``all``."""
-    return answer(root, MEMBERS)
 
 
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
@@ -839,61 +840,17 @@ def overrides_template(root: Path) -> str:
     )
 
 
-def _toml_value(value: object) -> str:
-    """*value* as a TOML literal: a bool, a number, a string, or a list of those."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, (list, tuple)):
-        items: list[object] = list(value)
-        return "[" + ", ".join(_toml_value(item) for item in items) + "]"
-    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def handler_lines(
-    extractor: Extractor,
-    paths: list[str],
-    inventories: tuple[str, ...],
-    members: str,
-) -> list[str]:
-    """The mkdocstrings handler block for *extractor* over *paths*.
-
-    The handler's search paths and inventories, then its options as
-    the extractor carries them, then the members policy: ``all``
-    writes an empty filter list, so every member is documented, and
-    ``public`` leaves the handler's own default filter standing.
-    """
-    listed = ", ".join(f'"{path}"' for path in paths)
-    linked = ", ".join(f'"{url}"' for url in inventories)
-    lines = [
-        "",
-        f"[project.plugins.mkdocstrings.handlers.{extractor.name}]",
-        f"paths = [{listed}]",
-        f"inventories = [{linked}]",
-    ]
-    if extractor.options or members == ALL_MEMBERS:
-        lines += [
-            "",
-            f"[project.plugins.mkdocstrings.handlers.{extractor.name}.options]",
-        ]
-        lines += [
-            f"{key} = {_toml_value(value)}" for key, value in extractor.options.items()
-        ]
-        if members == ALL_MEMBERS:
-            lines.append("filters = []")
-    return lines
-
-
 def zensical_config(root: Path) -> str:
     """The assembled ``zensical.toml`` body, header excluded.
 
     Site identity comes from the ``[docs]`` table (title defaults to
     the root project's name); the nav carries the root ``docs/``
     pages, the release view and every package's section at its mount
-    path; the theme, extension set, and asset lists follow. The whole
-    file is the build's: hand customisation goes through the contract
-    and the packages' ``nav.toml`` files.
+    path; the theme, extension set, and asset lists follow, then the
+    tables the listed extensions answer ``docs.config`` with, in list
+    order, over every package. The whole file is the build's: hand
+    customisation goes through the contract and the packages'
+    ``nav.toml`` files.
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
@@ -919,32 +876,14 @@ def zensical_config(root: Path) -> str:
         # links its own year archives at build time instead.
         lines.append('    { "Releases" = "releases/index.md" },')
     lines += development_nav_lines(root)
-    from livery.workshop._kinds import kind_extractor
-
     packages = discover_packages(root)
     lines += packages_nav_lines(packages)
-    handlers: dict[str, tuple[Extractor, list[str]]] = {}
-    for package in packages:
-        section, _extracts = _package_section(package)
-        if not section:
-            continue
-        extractor = kind_extractor(package.kind)
-        if extractor is None:
-            continue
-        # One handler block per extractor, over every package that
-        # extracts through it, in the packages' order.
-        _, paths = handlers.setdefault(extractor.name, (extractor, []))
-        paths += extractor.sources(package)
     lines.append(f"    {NAV_END}")
     lines.append("]")
     lines += _extra_asset_lines(root)
     lines += _theme_lines(theme_values(root))
     lines += _extension_block(root)
-    members = members_policy(root)
-    for extractor, paths in handlers.values():
-        if paths:
-            lines += handler_lines(extractor, paths, extractor.inventories, members)
-    return "\n".join(lines) + "\n"
+    return joined("\n".join(lines) + "\n", Scope(root, packages))
 
 
 def _package_section(
@@ -953,58 +892,46 @@ def _package_section(
     *,
     label: str = "",
     children: tuple[str, ...] = (),
-) -> tuple[list[str], bool]:
-    """One package's nav section lines, and whether it has API modules.
+) -> list[str]:
+    """One package's nav section lines.
 
     The authored ``nav.toml`` tree when the package ships one
     (checked both ways first), the enumerated authored pages
-    otherwise; then the changelog and API entries, which are machine
-    territory in either shape; then *children*, the lines of the
-    places below it in the Packages tree. Labelled *label*, the
-    member's path when empty. Empty for a package with nothing to
-    show and nothing below it.
+    otherwise; then the changelog, coverage and API entries, which
+    are machine territory in either shape, the API entries as the
+    docs phase emitted them into the package's generated tree; then
+    *children*, the lines of the places below it in the Packages
+    tree. Labelled *label*, the member's path when empty. Empty for a
+    package with nothing to show and nothing below it.
     """
-    from livery.workshop._kinds import kind_extractor
-
     docs = package.directory / "docs"
     pages = [p for p in _pages(docs) if not p.startswith("_generated/")]
-    modules = api_modules(package)
-    # A kind that extracts nothing still gets an API entry, to the
-    # page that names the absence, unless the package declined.
-    absent = kind_extractor(package.kind) is None and not declines_api(package)
     changelog = (package.directory / "CHANGELOG.md").is_file()
     authored = authored_nav(package)
-    if (
-        authored is None
-        and not pages
-        and not modules
-        and not changelog
-        and not absent
-        and not children
-    ):
-        return ([], False)
+    tree, blocks = authored if authored is not None else ([], {})
+    # A placed block's entries were lifted with the tree; an unplaced
+    # one is read from the file the docs phase emitted.
+    emitted = nav_block_file(docs / GENERATED_DIR, API_BLOCK)
+    api = (
+        blocks[API_BLOCK]
+        if API_BLOCK in blocks
+        else _emitted_entries(emitted, API_BLOCK)
+    )
+    if authored is None and not pages and not api and not changelog and not children:
+        return []
     name = package.member
     prefix = f"packages/{name}/"
     inner = indent + "    "
-    tree, blocks = authored if authored is not None else ([], {})
 
     def section(block: str, at: str) -> list[str]:
         if block == "changelog" and changelog:
             return [f'{at}{{ "Changelog" = "{prefix}changelog.md" }},']
         if block == "coverage" and package_coverage_reports(package):
             return [f'{at}{{ "Coverage" = "{prefix}coverage.md" }},']
+        if block == API_BLOCK:
+            return _authored_nav_lines(api, prefix, at)
         if block not in EMITTED_BLOCKS and blocks.get(block):
             return _authored_nav_lines(blocks[block], prefix, at)
-        if block == "api" and modules:
-            api = [f'{at}{{ "API" = [']
-            api += [
-                f'{at}    {{ "{dotted}" = "{prefix}{API_DIR}/{page}" }},'
-                for page, dotted in modules
-            ]
-            api.append(f"{at}] }},")
-            return api
-        if block == "api" and absent:
-            return [f'{at}{{ "API" = "{prefix}{API_DIR}/{NO_REFERENCE}" }},']
         return []
 
     placed = {
@@ -1038,7 +965,7 @@ def _package_section(
         lines += section(block, inner)
     lines += children
     lines.append(f"{indent}] }},")
-    return (lines, bool(modules))
+    return lines
 
 
 def _place_lines(node: Node, indent: str) -> list[str]:
@@ -1048,10 +975,9 @@ def _place_lines(node: Node, indent: str) -> list[str]:
         line for child in node.ordered() for line in _place_lines(child, inner)
     )
     if node.package is not None:
-        lines, _modules = _package_section(
+        return _package_section(
             node.package, indent, label=node.label, children=children
         )
-        return lines
     if not children:
         return []
     return [f'{indent}{{ "{node.label}" = [', *children, f"{indent}] }},"]
@@ -1463,6 +1389,11 @@ def _strip_generated_links(target: Path) -> None:
 #: rebuilt whole on every preview build. Never published.
 PREVIEW = ".docs-preview"
 
+#: The path from a preview's config back to the workspace root: the
+#: config sits two levels down, in its package's directory under
+#: `PREVIEW`.
+PREVIEW_ROOT = "../.."
+
 
 def named_package(root: Path, name: str) -> Package:
     """The package whose directory is *name*; refuses naming the known."""
@@ -1480,9 +1411,11 @@ def scoped_config(root: Path, package: Package) -> str:
     The workspace's site name and authored root pages, then only
     *package*'s section. No site URL and no release view: the
     preview is never published, and the release view is site-wide.
-    Cross-package references resolve outward through the published
-    workspace site's own inventory when the contract declares a
-    site URL.
+    The tables the listed extensions answer ``docs.config`` with
+    follow for the one package, read from the preview's directory,
+    with the published site's address when the contract declares
+    one, so a reference to another package resolves on the
+    published site.
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
@@ -1490,32 +1423,25 @@ def scoped_config(root: Path, package: Package) -> str:
     for page in _root_pages(root):
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
-    from livery.workshop._kinds import kind_extractor
-
-    section, extracts = _package_section(package)
-    lines += section
+    lines += _package_section(package)
     lines.append("]")
     lines += _theme_lines(theme_values(root))
-    lines += _extension_block(root, relative_to="../..")
-    extractor = kind_extractor(package.kind)
-    if extracts and extractor is not None:
-        inventories: list[str] = [*extractor.inventories]
-        site_url = str(table.get("site-url", ""))
-        if site_url:
-            inventories.append(site_url.rstrip("/") + "/objects.inv")
-        paths = [f"../../{path}" for path in extractor.sources(package)]
-        lines += handler_lines(
-            extractor, paths, tuple(inventories), members_policy(root)
-        )
-    return "\n".join(lines) + "\n"
+    lines += _extension_block(root, relative_to=PREVIEW_ROOT)
+    scope = Scope(
+        root,
+        (package,),
+        anchor=PREVIEW_ROOT + "/",
+        published=str(table.get("site-url", "")),
+    )
+    return joined("\n".join(lines) + "\n", scope)
 
 
 def materialise_preview(root: Path, package: Package) -> Path:
     """Materialise one package's preview tree; the scoped config's path.
 
     Rebuilt whole under ``.docs-preview/<name>/``: the authored root
-    pages, the package's freshly generated mount with its API pages,
-    and the scoped config beside them. The rendered root config is never
+    pages, the package's freshly generated mount, and the scoped
+    config beside them. The rendered root config is never
     touched. Callers run the mount and generation passes first, so
     the copied trees are current.
     """
@@ -1543,59 +1469,6 @@ def materialise_preview(root: Path, package: Package) -> Path:
         generated_header("#") + scoped_config(root, package), encoding="utf-8"
     )
     return config
-
-
-def api_modules(package: Package) -> list[tuple[str, str]]:
-    """The reference pages of *package*, `(page path, dotted name)`, by its kind.
-
-    Extraction belongs to the kind: the pages come from the kind's
-    extractor, and a kind without one has no pages, which the site
-    says by name on the absence page.
-    """
-    from livery.workshop._kinds import kind_extractor
-
-    extractor = kind_extractor(package.kind)
-    if extractor is None:
-        return []
-    return extractor.pages(package)
-
-
-def generate_api_pages(root: Path) -> list[str]:
-    """Write the API pages into each package's generated tree; the package names.
-
-    One page per module, each a single directive: mkdocstrings walks
-    the members. Written under ``api/`` in the tree the mount merges,
-    so the pages publish under the package's own path.
-    """
-    from livery.workshop._kinds import kind_extractor
-
-    generated: list[str] = []
-    for package in discover_packages(root):
-        base = package.directory / "docs" / GENERATED_DIR / API_DIR
-        if kind_extractor(package.kind) is None and not declines_api(package):
-            # The absence, named: a kind that extracts nothing gets
-            # one page saying so, never an empty section.
-            shutil.rmtree(base, ignore_errors=True)
-            base.mkdir(parents=True, exist_ok=True)
-            (base / NO_REFERENCE).write_text(
-                "# API reference\n\nNo API reference: the"
-                f" `{package.kind}` kind declares no extractor.\n",
-                encoding="utf-8",
-            )
-            generated.append(package.member)
-            continue
-        modules = api_modules(package)
-        # The generated reference is rebuilt whole: a package that
-        # declines, or extracts nothing now, keeps no stale pages.
-        shutil.rmtree(base, ignore_errors=True)
-        if not modules:
-            continue
-        for page, dotted in modules:
-            target = base / page
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
-        generated.append(package.member)
-    return generated
 
 
 def _publish_container(root: Path) -> None:
@@ -1726,7 +1599,7 @@ def emit_section_navs(root: Path) -> list[str]:
     """
     emitted: list[str] = []
     for package in discover_packages(root):
-        section, _ = _package_section(package, indent="")
+        section = _package_section(package, indent="")
         if not section:
             continue
         generated = package.directory / "docs" / GENERATED_DIR
@@ -1776,9 +1649,6 @@ def _generate_all(root: Path, *, full: bool = False) -> None:
     logged = generate_changelog_pages(root)
     if logged:
         print(f"  changelogs for {', '.join(logged)}")
-    documented = generate_api_pages(root)
-    if documented:
-        print(f"  API pages for {', '.join(documented)}")
     covered = generate_coverage_pages(root)
     if covered:
         print(f"  coverage pages for {', '.join(covered)}")

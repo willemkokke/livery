@@ -22,6 +22,10 @@ extensions = [
     "claude",
     # The site's assembly and verbs, shipped in the workshop wheel.
     "docs",
+    # The site's python API reference, its handler's tables in the
+    # site's config, and the docstring checks; shipped in the workshop
+    # wheel.
+    "mkdocstrings",
     # The python formatter and linter, configured by the root ruff.toml.
     "ruff",
     # The type checker, configured by the root pyrightconfig.json; its

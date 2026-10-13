@@ -87,6 +87,7 @@ def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
         "changelog",
         "claude",
         "docs",
+        "mkdocstrings",
         "ruff",
         "basedpyright",
         "mypy",

@@ -1,0 +1,52 @@
+# The mkdocstrings extension: the python API reference on the docs
+# extension's site, the python handler's tables in the site's config,
+# and the two lint steps that judge the docstrings the reference
+# publishes. Read at every mount; it carries no verbs, and its steps and
+# its answer are imported when they run.
+
+[extension]
+api-version = 1
+# Listed in [workspace] extensions, after docs.
+levels = ["workspace"]
+# Its pages and its tables are the docs extension's site's.
+requires = ["docs"]
+
+# Each python package's API reference, written into the package's
+# generated tree before the site builds: a page per module of each of
+# its roots, public modules before private ones at every level, and the
+# api nav block that lists them, which the site places after the
+# section's other entries unless the package's nav.toml places it. A
+# package that declines with [docs] api = false gets neither.
+[phases.docs.mkdocstrings]
+main = "livery.extensions.mkdocstrings._pages:pages_run"
+scope = "package"
+extensions = ["python"]
+
+# The directories, beside the package's sources, the python handler
+# reads modules from, such as stubs a generator renders.
+[phases.docs.mkdocstrings.options.paths]
+type = "strs"
+default = []
+doc = "the directories, relative to the package, the python handler also reads modules from, after its sources"
+
+# The cross-references in the docstrings the site renders name anchors
+# the site renders. Which docstrings render and which anchors exist
+# follow from every source, the authored pages' directives, the
+# contracts, the extensions' declarations and the members' manifests,
+# so a change to any of them runs the step over every source.
+[phases.lint.docrefs]
+main = "livery.extensions.mkdocstrings._refs:docrefs_run"
+inputs = { reads = ["packages/**/src/**/*.py"], per-file = false, widens = ["docs/**/*.md", "packages/**/docs/**/*.md", "workshop.toml", "packages/**/workshop.toml", "packages/**/src/**/extension.toml", "packages/**/pyproject.toml"] }
+
+# Every name a python package exports has a docstring, since the API
+# reference publishes it, judged over the python packages a run
+# reaches.
+[phases.lint.docstrings]
+main = "livery.extensions.mkdocstrings._docstrings:docstrings_run"
+extensions = ["python"]
+
+# The python handler's tables in the site's config: the search paths of
+# the packages the config covers, the inventories, and the handler's
+# options, with the docs.members answer applied.
+[queries]
+"docs.config" = "livery.extensions.mkdocstrings._config:writer"

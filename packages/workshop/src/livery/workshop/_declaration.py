@@ -1032,10 +1032,10 @@ class _Reader:
             inputs=inputs,
         )
         for option in record.options:
-            if option.kind not in ("bool", "str", "int"):
+            if option.kind not in ("bool", "str", "int", "strs"):
                 raise self.refuse(
                     (*where, "options", option.name, "type"),
-                    "is required: bool, str or int",
+                    "is required: bool, str, int or strs",
                 )
         try:
             verify(record.fragments, record.name)

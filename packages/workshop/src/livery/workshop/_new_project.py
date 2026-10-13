@@ -189,17 +189,25 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
 
     Footman's own providers and the base are never listed. A stock App
     (the base among its builtins) lists the changelog's extension, the
-    site's, the python formatter's, the type checker's, the test
-    runner's and coverage's first, as ruled; the list is in precedence
-    order, so a brand's own extensions follow them and win. An agent's
-    files are a choice the project makes, so no agent's extension is
-    among them.
+    site's, the site's API reference, the python formatter's, the type
+    checker's, the test runner's and coverage's first, as ruled; the
+    list is in precedence order, so a brand's own extensions follow
+    them and win. An agent's files are a choice the project makes, so no
+    agent's extension is among them.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
     stack = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack[:0] = ["changelog", "docs", "ruff", "basedpyright", "pytest", "coverage"]
+        stack[:0] = [
+            "changelog",
+            "docs",
+            "mkdocstrings",
+            "ruff",
+            "basedpyright",
+            "pytest",
+            "coverage",
+        ]
     return stack
 
 
