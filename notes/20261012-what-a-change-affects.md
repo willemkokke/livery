@@ -69,9 +69,9 @@ Each is a consumer of the one engine with its own influence rule.
   (`run_suites(selection=...)`). The test-file phases fill the map;
   nothing downstream changes shape.
 - The layering steps parse every judged source once, memoised by path,
-  size and mtime (`livery.workshop._ast_rules.parsed_modules`), and
-  `imports_of` lists a module's imports. The module graph reads that
-  parse.
+  size and mtime (`livery.extensions.python._parse.parsed_modules`), and
+  the `references` query's answer lists what each source references,
+  at import time or lazily. The module graph reads that answer.
 - In CI the test runner arms `COVERAGE_PROCESS_START`, the `.pth`
   meters every child, `patch = subprocess` follows the `fm` children a
   test spawns, the ctrace core keeps every context complete, and the
