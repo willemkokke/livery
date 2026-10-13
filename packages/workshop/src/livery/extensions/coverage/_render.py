@@ -110,7 +110,8 @@ def render(into: Path, report: Report) -> Numbers:
     """Write *report*'s pages into *into*, replacing what was there; the totals.
 
     *into* is removed and written afresh, so a file that left the
-    report leaves no page behind.
+    report leaves no page behind. Each page is written with LF line
+    endings, so one report gives the same bytes on every platform.
     """
     shutil.rmtree(into, ignore_errors=True)
     into.mkdir(parents=True)
@@ -133,18 +134,14 @@ def render(into: Path, report: Report) -> Numbers:
     for index, (drawn, counted) in enumerate(rows):
         before = pages[index - 1] if index else "index.html"
         after = pages[index + 1] if index + 1 < len(pages) else "index.html"
-        (into / pages[index]).write_text(
-            page.file(drawn, counted, before, after), encoding="utf-8"
-        )
+        _write(into / pages[index], page.file(drawn, counted, before, after))
     first = pages[0] if pages else "index.html"
     last = pages[-1] if pages else "index.html"
     index_rows = [
         _Row(drawn.name, pages[index], "", "", counted)
         for index, (drawn, counted) in enumerate(rows)
     ]
-    (into / "index.html").write_text(
-        page.index("file", index_rows, totals, last, first), encoding="utf-8"
-    )
+    _write(into / "index.html", page.index("file", index_rows, totals, last, first))
     for noun, _plural in kinds:
         region_index: list[_Row] = []
         for index, (drawn, _counted) in enumerate(rows):
@@ -166,10 +163,16 @@ def render(into: Path, report: Report) -> Numbers:
                         counted,
                     )
                 )
-        (into / f"{noun}_index.html").write_text(
-            page.index(noun, region_index, totals, last, first), encoding="utf-8"
+        _write(
+            into / f"{noun}_index.html",
+            page.index(noun, region_index, totals, last, first),
         )
     return totals
+
+
+def _write(path: Path, markup: str) -> None:
+    """Write a page's *markup* to *path* as UTF-8 with LF line endings."""
+    path.write_text(markup, encoding="utf-8", newline="\n")
 
 
 def page_name(name: str) -> str:
@@ -280,12 +283,15 @@ def highlighted(name: str, text: str) -> list[str]:
     """*text* as HTML, line by line, highlighted by Pygments' lexer for *name*.
 
     A name no lexer claims is drawn as plain text. Each line is HTML
-    without its newline; a token over several lines is split at each.
+    without its line ending; a token over several lines is split at
+    each, and a CRLF or a lone CR ends a line as LF does
+    ([livery.extensions.coverage._render.source_lines][]).
     """
     from pygments.lexers import get_lexer_for_filename
     from pygments.lexers.special import TextLexer
     from pygments.util import ClassNotFound
 
+    text = _newlines(text)
     try:
         lexer = get_lexer_for_filename(name, text, stripnl=False, ensurenl=False)
     except ClassNotFound:
@@ -328,11 +334,21 @@ def _token_class(kind: object) -> str:
 
 
 def source_lines(text: str) -> list[str]:
-    """*text*'s lines, numbered as coverage.py numbers them: split at each newline."""
-    lines = text.split("\n")
+    """*text*'s lines, numbered as coverage.py numbers them.
+
+    coverage.py reads a source's CRLF and lone CR line endings as LF,
+    so a file checked out with CRLF on Windows has the lines it has
+    elsewhere, and none of them ends in a carriage return.
+    """
+    lines = _newlines(text).split("\n")
     if lines and lines[-1] == "":
         lines.pop()
     return lines
+
+
+def _newlines(text: str) -> str:
+    """*text* with each CRLF and each lone CR as LF."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _copy_asset(into: Path, name: str) -> str:

@@ -22,10 +22,14 @@ pages draw parts alone. A part is JSON:
    "reached": {"sets": ["AAE="], "lines": [[9, 0]]}}}}
 ```
 
-A set of lines is a range string, ``1-12,15,17-40``. Per file:
+A file is named by its path from the workspace root with forward
+slashes, whichever platform measured it. A set of lines is a range
+string, ``1-12,15,17-40``. Per file:
 
-- ``digest``: the git blob id of the content measured; empty when the
-  measurer could not read the file.
+- ``digest``: the git blob id of the content measured, read as text:
+  its bytes with each CRLF as LF, the blob git stores for a text file,
+  so a checkout with CRLF line endings and one with LF give one
+  digest. Empty when the measurer could not read the file.
 - ``statements``: the lines that can run. ``hits``: the statements that
   ran, for a measurer whose ``counts`` is ``presence``; ``counts``:
   ``[line, runs]`` pairs for one whose ``counts`` is ``counts``, a
@@ -213,8 +217,9 @@ class Entry:
     """What a measurer read of one file.
 
     Attributes:
-        digest: The git blob id of the content measured; empty when the
-            measurer could not read the file.
+        digest: The git blob id of the content measured, its CRLF line
+            endings read as LF; empty when the measurer could not read
+            the file.
         statements: The lines that can run.
         counts: How many times each statement ran, the ones that ran
             alone; a presence measurer's are 1.
@@ -278,7 +283,7 @@ class Part:
             a run left.
         measurer: Who read it.
         files: What it read of each file, by the file's path from the
-            workspace root.
+            workspace root with forward slashes.
         contexts: The contexts a line's ``reached`` indexes name; the
             empty string is the context outside every test.
     """
@@ -530,9 +535,16 @@ def unpack_set(text: str) -> Lines:
 
 
 def digest(content: bytes) -> str:
-    """The git blob id of *content*: what a part's ``digest`` names."""
-    header = f"blob {len(content)}\0".encode("ascii")
-    return hashlib.sha1(header + content, usedforsecurity=False).hexdigest()
+    """The git blob id of *content* as text: what a part's ``digest`` names.
+
+    Each CRLF in *content* counts as LF, so the digest is the blob id
+    git stores for a text file whatever line endings a checkout gives
+    it: Git for Windows checks text out with CRLF, and a file measured
+    there has the digest of the same file measured on Linux.
+    """
+    text = content.replace(b"\r\n", b"\n")
+    header = f"blob {len(text)}\0".encode("ascii")
+    return hashlib.sha1(header + text, usedforsecurity=False).hexdigest()
 
 
 def encode(part: Part) -> dict[str, Any]:
@@ -622,7 +634,9 @@ def decode(raw: object, *, source: str) -> Part:
     measurer = reader.measurer(table.get("measurer"), ("measurer",))
     contexts = reader.texts(table.get("contexts", []), ("contexts",))
     files = {
-        name: reader.entry(value, ("files", name), measurer, len(contexts))
+        reader.file_name(name): reader.entry(
+            value, ("files", name), measurer, len(contexts)
+        )
         for name, value in reader.table(table.get("files"), ("files",)).items()
     }
     return Part(unit, measurer, files, tuple(contexts))
@@ -665,6 +679,21 @@ class _Reader:
                 f"holds {', '.join(unknown)}, which format {FORMAT} has no key"
                 f" for; its keys are {', '.join(keys)}",
             )
+
+    def file_name(self, name: str) -> str:
+        """*name* when it is a path from the workspace root with forward slashes."""
+        parts = name.split("/")
+        if (
+            "\\" in name
+            or name.startswith("/")
+            or ":" in parts[0]
+            or any(part in ("", ".", "..") for part in parts)
+        ):
+            raise self.refuse(
+                ("files", name),
+                "is no path from the workspace root with forward slashes",
+            )
+        return name
 
     def text(self, raw: object, path: KeyPath, *, empty: bool = True) -> str:
         if not isinstance(raw, str) or not (empty or raw):

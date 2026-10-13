@@ -217,6 +217,73 @@ def test_a_part_of_another_format_version_is_named_and_skipped(
     assert [row["File"] for row in index.rows] == [MODULE, "Total"]
 
 
+def test_a_source_written_with_crlf_draws_the_lines_and_the_digest_of_its_lf_form(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    lf = SOURCE.encode()
+    crlf = SOURCE.replace("\n", "\r\n").encode()
+    assert fmt.digest(crlf) == fmt.digest(lf)
+    # The part was measured at the text git stores: the LF form, which
+    # a Windows checkout holds with CRLF.
+    _left(root, Part(".", COVERAGE_PY, {MODULE: _entry(root, digest=fmt.digest(lf))}))
+    tree = root / "packages/core/htmlcov"
+    drawn: dict[bytes, list[tuple[int, str, str, list[str]]]] = {}
+    for content in (lf, crlf):
+        (root / MODULE).write_bytes(content)
+        assert _render_pages(root) == ["core"]
+        href = read_page(tree / "index.html").rows[0]["href"]
+        assert b"\r" not in (tree / href).read_bytes()
+        page = read_page(tree / href)
+        assert page.notice == ""
+        drawn[content] = [
+            (number, line.category, line.source, line.jumps)
+            for number, line in page.lines.items()
+        ]
+    assert drawn[crlf] == drawn[lf]
+    assert [number for number, *_ in drawn[lf]] == [1, 2, 3, 4, 5, 6]
+
+
+def test_a_name_written_with_backslashes_is_drawn_with_forward_slashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._coverage_lines import write_part
+
+    root = _workspace(tmp_path, monkeypatch)
+    native = "packages/core/src/native.cpp"
+    (root / native).write_text("int f() {\n  return 1;\n}\n")
+    # Rows a Windows leg named with its own separator.
+    held = {
+        "check-a": {
+            "packages/core": _unit(
+                "packages/core", {MODULE.replace("/", "\\"): [(-1, 1)]}, "arcs"
+            ),
+            "packages/native": _unit(
+                "packages/native", {native.replace("/", "\\"): [(1, 3)]}, LINES
+            ),
+        }
+    }
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    _meter(
+        root,
+        rows={
+            "packages/core": fmt.encode(
+                Part("packages/core", COVERAGE_PY, {MODULE: _entry(root)})
+            )
+        },
+    )
+    assert _render_pages(root) == ["core"]
+    index = read_page(root / "packages/core/htmlcov/index.html")
+    assert [row["File"] for row in index.rows] == [MODULE, native, "Total"]
+    # A machine's own lines part, written on Windows, reads the same.
+    monkeypatch.setattr(_pages, "_stored", lambda root: None)
+    (root / "meter.json").unlink()
+    write_part(root, "packages/native", {native.replace("/", "\\"): {1: 2, 2: 0}})
+    assert _render_pages(root) == ["core"]
+    index = read_page(root / "packages/core/htmlcov/index.html")
+    assert [row["File"] for row in index.rows] == [native, "Total"]
+
+
 def test_a_reduction_that_refuses_stops_the_pages_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

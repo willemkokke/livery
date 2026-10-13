@@ -177,6 +177,41 @@ def test_each_row_reduces_to_its_own_part_and_each_source_is_read_once(
     assert one["measurer"]["judges"] == ["lines", "branches"]
 
 
+def test_both_digests_are_the_blob_git_stores_for_the_text_with_crlf_or_lf() -> None:
+    from livery.extensions.coverage._format import digest
+
+    lf = b"if a:\n    b = 2\n"
+    crlf = b"if a:\r\n    b = 2\r\n"
+    # `git hash-object` gives this id for the LF text, and git stores a
+    # CRLF checkout of it, Git for Windows', as the same blob.
+    stored = "14acfc4e683f05ebcbae533dc3e273acef7e267c"
+    assert _coverage._digest(lf) == _coverage._digest(crlf) == stored
+    assert digest(lf) == digest(crlf) == stored
+
+
+def test_a_crlf_source_and_a_backslashed_name_reduce_as_their_lf_and_slashed_forms(
+    tmp_path: Path,
+) -> None:
+    module = f"{SOURCES}/mod.py"
+    reduced: dict[str, dict[str, Any]] = {}
+    for ending in ("\n", "\r\n"):
+        root = tmp_path / ("crlf" if ending == "\r\n" else "lf")
+        (root / SOURCES).mkdir(parents=True)
+        (root / module).write_bytes(
+            "a = 1\nif a:\n    b = 2\n".replace("\n", ending).encode()
+        )
+        # A Windows leg's row names the file with backslashes.
+        arcs = [(-1, 1), (1, 2), (2, 3), (3, -1)]
+        (part,) = _coverage.Arcs().rows(
+            root, [_row("packages/core", {module.replace("/", "\\"): arcs})]
+        )
+        reduced[ending] = part
+    assert reduced["\r\n"] == reduced["\n"]
+    assert list(reduced["\n"]["files"]) == [module]
+    lf_text = b"a = 1\nif a:\n    b = 2\n"
+    assert reduced["\n"]["files"][module]["digest"] == _coverage._digest(lf_text)
+
+
 def test_a_context_set_packs_sorted_deltas_and_a_wide_gap_takes_two_bytes() -> None:
     from livery.extensions.coverage._format import parse_ranges, unpack_set
 
@@ -205,7 +240,9 @@ def _reference(root: Path) -> tuple[dict[str, dict[int, Any]], dict[str, Any]]:
     """coverage.py's own reading of *root*'s data: its lines, and its JSON report.
 
     Each line as coverage.py's HTML report draws it, by file; the JSON
-    report is format 3, with its functions and classes.
+    report is format 3, with its functions and classes. coverage.py
+    names a file with the platform's separator, and both are keyed by
+    the name with forward slashes, as a part names it.
     """
     from coverage import Coverage
     from coverage.html import HtmlDataGeneration
@@ -220,12 +257,13 @@ def _reference(root: Path) -> tuple[dict[str, dict[int, Any]], dict[str, Any]]:
     lines: dict[str, dict[int, Any]] = {}
     for reporter, analysis in get_analysis_to_report(cov, None):
         drawn = generation.data_for_file(reporter, analysis)
-        lines[reporter.relative_filename()] = {
+        lines[_posix(reporter.relative_filename())] = {
             line.number: line for line in drawn.lines
         }
     report = root / "coverage.json"
     cov.json_report(outfile=str(report))
     data: dict[str, Any] = json.loads(report.read_text())
+    data["files"] = _keyed_posix(data["files"])
     assert data["meta"]["format"] == 3
     return lines, data
 
@@ -366,7 +404,7 @@ def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_do
             summary["covered_branches"],
             summary["num_partial_branches"],
         )
-        for name, measured in report["files"].items()
+        for name, measured in _keyed_posix(report["files"]).items()
         for summary in (measured["summary"],)
     }
     assert {
@@ -380,3 +418,13 @@ def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_do
         )
         for name, counted in mine.items()
     } == theirs
+
+
+def _posix(name: str) -> str:
+    """A file's name as coverage.py gives it, with forward slashes."""
+    return name.replace("\\", "/")
+
+
+def _keyed_posix(files: dict[str, Any]) -> dict[str, Any]:
+    """A JSON report's files keyed by their names with forward slashes."""
+    return {_posix(name): held for name, held in files.items()}

@@ -84,6 +84,15 @@ def _entry(**keys: Any) -> dict[str, Any]:
             "measurer.judges[0]: is 'rows', and one of lines, branches is wanted",
         ),
         ({**_raw(), "contexts": "t1"}, "contexts: is 't1', and a list is wanted"),
+        (
+            _raw(**{"a\\b.py": _entry()}),
+            'files["a\\\\b.py"]: is no path from the workspace root with forward'
+            " slashes",
+        ),
+        (_raw(**{"/a.py": _entry()}), 'files["/a.py"]: is no path from the workspace'),
+        (_raw(**{"C:/a.py": _entry()}), 'files["C:/a.py"]: is no path from the'),
+        (_raw(**{"a/../b.py": _entry()}), 'files["a/../b.py"]: is no path from the'),
+        (_raw(**{"a//b.py": _entry()}), 'files["a//b.py"]: is no path from the'),
         ({**_raw(), "contexts": [3]}, "contexts[0]: is 3, and text is wanted"),
         (_raw(**{"a.py": {"statements": "1"}}), 'files["a.py"].digest: is None'),
         (
@@ -247,7 +256,9 @@ def test_range_strings_and_packed_sets_hold_their_lines() -> None:
     for held in (set(), {0}, {3, 4, 5}, {0, 127, 128, 20000}):
         assert fmt.unpack_set(fmt.pack_set(held)) == held
     assert fmt.pack_set({0, 1, 300}) == "AACqAg=="
-    # The git blob id of the bytes, as `git hash-object` gives it.
+    # The git blob id of the text, as `git hash-object` gives it, and the
+    # one git stores for a CRLF checkout of it.
+    assert fmt.digest(b"a = 1\r\n") == fmt.digest(b"a = 1\n")
     assert fmt.digest(b"") == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
     assert fmt.digest(b"a = 1\n") == "1337a530cbc1bd7d20aee2d80f1f174a9182417d"
 

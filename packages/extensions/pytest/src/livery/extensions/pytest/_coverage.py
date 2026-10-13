@@ -137,12 +137,15 @@ def _row(
         )
     found: dict[str, set[tuple[int, int]]] = {}
     for name, arcs in cast("Mapping[str, Iterable[Sequence[int]]]", files).items():
-        found[name] = {(arc[0], arc[1]) for arc in arcs}
+        # A part names a file with forward slashes, whichever platform's
+        # leg measured it.
+        held = found.setdefault(name.replace("\\", "/"), set())
+        held.update((arc[0], arc[1]) for arc in arcs)
     return unit, found
 
 
 def _relative(filename: str, root: Path) -> str | None:
-    """*filename* from the workspace root, with slashes; None outside it."""
+    """*filename* from the workspace root, with forward slashes; None outside it."""
     name = filename.replace("\\", "/")
     if not Path(name).is_absolute():
         return name
@@ -394,6 +397,13 @@ def _packed(indexes: Iterable[int]) -> str:
 
 
 def _digest(content: bytes) -> str:
-    """The git blob id of *content*."""
-    header = f"blob {len(content)}\0".encode("ascii")
-    return hashlib.sha1(header + content, usedforsecurity=False).hexdigest()
+    """The git blob id of *content* as text, the line format's ``digest``.
+
+    Each CRLF in *content* counts as LF, so the digest is the blob id
+    git stores for a text file whatever line endings a checkout gives
+    it: Git for Windows checks text out with CRLF, and a file reduced
+    there has the digest of the same file reduced on Linux.
+    """
+    text = content.replace(b"\r\n", b"\n")
+    header = f"blob {len(text)}\0".encode("ascii")
+    return hashlib.sha1(header + text, usedforsecurity=False).hexdigest()

@@ -320,11 +320,13 @@ def _from_record(
     for label, units in held.items():
         for unit in units.values():
             runs.add(unit.run)
-            files = {
-                name: pairs
-                for name, pairs in unit.files.items()
-                if name.startswith(prefixes)
-            }
+            # A part names a file with forward slashes, whichever
+            # platform's leg measured it.
+            files: dict[str, list[tuple[int, int]]] = {}
+            for name, pairs in unit.files.items():
+                posix = name.replace("\\", "/")
+                if posix.startswith(prefixes):
+                    files[posix] = pairs
             if not files:
                 continue
             if unit.measurer == LINES_MEASURER.name:
@@ -425,7 +427,10 @@ def _lines_part(
     checkout's.
     """
     entries: dict[str, Entry] = {}
-    for name, pairs in files.items():
+    for named, pairs in files.items():
+        # A part names a file with forward slashes, whichever platform
+        # measured it.
+        name = named.replace("\\", "/")
         path = root / name
         counted = dict(pairs)
         entries[name] = Entry(
@@ -437,11 +442,14 @@ def _lines_part(
 
 
 def _drawn(root: Path, name: str, merged: Merged, checkout: str) -> Drawn:
-    """*name* to draw: with its text when the checkout holds the content measured."""
+    """*name* to draw: with its text when the checkout holds the content measured.
+
+    The text is the file's bytes as UTF-8, its line endings whatever
+    the checkout gave it; the renderer reads a CRLF as LF.
+    """
     if merged.entry.digest != checkout:
         return Drawn(name, merged, None, checkout)
     text = (root / name).read_bytes().decode("utf-8", errors="replace")
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
     return Drawn(name, merged, text, checkout)
 
 
