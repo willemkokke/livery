@@ -22,7 +22,15 @@ from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.workshop import _verified
 from livery.workshop._packages import Package
-from workshop_coverage_meter import asked, install_meter, meter, part, ran
+from workshop_coverage_meter import (
+    asked,
+    install_meter,
+    meter,
+    part,
+    ran,
+    read_parts,
+    stored_unit,
+)
 from workshop_measured import measure
 
 _FAILURES = (SystemExit, Failed)
@@ -702,7 +710,7 @@ def test_a_leg_that_ran_its_suites_and_left_no_part_of_any_refuses(
 def test_a_part_that_does_not_validate_refuses_naming_the_file_and_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.cmake import _build as _cmake
+    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, write_marker
 
     n = _native_suite(tmp_path, "n")
@@ -711,7 +719,9 @@ def test_a_part_that_does_not_validate_refuses_naming_the_file_and_key(
     put = _capture_leaves(monkeypatch)
     # A part the measurer left in the workspace: its counts name a line
     # that is no statement.
-    left = _cmake.write_part(tmp_path, "packages/n", {_NATIVE: {1: 1}}, "gcov")
+    left = _readings.write_part(
+        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1})}, "gcov"
+    )
     broken = json.loads(left.read_text())
     broken["files"][_NATIVE]["counts"] = [[1, 1], [9, 2]]
     left.write_text(json.dumps(broken))
@@ -875,7 +885,7 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     assert put[0]["leg"] == "check-a" and put[0]["scope"] == "affected"
     assert put[0]["packages"] == ("packages/x",)
     unit = _units(put[0])["packages/x"]
-    assert ran(unit.parts) == {"packages/x/src/livery/x/mod.py": {1, 2, 3, 4}}
+    assert ran(unit) == {"packages/x/src/livery/x/mod.py": {1, 2, 3, 4}}
     assert unit.closure == "k" * 64 and unit.run == "7" and unit.sha == "a" * 40
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a"
@@ -908,8 +918,8 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     out = capsys.readouterr().out
     units = _units(put[0])
     assert sorted(units) == ["packages/x", "packages/y", "tests"]
-    assert ran(units["packages/y"].parts) == {"packages/y/src/livery/y/mod.py": {1}}
-    assert ran(units["tests"].parts) == {
+    assert ran(units["packages/y"]) == {"packages/y/src/livery/y/mod.py": {1}}
+    assert ran(units["tests"]) == {
         "packages/x/src/livery/x/mod.py": {1},
         "packages/y/src/livery/y/mod.py": {1, 2, 3},
     }
@@ -974,9 +984,9 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
         {"unit": "tests", "tests": "tests/"},
     ]
     units = _units(put[0])
-    assert ran(units["packages/top"].parts) == {top_source: {1, 2}, base_source: {3}}
-    assert ran(units["packages/base"].parts) == {base_source: {1}}
-    assert ran(units["tests"].parts) == {base_source: {4}, top_source: {4}}
+    assert ran(units["packages/top"]) == {top_source: {1, 2}, base_source: {3}}
+    assert ran(units["packages/base"]) == {base_source: {1}}
+    assert ran(units["tests"]) == {base_source: {4}, top_source: {4}}
     # A file outside a suite's closure is not the suite's to store.
     stray = tmp_path / "packages" / "base" / "src" / "livery" / "base" / "stray.py"
     stray.write_text("a = 1\n")
@@ -991,17 +1001,19 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
     )
     put.clear()
     coverage_leg.gather_leg(tmp_path, (top, base))
-    assert ran(_units(put[0])["packages/base"].parts) == {base_source: {1}}
+    assert ran(_units(put[0])["packages/base"]) == {base_source: {1}}
 
 
 def test_a_leg_that_cannot_leave_its_lines_is_red_and_a_skipped_leg_leaves_its_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake import _build as _cmake
+    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, VERIFIED, write_marker
 
     n = _native_suite(tmp_path, "n")
-    _cmake.write_part(tmp_path, "packages/n", {_NATIVE: {1: 1}}, "gcov")
+    _readings.write_part(
+        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1})}, "gcov"
+    )
     # A marker with no label leaves the parts no key: the leg is red.
     write_marker(tmp_path, FULL, leg="")
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
@@ -1065,9 +1077,7 @@ def _unit(
     closure: str = "k" * 64,
 ) -> coverage_record.Unit:
     """A unit whose one part reads coverage.py's way: the lines given ran."""
-    return coverage_record.Unit(
-        path, closure, run, "a" * 40, (part(root, path, files),)
-    )
+    return stored_unit(path, (part(root, path, files),), closure=closure, run=run)
 
 
 def _source(tmp_path: Path, name: str) -> Path:
@@ -1238,7 +1248,7 @@ def test_a_carried_part_that_does_not_validate_refuses_naming_its_row_and_key(
     (tmp_path / UNION).parent.mkdir(parents=True)
     (tmp_path / UNION).write_text("{}")
     broken = _unit(tmp_path, "packages/x", {name: [1]})
-    broken.parts[0]["files"][name]["statements"] = "0-2"
+    broken.facts[broken.parts[0]["files"][name]["facts"]]["statements"] = "0-2"
     _union(
         monkeypatch,
         [_leg("check-a", "verified")],
@@ -1326,9 +1336,7 @@ def test_branches_of_two_measurers_never_merge(
             Measurer(measurer, counts=COUNTS, branches=INDEXES),
             {_NATIVE: entry},
         )
-        return coverage_record.Unit(
-            "packages/n", "k" * 64, "7", "a" * 40, (encode(reading),)
-        )
+        return stored_unit("packages/n", (encode(reading),))
 
     _in_ci(monkeypatch, "gate")
     # Each compiler numbers the line's branches its own way: branch 0 of
@@ -1826,9 +1834,7 @@ def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_is_p
         data.add_arcs(arcs)
         data.write()
         (made,) = reduction.leg(tmp_path, [request((package,), package)])
-        units[label] = coverage_record.Unit(
-            "packages/x", "k" * 64, "7", "a" * 40, (made,)
-        )
+        units[label] = stored_unit("packages/x", (made,))
         (tmp_path / f".coverage.{label}").unlink()
     (tmp_path / "workshop.toml").unlink()
     _in_ci(monkeypatch, "gate")
@@ -1968,18 +1974,20 @@ def _native_unit(
     root: Path, path: str, counts: dict[int, int], *, run: str = "7"
 ) -> coverage_record.Unit:
     """A native suite's unit: gcov's counts of the source's lines."""
-    from livery.extensions.cmake import _build as _cmake
+    from livery.extensions.cmake import _readings
 
-    written = _cmake.write_part(root, path, {_NATIVE: counts}, "gcov")
+    written = _readings.write_part(
+        root, path, {_NATIVE: _readings.Reading(lines=counts)}, "gcov"
+    )
     held = json.loads(written.read_text())
     written.unlink()
-    return coverage_record.Unit(path, "k" * 64, run, "a" * 40, (held,))
+    return stored_unit(path, (held,), run=run)
 
 
 def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake import _build as _cmake
+    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, write_marker
 
     x = _suite(tmp_path, "x")
@@ -1990,7 +1998,9 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
         '[workspace]\nextensions = ["acme.meter", "coverage"]\n'
     )
     meter(tmp_path, units={"packages/x": part(tmp_path, "packages/x", {x_source: [1]})})
-    _cmake.write_part(tmp_path, "packages/n", {_NATIVE: {1: 1, 2: 0}}, "gcov")
+    _readings.write_part(
+        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1, 2: 0})}, "gcov"
+    )
     write_marker(tmp_path, FULL, leg="check-a")
     put = _capture_leaves(monkeypatch)
     _in_ci(monkeypatch, "check-a")
@@ -2000,10 +2010,10 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
     assert [unit["unit"] for unit in asked(tmp_path)] == ["packages/x"]
     units = _units(put[0])
     assert sorted(units) == ["packages/n", "packages/x"]
-    (native,) = units["packages/n"].parts
-    assert native["measurer"]["name"] == "gcov"
-    assert ran(units["packages/n"].parts) == {_NATIVE: {1}}
-    assert native["files"][_NATIVE]["statements"] == "1-2"
+    (native,) = read_parts(units["packages/n"])
+    assert native.measurer.name == "gcov"
+    assert ran(units["packages/n"]) == {_NATIVE: {1}}
+    assert native.files[_NATIVE].statements == {1, 2}
     assert units["packages/x"].parts[0]["measurer"]["name"] == "coverage.py"
     out = capsys.readouterr().out
     assert "coverage store: packages/n stored for closure kkkkkkkkkkkk" in out

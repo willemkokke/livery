@@ -197,6 +197,8 @@ def test_each_unit_reduces_to_its_own_part_and_each_source_is_read_once(
     assert [one["unit"], two["unit"]] == ["packages/core", "tests"]
     assert sorted(one["files"]) == [module]
     assert one["files"][module]["hits"] == "1-3"
+    # Every branch carries the sentence the source gives it, taken or
+    # not: a page shows it while the branch never ran.
     assert one["files"][module]["branches"] == [
         [
             2,
@@ -206,13 +208,23 @@ def test_each_unit_reduces_to_its_own_part_and_each_source_is_read_once(
             "line 2 didn't exit the module because the condition on line 2 was"
             " always true",
         ],
-        [2, 3, 1, 1],
+        [
+            2,
+            3,
+            1,
+            1,
+            "line 2 didn't jump to line 3 because the condition on line 2 was"
+            " never true",
+        ],
     ]
     assert "hits" not in two["files"][module]
     assert two["files"][init] == {"digest": _coverage._digest(b"")}
     assert sorted(built) == sorted(str(tmp_path / name) for name in (module, init))
     assert one["measurer"]["name"] == "coverage.py"
     assert one["measurer"]["judges"] == ["lines", "branches"]
+    # coverage.py reads no columns: its parts hold no ranges.
+    assert one["measurer"]["columns"] is False
+    assert not [entry for entry in one["files"].values() if "ranges" in entry]
     # A leg's part names no test: the contexts stay in the data.
     assert one["contexts"] == [] and "reached" not in one["files"][module]
 
@@ -406,7 +418,7 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     # made of the same data and main's record stored. Only the lines that
     # say where the measurement comes from differ: the record's source on
     # the index, and the suite a stored part names on each file's page.
-    from livery.extensions.coverage import _pages
+    from livery.extensions.coverage import _format, _pages
     from livery.extensions.coverage._record import Unit
     from livery.extensions.docs import _site as _docs
 
@@ -433,9 +445,13 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     (root / ".coverage").rename(root / ".coverage.host.1")
     (made,) = _coverage.Arcs().leg(root, [CORE])
     (root / ".coverage.host.1").unlink()
+    # The record keeps the part in its stored form, its facts apart.
+    kept, facts = _format.stored(_format.decode(made, source="the leg's part"))
     held = {
         "check-a": {
-            "packages/core": Unit("packages/core", "k" * 64, "7", "a" * 40, (made,))
+            "packages/core": Unit(
+                "packages/core", "k" * 64, "7", "a" * 40, (kept,), facts
+            )
         }
     }
     monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))

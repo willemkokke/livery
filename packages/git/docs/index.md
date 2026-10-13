@@ -88,6 +88,11 @@ checkout's own object store. A read that names the files it wants,
 `rows(store, only=...)` or `read(store, ref, only=...)`, reads those
 alone and names the rest, so a ref of large rows costs a reader of a few
 of them those few; `row` and `file` read the one file they name. A
+series that declares `blobs`, a directory such as `facts/`, keeps
+files there beside its rows as their writer wrote them: `put` writes
+them unstamped, so a blob of the same text is the object git already
+holds, a read hands them back as text in `Rows.blobs` and never
+parses one as a row, and the janitor counts the rows alone. A
 `remote_snapshot` block makes every read inside one listing and one
 fetch. `sweep` is the janitor. Every failure is a printed reason, never
 a boolean.

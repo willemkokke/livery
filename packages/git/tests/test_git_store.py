@@ -8,6 +8,7 @@ tests' own identity, the default snapshot variable.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -315,6 +316,66 @@ def test_the_janitor_counts_a_series_without_bounds_by_name_alone(
     assert lines == [f"  {unbounded.ref}: 2 row(s), within its bounds"]
     blobs = _blob_ids(work)
     assert not set(blobs.values()) & set(asked)
+
+
+def test_a_series_refuses_blobs_without_a_directory_or_beside_a_window(
+    repos: tuple[Path, Path],
+) -> None:
+    with pytest.raises(ValueError, match="blobs name a directory ending in a slash"):
+        git.Series("kept", ci_only=False, blobs="facts")
+    with pytest.raises(ValueError, match="declares no window"):
+        git.Series("kept", ci_only=False, blobs="facts/", window=3)
+    # A row named inside the blobs, or a blob outside them, is refused.
+    _, work = repos
+    kept = git.Series("kept", ci_only=False, local=True, blobs="facts/")
+    for rows, blobs in (({"facts/a.json": {"x": 1}}, {}), ({}, {"a.json": "{}"})):
+        why = kept.put(_store(work), rows, message="astray", blobs=blobs)
+        assert why.startswith(f"refusing {kept.ref}: ")
+        assert "a row lives outside the series' blobs (facts/)" in why
+    assert kept.rows(_store(work)) == git.Rows(())
+
+
+def test_a_series_keeps_its_blobs_as_written_and_reads_them_back_as_text(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    family = git.Keyed("kept", ("leg",), ci_only=False, local=True, blobs="facts/")
+    kept = family.series("a")
+    assert kept.blobs == "facts/"
+    text = '{"statements":"1-2"}'
+    why = kept.put(
+        _store(work),
+        {"row.json": {"x": 1}},
+        message="one row, one blob",
+        blobs={"facts/one.json": text},
+    )
+    assert why == ""
+    # A blob is the text given, unstamped: its git blob id is the text's.
+    blobs = _blob_ids(work)
+    header = f"blob {len(text)}\0".encode()
+    assert (
+        blobs["facts/one.json"]
+        == hashlib.sha1(header + text.encode(), usedforsecurity=False).hexdigest()
+    )
+    # A read never parses a blob as a row: it hands back the text of the
+    # ones it accepts, and names the rest.
+    found = kept.rows(_store(work))
+    assert [row.name for row in found.rows] == ["row.json"] and found.skipped == ()
+    assert found.blobs == {"facts/one.json": text}
+    asked = _object_reads(monkeypatch)
+    found = kept.rows(_store(work), only="row.json".__eq__)
+    assert found.blobs == {} and found.unread == ("facts/one.json",)
+    assert blobs["facts/one.json"] not in asked
+    # A write lays its rows over the blobs, which stand until named.
+    assert kept.put(_store(work), {"row.json": {"x": 2}}, message="again") == ""
+    assert kept.rows(_store(work)).blobs == {"facts/one.json": text}
+    assert kept.put(_store(work), {}, message="drop", remove=["facts/one.json"]) == ""
+    assert kept.rows(_store(work)).blobs == {}
+    # The janitor counts the rows alone.
+    again = kept.put(_store(work), {}, message="blob", blobs={"facts/two.json": text})
+    assert again == ""
+    lines = git.sweep(_store(work), (family,), remote=False)
+    assert lines == [f"  {kept.ref}: 1 row(s), within its bounds"]
 
 
 def test_a_tree_the_checkout_lacks_fails_naming_it(

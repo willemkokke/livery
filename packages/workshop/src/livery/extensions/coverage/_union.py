@@ -295,20 +295,30 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
     """Merge every unit's parts and write the union file; each left-out reading named.
 
     A file's readings merge at the content the checkout holds, so the
-    checkout's digest of every file the parts name is read first.
+    checkout's digest of every file the parts name is read first. Each
+    part is read from its stored form with the fixed facts its unit
+    holds.
 
     Raises:
-        Failed: when a part is off the line format, naming the unit it
-            came from and the key at fault.
+        Failed: when a part is off the line format, or names fixed
+            facts its unit does not hold, naming the unit it came from
+            and the key at fault.
     """
-    from livery.extensions.coverage._format import PartError, decode, digest, merge
+    from livery.extensions.coverage._format import (
+        PartError,
+        digest,
+        from_stored,
+        merge,
+    )
     from livery.extensions.coverage._parts import UNION, write_union
 
     parts: list[Part] = []
     for unit, source in merged:
         for index, raw in enumerate(unit.parts):
             try:
-                parts.append(decode(raw, source=f"{source}, part {index}"))
+                parts.append(
+                    from_stored(raw, unit.facts, source=f"{source}, part {index}")
+                )
             except PartError as error:
                 fail(f"coverage: {error}")
     names = sorted({name for part in parts for name in part.files})

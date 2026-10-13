@@ -7,10 +7,11 @@ skipped (`top_up`). Then it gathers the parts of every suite the leg
 ran (`gather_leg`): the parts a native suite's measurer left in the
 workspace, and the parts the listed reductions make of the data the
 run left, once for each suite, each holding the files of the suite's
-closure. It leaves them, with the scope the leg measured, for the
-leg's one write, which puts them on the leg's per-run ref beside its
-timing row, and it prints each suite's parts' size as stored, raw and
-gzipped.
+closure. It leaves them in the line format's stored form, with the
+fixed facts they name and the scope the leg measured, for the leg's
+one write, which puts them on the leg's per-run ref beside its timing
+row, and it prints each suite's size as a record stores it, what ran
+and its fixed facts, raw and gzipped.
 """
 
 from __future__ import annotations
@@ -23,7 +24,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from livery import git
-from livery.extensions.coverage._format import Part, PartError, decode, encode
+from livery.extensions.coverage._format import (
+    Part,
+    PartError,
+    decode,
+    facts_text,
+    stored,
+)
 from livery.footman import fail
 from livery.workshop._packages import WORKSPACE_TESTS, workspace_suite
 
@@ -98,13 +105,39 @@ def request(packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
     }
 
 
-def sizes(unit: Unit) -> tuple[int, int]:
-    """*unit*'s parts as a row stores them: their bytes, raw and gzipped.
+def sizes(unit: Unit) -> tuple[int, int, int, int]:
+    """*unit* as a record stores it: its row's bytes, then its fixed facts'.
 
-    Gzipped at zlib's default level, the level git stores an object at.
+    Each raw, then gzipped at zlib's default level, the level git
+    stores an object at, the facts one file each as the record keeps
+    them.
     """
-    raw = json.dumps(list(unit.parts), sort_keys=True).encode("utf-8")
-    return len(raw), len(gzip.compress(raw, compresslevel=6, mtime=0))
+    row = json.dumps(list(unit.parts), sort_keys=True).encode("utf-8")
+    facts = [
+        facts_text(unit.facts[name]).encode("utf-8")
+        for name in unit.named
+        if name in unit.facts
+    ]
+    return (
+        len(row),
+        _gzipped(row),
+        sum(len(item) for item in facts),
+        sum(_gzipped(item) for item in facts),
+    )
+
+
+def _gzipped(content: bytes) -> int:
+    """How many bytes *content* takes gzipped at zlib's default level."""
+    return len(gzip.compress(content, compresslevel=6, mtime=0))
+
+
+def shown_sizes(unit: Unit) -> str:
+    """*unit*'s size as a line shows it: what ran, then its fixed facts."""
+    row, packed, facts, facts_packed = sizes(unit)
+    return (
+        f"{shown_size(row)} raw, {shown_size(packed)} gzipped, and its fixed facts"
+        f" {shown_size(facts)} raw, {shown_size(facts_packed)} gzipped"
+    )
 
 
 def shown_size(count: int) -> str:
@@ -121,10 +154,11 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
     that cannot leave its parts is red: the union would otherwise lack
     a suite, and a smaller union never passes. The leg's last entry,
     ``ci.leg``, puts the file on its per-run ref beside its timing row
-    ([livery.workshop._metrics.put_leg][]). The lines name the parts'
-    size as stored, raw and gzipped: the leg's whole, then each unit's.
+    ([livery.workshop._metrics.put_leg][]). The lines name the size as
+    stored, raw and gzipped: the leg's whole file, its fixed facts each
+    once, then each unit's row and the fixed facts it names.
     """
-    from livery.extensions.coverage._record import leave_run
+    from livery.extensions.coverage._record import leave_run, unit_fields, units_facts
     from livery.workshop._ci_context import run_context
 
     run = run_context()
@@ -149,20 +183,22 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
             " leg that measured a suite and cannot store its parts is red, never"
             " a smaller union"
         )
-    measured = {path: sizes(unit) for path, unit in units.items()}
-    raw = sum(size for size, _packed in measured.values())
-    gzipped = sum(packed for _size, packed in measured.values())
+    whole = json.dumps(
+        {
+            "units": [unit_fields(unit) for unit in units.values()],
+            "facts": units_facts(units.values()),
+        },
+        sort_keys=True,
+    ).encode("utf-8")
     print(
         f"  coverage store: {len(units)} unit(s) for the run's ref of"
-        f" {leg or 'an unlabelled leg'} ({marker['scope']}), {shown_size(raw)} raw,"
-        f" {shown_size(gzipped)} gzipped"
+        f" {leg or 'an unlabelled leg'} ({marker['scope']}),"
+        f" {shown_size(len(whole))} raw, {shown_size(_gzipped(whole))} gzipped"
     )
     for path, unit in units.items():
-        size, packed = measured[path]
         print(
             f"  coverage store: {path} stored for closure {unit.closure[:12]} on"
-            f" {leg} ({len(unit.files)} files, {shown_size(size)} raw,"
-            f" {shown_size(packed)} gzipped)"
+            f" {leg} ({len(unit.files)} files, {shown_sizes(unit)})"
         )
 
 
@@ -224,8 +260,8 @@ def _reduced_parts(
     return found
 
 
-def _within(part: Part, packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
-    """*part* with the files of *unit*'s closure alone, as a row holds it."""
+def _within(part: Part, packages: tuple[Package, ...], unit: Package) -> Part:
+    """*part* with the files of *unit*'s closure alone."""
     from livery.extensions.coverage._record import in_closure
 
     files = {
@@ -233,7 +269,22 @@ def _within(part: Part, packages: tuple[Package, ...], unit: Package) -> dict[st
         for name, entry in part.files.items()
         if in_closure(packages, unit, name)
     }
-    return encode(Part(part.unit, part.measurer, files, part.contexts))
+    return Part(part.unit, part.measurer, files, part.contexts)
+
+
+def _stored_unit(
+    parts: Sequence[Part], path: str, closure: str, run: str, sha: str
+) -> Unit:
+    """The unit at *path* holding *parts* in the stored form, with their facts."""
+    from livery.extensions.coverage._record import Unit
+
+    held: list[dict[str, Any]] = []
+    facts: dict[str, Any] = {}
+    for part in parts:
+        kept, named = stored(part)
+        held.append(kept)
+        facts.update(named)
+    return Unit(path, closure, run, sha, tuple(held), facts)
 
 
 def gather_leg(
@@ -315,18 +366,18 @@ def gather_leg(
                 " to store for it"
             )
             continue
-        held = tuple(_within(part, packages, unit) for part in parts)
+        held = [_within(part, packages, unit) for part in parts]
         if run is None:
-            found = Unit(unit.path, "", "", "", held)
-            size, packed = sizes(found)
+            found = _stored_unit(held, unit.path, "", "", "")
             print(
                 f"  coverage store: {unit.path} measured ({len(found.files)} files,"
-                f" {shown_size(size)} raw, {shown_size(packed)} gzipped); outside"
-                " CI nothing is stored"
+                f" {shown_sizes(found)}); outside CI nothing is stored"
             )
             continue
         key = closure_id(root, packages, unit)
-        measured[unit.path] = Unit(unit.path, key, run.run_id, git.head_sha(root), held)
+        measured[unit.path] = _stored_unit(
+            held, unit.path, key, run.run_id, git.head_sha(root)
+        )
     if run is not None:
         _leave_leg(root, marker, measured)
 

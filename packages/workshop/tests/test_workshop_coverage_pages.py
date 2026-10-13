@@ -16,11 +16,12 @@ from livery.extensions.coverage._format import (
     Measurer,
     Merged,
     Part,
+    Range,
     Region,
 )
 from livery.extensions.coverage._record import Unit
 from livery.footman import Failed
-from workshop_coverage_meter import COVERAGE_PY, install_meter, meter
+from workshop_coverage_meter import COVERAGE_PY, install_meter, meter, stored_unit
 from workshop_coverage_pages import read_page
 
 _FAILURES = (SystemExit, Failed)
@@ -151,14 +152,14 @@ def test_a_part_of_another_format_version_is_named_and_skipped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    future = {**fmt.encode(Part(".", COVERAGE_PY, {})), "format": 2}
+    earlier = {**fmt.encode(Part(".", COVERAGE_PY, {})), "format": 1}
     _meter(
-        root, left=[future, fmt.encode(Part(".", COVERAGE_PY, {MODULE: _entry(root)}))]
+        root, left=[earlier, fmt.encode(Part(".", COVERAGE_PY, {MODULE: _entry(root)}))]
     )
     assert _render_pages(root) == ["core"]
     assert (
-        "  coverage: the arcs measurer's data on this machine: a part of format 2;"
-        " this workshop reads format 1; the pages draw without it\n"
+        "  coverage: the arcs measurer's data on this machine: a part of format 1;"
+        " this workshop reads format 2; the pages draw without it\n"
     ) in capsys.readouterr().out
     index = read_page(root / "packages/core/htmlcov/index.html")
     assert [row["File"] for row in index.rows] == [MODULE, "Total"]
@@ -362,10 +363,8 @@ def test_the_marks_are_read_for_a_ratcheted_package_in_the_merge_gate_job_alone(
 
 
 def _unit(path: str, *parts: Part, run: str = "7") -> Unit:
-    """A unit of main's record: its parts as the leg made them."""
-    return Unit(
-        path, "k" * 64, run, "a" * 40, tuple(fmt.encode(part) for part in parts)
-    )
+    """A unit of main's record: its parts as the leg made them, in their stored form."""
+    return stored_unit(path, [fmt.encode(part) for part in parts], run=run)
 
 
 #: A native measurer as the cmake extension's parts name it.
@@ -433,11 +432,11 @@ def test_main_s_record_is_drawn_from_the_parts_the_legs_stored(
     assert page.notes == ["Measured by gcov while the suites of packages/native ran."]
     # A stored part off the format stops the pages, naming the row and
     # the key.
-    broken = fmt.encode(Part("packages/core", COVERAGE_PY, {MODULE: _entry(root)}))
-    broken["files"][MODULE]["hits"] = "1-9"
-    held["check-a"]["packages/core"] = Unit(
-        "packages/core", "k" * 64, "7", "a" * 40, (broken,)
+    broken = _unit(
+        "packages/core", Part("packages/core", COVERAGE_PY, {MODULE: _entry(root)})
     )
+    broken.parts[0]["files"][MODULE]["hits"] = "1-9"
+    held["check-a"]["packages/core"] = broken
     with pytest.raises(
         _FAILURES,
         match=(
@@ -489,6 +488,71 @@ def test_a_count_only_line_is_drawn_without_claiming_which_branch_ran(
     assert line.jumps == ["1 of 2"]
     assert line.whys == ["1 of line 2's 2 branches ran"]
     assert "↛" not in line.shown and "branch " not in line.shown
+
+
+#: A one-line ``if``/``else`` whose ``if`` arm never ran, as llvm-cov
+#: reads it: the function's body, the condition, and each arm.
+_CLAMP = "int clamp(int v, int h) {\n  if (v > h) { return h; } else { return v; }\n}\n"
+_LLVM = Measurer(
+    "llvm-cov",
+    counts=fmt.COUNTS,
+    branches=fmt.INDEXES,
+    regions=("function",),
+    columns=True,
+)
+
+
+def _clamp(root: Path, *ranges: Range) -> dict[str, dict[str, Unit]]:
+    """Main's record holding llvm-cov's reading of ``native.cpp`` with *ranges*."""
+    native = "packages/core/src/native.cpp"
+    (root / native).write_text(_CLAMP)
+    entry = Entry(
+        digest=fmt.digest(_CLAMP.encode()),
+        statements=frozenset({1, 2, 3}),
+        counts={1: 1, 2: 1, 3: 1},
+        ranges=ranges,
+    )
+    part = Part("packages/native", _LLVM, {native: entry})
+    return {"check-a": {"packages/native": _unit("packages/native", part)}}
+
+
+def test_a_line_with_an_unrun_range_is_drawn_partial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, '["docs", "coverage"]')
+    # A range outside the text it was measured at stops the pages first,
+    # naming the file and the range.
+    held = _clamp(root, Range(4, 1, 4, 2, 0))
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    with pytest.raises(
+        _FAILURES,
+        match=(
+            r"coverage: packages/core/src/native\.cpp, as llvm-cov measured it:"
+            r" ranges\[0\]: 4:1-4:2 lies outside the file: the file has 3 lines"
+        ),
+    ):
+        _render_pages(root)
+    # Every line ran, and line 2's `if` arm never did: the line is drawn
+    # partial, and the arm's code alone is marked.
+    held = _clamp(
+        root,
+        Range(1, 25, 3, 2, 1),
+        Range(2, 7, 2, 12, 1),
+        Range(2, 14, 2, 27, 0),
+        Range(2, 33, 2, 46, 1),
+    )
+    assert _render_pages(root) == ["core"]
+    tree = root / "packages/core/htmlcov"
+    (row, _total) = read_page(tree / "index.html").rows
+    page = read_page(tree / row["href"])
+    assert [(number, line.category) for number, line in page.lines.items()] == [
+        (1, "run"),
+        (2, "par"),
+        (3, "run"),
+    ]
+    markup = (tree / row["href"]).read_text(encoding="utf-8")
+    marked = re.findall(r'<span class="(?:[^"]* )?nr">([^<]*)</span>', markup)
+    assert "".join(marked) == "{ return h; }"
 
 
 def test_the_store_is_read_only_in_the_merge_point_s_gate_job(

@@ -5,17 +5,21 @@ measurer's reduction of the data a run left. The fake extension
 ``acme.meter`` answers for ``arcs`` while coverage is listed: its
 reduction hands back the parts a test left in ``meter.json`` at the
 workspace root, and writes what a leg asked of it to ``asked.json``.
+A record's unit keeps its parts in the stored form: `stored_unit`
+makes one of parts as JSON holds them, and `ran` reads one back.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from livery.extensions.coverage import _format as fmt
+from livery.extensions.coverage._record import Unit
 from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: The fake measurer's declaration.
@@ -117,11 +121,40 @@ def part(
     return fmt.encode(fmt.Part(unit, measurer, entries))
 
 
-def ran(parts: tuple[dict[str, Any], ...]) -> dict[str, set[int]]:
-    """The lines *parts* say ran, by file."""
-    found: dict[str, set[int]] = {}
+def stored_unit(
+    path: str,
+    parts: Sequence[dict[str, Any]],
+    *,
+    closure: str = "k" * 64,
+    run: str = "7",
+    sha: str = "a" * 40,
+) -> Unit:
+    """The unit at *path* holding *parts*, parts as JSON holds them, as a record does.
+
+    Each part is kept in its stored form, and the unit holds the fixed
+    facts they name.
+    """
+    held: list[dict[str, Any]] = []
+    facts: dict[str, Any] = {}
     for raw in parts:
-        decoded = fmt.decode(raw, source="a test's part")
+        kept, named = fmt.stored(fmt.decode(raw, source="a test's part"))
+        held.append(kept)
+        facts.update(named)
+    return Unit(path, closure, run, sha, tuple(held), facts)
+
+
+def read_parts(unit: Unit) -> list[fmt.Part]:
+    """*unit*'s parts, read from their stored form with its facts."""
+    return [
+        fmt.from_stored(raw, unit.facts, source=f"{unit.path}, part {index}")
+        for index, raw in enumerate(unit.parts)
+    ]
+
+
+def ran(unit: Unit) -> dict[str, set[int]]:
+    """The lines *unit*'s parts say ran, by file."""
+    found: dict[str, set[int]] = {}
+    for decoded in read_parts(unit):
         for name, entry in decoded.files.items():
             found.setdefault(name, set()).update(entry.executed)
     return found

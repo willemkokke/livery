@@ -1408,7 +1408,7 @@ _DRAWN = 'extensions = ["docs", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake._build import write_part
+    from livery.extensions.cmake._readings import Reading, write_part
     from livery.extensions.docs import _site as _docs
 
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
@@ -1421,7 +1421,10 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     source = root / "packages" / "core" / "src" / "acme" / "core" / "mod.py"
     source.write_text("a = 1\n")
     write_part(
-        root, "packages/core", {"packages/core/src/acme/core/mod.py": {1: 1}}, "gcov"
+        root,
+        "packages/core",
+        {"packages/core/src/acme/core/mod.py": Reading(lines={1: 1})},
+        "gcov",
     )
     report = root / "packages" / "core" / "htmlcov"
     # Docs alone, and docs beside coverage whose `for` list leaves docs
@@ -1445,9 +1448,9 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake._build import write_part
-    from livery.extensions.coverage._record import Unit
+    from livery.extensions.cmake._readings import Reading, write_part
     from livery.extensions.docs import _site as _docs
+    from workshop_coverage_meter import stored_unit
 
     root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(
@@ -1462,11 +1465,12 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     # Inside CI the store's units stand in for the legs' data: the parts
     # a leg made, as main's record keeps them.
     written = write_part(
-        root, "packages/core", {"packages/core/src/core/mod.c": {1: 1, 2: 0}}, "gcov"
+        root,
+        "packages/core",
+        {"packages/core/src/core/mod.c": Reading(lines={1: 1, 2: 0})},
+        "gcov",
     )
-    stored = Unit(
-        "packages/core", "k" * 64, "7", "a" * 40, (json.loads(written.read_text()),)
-    )
+    stored = stored_unit("packages/core", (json.loads(written.read_text()),))
     written.unlink()
     monkeypatch.setattr(
         "livery.extensions.coverage._pages._stored",

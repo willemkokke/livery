@@ -1,23 +1,24 @@
-"""The line format, version 1: what one measurer read of one unit, file by file.
+"""The line format, version 2: what one measurer read of one unit, file by file.
 
 A part holds what one measurer read for one unit on one machine: a
 package's suite, or the whole data a run left. Every measurer reduces
 to it, whatever language it measures: coverage.py's arcs, gcov's
-counts and a Cobertura report each become a part, and the coverage
-pages draw parts alone. A part is JSON:
+counts, llvm-cov's regions and a Cobertura report each become a part,
+and the coverage pages draw parts alone. A part is JSON:
 
 ```json
-{"format": 1, "unit": "packages/workshop",
+{"format": 2, "unit": "packages/workshop",
  "measurer": {"name": "coverage.py", "version": "7.16.2",
               "runtime": "CPython 3.14", "counts": "presence",
               "branches": "targets", "regions": ["function", "class"],
-              "judges": ["lines", "branches"]},
+              "judges": ["lines", "branches"], "columns": false},
  "contexts": ["", "packages/workshop/tests/test_graph.py::test_walk"],
  "files": {"packages/workshop/src/livery/workshop/_graph.py": {
    "digest": "<the file's git blob id>",
    "statements": "1-12,15,17-40", "hits": "1-9,15,17-30",
    "excluded": "41-48", "spans": [[20, 23]],
-   "branches": [[12, 13, 0, 1], [12, 15, 1, 0, "line 12 didn't jump ..."]],
+   "branches": [[12, 13, 0, 1, "line 12 didn't jump to line 13 ..."],
+                [12, 15, 1, 0, "line 12 didn't jump to line 15 ..."]],
    "regions": [["function", "Graph.walk", 41, "42-60"]],
    "reached": {"sets": ["AAE="], "lines": [[9, 0]]}}}}
 ```
@@ -41,18 +42,52 @@ string, ``1-12,15,17-40``. Per file:
   that starts on that line, or null for a measurer that numbers a
   line's branches instead; ``index`` is the branch's place among its
   line's; ``taken`` how many times it ran; ``why`` the sentence that
-  says why an untaken branch never ran, or a tag: ``waived`` for a
-  branch the source waives, counted as taken, ``throw`` for the path
-  an exception takes.
+  says why the branch would not run, which a page shows while it never
+  did, or a tag: ``waived`` for a branch the source waives, counted as
+  taken, ``throw`` for the path an exception takes. The sentence
+  depends on the source alone, so every reading of one content gives
+  a branch the same one.
 - ``branch-counts``: ``[line, branches, taken]`` for a measurer that
   counts a line's branches without naming them.
 - ``regions``: ``[kind, name, start, lines, calls?]``, a function or a
   class: its first line, the lines of its body, and how many times it
   was called when the measurer counts calls.
+- ``ranges``: ``[start line, start column, end line, end column,
+  count]`` for a measurer whose ``columns`` is true: each stretch of
+  code it counts on its own, such as the two arms of an ``if`` written
+  on one line, and how many times it ran. A column counts bytes from
+  1, and the end column is the one after the stretch's last. A
+  measurer without columns leaves ``ranges`` out.
 - ``reached``: the contexts that reached each line, only where the
   measurer recorded them. ``sets`` are sets of indexes into the part's
   ``contexts``, each sorted, delta-coded as unsigned LEB128 and
   base64-encoded; ``lines`` pairs a line with the index of its set.
+
+A record keeps each part in its stored form, which `stored` writes and
+`from_stored` reads back. A file's fixed facts, what its content and
+its measurer decide whatever ran, move to a table of their own, named
+by the git blob id of the table's JSON (`facts_name`) and kept once
+however many parts name it. The file keeps its digest, that name, and
+what ran:
+
+```json
+{"digest": "<the file's git blob id>", "facts": "<the facts' name>",
+ "hits": "1-9,15,17-30", "taken": "1,3-5",
+ "reached": {"sets": ["AAE="], "lines": [[9, 0]]}}
+```
+
+The facts hold ``statements``, ``excluded`` and ``spans`` as a part
+holds them, and ``branches``, ``branch-counts``, ``regions`` and
+``ranges`` without the number each item ends in: a branch's ``taken``,
+a count's ``taken``, a region's ``calls``, a range's ``count``. What
+ran is ``hits`` or ``counts`` and ``reached`` as a part holds them,
+and each item of the facts' lists by its place in the list, counted
+from 1: ``taken``, the branches that ran, a range string of places for
+a measurer that reads presence and ``[place, taken]`` pairs for one
+that counts; ``counted``, ``[place, taken]`` for each count of a
+line's branches with any taken; ``calls``, ``[place, calls]`` for each
+region whose calls are counted; and ``range-counts``, ``[place,
+count]`` for each range that ran.
 
 [livery.extensions.coverage._format.decode][] reads a part and refuses
 one off the format, naming where it came from and the key;
@@ -75,8 +110,8 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 #: The version of the line format this module reads and writes. A part
-#: of another version is named and skipped, never guessed at.
-FORMAT = 1
+#: of another version is named and refused, never guessed at.
+FORMAT = 2
 
 #: A measurer that reads whether a line ran, and one that reads how
 #: many times.
@@ -142,6 +177,8 @@ class Measurer:
         regions: The kinds of region it names: ``function``, ``class``.
         judges: What its figure judges: ``lines``, and ``branches`` as
             well for coverage.py.
+        columns: Whether it reads columns, so its readings hold
+            ranges: llvm-cov does; coverage.py and gcov do not.
     """
 
     name: str
@@ -151,6 +188,7 @@ class Measurer:
     branches: str = NO_BRANCHES
     regions: tuple[str, ...] = ()
     judges: tuple[str, ...] = (LINES,)
+    columns: bool = False
 
     @property
     def identity(self) -> tuple[str, str, str]:
@@ -181,8 +219,8 @@ class Branch:
             measurer numbers branches instead.
         index: Its place among its line's branches, from 0.
         taken: How many times it ran.
-        why: The sentence that says why it never ran, or a tag:
-            ``waived`` or ``throw``.
+        why: The sentence that says why it would not run, shown while
+            it never did, or a tag: ``waived`` or ``throw``.
     """
 
     source: int
@@ -213,6 +251,41 @@ class Region:
 
 
 @dataclass(frozen=True)
+class Range:
+    """A stretch of code a measurer that reads columns counts on its own.
+
+    A column counts bytes from 1, and the end column is the one after
+    the stretch's last: ``Range(6, 21, 6, 37, 0)`` is the 16 bytes of
+    line 6 from column 21, which never ran.
+
+    Attributes:
+        start_line: The line it starts on.
+        start_column: The column it starts at.
+        end_line: The line it ends on.
+        end_column: The column after its last.
+        count: How many times it ran.
+    """
+
+    start_line: int
+    start_column: int
+    end_line: int
+    end_column: int
+    count: int = 0
+
+    @property
+    def extent(self) -> tuple[int, int, int, int]:
+        """Where it is: its start line and column, then its end line and column."""
+        return (self.start_line, self.start_column, self.end_line, self.end_column)
+
+    @property
+    def shown(self) -> str:
+        """Where it is as a refusal names it: ``6:21-6:37``."""
+        return (
+            f"{self.start_line}:{self.start_column}-{self.end_line}:{self.end_column}"
+        )
+
+
+@dataclass(frozen=True)
 class Entry:
     """What a measurer read of one file.
 
@@ -233,6 +306,8 @@ class Entry:
         regions: The functions and classes.
         reached: The contexts that reached each line, as indexes into
             the part's contexts; empty where none were recorded.
+        ranges: The stretches of code a measurer that reads columns
+            counts on its own, in the order of where they are.
     """
 
     digest: str
@@ -244,6 +319,7 @@ class Entry:
     branch_counts: tuple[tuple[int, int, int], ...] = ()
     regions: tuple[Region, ...] = ()
     reached: Mapping[int, Lines] = field(default_factory=dict)
+    ranges: tuple[Range, ...] = ()
 
     @property
     def executed(self) -> Lines:
@@ -259,7 +335,7 @@ class Entry:
 
     @property
     def partial(self) -> Lines:
-        """The lines that ran with a branch that never did."""
+        """The lines that ran with a branch, or some of their code, that never did."""
         missing = self.missing
         found = {
             branch.source
@@ -271,6 +347,9 @@ class Entry:
             for line, total, taken in self.branch_counts
             if taken < total and line not in missing
         )
+        if self.ranges:
+            executed = self.executed
+            found.update(line for line in unrun_columns(self) if line in executed)
         return frozenset(found)
 
 
@@ -418,8 +497,9 @@ def numbers(entry: Entry, measurer: Measurer) -> Numbers:
 def narrowed(entry: Entry, keep: Callable[[int], bool]) -> Entry:
     """*entry* narrowed to the lines *keep* holds, as coverage.py narrows a region.
 
-    A branch belongs to the line it leaves, so a region keeps the
-    branches its own lines leave; the regions themselves go.
+    A branch belongs to the line it leaves and a range to the line it
+    starts on, so a region keeps the branches its own lines leave and
+    the ranges they start; the regions themselves go.
     """
     return Entry(
         digest=entry.digest,
@@ -430,6 +510,7 @@ def narrowed(entry: Entry, keep: Callable[[int], bool]) -> Entry:
         branches=tuple(branch for branch in entry.branches if keep(branch.source)),
         branch_counts=tuple(item for item in entry.branch_counts if keep(item[0])),
         reached={line: held for line, held in entry.reached.items() if keep(line)},
+        ranges=tuple(item for item in entry.ranges if keep(item.start_line)),
     )
 
 
@@ -564,6 +645,7 @@ def encode(part: Part) -> dict[str, Any]:
             "branches": measurer.branches,
             "regions": list(measurer.regions),
             "judges": list(measurer.judges),
+            "columns": measurer.columns,
         },
         "contexts": list(part.contexts),
         "files": files,
@@ -597,6 +679,11 @@ def _encoded_entry(entry: Entry, measurer: Measurer) -> dict[str, Any]:
             + ([region.calls] if region.calls is not None else [])
             for region in entry.regions
         ]
+    if entry.ranges:
+        found["ranges"] = [
+            [*item.extent, item.count]
+            for item in sorted(entry.ranges, key=_range_order)
+        ]
     if entry.reached:
         sets: dict[Lines, int] = {}
         lines: list[list[int]] = []
@@ -609,6 +696,10 @@ def _encoded_entry(entry: Entry, measurer: Measurer) -> dict[str, Any]:
 
 def _branch_order(branch: Branch) -> tuple[int, int]:
     return (branch.source, branch.index)
+
+
+def _range_order(item: Range) -> tuple[int, int, int, int]:
+    return item.extent
 
 
 # --- decoding -------------------------------------------------------------------
@@ -730,9 +821,23 @@ class _Reader:
             raise self.refuse(path, f"is {raw!r}, and one of {listed} is wanted")
         return cast("str", raw)
 
+    def boolean(self, raw: object, path: KeyPath) -> bool:
+        if not isinstance(raw, bool):
+            raise self.refuse(path, f"is {raw!r}, and true or false is wanted")
+        return raw
+
     def measurer(self, raw: object, path: KeyPath) -> Measurer:
         table = self.table(raw, path)
-        keys = ("name", "version", "runtime", "counts", "branches", "regions", "judges")
+        keys = (
+            "name",
+            "version",
+            "runtime",
+            "counts",
+            "branches",
+            "regions",
+            "judges",
+            "columns",
+        )
         self.known(table, path, keys)
         judges = self.texts(table.get("judges", [LINES]), (*path, "judges"))
         for index, judged in enumerate(judges):
@@ -755,6 +860,7 @@ class _Reader:
             ),
             regions=tuple(self.texts(table.get("regions", []), (*path, "regions"))),
             judges=tuple(judges),
+            columns=self.boolean(table.get("columns", False), (*path, "columns")),
         )
 
     def entry(
@@ -763,7 +869,9 @@ class _Reader:
         table = self.table(raw, path)
         ran = "hits" if measurer.counts == PRESENCE else "counts"
         keys = ("digest", "statements", ran, "excluded", "spans", "branches")
-        self.known(table, path, (*keys, "branch-counts", "regions", "reached"))
+        self.known(
+            table, path, (*keys, "branch-counts", "regions", "ranges", "reached")
+        )
         statements = self.lines(table.get("statements", ""), (*path, "statements"))
         if measurer.counts == PRESENCE:
             hits = self.lines(table.get("hits", ""), (*path, "hits"))
@@ -791,6 +899,7 @@ class _Reader:
                 table.get("regions", []), (*path, "regions"), measurer
             ),
             reached=self.reached(table.get("reached"), (*path, "reached"), contexts),
+            ranges=self.ranges(table.get("ranges", []), (*path, "ranges"), measurer),
         )
 
     def counts(self, raw: object, path: KeyPath) -> dict[int, int]:
@@ -901,6 +1010,44 @@ class _Reader:
             )
         return tuple(found)
 
+    def ranges(
+        self, raw: object, path: KeyPath, measurer: Measurer
+    ) -> tuple[Range, ...]:
+        items = self.listed(raw, path)
+        if items and not measurer.columns:
+            raise self.refuse(
+                path, f"names ranges, and {measurer.name} reads no columns"
+            )
+        found: list[Range] = []
+        seen: set[tuple[int, int, int, int]] = set()
+        for index, item in enumerate(items):
+            at = (*path, index)
+            fields = self.listed(item, at)
+            if len(fields) != 5:
+                raise self.refuse(
+                    at,
+                    "is no [start line, start column, end line, end column, count]"
+                    " range",
+                )
+            start_line = self.number(fields[0], (*at, 0), least=1)
+            start_column = self.number(fields[1], (*at, 1), least=1)
+            end_line = self.number(fields[2], (*at, 2), least=start_line)
+            end_column = self.number(
+                fields[3], (*at, 3), least=start_column if end_line == start_line else 1
+            )
+            found_range = Range(
+                start_line,
+                start_column,
+                end_line,
+                end_column,
+                self.number(fields[4], (*at, 4), least=0),
+            )
+            if found_range.extent in seen:
+                raise self.refuse(at, f"repeats the range {found_range.shown}")
+            seen.add(found_range.extent)
+            found.append(found_range)
+        return tuple(sorted(found, key=_range_order))
+
     def reached(self, raw: object, path: KeyPath, contexts: int) -> dict[int, Lines]:
         if raw is None:
             return {}
@@ -986,10 +1133,10 @@ def merge(parts: Iterable[Part], current: Mapping[str, str] | None = None) -> Co
 
     The merge: statements and excluded lines are the union, hits are
     or-ed and counts added, a branch is one by its line and index with
-    its runs added and its sentence kept only while it never ran, a
-    count of a line's branches keeps the most taken, a region is one by
-    its kind, name and start with its calls added, and the contexts
-    that reached a line are the union, by name.
+    its runs added and its sentence kept, a count of a line's branches
+    keeps the most taken, a region is one by its kind, name and start
+    with its calls added, a range is one by where it is with its counts
+    added, and the contexts that reached a line are the union, by name.
     """
     readings: dict[str, list[tuple[Part, Entry]]] = {}
     names: set[str] = set()
@@ -1066,6 +1213,7 @@ def _merged(readings: list[tuple[dict[int, Lines], Entry]]) -> Entry:
     branches: dict[tuple[int, int], Branch] = {}
     branch_counts: dict[int, tuple[int, int]] = {}
     regions: dict[tuple[str, str, int], Region] = {}
+    counted: dict[tuple[int, int, int, int], int] = {}
     reached: dict[int, set[int]] = {}
     for held, entry in readings:
         statements.update(entry.statements)
@@ -1079,13 +1227,12 @@ def _merged(readings: list[tuple[dict[int, Lines], Entry]]) -> Entry:
             if known is None:
                 branches[key] = branch
                 continue
-            taken = known.taken + branch.taken
             branches[key] = Branch(
                 branch.source,
                 branch.target,
                 branch.index,
-                taken,
-                "" if taken else known.why or branch.why,
+                known.taken + branch.taken,
+                known.why or branch.why,
             )
         for line, total, ran in entry.branch_counts:
             was_total, was_ran = branch_counts.get(line, (0, 0))
@@ -1104,6 +1251,8 @@ def _merged(readings: list[tuple[dict[int, Lines], Entry]]) -> Entry:
             regions[key_of] = Region(
                 region.kind, region.name, region.start, seen.lines | region.lines, calls
             )
+        for item in entry.ranges:
+            counted[item.extent] = counted.get(item.extent, 0) + item.count
         for line, indexes in held.items():
             reached.setdefault(line, set()).update(indexes)
     return Entry(
@@ -1118,4 +1267,315 @@ def _merged(readings: list[tuple[dict[int, Lines], Entry]]) -> Entry:
         ),
         regions=tuple(regions.values()),
         reached={line: frozenset(indexes) for line, indexes in sorted(reached.items())},
+        ranges=tuple(
+            Range(*extent, count) for extent, count in sorted(counted.items())
+        ),
     )
+
+
+# --- ranges against their text ------------------------------------------------------
+
+
+def unrun_columns(entry: Entry) -> dict[int, tuple[tuple[int, int | None], ...]]:
+    """The columns of each line its ranges say never ran, as ``(start, end)`` pairs.
+
+    A column belongs to the innermost range that holds it, the one that
+    starts last, and of two that start together the one that ends
+    first, as llvm-cov draws its regions; a column no range holds is
+    not judged. Columns count bytes from 1, and a stretch's end is the
+    column after its last, or None when it runs to the end of the line.
+    A line with no such stretch is left out.
+    """
+    by_line: dict[int, list[Range]] = {}
+    for item in entry.ranges:
+        for line in range(item.start_line, item.end_line + 1):
+            by_line.setdefault(line, []).append(item)
+    found: dict[int, tuple[tuple[int, int | None], ...]] = {}
+    for line, held in sorted(by_line.items()):
+        if all(item.count for item in held):
+            continue
+        spans = [
+            (
+                item.start_column if item.start_line == line else 1,
+                item.end_column if item.end_line == line else None,
+                item,
+            )
+            for item in held
+        ]
+        cuts = sorted(
+            {start for start, _, _ in spans}
+            | {end for _, end, _ in spans if end is not None}
+        )
+        unrun: list[tuple[int, int | None]] = []
+        for place, start in enumerate(cuts):
+            end = cuts[place + 1] if place + 1 < len(cuts) else None
+            holding = [
+                item
+                for first, last, item in spans
+                if first <= start
+                and (last is None or (end is not None and last >= end))
+            ]
+            if not holding:
+                continue
+            inner = min(holding, key=_innermost)
+            if inner.count:
+                continue
+            if unrun and unrun[-1][1] == start:
+                unrun[-1] = (unrun[-1][0], end)
+            else:
+                unrun.append((start, end))
+        if unrun:
+            found[line] = tuple(unrun)
+    return found
+
+
+def _innermost(item: Range) -> tuple[int, int, int, int]:
+    """Rank a range holding a column: the one that starts last, then ends first."""
+    return (-item.start_line, -item.start_column, item.end_line, item.end_column)
+
+
+def check_ranges(entry: Entry, text: str, *, source: str) -> None:
+    """Refuse a range of *entry* outside *text*, the content it was measured at.
+
+    *text*'s lines are counted as the pages count them, a CRLF or a lone
+    CR ending a line as LF does, and each line's columns are its bytes
+    in UTF-8, the end column one past the last.
+
+    Raises:
+        PartError: when a range starts or ends beyond the file's lines,
+            or beyond its line's columns, naming *source* and the range.
+    """
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    widths = [len(line.encode("utf-8")) for line in lines]
+    for index, item in enumerate(entry.ranges):
+        problem = ""
+        if item.end_line > len(widths):
+            problem = f"the file has {len(widths)} lines"
+        elif item.start_column > widths[item.start_line - 1] + 1:
+            problem = (
+                f"line {item.start_line} has {widths[item.start_line - 1]} columns"
+            )
+        elif item.end_column > widths[item.end_line - 1] + 1:
+            problem = f"line {item.end_line} has {widths[item.end_line - 1]} columns"
+        if problem:
+            raise PartError(
+                f"{source}: ranges[{index}]: {item.shown} lies outside the file:"
+                f" {problem}"
+            )
+
+
+# --- the stored form ------------------------------------------------------------
+
+
+def facts_name(facts: Mapping[str, Any]) -> str:
+    """The name of a file's fixed facts: the git blob id of `facts_text` of them.
+
+    A record that keeps the facts as a file of that text keeps them
+    under the name git gives the file.
+    """
+    return digest(facts_text(facts).encode("utf-8"))
+
+
+def facts_text(facts: Mapping[str, Any]) -> str:
+    """*facts* as one JSON text: keys sorted, no space between items."""
+    return json.dumps(facts, sort_keys=True, separators=(",", ":"))
+
+
+def stored(part: Part) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """*part* in its stored form, and the fixed facts it names, by name.
+
+    A file with no fixed facts, one the measurer could not read, names
+    none. A measurer that reads presence keeps its branches that ran as
+    a range string of places while none ran more than once, which its
+    readings never do; ``[place, taken]`` pairs keep the rest.
+    """
+    full = encode(part)
+    presence = part.measurer.counts == PRESENCE
+    facts: dict[str, dict[str, Any]] = {}
+    files: dict[str, Any] = {}
+    for name, entry in full["files"].items():
+        fixed, ran = _split(entry, presence=presence)
+        if fixed:
+            key = facts_name(fixed)
+            facts[key] = fixed
+            ran["facts"] = key
+        files[name] = ran
+    return {**full, "files": files}, facts
+
+
+def _split(
+    entry: Mapping[str, Any], *, presence: bool
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """An encoded entry's fixed facts, and what ran with the file's digest."""
+    fixed = {
+        key: entry[key] for key in ("statements", "excluded", "spans") if key in entry
+    }
+    ran = {
+        key: entry[key]
+        for key in ("digest", "hits", "counts", "reached")
+        if key in entry
+    }
+    branches: list[list[Any]] = entry.get("branches", [])
+    if branches:
+        fixed["branches"] = [[*item[:3], *item[4:]] for item in branches]
+        taken = [[place, item[3]] for place, item in enumerate(branches, 1) if item[3]]
+        if taken and presence and all(runs == 1 for _, runs in taken):
+            ran["taken"] = ranges(place for place, _ in taken)
+        elif taken:
+            ran["taken"] = taken
+    for key, kept, into in (
+        ("branch-counts", 2, "counted"),
+        ("regions", 4, "calls"),
+        ("ranges", 4, "range-counts"),
+    ):
+        items: list[list[Any]] = entry.get(key, [])
+        if not items:
+            continue
+        fixed[key] = [item[:kept] for item in items]
+        pairs = [
+            [place, item[kept]]
+            for place, item in enumerate(items, 1)
+            if len(item) > kept and (item[kept] or into == "calls")
+        ]
+        if pairs:
+            ran[into] = pairs
+    return fixed, ran
+
+
+def facts_names(raw: Mapping[str, Any]) -> dict[str, str]:
+    """The fixed facts a part in its stored form names, each with a file's digest.
+
+    Each name maps to the digest of the first file that names it, for a
+    refusal to name the content whose facts are missing. A value off
+    the stored form names nothing here; `from_stored` refuses it.
+    """
+    found: dict[str, str] = {}
+    files = raw.get("files")
+    if not isinstance(files, dict):
+        return found
+    for entry in cast("dict[str, Any]", files).values():
+        if not isinstance(entry, dict):
+            continue
+        named = cast("dict[str, Any]", entry).get("facts")
+        if isinstance(named, str) and named not in found:
+            found[named] = str(cast("dict[str, Any]", entry).get("digest", ""))
+    return found
+
+
+def from_stored(raw: object, facts: Mapping[str, Any], *, source: str) -> Part:
+    """Read *raw*, a part in its stored form, its files' fixed facts read from *facts*.
+
+    *facts* maps a facts' name to the facts. Every refusal names
+    *source* and the key at fault, as `decode`'s do.
+
+    Raises:
+        OtherVersion: when the part is of another format version.
+        PartError: when a file names fixed facts *facts* does not hold,
+            naming the facts and the file's content; when a place names
+            no item of its facts; or when the part, its facts joined in,
+            is off the format.
+    """
+    reader = _Reader(source)
+    table = reader.table(raw, ())
+    version = table.get("format")
+    if version != FORMAT:
+        raise OtherVersion(source, version)
+    measurer = reader.measurer(table.get("measurer"), ("measurer",))
+    files = {
+        name: _joined(reader, value, ("files", name), facts, measurer)
+        for name, value in reader.table(table.get("files"), ("files",)).items()
+    }
+    return decode({**table, "files": files}, source=source)
+
+
+#: The keys of a file in the stored form.
+_STORED_KEYS = (
+    "digest",
+    "facts",
+    "hits",
+    "counts",
+    "taken",
+    "counted",
+    "calls",
+    "range-counts",
+    "reached",
+)
+
+
+def _joined(
+    reader: _Reader,
+    raw: object,
+    path: KeyPath,
+    facts: Mapping[str, Any],
+    measurer: Measurer,
+) -> dict[str, Any]:
+    """A file of a part in its stored form, its fixed facts joined in."""
+    entry = reader.table(raw, path)
+    reader.known(entry, path, _STORED_KEYS)
+    fixed: dict[str, Any] = {}
+    if "facts" in entry:
+        key = reader.text(entry["facts"], (*path, "facts"), empty=False)
+        if key not in facts:
+            content = str(entry.get("digest", ""))[:12] or "content that was not read"
+            raise reader.refuse(
+                (*path, "facts"),
+                f"names the fixed facts {key} of content {content}, and no facts"
+                " of that name are held",
+            )
+        fixed = reader.table(facts[key], ("facts", key))
+    full: dict[str, Any] = {
+        key: value
+        for key, value in {**fixed, **entry}.items()
+        if key not in _STORED_KEYS[4:8] and key != "facts"
+    }
+    branches = reader.listed(fixed.get("branches", []), ("facts", "branches"))
+    taken = _places(reader, entry.get("taken", []), (*path, "taken"), len(branches))
+    if branches:
+        joined: list[list[Any]] = []
+        for place, item in enumerate(branches, 1):
+            fields = reader.listed(item, ("facts", "branches", place))
+            joined.append([*fields[:3], taken.get(place, 0), *fields[3:]])
+        full["branches"] = joined
+    for key, into in (
+        ("branch-counts", "counted"),
+        ("regions", "calls"),
+        ("ranges", "range-counts"),
+    ):
+        items = reader.listed(fixed.get(key, []), ("facts", key))
+        numbers_of = _places(reader, entry.get(into, []), (*path, into), len(items))
+        if not items:
+            continue
+        joined = []
+        for place, item in enumerate(items, 1):
+            fields = reader.listed(item, ("facts", key, place))
+            if place in numbers_of:
+                fields = [*fields, numbers_of[place]]
+            elif into != "calls":
+                # A region whose calls are not counted keeps none; a
+                # count left out is 0.
+                fields = [*fields, 0]
+            joined.append(fields)
+        full[key] = joined
+    return full
+
+
+def _places(reader: _Reader, raw: object, path: KeyPath, count: int) -> dict[int, int]:
+    """The numbers a stored file keeps by place: a range string reads as 1 each."""
+    found: dict[int, int] = {}
+    if isinstance(raw, str):
+        found = dict.fromkeys(reader.lines(raw, path), 1)
+    else:
+        for index, item in enumerate(reader.listed(raw, path)):
+            pair = reader.listed(item, (*path, index))
+            if len(pair) != 2:
+                raise reader.refuse((*path, index), "is no [place, number] pair")
+            place = reader.number(pair[0], (*path, index, 0), least=1)
+            found[place] = reader.number(pair[1], (*path, index, 1), least=0)
+    beyond = sorted(place for place in found if place > count)
+    if beyond:
+        raise reader.refuse(
+            path, f"names place {beyond[0]}, and its fixed facts hold {count}"
+        )
+    return found

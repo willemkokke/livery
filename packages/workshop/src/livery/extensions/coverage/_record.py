@@ -27,16 +27,22 @@ record holds is measured on the spot, never red.
 The unit is the suite that ran, never the package covered: a suite
 executes lines across packages (a dependant's tests run its
 dependencies), so a unit's parts hold the files of the suite's closure
-alone, the files whose identity the key names. Reach for `recorded` to
-read a record on a leg, `leave_run` to leave a leg's parts for its
-write, `run_legs` to read them in the gate job, and `put_record` to
-write the record. A read of a record parses its current rows alone and
-names its kept rows, reading one only when the union asks for it.
+alone, the files whose identity the key names. A row keeps its parts in
+the line format's stored form: what ran, each file's fixed facts named
+by their own digest. The facts are files of their own beside the rows
+(`FACTS`), each kept once however many rows, legs and writes name it,
+and a write drops the facts no row names any more. Reach for
+`recorded` to read a record on a leg, `leave_run` to leave a leg's
+parts for its write, `run_legs` to read them in the gate job, and
+`put_record` to write the record. A read of a record parses its
+current rows and the facts they name alone, and names its kept rows,
+reading one only when the union asks for it.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -45,15 +51,22 @@ from pathlib import Path
 from typing import Any
 
 from livery import git
-from livery.extensions.coverage._format import FORMAT
+from livery.extensions.coverage._format import FORMAT, facts_names, facts_text
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._packages import WORKSPACE_TESTS, Package
 
-#: The rows' shape: 3 holds a unit's parts in the line format, so a
-#: package is judged on what each of its measurers judges. A row of
-#: another schema is skipped and named, so a row of arcs written before
-#: is a miss and the unit is measured afresh.
+#: The rows' shape: 3 holds a unit's parts in the line format's stored
+#: form, so a package is judged on what each of its measurers judges.
+#: A row of another schema is skipped and named, so a row of arcs
+#: written before is a miss and the unit is measured afresh.
 SCHEMA = 3
+
+#: The directory of a record's fixed facts, beside its rows: one file
+#: per facts' name, holding the facts as the line format's `facts_text`
+#: writes them, so the name is the file's own git blob id and one
+#: file's facts are one object however many rows, legs and writes name
+#: them.
+FACTS = "facts/"
 
 #: The record every leg reads last and main's run alone writes: the
 #: measurement of main's tree. A branch's record has the branch's
@@ -116,7 +129,13 @@ RECORD = git.Keyed(
     schema=SCHEMA,
     current=current_keys,
     linger=timedelta(days=1),
+    blobs=FACTS,
 )
+
+
+def facts_file(name: str) -> str:
+    """The record's file for the fixed facts named *name*."""
+    return f"{FACTS}{name}.json"
 
 
 #: How long a record keeps a row a write replaced at another closure, or
@@ -145,9 +164,10 @@ def _current_row(name: str) -> bool:
     """Whether the file *name* is a current row: a unit's slug alone.
 
     A slug holds no dot, so a current row's name holds one and a kept
-    row's, which adds its closure and its moment, holds three.
+    row's, which adds its closure and its moment, holds three; the
+    fixed facts live in a directory of their own.
     """
-    return name.count(".") == 1
+    return name.count(".") == 1 and "/" not in name
 
 
 @dataclass(frozen=True)
@@ -159,10 +179,14 @@ class Unit:
         closure: The closure identity the measurement is keyed by.
         run: The run that measured it.
         sha: The commit that run checked out.
-        parts: The unit's parts in the line format, as JSON holds
-            them: one for each measurer that measured the suite, each
-            holding the files of the suite's closure it reached. A
-            suite that ran unmeasured has none.
+        parts: The unit's parts in the line format's stored form, as
+            JSON holds them: one for each measurer that measured the
+            suite, each holding the files of the suite's closure it
+            reached. A suite that ran unmeasured has none.
+        facts: The fixed facts the parts name, by name; the units of
+            one record share the record's. Two units with the same parts
+            are equal whatever else their tables hold, since a part names
+            its facts by their content.
     """
 
     path: str
@@ -170,6 +194,7 @@ class Unit:
     run: str
     sha: str
     parts: tuple[dict[str, Any], ...] = ()
+    facts: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def files(self) -> tuple[str, ...]:
@@ -180,6 +205,15 @@ class Unit:
             if isinstance(named, dict):
                 found.update(str(name) for name in named)
         return tuple(sorted(found))
+
+    @property
+    def named(self) -> dict[str, str]:
+        """The fixed facts the parts name, each with the digest of a file naming it."""
+        found: dict[str, str] = {}
+        for part in self.parts:
+            for name, content in facts_names(part).items():
+                found.setdefault(name, content)
+        return found
 
 
 @dataclass(frozen=True)
@@ -252,6 +286,10 @@ class Record:
             for `KEPT_FOR` from the write that kept each.
         read_kept: Reads a kept row by its name, for `at`; ``None``
             when the record was not read from the store.
+        facts: The fixed facts read, by name: the ones the current
+            rows name, and a kept row's once it is read.
+        held_facts: The name of every fixed facts file the record
+            holds, read or not.
     """
 
     units: dict[str, Unit]
@@ -262,6 +300,8 @@ class Record:
     read_kept: Callable[[str], Unit | None] | None = field(
         default=None, compare=False, repr=False
     )
+    facts: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
+    held_facts: tuple[str, ...] = ()
 
     def at(self, path: str, closure: str) -> Unit | None:
         """The measurement of *path* at *closure*: the current row's, else a kept one's.
@@ -406,7 +446,7 @@ def in_closure(packages: tuple[Package, ...], package: Package, filename: str) -
 
 
 def unit_fields(unit: Unit) -> dict[str, Any]:
-    """*unit* as a row and a leg's file hold it."""
+    """*unit* as a row and a leg's file hold it: its parts, without their facts."""
     return {
         "unit": unit.path,
         "closure": unit.closure,
@@ -416,8 +456,20 @@ def unit_fields(unit: Unit) -> dict[str, Any]:
     }
 
 
-def _parse_unit(raw: Any, *, path: str = "") -> tuple[Unit | None, str]:
-    """A unit from its fields; or ``None`` and why they are not a unit's.
+def units_facts(units: Iterable[Unit]) -> dict[str, Any]:
+    """The fixed facts *units*' parts name, by name, each once."""
+    found: dict[str, Any] = {}
+    for unit in units:
+        for name in unit.named:
+            if name not in found and name in unit.facts:
+                found[name] = unit.facts[name]
+    return found
+
+
+def _parse_unit(
+    raw: Any, *, path: str = "", facts: Mapping[str, Any] | None = None
+) -> tuple[Unit | None, str]:
+    """A unit from its fields and *facts*; or ``None`` and why they are not a unit's.
 
     A part is read whole only where it is used; here each one must be a
     table of this workshop's format, so a part of another version makes
@@ -445,6 +497,7 @@ def _parse_unit(raw: Any, *, path: str = "") -> tuple[Unit | None, str]:
             run=str(raw.get("run", "")),
             sha=str(raw.get("sha", "")),
             parts=tuple(parts),
+            facts=facts if facts is not None else {},
         ),
         "",
     )
@@ -462,9 +515,10 @@ def leave_run(
     """Leave *leg*'s scope and measured *units* for its one write; ``""`` or why not.
 
     The one file carries the scope the leg's gate ran, the packages a
-    narrowed gate named, and every unit's parts, so the gate job reads
-    a leg's whole fact in one read and the parts go with the ref when
-    the run's metrics are collected. It lands in the leg's spool
+    narrowed gate named, every unit's parts, and the fixed facts they
+    name, each once, so the gate job reads a leg's whole fact in one
+    read and the parts go with the ref when the run's metrics are
+    collected. It lands in the leg's spool
     ([livery.workshop._metrics.LEG_SPOOL][]), and the leg's last
     entry, ``ci.leg``, puts it on the leg's per-run ref beside the
     timing row ([livery.workshop._metrics.put_leg][]), so a leg writes
@@ -481,6 +535,7 @@ def leave_run(
         "run": run.run_id,
         "forge": run.forge,
         "units": {path: unit_fields(unit) for path, unit in sorted(units.items())},
+        "facts": units_facts(units.values()),
     }
     leave_leg_file(root, RUN_FILE, row)
     return ""
@@ -519,10 +574,12 @@ def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
             )
             continue
         raw_units = found.data.get("units")
+        raw_facts = found.data.get("facts")
+        facts = raw_facts if isinstance(raw_facts, dict) else {}
         units: dict[str, Unit] = {}
         if isinstance(raw_units, dict):
             for path, raw in raw_units.items():
-                unit, _why = _parse_unit(raw, path=str(path))
+                unit, _why = _parse_unit(raw, path=str(path), facts=facts)
                 if unit is not None:
                     units[unit.path] = unit
         legs.append(
@@ -543,34 +600,99 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
     An absent record is no units and no failure; a record the store
     could not read is a failure with its reason; a row that is not a
     unit is skipped and named, and the rest stand. The current rows
-    alone are read: a row named by its unit, closure and moment
-    (`kept_name`) is a kept one, named in the record and read only when
-    the union asks for it (`Record.at`). A leg without a label, or an
-    empty base, has no record to read.
+    alone are read, then the fixed facts they name: a row naming facts
+    the record does not hold is skipped, naming the facts and the
+    content, so its unit is a miss and is measured afresh. A row named
+    by its unit, closure and moment (`kept_name`) is a kept one, named
+    in the record and read, with its facts, only when the union asks
+    for it (`Record.at`). A leg without a label, or an empty base, has
+    no record to read.
     """
     if not leg:
         return Record({}, failed=True, reason="this leg has no label")
     if not base:
         return Record({}, failed=True, reason="no branch to read a record for")
     series = RECORD.series(base, leg)
-    found = series.rows(state_store(root), only=_current_row)
+    store = state_store(root)
+    found = series.rows(store, only=_current_row)
     if found.failed:
         return Record({}, failed=True, reason=found.reason)
+    facts: dict[str, Any] = {}
     units: dict[str, Unit] = {}
     skipped = list(found.skipped)
     for row in found.rows:
-        unit, why = _parse_unit(row.data)
+        unit, why = _parse_unit(row.data, facts=facts)
         if unit is None:
             skipped.append(git.Skipped(row.name, why))
             continue
         units[unit.path] = unit
+    why = _read_facts(series, store, facts, units.values())
+    if why:
+        return Record({}, failed=True, reason=why)
+    for path, unit in sorted(units.items()):
+        missing = sorted(name for name in unit.named if name not in facts)
+        if missing:
+            skipped.append(git.Skipped(row_name(path), _no_facts(unit, missing[0])))
+            del units[path]
 
     def read_kept(name: str) -> Unit | None:
-        row, _why = series.row(state_store(root), name)
-        return None if row is None else _parse_unit(row.data)[0]
+        row, _why = series.row(store, name)
+        unit = None if row is None else _parse_unit(row.data, facts=facts)[0]
+        if unit is None or _read_facts(series, store, facts, [unit]):
+            return None
+        return unit if all(name in facts for name in unit.named) else None
 
-    kept = tuple(Kept(name) for name in found.unread)
-    return Record(units, tuple(skipped), kept=kept, read_kept=read_kept)
+    held = tuple(name for name in found.unread if series.blob(name))
+    kept = tuple(Kept(name) for name in found.unread if not series.blob(name))
+    return Record(
+        units,
+        tuple(skipped),
+        kept=kept,
+        read_kept=read_kept,
+        facts=facts,
+        held_facts=held,
+    )
+
+
+def _read_facts(
+    series: git.Series,
+    store: git.StateStore,
+    facts: dict[str, Any],
+    units: Iterable[Unit],
+) -> str:
+    """Read the fixed facts *units* name into *facts*; ``""`` or why the read failed.
+
+    A facts file that does not parse is left out, so the rows naming it
+    are skipped as rows naming facts the record does not hold.
+    """
+    wanted = {
+        facts_file(name) for unit in units for name in unit.named if name not in facts
+    }
+    if not wanted:
+        return ""
+    found = series.rows(store, only=wanted.__contains__)
+    if found.failed:
+        return found.reason
+    for file, text in found.blobs.items():
+        try:
+            facts[_facts_named_by(file)] = json.loads(text)
+        except ValueError:
+            continue
+    return ""
+
+
+def _facts_named_by(file: str) -> str:
+    """The name of the fixed facts the record's file *file* holds."""
+    return file[len(FACTS) :].removesuffix(".json")
+
+
+def _no_facts(unit: Unit, name: str) -> str:
+    """Why a row naming facts the record lacks is skipped: the facts and the content."""
+    content = unit.named.get(name, "")[:12] or "content that was not read"
+    return (
+        f"names the fixed facts {name} of content {content}, and the record holds"
+        f" no {facts_file(name)}"
+    )
 
 
 def put_record(
@@ -600,6 +722,12 @@ def put_record(
     `KEPT_FOR` at *now* goes. *held* is the record as the caller read
     it; it is read here when absent, and a record that cannot be read
     refuses the write, since what it would keep is unknown.
+
+    The fixed facts a fresh row names are written beside the rows when
+    the record does not hold them yet, from the fresh units' own
+    facts, and the facts no row of the written record names go. The
+    kept rows that stay are read for the facts they name, and a write
+    whose rows name facts no unit holds is refused by name.
     """
     if not leg:
         return "refusing: the leg has no label, so the record has no key"
@@ -625,15 +753,56 @@ def put_record(
     moment = now or datetime.now(UTC)
     removed = list(remove)
     rows = {row_name(path): unit_fields(unit) for path, unit in sorted(fresh.items())}
+    named: dict[str, str] = {}
+    for unit in fresh.values():
+        named.update(unit.named)
     for path, unit in sorted(current.units.items()):
         replaced = path in fresh and fresh[path].closure != unit.closure
         dropped = path not in fresh and row_name(path) in removed
         if replaced or dropped:
             rows[kept_name(path, unit.closure, moment)] = unit_fields(unit)
+        if replaced or path not in fresh:
+            # The row stands, or stays as a kept row: its facts stay.
+            named.update(unit.named)
     removed += current.expired(moment)
-    return RECORD.series(base, leg).put(
-        state_store(root),
+    series = RECORD.series(base, leg)
+    store = state_store(root)
+    staying = {kept.name for kept in current.kept} - set(removed) - set(rows)
+    if staying:
+        found = series.rows(store, only=staying.__contains__)
+        if found.failed:
+            return (
+                f"refusing: {base}'s kept rows on {leg} could not be read"
+                f" ({found.reason}), so the fixed facts they name are unknown"
+            )
+        for row in found.rows:
+            staying_unit, _why = _parse_unit(row.data)
+            if staying_unit is not None:
+                named.update(staying_unit.named)
+    on_record = set(current.held_facts)
+    table: dict[str, Any] = dict(current.facts)
+    for unit in fresh.values():
+        table.update(unit.facts)
+    absent = sorted(
+        name
+        for name in named
+        if facts_file(name) not in on_record and name not in table
+    )
+    if absent:
+        return (
+            f"refusing: the rows name the fixed facts {absent[0]} of content"
+            f" {named[absent[0]][:12] or 'that was not read'}, which no unit holds"
+        )
+    blobs = {
+        facts_file(name): facts_text(table[name])
+        for name in sorted(named)
+        if facts_file(name) not in on_record
+    }
+    removed += sorted(file for file in on_record if _facts_named_by(file) not in named)
+    return series.put(
+        store,
         rows,
         message=f"coverage: {base}'s record on {leg} by run {run.run_id}",
         remove=removed,
+        blobs=blobs,
     )

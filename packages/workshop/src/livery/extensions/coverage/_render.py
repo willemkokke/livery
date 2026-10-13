@@ -9,20 +9,23 @@ extension's ``content/assets``. The numbers are coverage.py's
 branches and percentages its report shows, and the category it draws
 each line in. Beyond them, a page shows how many times each line ran
 for a measurer that counts runs, a measurer's numbered branches and
-its counts of a line's branches, who measured each file, where the
-measurement comes from, and the package's floor. The pages depend on
-the readings alone: drawing the same readings again writes the same
-tree.
+its counts of a line's branches, the code of a line that ran which
+never did for a measurer that reads columns, who measured each file,
+where the measurement comes from, and the package's floor. The pages
+depend on the readings alone: drawing the same readings again writes
+the same tree.
 """
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import html
+import itertools
 import json
 import re
 import shutil
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -38,6 +41,7 @@ from livery.extensions.coverage._format import (
     numbers,
     region_rows,
     shown,
+    unrun_columns,
 )
 
 #: The stylesheet and the script every page loads, shipped beside this
@@ -278,18 +282,57 @@ def _sentence(why: str) -> str:
 
 
 def _has_branches(drawn: Drawn) -> bool:
+    entry = drawn.merged.entry
     return drawn.merged.measurer.branches != NO_BRANCHES or bool(
-        drawn.merged.entry.branch_counts
+        entry.branch_counts or entry.ranges
     )
 
 
-def highlighted(name: str, text: str) -> list[str]:
+def unrun_marks(entry: Entry, text: str) -> dict[int, list[tuple[int, int]]]:
+    """The characters of each line that ran whose code never did, by the ranges.
+
+    Per line of *text*, each stretch from its first character's index
+    to the index after its last. A range's columns count bytes, so a
+    line with characters beyond ASCII has its stretches moved to the
+    characters those bytes belong to. A line that never ran is drawn
+    missing whole and has none.
+    """
+    lines = source_lines(text)
+    executed = entry.executed
+    found: dict[int, list[tuple[int, int]]] = {}
+    for line, spans in unrun_columns(entry).items():
+        if line not in executed or line > len(lines):
+            continue
+        starts: list[int] = []
+        width = 0
+        for char in lines[line - 1]:
+            starts.append(width)
+            width += len(char.encode("utf-8"))
+        marked = [
+            (
+                bisect.bisect_left(starts, start - 1),
+                bisect.bisect_left(starts, width if end is None else end - 1),
+            )
+            for start, end in spans
+        ]
+        kept = [(start, end) for start, end in marked if start < end]
+        if kept:
+            found[line] = kept
+    return found
+
+
+def highlighted(
+    name: str, text: str, marks: Mapping[int, Sequence[tuple[int, int]]] | None = None
+) -> list[str]:
     """*text* as HTML, line by line, highlighted by Pygments' lexer for *name*.
 
     A name no lexer claims is drawn as plain text. Each line is HTML
     without its line ending; a token over several lines is split at
     each, and a CRLF or a lone CR ends a line as LF does
-    ([livery.extensions.coverage._render.source_lines][]).
+    ([livery.extensions.coverage._render.source_lines][]). *marks*
+    names, by line, the stretches of characters that never ran, as
+    `unrun_marks` gives them: each piece of a token inside one is drawn
+    with the class ``nr`` beside the token's own.
     """
     from pygments.lexers import get_lexer_for_filename
     from pygments.lexers.special import TextLexer
@@ -301,20 +344,48 @@ def highlighted(name: str, text: str) -> list[str]:
     except ClassNotFound:
         lexer = TextLexer(stripnl=False, ensurenl=False)
     lines: list[list[str]] = [[]]
+    offset = 0
     for kind, value in lexer.get_tokens(text):
         css = _token_class(kind)
         for index, piece in enumerate(value.split("\n")):
             if index:
                 lines.append([])
+                offset = 0
             if not piece:
                 continue
-            escaped = html.escape(piece, quote=False)
-            lines[-1].append(
-                f'<span class="{css}">{escaped}</span>' if css else escaped
-            )
+            marked = (marks or {}).get(len(lines), ())
+            for start, end, unrun in _pieces(offset, len(piece), marked):
+                escaped = html.escape(piece[start - offset : end - offset], quote=False)
+                classes = f"{css} nr".strip() if unrun else css
+                lines[-1].append(
+                    f'<span class="{classes}">{escaped}</span>' if classes else escaped
+                )
+            offset += len(piece)
     drawn = ["".join(line) for line in lines]
     count = len(source_lines(text))
     return (drawn + [""] * count)[:count]
+
+
+def _pieces(
+    start: int, length: int, marked: Sequence[tuple[int, int]]
+) -> list[tuple[int, int, bool]]:
+    """The characters from *start* on, cut where a stretch of *marked* starts or ends.
+
+    Each piece is its first index, the index after its last, and
+    whether a marked stretch holds it; an unmarked token is one piece.
+    """
+    end = start + length
+    cuts = sorted(
+        {start, end} | {edge for span in marked for edge in span if start < edge < end}
+    )
+    found: list[tuple[int, int, bool]] = []
+    for first, last in itertools.pairwise(cuts):
+        unrun = any(low <= first and last <= high for low, high in marked)
+        if found and found[-1][2] == unrun:
+            found[-1] = (found[-1][0], last, unrun)
+        else:
+            found.append((first, last, unrun))
+    return found
 
 
 #: Pygments' short class name for each token kind met, Pygments' own
@@ -685,7 +756,8 @@ class _Pages:
         merged = drawn.merged
         entry = merged.entry
         text = drawn.text or ""
-        drawn_lines = highlighted(drawn.name, text)
+        marks = unrun_marks(entry, text) if entry.ranges else {}
+        drawn_lines = highlighted(drawn.name, text, marks)
         categories = line_categories(entry, len(drawn_lines))
         counting = merged.measurer.counts != "presence"
         names, codes = self.contexts(entry)

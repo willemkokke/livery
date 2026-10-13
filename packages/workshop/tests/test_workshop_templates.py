@@ -572,7 +572,7 @@ def test_a_native_package_s_part_lands_where_every_workspace_ignores_it(
     # The cmake extension's test leaves its part under .workshop/ while
     # it measures for coverage, a directory the base ignores, so cmake
     # ships no ignore line of its own, listed or not.
-    from livery.extensions.cmake._build import PARTS
+    from livery.extensions.cmake._readings import PARTS
     from livery.workshop._shipped_files import outputs
 
     assert PARTS.startswith(".workshop/")

@@ -8,19 +8,21 @@ check leg's metered run left into one part per suite the leg ran, each
 suite's arcs within its closure as its own tests and the code outside
 every test reached them; and on a machine, the data its last run left
 into one part of the whole run. A part is in the line format, version
-1: per file, coverage.py's own analysis of it under the workspace's
+2: per file, coverage.py's own analysis of it under the workspace's
 ``.coveragerc``. It holds the statements and the ones that ran, the
 excluded lines, the statements written over several lines, each
 branch of a line with more than one exit with the sentence that says
-why an untaken one never ran, the functions and classes, and, where a
-machine's data names them, the tests that reached each line. A branch
-the source waives with ``# pragma: no branch`` counts as taken, as
-coverage.py counts it.
+why it would not run, the functions and classes, and, where a
+machine's data names them, the tests that reached each line.
+coverage.py reads no columns, so a part holds no ranges. A branch the
+source waives with ``# pragma: no branch`` counts as taken, as
+coverage.py counts it, and is tagged ``waived``.
 
 coverage.py's parser reads each file once, however many suites name
-it. Before a part is handed over, each file's numbers are checked
-against coverage.py's own analysis of the same data, and a file whose
-numbers differ refuses the reduction, naming the file.
+it, and says each branch's sentence once. Before a part is handed
+over, each file's numbers are checked against coverage.py's own
+analysis of the same data, and a file whose numbers differ refuses the
+reduction, naming the file.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ import platform
 import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -44,7 +46,7 @@ if TYPE_CHECKING:
 MEASURER = "arcs"
 
 #: The line format version the parts are written in.
-FORMAT = 1
+FORMAT = 2
 
 #: The data a run leaves at the workspace root, and the configuration
 #: coverage.py reads there. A metered leg leaves one data file per
@@ -208,12 +210,25 @@ def _relative(filename: str, root: Path) -> str | None:
 
 @dataclass(frozen=True)
 class _Static:
-    """What a file's source says, read once: its digest, reporter, spans and regions."""
+    """What a file's source says, read once: its digest, reporter, spans and regions.
+
+    Each branch's sentence is the parser's, said once and kept in
+    ``sentences`` by the branch's line and target.
+    """
 
     digest: str
     reporter: PythonFileReporter
     spans: list[list[int]]
     regions: list[list[Any]]
+    sentences: dict[tuple[int, int], str] = field(default_factory=dict)
+
+    def sentence(self, source: int, target: int) -> str:
+        """Why the branch from *source* to *target* would not run, in a sentence."""
+        found = self.sentences.get((source, target))
+        if found is None:
+            found = self.reporter.missing_arc_description(source, target)
+            self.sentences[(source, target)] = found
+        return found
 
 
 class _Reducer:
@@ -238,6 +253,7 @@ class _Reducer:
             "branches": "targets",
             "regions": ["function", "class"],
             "judges": ["lines", "branches"],
+            "columns": False,
         }
 
     def static(self, name: str) -> _Static | None:
@@ -335,13 +351,10 @@ class _Reducer:
         for source, target in possible:
             index = place.get(source, 0)
             place[source] = index + 1
-            if (source, target) in analysis.arcs_executed_set:
-                branches.append([source, target, index, 1])
-            elif source in analysis.no_branch:
-                branches.append([source, target, index, 1, WAIVED])
-            else:
-                why = static.reporter.missing_arc_description(source, target)
-                branches.append([source, target, index, 0, why])
+            waived = source in analysis.no_branch
+            taken = waived or (source, target) in analysis.arcs_executed_set
+            why = WAIVED if waived else static.sentence(source, target)
+            branches.append([source, target, index, int(taken), why])
         hits = analysis.executed & statements
         self.check(name, analysis, hits, branches)
         found: dict[str, Any] = {"digest": static.digest}

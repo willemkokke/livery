@@ -877,6 +877,17 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     assert any(
         hits > 0 for name in sources for hits in parts["packages/native"][name].values()
     )
+    # The most the measurer gives: the functions, demangled, and on clang
+    # each stretch of code with its count.
+    from livery.extensions.coverage._parts import part_files, read_part
+
+    (written,) = part_files(tmp_path)
+    part = read_part(written, tmp_path)
+    entries = [part.files[name] for name in sources]
+    names = [region.name for entry in entries for region in entry.regions]
+    assert names and not [name for name in names if name.startswith("_Z")], names
+    assert part.measurer.columns == (part.measurer.name == "llvm-cov")
+    assert any(entry.ranges for entry in entries) == part.measurer.columns
     measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert 0.0 < measured["packages/native"] <= 100.0
     assert "coverage: " in capsys.readouterr().out
@@ -1375,6 +1386,13 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     assert any(
         hits > 0 for name in sources for hits in parts["packages/native"][name].values()
     )
+    # Microsoft's engine reads no columns: its part holds no ranges.
+    from livery.extensions.coverage._parts import part_files, read_part
+
+    (written,) = part_files(tmp_path)
+    part = read_part(written, tmp_path)
+    assert not part.measurer.columns
+    assert not [entry for entry in part.files.values() if entry.ranges]
     measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert 0.0 < measured["packages/native"] <= 100.0
     assert "measured by msvc" in capsys.readouterr().out

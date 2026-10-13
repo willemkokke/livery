@@ -7,7 +7,8 @@ function that draws the coverage pages. This extension answers in its
 
 The pages are drawn from parts in the line format (`_format`) by
 `_render`. In the merge point's gate job the parts are main's coverage
-record on every check leg, stored as the legs made them. Anywhere else
+record on every check leg, read from their stored form with the fixed
+facts the record holds, as the legs made them. Anywhere else
 they are the data the last gate run left on this machine: the parts a
 native suite's measurer left in the workspace, and the parts each
 listed extension's reduction makes of its measurer's data, the pytest
@@ -23,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery import git
@@ -32,8 +33,10 @@ from livery.extensions.coverage._format import (
     OtherVersion,
     Part,
     PartError,
+    check_ranges,
     decode,
     digest,
+    from_stored,
     merge,
 )
 from livery.extensions.coverage._render import Drawn, Report, render
@@ -74,10 +77,12 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
     machine, whose data outlives a moved file until the next gate run,
     the package's index names it and the rest is drawn. A file whose
     content differs from the content measured keeps its numbers, and
-    its page says it was measured at other content. Each package's
-    index states its floor: the floor its contract names, the mark it
-    ratchets to, read in the merge point's gate job, or that nothing
-    judges it. Returns the members drawn.
+    its page says it was measured at other content; a file measured at
+    the checkout's content with a range outside its text refuses,
+    naming the file and the range. Each package's index states its
+    floor: the floor its contract names, the mark it ratchets to, read
+    in the merge point's gate job, or that nothing judges it. Returns
+    the members drawn.
     """
     from livery.extensions.coverage._floors import floor_status
     from livery.workshop._ci_context import run_context
@@ -259,8 +264,10 @@ def _from_record(
     """The parts of main's record, as the legs made them.
 
     Each part is narrowed to the files under *prefixes* first, the files
-    the pages draw, so no other file is read. A part off the format
-    stops the pages, naming the row and the key.
+    the pages draw, so no other file is read, and read from its stored
+    form with the fixed facts its unit holds. A part off the format, or
+    naming facts the record does not hold, stops the pages, naming the
+    row and the key.
     """
     found = _Measured(misses=list(misses))
     runs: set[str] = set()
@@ -280,7 +287,12 @@ def _from_record(
                     continue
                 source = f"main's record on {label}, {unit.path}, part {index}"
                 found.parts.extend(
-                    _decoded([{**raw, "files": narrowed}], [source], found.misses)
+                    _decoded(
+                        [{**raw, "files": narrowed}],
+                        [source],
+                        found.misses,
+                        facts=unit.facts,
+                    )
                 )
     legs = ", ".join(held) or "no leg"
     found.notes = (
@@ -323,17 +335,26 @@ def _local(root: Path) -> _Measured:
 
 
 def _decoded(
-    raw: Sequence[object], sources: Sequence[str], misses: list[str]
+    raw: Sequence[object],
+    sources: Sequence[str],
+    misses: list[str],
+    *,
+    facts: Mapping[str, Any] | None = None,
 ) -> list[Part]:
     """*raw*'s parts, read; one of another version is named in *misses* and skipped.
 
-    A part off the format refuses the pages, naming its source and the
-    key at fault.
+    With *facts*, each part is in its stored form and its files' fixed
+    facts are read from them. A part off the format refuses the pages,
+    naming its source and the key at fault.
     """
     parts: list[Part] = []
     for item, source in zip(raw, sources, strict=True):
         try:
-            parts.append(decode(item, source=source))
+            parts.append(
+                decode(item, source=source)
+                if facts is None
+                else from_stored(item, facts, source=source)
+            )
         except OtherVersion as error:
             misses.append(f"{error}; the pages draw without it")
         except PartError as error:
@@ -345,11 +366,20 @@ def _drawn(root: Path, name: str, merged: Merged, checkout: str) -> Drawn:
     """*name* to draw: with its text when the checkout holds the content measured.
 
     The text is the file's bytes as UTF-8, its line endings whatever
-    the checkout gave it; the renderer reads a CRLF as LF.
+    the checkout gave it; the renderer reads a CRLF as LF. A range
+    outside the text refuses the pages, naming the file and the range.
     """
     if merged.entry.digest != checkout:
         return Drawn(name, merged, None, checkout)
     text = (root / name).read_bytes().decode("utf-8", errors="replace")
+    try:
+        check_ranges(
+            merged.entry,
+            text,
+            source=f"{name}, as {merged.measurer.label} measured it",
+        )
+    except PartError as error:
+        fail(f"coverage: {error}")
     return Drawn(name, merged, text, checkout)
 
 

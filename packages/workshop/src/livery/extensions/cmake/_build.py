@@ -7,10 +7,11 @@ extension's ``[for.coverage]`` table applies
 ([livery.extensions.cmake._build.measures][]): the build is
 instrumented and each run is measured by the compiler family CMake
 detected, gcov for gcc, llvm-cov for clang, Microsoft's engine for
-MSVC; while it is not, the build is not instrumented and ctest runs
-alone. On Windows with no compiler chosen, the build enters the
-newest Visual Studio's C++ environment itself. Nothing here names a
-language: CMake chooses the compilers its project asks for.
+MSVC, whose output `_readings` turns into the package's part; while
+it is not, the build is not instrumented and ctest runs alone. On
+Windows with no compiler chosen, the build enters the newest Visual
+Studio's C++ environment itself. Nothing here names a language: CMake
+chooses the compilers its project asks for.
 
 Every tool here is a tool of the store, reached through its toolroom
 handle, so the version is the one this checkout's lock pins. A handle
@@ -21,7 +22,6 @@ spawns its tool by name, so a machine that never deployed one raises
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 import os
 import platform
@@ -29,12 +29,23 @@ import re
 import shutil
 import sys
 import tempfile
-from pathlib import Path, PureWindowsPath
-from typing import TYPE_CHECKING, Any, NoReturn
+from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 from xml.etree import ElementTree
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
+from livery.extensions.cmake._readings import (
+    Reading,
+    demangle,
+    from_cobertura,
+    from_gcov_json,
+    from_llvm_json,
+    relativise,
+    remove_parts,
+    within,
+    write_part,
+)
 from livery.footman import fail
 
 if TYPE_CHECKING:
@@ -450,8 +461,8 @@ def _xcrun(name: str) -> str:
     return _asked(["xcrun", "--find", name])
 
 
-def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
-    """The lines gcov reads from the build's counters.
+def _measure_gcov(package: Package, compiler: str) -> dict[str, Reading]:
+    """What gcov reads from the build's counters, with each line's branches.
 
     A file is named as the compiler saw it; one relative to the build
     directory is made absolute there.
@@ -472,10 +483,10 @@ def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
             f"{package.name}: built with {compiler}, and no gcov is beside it or"
             " on PATH; install the compiler's gcov"
         )
-    merged: dict[str, dict[int, int]] = {}
+    merged: dict[str, Reading] = {}
     for path in data:
         result = footman.run(
-            [gcov, "--json-format", "--stdout", str(path)],
+            [gcov, "--branch-probabilities", "--json-format", "--stdout", str(path)],
             cwd=build_dir,
             nofail=True,
             recorded=False,
@@ -485,248 +496,21 @@ def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
                 f"{package.name}: gcov exited {result.code} on {path.name}:\n"
                 f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
             )
-        read = from_gcov_json(result.stdout)
         # gcov names a file as the compiler saw it, relative to the
         # build directory when the compile line was.
-        absolute = {
-            name if Path(name).is_absolute() else str(build_dir / name): counts
-            for name, counts in read.items()
-        }
-        for name, counts in absolute.items():
-            into = merged.setdefault(name, {})
-            for line, hits in counts.items():
-                into[line] = into.get(line, 0) + hits
+        for name, reading in from_gcov_json(result.stdout).items():
+            absolute = name if Path(name).is_absolute() else str(build_dir / name)
+            merged.setdefault(absolute, Reading()).add(reading)
     return merged
 
 
-#: Where a measured test run leaves each package's part, under a
-#: directory named after its measurer, in the line format the coverage
-#: extension reads: inside the workspace's ``.workshop`` directory,
-#: which the base keeps out of git.
-PARTS = ".workshop/coverage/parts"
+def _measure_llvm(package: Package, compiler: str) -> dict[str, Reading]:
+    """What llvm-cov reads from the run's profiles over the test executables.
 
-#: The line format's version the parts are written in.
-FORMAT = 1
-
-#: The measurer a part names, by the compiler family that read it.
-MEASURER_NAMES = {"gcov": "gcov", "llvm": "llvm-cov", "msvc": "dotnet-coverage"}
-
-
-def write_part(
-    root: Path, package_path: str, lines: dict[str, dict[int, int]], family: str
-) -> Path:
-    """Write *lines* as *package_path*'s part in the line format under *root*; the path.
-
-    The part names its measurer by the compiler *family* that read it,
-    counts how many times each line ran, and judges lines alone: per
-    file the instrumentable lines as its statements, the ones that ran
-    with their counts, and the git blob id of the file's text with each
-    CRLF read as LF, so a Windows checkout and a Linux one give one
-    digest. A line number below 1 is no line and is left out.
+    Read from llvm-cov's JSON export, which has the columns its lcov
+    export leaves out; the functions are named by the demangler beside
+    the compiler (`_demangled`).
     """
-    from livery import git
-
-    measurer = MEASURER_NAMES.get(family, family)
-    files: dict[str, dict[str, Any]] = {}
-    for name, counts in sorted(lines.items()):
-        held = {line: runs for line, runs in counts.items() if line >= 1}
-        source = root / name
-        entry: dict[str, Any] = {
-            "digest": _digest(source.read_bytes()) if source.is_file() else ""
-        }
-        if held:
-            entry["statements"] = _ranges(held)
-        ran = [[line, runs] for line, runs in sorted(held.items()) if runs > 0]
-        if ran:
-            entry["counts"] = ran
-        files[name] = entry
-    part = {
-        "format": FORMAT,
-        "unit": package_path,
-        "measurer": {
-            "name": measurer,
-            "version": "",
-            "runtime": "",
-            "counts": "counts",
-            "branches": "none",
-            "regions": [],
-            "judges": ["lines"],
-        },
-        "contexts": [],
-        "files": files,
-    }
-    path = root / PARTS / measurer / f"{git.slug(package_path)}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(part, sort_keys=True) + "\n", encoding="utf-8")
-    return path
-
-
-def remove_parts(root: Path, package_path: str) -> None:
-    """Delete *package_path*'s parts of an earlier run under *root*, any measurer's."""
-    from livery import git
-
-    for stale in (root / PARTS).glob(f"*/{git.slug(package_path)}.json"):
-        stale.unlink()
-
-
-def _ranges(lines: dict[int, int]) -> str:
-    """The line numbers of *lines* as the line format's range string: ``1-12,15``."""
-    ordered = sorted(lines)
-    found: list[str] = []
-    index = 0
-    while index < len(ordered):
-        start = end = ordered[index]
-        while index + 1 < len(ordered) and ordered[index + 1] == end + 1:
-            index += 1
-            end = ordered[index]
-        found.append(str(start) if start == end else f"{start}-{end}")
-        index += 1
-    return ",".join(found)
-
-
-def _digest(content: bytes) -> str:
-    """The git blob id of *content* as text, the line format's ``digest``.
-
-    Each CRLF counts as LF: Git for Windows checks text out with CRLF,
-    and a file measured there has the digest of the same file measured
-    on Linux.
-    """
-    text = content.replace(b"\r\n", b"\n")
-    header = f"blob {len(text)}\0".encode("ascii")
-    return hashlib.sha1(header + text, usedforsecurity=False).hexdigest()
-
-
-def relativise(
-    lines: dict[str, dict[int, int]], root: Path
-) -> dict[str, dict[int, int]]:
-    """*lines* keyed by workspace-relative posix paths; files outside *root* dropped.
-
-    A measurer names files the way the compiler saw them, absolute and
-    with the host's separators; the row and the floors want the path
-    the repository knows.
-    """
-    base = root.resolve()
-    kept: dict[str, dict[int, int]] = {}
-    for name, counts in lines.items():
-        candidate = Path(PureWindowsPath(name).as_posix() if "\\" in name else name)
-        if not candidate.is_absolute():
-            candidate = base / candidate
-        try:
-            relative = candidate.resolve().relative_to(base).as_posix()
-        except ValueError:
-            continue
-        kept[relative] = dict(counts)
-    return kept
-
-
-def within(
-    lines: dict[str, dict[int, int]], package: Package
-) -> dict[str, dict[int, int]]:
-    """The files of *lines* under *package*, keyed as they are."""
-    prefix = f"{package.path}/"
-    return {name: counts for name, counts in lines.items() if name.startswith(prefix)}
-
-
-def from_lcov(text: str) -> dict[str, dict[int, int]]:
-    """The lines an lcov trace names: ``SF:`` opens a file, ``DA:`` counts a line."""
-    lines: dict[str, dict[int, int]] = {}
-    current: dict[int, int] | None = None
-    for raw in text.splitlines():
-        line = raw.strip()
-        if line.startswith("SF:"):
-            current = lines.setdefault(line[3:], {})
-        elif line.startswith("DA:") and current is not None:
-            number, _, hits = line[3:].partition(",")
-            count = hits.split(",")[0]
-            current[int(number)] = current.get(int(number), 0) + int(count or 0)
-        elif line == "end_of_record":
-            current = None
-    return lines
-
-
-def from_cobertura(text: str) -> dict[str, dict[int, int]]:
-    """The lines a Cobertura report names; a report that is not XML refuses.
-
-    A class's ``filename`` is taken as it is when absolute, else under
-    the report's first ``<source>``.
-    """
-    try:
-        document = ElementTree.fromstring(text)
-    except ElementTree.ParseError as error:
-        fail(f"the coverage report is not XML ({error})")
-    sources = [
-        (node.text or "").strip() for node in document.iter("source") if node.text
-    ]
-    lines: dict[str, dict[int, int]] = {}
-    for klass in document.iter("class"):
-        name = klass.get("filename", "")
-        if not name:
-            continue
-        if not _absolute(name) and sources:
-            name = (
-                sources[0].rstrip("\\/") + ("\\" if "\\" in sources[0] else "/") + name
-            )
-        counts = lines.setdefault(name, {})
-        for row in klass.iter("line"):
-            number = row.get("number")
-            if number is None:
-                continue
-            counts[int(number)] = counts.get(int(number), 0) + int(row.get("hits", "0"))
-    return lines
-
-
-def _absolute(name: str) -> bool:
-    return Path(name).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", name) is not None
-
-
-def from_gcov_json(text: str) -> dict[str, dict[int, int]]:
-    """The lines gcov's ``--json-format`` output names; a non-document refuses.
-
-    Per file, line number to hit count, the counts of a line gcov
-    names twice added up.
-    """
-    lines: dict[str, dict[int, int]] = {}
-    for document in _json_documents(text):
-        files = document.get("files") if isinstance(document, dict) else None
-        if not isinstance(files, list):
-            fail("gcov printed no files table; its JSON format has one")
-        for entry in files:
-            if not isinstance(entry, dict):
-                continue
-            name = str(entry.get("file", ""))
-            rows = entry.get("lines")
-            if not name or not isinstance(rows, list):
-                continue
-            counts = lines.setdefault(name, {})
-            for row in rows:
-                if isinstance(row, dict) and "line_number" in row:
-                    line = int(row["line_number"])
-                    counts[line] = counts.get(line, 0) + int(row.get("count", 0))
-    return lines
-
-
-def _json_documents(text: str) -> list[Any]:
-    """Every JSON document in *text*, one per line or one whole; non-JSON refuses."""
-    stripped = text.strip()
-    if not stripped:
-        return []
-    try:
-        return [json.loads(stripped)]
-    except ValueError:
-        pass
-    documents: list[Any] = []
-    for line in stripped.splitlines():
-        if not line.strip():
-            continue
-        try:
-            documents.append(json.loads(line))
-        except ValueError:
-            fail(f"gcov printed a line that is not JSON: {line[:120]}")
-    return documents
-
-
-def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
-    """The lines llvm-cov reads from the run's profiles over the test executables."""
     build_dir = package.directory / GATE_BUILD_DIR
     raws = sorted((build_dir / PROFILE_DIR).glob("*.profraw"))
     if not raws:
@@ -757,7 +541,7 @@ def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
     objects = _test_objects(package)
     if not objects:
         fail(f"{package.name}: ctest names no test executable to read coverage from")
-    argv = [cov, "export", "-format=lcov", f"-instr-profile={merged}", objects[0]]
+    argv = [cov, "export", "-format=text", f"-instr-profile={merged}", objects[0]]
     for extra in objects[1:]:
         argv += ["-object", extra]
     result = footman.run(argv, nofail=True, recorded=False)
@@ -766,13 +550,44 @@ def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
             f"{package.name}: llvm-cov exited {result.code}:\n"
             f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
         )
-    return from_lcov(result.stdout)
+    readings = from_llvm_json(result.stdout)
+    demangle(readings, functools.partial(_demangled, package, compiler))
+    return readings
+
+
+def _demangled(package: Package, compiler: str, names: list[str]) -> list[str]:
+    """*names* demangled by llvm-cxxfilt or c++filt beside *compiler*, in order.
+
+    A host with neither keeps the names llvm-cov gives and says so; a
+    demangler that fails leaves them too, with its words.
+    """
+    found = (
+        _beside(compiler, "llvm-cxxfilt")
+        or _xcrun("llvm-cxxfilt")
+        or _beside(compiler, "c++filt")
+    )
+    if not found:
+        print(
+            f"  {package.name}: coverage: no llvm-cxxfilt or c++filt beside"
+            f" {compiler or 'the compiler'}; its functions keep their mangled names"
+        )
+        return names
+    result = footman.run(
+        [found, "-n"], input="\n".join(names) + "\n", nofail=True, recorded=False
+    )
+    if result.code != 0:
+        print(
+            f"  {package.name}: coverage: {Path(found).name} exited {result.code};"
+            f" its functions keep their mangled names: {result.stderr.strip()[:200]}"
+        )
+        return names
+    return result.stdout.splitlines()
 
 
 def _measure_msvc(
     package: Package, arguments: list[str], env: dict[str, str], names: list[str]
-) -> dict[str, dict[int, int]]:
-    """The lines Microsoft's engine reads from the ctest run it collects around.
+) -> dict[str, Reading]:
+    """What Microsoft's engine reads from the ctest run it collects around.
 
     Each executable ctest names, and every shared library the build
     made, is instrumented statically into a copy that takes the
