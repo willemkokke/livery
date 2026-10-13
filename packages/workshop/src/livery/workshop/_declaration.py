@@ -587,7 +587,10 @@ class _Reader:
         refuse, since that job's needs are the point's it inherits
         from, whose runs never have the joining point's jobs. A job
         naming ``labels`` fans out to one leg per runner label the
-        function names (a ``runners`` matrix).
+        function names (a ``runners`` matrix). ``judges`` names the
+        tasks that judge the run before the verdict, on a join of a
+        point's own verdict job alone; on any other job they refuse
+        ([livery.workshop._points.judges_refusal][]).
         """
         from livery.workshop._points import (
             DECLARED,
@@ -595,6 +598,7 @@ class _Reader:
             Job,
             JobContribution,
             contributed_jobs,
+            judges_refusal,
             point_has_job,
         )
 
@@ -610,6 +614,8 @@ class _Reader:
         joins = point_has_job(point, name) or any(
             item.point in lineage and item.job.name == name for item in earlier
         )
+        if "judges" in entry and (why := judges_refusal(point, name)):
+            raise self.refuse((*where, "judges"), why)
         if joins and entry.get("gates"):
             raise self.refuse(
                 (*where, "gates"),
@@ -665,6 +671,10 @@ class _Reader:
             entries=tuple(
                 Entry(point, name, str(task), source=self.extension)
                 for task in entry.get("entries", ())
+            )
+            + tuple(
+                Entry(point, name, str(task), source=self.extension, judges=True)
+                for task in entry.get("judges", ())
             ),
             gates=bool(entry.get("gates", False)),
             extension=self.extension,

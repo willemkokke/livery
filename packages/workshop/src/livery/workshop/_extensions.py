@@ -489,6 +489,21 @@ UNDECLARED: tuple[str, ...] = ()
 STALE: tuple[str, ...] = ()
 
 
+def snapshot() -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+    """What the mount recorded, for [livery.workshop._extensions.restore][] to put back.
+
+    Whether a mount ran, and the listed extensions it found undeclared
+    and stale.
+    """
+    return MOUNTED, UNDECLARED, STALE
+
+
+def restore(state: tuple[bool, tuple[str, ...], tuple[str, ...]]) -> None:
+    """Put the mount's records back to *state*."""
+    global MOUNTED, UNDECLARED, STALE
+    MOUNTED, UNDECLARED, STALE = state
+
+
 def mount_git_plugin() -> str:
     """Mount the git plugin; the reason it could not, printed as a note, or empty.
 

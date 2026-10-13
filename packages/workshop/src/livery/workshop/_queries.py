@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 if TYPE_CHECKING:
+    from livery.git import Keyed, Series
     from livery.workshop._composition import Lookup
     from livery.workshop._declaration import Declaration, DeclaredValue, Reference
     from livery.workshop._packages import Package
@@ -234,6 +235,10 @@ EXECUTABLES: Query[tuple[str, ...]] = Query("executables")
 #: The marketplace ids of the editor extensions the listed extensions
 #: recommend, which the rendered ``.vscode/extensions.json`` lists.
 EDITOR_EXTENSIONS: Query[tuple[str, ...]] = Query("editor-extensions")
+
+#: The state store's series the listed extensions keep beside the
+#: base's own, which the janitor bounds and ``fm store.ls`` lists.
+STORE_SERIES: Query[tuple[Series | Keyed, ...]] = Query("store.series")
 
 
 @functools.cache

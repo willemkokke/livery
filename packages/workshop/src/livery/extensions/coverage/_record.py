@@ -8,8 +8,9 @@ a record, and so does every branch with a pull request run, under the
 same family with the branch as the base part. A check leg skips a
 suite when its branch's record or main's holds the unit at the suite's
 current closure identity, and runs it otherwise. A leg that ran a
-suite puts the suite's arcs on its per-run ref, beside its timing
-half, with the scope its gate ran; the run's gate job unions the
+suite leaves the suite's arcs, with the scope its gate ran, for the
+leg's one write, which puts them on its per-run ref beside its timing
+half; the run's gate job unions the
 per-run refs with the rows it carries from the records, judges the
 floors on that union, and writes the union back: a pull request's run
 onto its branch's record, main's run onto main's, each replaced in
@@ -26,11 +27,11 @@ The unit is the suite that ran, never the package covered: a suite
 executes lines across packages (a dependant's tests run its
 dependencies), so the stored lines are filtered to the files of the
 suite's closure, the files whose identity the key names. Reach for
-[livery.workshop._coverage_store.recorded][] to read main's record on
-a leg, [livery.workshop._coverage_store.put_run][] to put a leg's
-lines, [livery.workshop._coverage_store.run_legs][] to read them in
-the gate job, and [livery.workshop._coverage_store.put_record][] to
-write the record.
+[livery.extensions.coverage._record.recorded][] to read main's record
+on a leg, [livery.extensions.coverage._record.leave_run][] to leave a
+leg's lines for its write, [livery.extensions.coverage._record.run_legs][]
+to read them in the gate job, and
+[livery.extensions.coverage._record.put_record][] to write the record.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ from typing import Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
-from livery.workshop._packages import Package
+from livery.workshop._packages import WORKSPACE_TESTS, Package
 
 #: The rows' shape: 2 holds arcs, pairs of line numbers, so a package
 #: is judged on its statements and its branches together. A row of
@@ -58,38 +59,15 @@ SCHEMA = 2
 #: name as its base instead, written by that branch's own runs.
 MAIN = "main"
 
-#: The file a check leg puts on its per-run ref beside its timing
-#: half: the scope its gate ran and the lines of every suite it ran.
+#: The file a check leg leaves for its one write, which puts it on the
+#: leg's per-run ref beside its timing half: the scope its gate ran and
+#: the lines of every suite it ran.
 RUN_FILE = "coverage.json"
 
 #: The root files whose identity every suite's key carries: a pin
 #: change is a dependency change for every suite, whichever package
 #: the closure walks.
 ROOT_PINS = ("pyproject.toml", "uv.lock")
-
-#: The workspace's own test directory, a stored unit like a package's
-#: suite. Its tests reach any package, so its identity is the whole
-#: tree, and every leg that runs a suite runs it.
-WORKSPACE_TESTS = "tests"
-
-
-def workspace_suite(root: Path) -> Package | None:
-    """The workspace's own tests, the ``tests`` directory at its root, as a unit.
-
-    ``None`` when the workspace has none. The unit's kind,
-    ``workspace``, is no registered kind, so no step judges it by
-    kind; a test step runs it beside the members it judges.
-    """
-    directory = root / WORKSPACE_TESTS
-    if not directory.is_dir():
-        return None
-    return Package(
-        directory=directory,
-        path=WORKSPACE_TESTS,
-        name="workspace-tests",
-        kind="workspace",
-        depends=(),
-    )
 
 
 def branches(root: Path) -> list[str] | None:
@@ -125,7 +103,7 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
 #: for main and ``coverage/<branch>/<leg>`` for a branch, one row per
 #: unit, replaced in place by every write, the rows a write replaced
 #: or removed kept beside them for a day
-#: ([livery.workshop._coverage_store.KEPT_FOR][]); a series of a branch gone
+#: ([livery.extensions.coverage._record.KEPT_FOR][]); a series of a branch gone
 #: from origin, or of a leg the matrix no longer produces, is the
 #: janitor's to drop. A gone branch's record lingers a day first:
 #: main's run for the squash that merged it carries every suite its
@@ -236,7 +214,7 @@ class Record:
         failed: Whether the record could not be read at all.
         reason: Why it could not, in the store's wording.
         kept: The rows writes replaced or removed within
-            [livery.workshop._coverage_store.KEPT_FOR][], by file name.
+            [livery.extensions.coverage._record.KEPT_FOR][], by file name.
     """
 
     units: dict[str, Unit]
@@ -262,7 +240,7 @@ class Record:
     def expired(self, now: datetime) -> list[str]:
         """The names of the kept rows past their day at *now*.
 
-        A row is kept for [livery.workshop._coverage_store.KEPT_FOR][]
+        A row is kept for [livery.extensions.coverage._record.KEPT_FOR][]
         from the write that kept it. A row without a readable stamp
         counts as expired: its age cannot be told.
         """
@@ -291,6 +269,24 @@ class Record:
 def record_ref(leg: str, base: str = MAIN) -> str:
     """The ref holding *base*'s record on *leg*: main's, or a branch's."""
     return RECORD.series(base, leg).ref
+
+
+def record_bases(branch: str) -> tuple[str, ...]:
+    """The records a leg reads, in order: the branch's own if any, then main's."""
+    return (branch, MAIN) if branch and branch != MAIN else (MAIN,)
+
+
+def series(root: Path) -> tuple[git.Series | git.Keyed, ...]:
+    """Answer ``store.series``: the coverage record and the coverage marks.
+
+    The janitor bounds them and ``fm store.ls`` lists them while the
+    workspace lists the coverage extension. The answer is the same in
+    every workspace, so *root* is not read.
+    """
+    from livery.extensions.coverage._marks import SERIES
+
+    del root
+    return (RECORD, SERIES)
 
 
 def row_name(path: str) -> str:
@@ -407,14 +403,7 @@ def _parse_unit(raw: Any, *, path: str = "") -> Unit | None:
     )
 
 
-def _per_run(run_id: str, leg: str) -> git.Series:
-    """The per-run series *leg* of *run_id* writes, the timing half's."""
-    from livery.workshop._metrics import RUNS
-
-    return RUNS.series(run_id, leg)
-
-
-def put_run(
+def leave_run(
     root: Path,
     run: RunContext,
     *,
@@ -422,17 +411,20 @@ def put_run(
     scope: str,
     packages: tuple[str, ...],
     units: Mapping[str, Unit],
-    timing: Mapping[str, Any] | None = None,
 ) -> str:
-    """Put *leg*'s scope and its measured *units* on its per-run ref; ``""`` or why not.
+    """Leave *leg*'s scope and measured *units* for its one write; ``""`` or why not.
 
-    Only a CI run writes. The one file carries the scope the leg's
-    gate ran, the packages a narrowed gate named, and every unit's
-    lines, so the gate job reads a leg's whole fact in one read and
-    the lines go with the ref when the run's metrics are collected.
-    *timing*, the leg's timing row ([livery.workshop._metrics.leg_row][]),
-    rides the same write as the row file, so a leg writes its ref once.
+    The one file carries the scope the leg's gate ran, the packages a
+    narrowed gate named, and every unit's lines, so the gate job reads
+    a leg's whole fact in one read and the lines go with the ref when
+    the run's metrics are collected. It lands in the leg's spool
+    ([livery.workshop._metrics.LEG_SPOOL][]), and the leg's last
+    entry, ``ci.leg``, puts it on the leg's per-run ref beside the
+    timing row ([livery.workshop._metrics.put_leg][]), so a leg writes
+    its ref once.
     """
+    from livery.workshop._metrics import leave_leg_file
+
     if not leg:
         return "refusing: the leg has no label, so its lines have no key"
     row = {
@@ -443,14 +435,8 @@ def put_run(
         "forge": run.forge,
         "units": {path: _unit_fields(unit) for path, unit in sorted(units.items())},
     }
-    files: dict[str, Mapping[str, Any]] = {RUN_FILE: row}
-    if timing is not None:
-        from livery.workshop._metrics import ROW_FILE
-
-        files[ROW_FILE] = timing
-    return _per_run(run.run_id, leg).put(
-        state_store(root), files, message=f"coverage: {leg} of run {run.run_id}"
-    )
+    leave_leg_file(root, RUN_FILE, row)
+    return ""
 
 
 def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
@@ -510,7 +496,7 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
     An absent record is no units and no failure; a record the store
     could not read is a failure with its reason; a row that is not a
     unit is skipped and named, and the rest stand. A row named by its
-    unit and closure ([livery.workshop._coverage_store.kept_name][]) is
+    unit and closure ([livery.extensions.coverage._record.kept_name][]) is
     a kept one, read beside the current rows and never as one. A leg
     without a label, or an empty base, has no record to read.
     """
@@ -560,7 +546,7 @@ def put_record(
     A current row that a fresh one replaces at another closure, or
     that *remove* names, stays as a kept row under its closure's name,
     and every kept row older than
-    [livery.workshop._coverage_store.KEPT_FOR][] at *now* goes. *held*
+    [livery.extensions.coverage._record.KEPT_FOR][] at *now* goes. *held*
     is the record as the caller read it; it is read here when absent,
     and a record that cannot be read refuses the write, since what it
     would keep is unknown.

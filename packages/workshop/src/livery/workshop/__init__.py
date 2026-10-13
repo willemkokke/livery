@@ -63,8 +63,9 @@ The guidance for one reader, [livery.workshop.AGENT][] or
 [livery.workshop.Prose][] fragments [livery.workshop.guidance][]
 answers; each listed extension's shipped files live where
 [livery.workshop.shipped_content][] says; the gate's fixers run over
-named files through [livery.workshop.fix_files][]; and what the listed
-extensions declare for an extension is
+named files through [livery.workshop.fix_files][], and a phase's steps
+over named packages through [livery.workshop.run_phase_over][]; and
+what the listed extensions declare for an extension is
 [livery.workshop.contributions_for][].
 
 A package-level extension adds steps to a package's lifecycle phases
@@ -91,7 +92,6 @@ if TYPE_CHECKING:
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
     from livery.workshop._contract import read_contract as read_contract
-    from livery.workshop._coverage_store import workspace_suite as workspace_suite
     from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
     from livery.workshop._extensions import shipped_content as shipped_content
@@ -109,6 +109,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import verify_workspace as verify_workspace
+    from livery.workshop._packages import workspace_suite as workspace_suite
     from livery.workshop._phases import PhaseContext as PhaseContext
     from livery.workshop._prose import AGENT as AGENT
     from livery.workshop._prose import HUMAN as HUMAN
@@ -117,6 +118,7 @@ if TYPE_CHECKING:
     from livery.workshop._provenance import generated_header as generated_header
     from livery.workshop._quality import ci_changes as ci_changes
     from livery.workshop._quality import fix_files as fix_files
+    from livery.workshop._quality import run_phase_over as run_phase_over
     from livery.workshop._queries import COMPILE_COMMANDS as COMPILE_COMMANDS
     from livery.workshop._queries import CURRENT_VERSION as CURRENT_VERSION
     from livery.workshop._queries import DISTRIBUTIONS as DISTRIBUTIONS
@@ -189,6 +191,7 @@ __all__ = [
     "registry",
     "release_notes",
     "run_batched",
+    "run_phase_over",
     "run_suites",
     "scoped_files",
     "scoped_packages",
@@ -251,6 +254,7 @@ _EXPORTS: dict[str, str] = {
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",
     "run_batched": "livery.workshop._invoke",
+    "run_phase_over": "livery.workshop._quality",
     "run_suites": "livery.workshop._kinds",
     "scoped_files": "livery.workshop._steps",
     "scoped_packages": "livery.workshop._steps",
@@ -259,7 +263,7 @@ _EXPORTS: dict[str, str] = {
     "step_option": "livery.workshop._steps",
     "verify_workspace": "livery.workshop._packages",
     "workspace_root": "livery.workshop._extensions",
-    "workspace_suite": "livery.workshop._coverage_store",
+    "workspace_suite": "livery.workshop._packages",
 }
 
 #: The public packages beneath the root, served whole on first use.

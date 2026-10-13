@@ -1,12 +1,17 @@
-# The coverage extension: each package's coverage policy, and the
-# site's coverage pages, drawn from the workspace's measured data in
-# the line format.
-# Read at every mount; a query's answer is imported when it is asked.
+# The coverage extension: each package's coverage policy, the measured
+# union the gate job judges it on, the record and the marks that carry
+# it across runs, and the site's coverage pages, drawn from the measured
+# data in the line format.
+# Read at every mount; its verbs arrive through its plugin, and a
+# query's answer is imported when it is asked.
 
 [extension]
 api-version = 1
 # Listed in [workspace] extensions.
 levels = ["workspace"]
+# The footman plugin that carries the leg's entry, the union and the
+# two verbs a person runs.
+plugin = "livery.extensions.coverage"
 
 # A package's coverage policy: the floor its coverage keeps, how far a
 # run may fall below it, and whether anything judges it. A package with
@@ -34,6 +39,26 @@ doc = "whether anything judges the package's coverage; true when absent, and fal
 # run left anywhere else.
 [for.docs.queries]
 "docs.coverage-pages" = "livery.extensions.coverage._pages:renderer"
+
+# Each check leg leaves its measured suites for the leg's one write,
+# after the gate and before that write: the suites no record can
+# supply run first, measured.
+[ci.jobs.gate.check]
+entries = ["coverage.leg"]
+
+# The gate job unions every leg's suites with the records and judges
+# the floors before it collects the run's rows: a package below its
+# floor stops the job before the verdict and the stamp.
+[ci.jobs.gate.gate]
+judges = ["coverage.union"]
+
+# The record and the marks are series of the state store: the janitor
+# bounds them and fm store.ls lists them. A machine's run of the python
+# suites prints this extension's preview: each package's figure beside
+# its floor, judging nothing.
+[queries]
+"store.series" = "livery.extensions.coverage._record:series"
+"python.test.preview" = "livery.extensions.coverage._floors:previewer"
 
 # Who reduces the stored rows of a measurer this extension does not
 # read itself, coverage.py's arcs say: each listed extension answers

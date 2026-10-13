@@ -49,7 +49,7 @@ from livery.footman import fail
 from livery.workshop import Query, answer
 
 if TYPE_CHECKING:
-    from livery.workshop._coverage_store import Unit
+    from livery.extensions.coverage._record import Unit
     from livery.workshop._packages import Package
 
 
@@ -282,7 +282,7 @@ def stored_rows(
     A leg whose record cannot be read, or holds nothing, is a named
     miss, never a refusal: the pages draw what there is.
     """
-    from livery.workshop._coverage_store import MAIN, recorded
+    from livery.extensions.coverage._record import MAIN, recorded
 
     found: dict[str, dict[str, Unit]] = {}
     misses: list[str] = []
@@ -374,7 +374,7 @@ def _from_record(
 
 def _local(root: Path, reductions: Mapping[str, Reduction]) -> _Measured:
     """The parts of the data the last gate run left at *root*."""
-    from livery.workshop._coverage_lines import read_parts
+    from livery.extensions.coverage._lines import read_parts
 
     found = _Measured(
         notes=("Measured on this machine, from the data its last gate run left.",)

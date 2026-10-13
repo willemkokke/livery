@@ -735,6 +735,44 @@ def test_a_join_of_a_job_the_point_inherits_names_no_needs(package: Path) -> Non
     assert jobs[("merge", "govern")].needs == ("gate",)
 
 
+def test_judges_on_a_job_that_is_not_the_verdict_s_refuse(package: Path) -> None:
+    from livery.footman import Failed
+    from livery.workshop import _points
+    from workshop_docs_declared import jobs_restored
+
+    where = package / "extension.toml"
+    # Judges join a point's own verdict job alone: the check legs, the
+    # merge point's inherited gate job and the nightly have none.
+    for point, job in (("gate", "check"), ("merge", "gate"), ("nightly", "nightly")):
+        assert _refusal(package, f'[ci.jobs.{point}.{job}]\njudges = ["acme.x"]\n') == (
+            f"{where}: ci.jobs.{point}.{job}.judges names judges on the {point}"
+            f" point's {job} job, which is not a verdict job a point declares;"
+            " judges join the gate point's gate job, before it collects the run's"
+            " rows"
+        )
+    # The registry refuses the same, for a contribution that never came
+    # through a declaration file.
+    entry = _points.Entry("gate", "check", "acme.x", judges=True)
+    with (
+        jobs_restored(),
+        pytest.raises((SystemExit, Failed), match="acme names judges"),
+    ):
+        _points.contribute_job(
+            "gate", _points.Job("check", joins=True), entries=(entry,), extension="acme"
+        )
+    # On the verdict job a judge reads as one, beside the join's entries.
+    found = _declare(
+        package,
+        '[ci.jobs.gate.gate]\nentries = ["acme.after"]\njudges = ["acme.x"]\n',
+    )
+    (item,) = found.additions.jobs
+    assert item.job.joins
+    assert [(entry.task, entry.judges) for entry in item.entries] == [
+        ("acme.after", False),
+        ("acme.x", True),
+    ]
+
+
 def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> None:
     where = package / "extension.toml"
     assert _refusal(

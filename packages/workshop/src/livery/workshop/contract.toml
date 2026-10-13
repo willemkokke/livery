@@ -520,6 +520,10 @@ doc = "files the entries do not read whose change runs the job all the same; non
 types = ["str"]
 doc = "the function naming the system packages the job installs before it enters, module:function given the workspace's root; none when absent"
 
+[contract.extension.ci.jobs."*"."*".judges]
+types = ["strs"]
+doc = "the tasks that judge the run before the verdict, on a point's own verdict job alone: each runs before the job collects the run's rows, and a red one stops the job before the verdict and the stamp; none when absent"
+
 [contract.extension.ci.jobs."*"."*".labels]
 types = ["str"]
 doc = "the function naming the runner labels the job fans out to, one leg each, module:function given the workspace's root; a workspace it names no label for renders no such job, and a need on it drops; one job on one runner when absent"
@@ -1067,6 +1071,13 @@ combine = "union"
 # runner's extension answers them. Declared by the base while the
 # python extension ships in its wheel.
 [queries."python.test.addopts"]
+level = "workspace"
+combine = "union"
+
+# The state store's series the listed extensions keep beside the
+# base's own, each a livery.git Series or Keyed family: the janitor
+# bounds them and fm store.ls lists them.
+[queries."store.series"]
 level = "workspace"
 combine = "union"
 

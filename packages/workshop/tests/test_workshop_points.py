@@ -10,11 +10,16 @@ import pytest
 
 from livery.workshop import _points
 
+# The coverage leg and the union are the coverage extension's, added as
+# the mount adds them for a workspace that lists coverage.
+from workshop_coverage_declared import coverage_jobs  # noqa: F401
+
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
 
 # The wheels job is nanobind's, added as the mount adds it.
 from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -456,6 +461,7 @@ def test_a_dispatch_s_only_runs_the_tasks_it_names_and_says_what_it_skipped(
     assert _points.ONLY in names
 
 
+@pytest.mark.usefixtures("coverage_jobs")
 def test_a_red_union_stops_the_gate_job_before_the_stamp(tmp_path: Path) -> None:
     root = _root(tmp_path)
     seen: list[str] = []
@@ -476,6 +482,101 @@ def test_a_red_union_stops_the_gate_job_before_the_stamp(tmp_path: Path) -> None
         tasks[union + 1 :]
     )
     assert seen == tasks[: union + 1]
+
+
+def test_a_red_judge_stops_the_gate_job_before_the_stamp(tmp_path: Path) -> None:
+    from livery.workshop._declaration import Additions
+    from livery.workshop._extensions import register_declared
+    from workshop_docs_declared import jobs_restored
+
+    root = _root(tmp_path)
+    judge = _points.Job("gate", joins=True)
+    entry = _points.Entry("gate", "gate", "acme.judge", judges=True)
+    seen: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        task = _task_of(argv)
+        seen.append(task)
+        return 3 if task == "acme.judge" else 0
+
+    with jobs_restored():
+        register_declared(
+            "acme",
+            Additions((), (_points.JobContribution("gate", judge, (entry,)),)),
+        )
+        tasks = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
+        with pytest.raises(_FAILURES, match=r"gate/gate: acme\.judge exited 3"):
+            _points.run_point(root, "gate", "gate", spawn=spawn)
+    # A judge runs before the collect, so a red one ends the job: the
+    # run's row is never collected, no verdict is reached, and no stamp
+    # records the tree as proved.
+    at = tasks.index("acme.judge")
+    assert tasks[at + 1] == _points.COLLECT
+    assert {"ci.verdict", "ci.verified.stamp"} <= set(tasks[at + 1 :])
+    assert seen == tasks[: at + 1]
+
+
+def test_a_workspace_without_coverage_runs_no_coverage_leg(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery import git
+    from livery.workshop._ci_context import LEG_VARIABLE, state_store
+    from livery.workshop._ci_tasks import leg_flow
+    from livery.workshop._extensions import declaration, register_jobs
+    from livery.workshop._metrics import ROW_FILE, RUNS
+    from livery.workshop._verified import FULL, write_marker
+    from workshop_docs_declared import jobs_restored
+
+    root = seeds("pushed", pushed) / "work"
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["ruff"]\n\n[forge]\nkind = "gitea"\n'
+        'owner = "owner"\n'
+    )
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "7")
+    monkeypatch.setattr(_points, "_tracing", lambda root: False)
+    spawned: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        task = _task_of(argv)
+        spawned.append(task)
+        if task == "check":
+            # The gate's own trace and its scope, as a profiled gate leaves them.
+            event = {"ph": "X", "cat": "task", "name": "check", "pid": 1, "tid": 1}
+            (root / _points.TRACE).write_text(
+                json.dumps({"traceEvents": [{**event, "ts": 0, "dur": 9000}]})
+            )
+            write_marker(root, FULL, leg=env[LEG_VARIABLE])
+        if task == "ci.leg":
+            monkeypatch.setenv(LEG_VARIABLE, env[LEG_VARIABLE])
+            job = argv[-1].removeprefix("--job=")
+            leg_flow(root, job=job, trace=Path(_points.TRACE))
+        return 0
+
+    with jobs_restored():
+        # The mount registers the jobs of what the workspace lists: ruff alone.
+        _points._CONTRIBUTED_JOBS.clear()
+        _points._JOINED_JOBS.clear()
+        found = declaration("ruff")
+        assert found is not None
+        register_jobs("ruff", found.additions.jobs)
+        for point in _points.point_by_name(root):
+            for job in _points.jobs_of(root, point):
+                tasks = [e.task for e in _points.entries_for(root, point, job)]
+                assert not [task for task in tasks if task.startswith("coverage.")]
+        _points.run_point(
+            root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=spawn
+        )
+        assert spawned == ["check", "ci.leg"]
+        # The leg's one write carries its row alone.
+        series = RUNS.series("7", "check-ubuntu-latest-3.14")
+        held = git.read(state_store(root), series.ref).files
+        assert held is not None and set(held) == {ROW_FILE}
+        # The gate job runs no union, and every entry green is a green job.
+        spawned.clear()
+        _points.run_point(root, "gate", "gate", spawn=spawn)
+    assert spawned and not [task for task in spawned if task.startswith("coverage.")]
 
 
 def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
@@ -578,6 +679,7 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     assert docs[-1].source == "workshop.toml"
 
 
+@pytest.mark.usefixtures("coverage_jobs")
 def test_the_runner_spawns_each_entry_with_the_legs_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -606,10 +708,11 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     # Every entry under a trace of its own, named after the task it ran.
     assert seen == [
         ["hse", "--profile=fm-profile-check.json", "check"],
+        ["hse", "--profile=fm-profile-coverage-leg.json", "coverage.leg"],
         [
             "hse",
-            "--profile=fm-profile-coverage-leg.json",
-            "coverage.leg",
+            "--profile=fm-profile-ci-leg.json",
+            "ci.leg",
             "--job=check (ubuntu-latest, 3.14)",
         ],
     ]
@@ -625,8 +728,8 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     )
     assert seen[-1] == [
         "hse",
-        "--profile=fm-profile-coverage-leg.json",
-        "coverage.leg",
+        "--profile=fm-profile-ci-leg.json",
+        "ci.leg",
         "--job=check",
     ]
     assert legs[-1] == "check-ubuntu-latest-3.14"
@@ -952,7 +1055,6 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
     drawn = json.loads(text)["traceEvents"]
     assert [e["name"] for e in drawn] == [
         "workflow.release.check-title",
-        "coverage.union",
         "ci.metrics.collect",
         "speed.judge",
         "--needs=check,docs",

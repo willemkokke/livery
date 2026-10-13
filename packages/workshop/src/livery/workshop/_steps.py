@@ -717,7 +717,7 @@ def _package_records(ctx: PhaseContext, package: Package) -> list[StepRecord]:
 
 def members(ctx: PhaseContext) -> tuple[Package, ...]:
     """The packages under judgment that a kind owns: the tests unit is none's."""
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._packages import WORKSPACE_TESTS
 
     return tuple(package for package in ctx.judged if package.path != WORKSPACE_TESTS)
 
@@ -1194,7 +1194,7 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
     is not a git checkout, and then every step that applies runs.
     """
     from livery.workshop._categories import category_of
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._packages import WORKSPACE_TESTS
     from livery.workshop._provenance import unit_of
 
     if ctx.files:
@@ -1358,7 +1358,7 @@ WHOLE = (".",)
 
 def _workspace_unit(ctx: PhaseContext) -> tuple[Package, ...]:
     """The workspace's own tests, when this run judges them as a unit."""
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._packages import WORKSPACE_TESTS
 
     return tuple(p for p in ctx.judged if p.path == WORKSPACE_TESTS)
 
@@ -1381,7 +1381,7 @@ def _every_unit_reached(ctx: PhaseContext, record: StepRecord, chosen: int) -> b
     same, so the step runs over its configured whole instead of a
     list naming every unit.
     """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._packages import WORKSPACE_TESTS
 
     everyone = tuple(p for p in ctx.packages if p.path != WORKSPACE_TESTS)
     gated_all = judged_by(record, everyone, quiet=True)
@@ -1506,8 +1506,8 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     are the root's suite, run when a test step names an extension the
     root's kind stands for ([livery.workshop._tools.ROOT_KIND][]).
     """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._packages import WORKSPACE_TESTS
     from livery.workshop._tools import ROOT_KIND
 
     tests = [record for record in _STEPS.values() if record.phase == "test"]

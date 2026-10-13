@@ -70,6 +70,9 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
 "livery.extensions.docs" = "livery.extensions.docs._tasks"
 # The nanobind extension's verb, the one the release's wheels job runs.
 "livery.extensions.nanobind" = "livery.extensions.nanobind._tasks"
+# The coverage extension's verbs: the leg's entry, the union, and the
+# floors and marks a person runs.
+"livery.extensions.coverage" = "livery.extensions.coverage._tasks"
 
 # The workshop extensions this wheel ships, by the name a workspace
 # lists: each maps to the package beside its extension.toml, which the

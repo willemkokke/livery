@@ -249,10 +249,10 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 writes=True,
                 note=(
-                    "The check legs: the tests run metered, and only they."
-                    " The leg's measured suites ride its per-run ref on the"
-                    " state store, and the gate job unions them with main's"
-                    " record and judges once. The scoped gate measures from"
+                    "The check legs: each runs the gate, and its row rides"
+                    " its per-run ref on the state store, in one write with"
+                    " the files its other entries left, for the gate job."
+                    " The scoped gate measures from"
                     " the proved tree nearest the checkout's, an earlier"
                     " push's merge rebuilt from its two commits among them,"
                     " or from the merge base with the pull request's base"
@@ -271,9 +271,8 @@ DECLARED: tuple[Point, ...] = (
                 note=(
                     "The one required context. Branch protection points"
                     " here, so the matrix can grow or shrink without touching"
-                    " repository settings. Its entries union the legs'"
-                    " measured suites with main's coverage record and judge"
-                    " the floors, collect the run's timing rows, ask the"
+                    " repository settings. Its entries run the judges the"
+                    " extensions add, collect the run's timing rows, ask the"
                     " forge for the jobs it needs, and stamp the tree a green"
                     " run proved; a red run is judged too. The stamp composes"
                     " a narrowed run with the record of the tree its legs"
@@ -671,6 +670,35 @@ def point_has_job(point: str, name: str) -> bool:
     return False
 
 
+def verdict_jobs() -> tuple[tuple[str, str], ...]:
+    """Each builtin point that declares a verdict job of its own, with the job's name.
+
+    A verdict job runs whatever the jobs it needs did; the judges an
+    extension adds join one of these.
+    """
+    return tuple(
+        (point.name, job.name) for point in DECLARED for job in point.jobs if job.always
+    )
+
+
+def judges_refusal(point: str, job: str) -> str:
+    """Why judges may not join *job* of *point*; empty when they may.
+
+    Judges join a point's own verdict job alone: they run before it
+    collects the run's rows, and a red one stops it before the verdict
+    and the stamp.
+    """
+    known = verdict_jobs()
+    if (point, job) in known:
+        return ""
+    listed = ", ".join(f"the {name} point's {verdict} job" for name, verdict in known)
+    return (
+        f"names judges on the {point} point's {job} job, which is not a verdict"
+        f" job a point declares; judges join {listed}, before it collects the"
+        " run's rows"
+    )
+
+
 def contribute_job(
     point: str,
     job: Job,
@@ -691,8 +719,9 @@ def contribute_job(
     join the needs of a job the point has of its own. Refuses a point
     that is not builtin, a job name the point already has when the job
     does not join, a join of a job the point does not have, a join that
-    gates, a name another extension contributed, and an entry naming
-    another point or job.
+    gates, a name another extension contributed, an entry naming
+    another point or job, and a judge on a job that is not the point's
+    own verdict job (`judges_refusal`).
     """
     by_name = {declared.name: declared for declared in DECLARED}
     if point not in by_name:
@@ -707,6 +736,10 @@ def contribute_job(
                 f" with an entry for {entry.point}/{entry.job}; an entry names"
                 " the job it runs in"
             )
+    if any(entry.judges for entry in entries):
+        why = judges_refusal(point, job.name)
+        if why:
+            fail(f"{extension} {why}")
     if job.joins:
         if not point_has_job(point, job.name):
             fail(
@@ -745,6 +778,36 @@ def withdraw_job(point: str, name: str) -> None:
     _CONTRIBUTED_JOBS.pop((point, name), None)
     for key in [key for key in _JOINED_JOBS if key[:2] == (point, name)]:
         del _JOINED_JOBS[key]
+
+
+def snapshot() -> tuple[
+    dict[tuple[str, str], JobContribution],
+    dict[tuple[str, str, str], JobContribution],
+    Tasks | None,
+]:
+    """The jobs the extensions added and joined, and the kept task tree, for restore.
+
+    Judges ride their joins' entries. [livery.workshop._points.restore][]
+    puts all three back.
+    """
+    return dict(_CONTRIBUTED_JOBS), dict(_JOINED_JOBS), MOUNTED
+
+
+def restore(
+    state: tuple[
+        dict[tuple[str, str], JobContribution],
+        dict[tuple[str, str, str], JobContribution],
+        Tasks | None,
+    ],
+) -> None:
+    """Put the added jobs, the joins and the kept task tree back to *state*."""
+    global MOUNTED
+    added, joined, tree = state
+    _CONTRIBUTED_JOBS.clear()
+    _CONTRIBUTED_JOBS.update(added)
+    _JOINED_JOBS.clear()
+    _JOINED_JOBS.update(joined)
+    MOUNTED = tree
 
 
 def contributed_jobs(point: str) -> tuple[JobContribution, ...]:
@@ -1136,6 +1199,10 @@ class Entry:
         last: Whether the entry runs after every entry an extension
             adds to the job, the janitor's shape; the added entries go
             before the first such entry.
+        judges: Whether the entry judges the run before the verdict:
+            a judge an extension adds to a point's verdict job runs
+            before the job collects the run's rows, and a red one stops
+            the job there, as a red builtin entry does.
     """
 
     point: str
@@ -1146,6 +1213,7 @@ class Entry:
     every: str = ""
     once: bool = False
     last: bool = False
+    judges: bool = False
 
 
 #: The cadences an entry may declare, in days.
@@ -1180,6 +1248,11 @@ def due(every: str, on: date) -> tuple[bool, date]:
     return False, following
 
 
+#: The task that collects the run's rows in the verdict job: the
+#: judges the extensions add run before it, so what they leave for
+#: the run's row is folded in.
+COLLECT = "ci.metrics.collect"
+
 #: The workshop's own schedule. Every entry runs profiled, so a job's
 #: own timeline is the union of the work it did; the gate's check job
 #: also records the leg's timing row, and its verdict job collects the
@@ -1189,19 +1262,18 @@ def due(every: str, on: date) -> tuple[bool, date]:
 #: the release dispatch, green unless a merged release is unpublished.
 BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "check", "check"),
-    # The leg's one write: its timing row and its measured suites go
-    # on its per-run ref together.
-    Entry("gate", "check", "coverage.leg", ("--job={display}",)),
+    # The leg's one write, after whatever the extensions add to the
+    # job: its timing row and every file their entries left go on its
+    # per-run ref together.
+    Entry("gate", "check", "ci.leg", ("--job={display}",), last=True),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
     # release title the changelogs do not match before anything else
     # is judged. It runs here so the legs never wait for a job of
-    # its own.
+    # its own. The judges the extensions add run after it, before the
+    # collect, so what they leave rides the run's row.
     Entry("gate", "gate", "workflow.release.check-title"),
-    # The union before the collect: its per-package percentages ride
-    # the run's row beside the timings.
-    Entry("gate", "gate", "coverage.union"),
-    Entry("gate", "gate", "ci.metrics.collect"),
+    Entry("gate", "gate", COLLECT),
     # The speed judge reads the run's row the collect just put: a
     # suite over its mark for the second run in a row is red here,
     # before the verdict, so the record never names a slow tree green.
@@ -1331,17 +1403,23 @@ def _join_entries(composed: list[Entry], item: JobContribution) -> None:
 
     Before the first entry of the job that runs last, else after the
     job's last entry, else at the end: the join's entries run after
-    the job's own and before its sweep.
+    the job's own and before its sweep. A judge goes before the job's
+    collect (`COLLECT`), so what it leaves for the run's row is folded
+    in, and the verdict and the stamp come after it.
     """
     key = (item.point, item.job.name)
-    at = next(
-        (i for i, e in enumerate(composed) if (e.point, e.job) == key and e.last),
-        None,
-    )
-    if at is None:
+    owned = [i for i, e in enumerate(composed) if (e.point, e.job) == key]
+    judges = [entry for entry in item.entries if entry.judges]
+    if judges:
+        at = next((i for i in owned if composed[i].task == COLLECT), None)
+        if at is None:
+            at = owned[-1] + 1 if owned else len(composed)
+        composed[at:at] = judges
         owned = [i for i, e in enumerate(composed) if (e.point, e.job) == key]
+    at = next((i for i in owned if composed[i].last), None)
+    if at is None:
         at = owned[-1] + 1 if owned else len(composed)
-    composed[at:at] = list(item.entries)
+    composed[at:at] = [entry for entry in item.entries if not entry.judges]
 
 
 def schedule(root: Path) -> tuple[Entry, ...]:
@@ -1564,7 +1642,8 @@ def run_point(
     """Run every entry of *job* at *point*, in order; a red entry fails the job.
 
     A red builtin entry stops the job at once, since the entries after
-    it read its verdict; a red entry of the contract's schedule stands
+    it read its verdict, and so does a red judge an extension adds to
+    the verdict job; a red entry of the contract's schedule stands
     on its own, so the scheduled entries after it still run, and the
     job fails at the end naming each red one. A dispatch that names
     tasks in the nightly's ``only`` input runs those alone, builtin or
@@ -1684,7 +1763,7 @@ def run_point(
                 code = spawn(argv, env)
                 if code != 0:
                     reason = f"{resolved}/{job}: {entry.task} exited {code}"
-                    if entry.source == "builtin":
+                    if entry.source == "builtin" or entry.judges:
                         fail(reason)
                     print(f"  {reason}; the scheduled entries after it still run")
                     red.append(reason)

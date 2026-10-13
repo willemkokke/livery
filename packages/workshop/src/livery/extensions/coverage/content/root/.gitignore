@@ -1,0 +1,7 @@
+# The data a measured run leaves, the native suites' lines parts, the
+# union's scratch, and the coverage pages drawn from them.
+.coverage
+.coverage.*
+.coverage-lines.*
+coverage-data/
+packages/**/htmlcov/

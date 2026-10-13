@@ -1,0 +1,3 @@
+# The data coverage.py's meter leaves where a test run is metered.
+.coverage
+.coverage.*

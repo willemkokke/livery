@@ -14,8 +14,8 @@ it could not see.
 Lowering a mark is an explicit act: ``fm coverage.accept`` writes a
 dated, reasoned row, and the gate judges from it. Every row names the
 run or the person that wrote it, so the trail of a package's floor is
-readable on the store. Reach for [livery.workshop._coverage_marks.marks][]
-to read the current marks and [livery.workshop._coverage_marks.judge][]
+readable on the store. Reach for [livery.extensions.coverage._marks.marks][]
+to read the current marks and [livery.extensions.coverage._marks.judge][]
 to decide a run.
 """
 

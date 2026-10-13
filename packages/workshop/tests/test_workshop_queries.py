@@ -808,6 +808,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "editor-extensions",
         "python.dev-group",
         "python.test.addopts",
+        "store.series",
         "release-notes",
     ]
     assert all(spec.extension == "livery.workshop" for spec in found.values())
@@ -815,6 +816,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "editor-extensions",
         "python.dev-group",
         "python.test.addopts",
+        "store.series",
         "release-notes",
     ]
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"

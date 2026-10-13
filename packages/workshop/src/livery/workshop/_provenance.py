@@ -556,7 +556,7 @@ def unit_of(
     A path under no package is the workspace unit's, relative to the
     root; None when the root has no unit to speak of.
     """
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     for package in packages:
         if path.startswith(package.path + "/"):

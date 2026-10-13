@@ -30,10 +30,10 @@ def _root() -> Path:
     return root
 
 
-def _declared() -> tuple[git.Series | git.Keyed, ...]:
-    from livery.workshop._series import DECLARED
+def _declared(root: Path) -> tuple[git.Series | git.Keyed, ...]:
+    from livery.workshop._series import declared
 
-    return DECLARED
+    return declared(root)
 
 
 def _scope(item: git.Series | git.Keyed) -> str:
@@ -54,7 +54,7 @@ def ls_flow(root: Path) -> list[str]:
 
 def _ls_lines(root: Path) -> list[str]:
     lines: list[str] = []
-    for item in _declared():
+    for item in _declared(root):
         if isinstance(item, git.Series):
             found = item.rows(state_store(root))
             if found.failed:
@@ -102,7 +102,7 @@ def show_flow(
 def _show_lines(
     root: Path, name: str, *, key: str = "", as_json: bool = False
 ) -> list[str]:
-    declared = _declared()
+    declared = _declared(root)
     item = next((each for each in declared if each.name == name), None)
     if item is None:
         fail(

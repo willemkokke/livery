@@ -88,8 +88,9 @@ Each is a consumer of the one engine with its own influence rule.
   trees green local gates proved, narrowed gates proving what a delta
   can influence; CI's verified series (`livery.workshop._verified`) is
   the chain's root. The coverage record
-  (`livery.workshop._coverage_store`) keeps arcs per suite keyed by the
-  suite's closure identity, and a leg skips a suite its record holds.
+  (`livery.extensions.coverage._record`) keeps arcs per suite keyed by
+  the suite's closure identity, and a leg's coverage entry measures the
+  suites its record does not hold.
 - The state store (`livery.git.StateStore`, built with the workshop's
   policy) declares a series in one line, CI-only or local, windowed,
   written by compare-and-swap, and `fm store.show` reads it. The series

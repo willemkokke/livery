@@ -24,8 +24,8 @@ import re
 import shutil
 import sys
 import tempfile
-from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from pathlib import Path, PureWindowsPath
+from typing import TYPE_CHECKING, Any, NoReturn
 from xml.etree import ElementTree
 
 import livery.footman as footman
@@ -52,6 +52,20 @@ COVERAGE_CMAKE = Path(__file__).with_name("coverage.cmake")
 #: Where an instrumented test run leaves its profiles and reports,
 #: under the gate build.
 PROFILE_DIR = "coverage"
+
+
+#: The measurer a compiler family's build takes, by CMake's compiler id.
+FAMILIES = {
+    "GNU": "gcov",
+    "Clang": "llvm",
+    "AppleClang": "llvm",
+    "MSVC": "msvc",
+}
+
+
+def measurer_for(compiler_id: str) -> str:
+    """The measurer for *compiler_id* as CMake spells it; empty without one."""
+    return FAMILIES.get(compiler_id, "")
 
 
 #: The shell that reads the batch file MSVC's environment comes from:
@@ -268,8 +282,6 @@ def test(
     none, and a family without a measurer refuses by name, since a
     suite that ran unmeasured never passes as measured.
     """
-    from livery.workshop import _coverage_lines as lines_
-
     build_dir = package.directory / GATE_BUILD_DIR
     env = {
         **toolchain_env(),
@@ -283,7 +295,7 @@ def test(
         argv += ["-R", pattern]
     argv += arguments
     compiler_id, compiler = compiler_of(package)
-    family = lines_.measurer_for(compiler_id)
+    family = measurer_for(compiler_id)
     if family == "msvc":
         measured = _measure_msvc(package, argv, env, names)
     else:
@@ -292,15 +304,15 @@ def test(
             fail(
                 f"{package.name}: the gate build's compiler"
                 f" {compiler_id or 'is unknown'} has no coverage measurer; the"
-                f" families are {', '.join(sorted(lines_.FAMILIES))}"
+                f" families are {', '.join(sorted(FAMILIES))}"
             )
         measured = (
             _measure_gcov(package, compiler)
             if family == "gcov"
             else _measure_llvm(package, compiler)
         )
-    kept = lines_.within(lines_.relativise(measured, root), package)
-    lines_.write_part(root, package.path, kept)
+    kept = within(relativise(measured, root), package)
+    write_part(root, package.path, kept)
     print(f"  {package.name}: coverage: {len(kept)} file(s) measured by {family}")
 
 
@@ -402,8 +414,6 @@ def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
     A file is named as the compiler saw it; one relative to the build
     directory is made absolute there.
     """
-    from livery.workshop import _coverage_lines as lines_
-
     build_dir = package.directory / GATE_BUILD_DIR
     data = sorted(build_dir.rglob("*.gcda"))
     if not data:
@@ -433,21 +443,175 @@ def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
                 f"{package.name}: gcov exited {result.code} on {path.name}:\n"
                 f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
             )
-        read = lines_.from_gcov_json(result.stdout)
+        read = from_gcov_json(result.stdout)
         # gcov names a file as the compiler saw it, relative to the
         # build directory when the compile line was.
         absolute = {
             name if Path(name).is_absolute() else str(build_dir / name): counts
             for name, counts in read.items()
         }
-        merged = lines_.merge(merged, absolute)
+        for name, counts in absolute.items():
+            into = merged.setdefault(name, {})
+            for line, hits in counts.items():
+                into[line] = into.get(line, 0) + hits
     return merged
+
+
+#: The parts a test run leaves at the workspace root, one per package,
+#: beside coverage.py's own ``.coverage.*`` parts, in the shape the
+#: coverage extension reads
+#: ([livery.extensions.coverage._lines.read_parts][]).
+PART_PREFIX = ".coverage-lines."
+
+
+def write_part(root: Path, package_path: str, lines: dict[str, dict[int, int]]) -> Path:
+    """Write *lines* as *package_path*'s part under *root*; the path written.
+
+    One JSON object: the package's path, and per file its ``(line,
+    hits)`` pairs in line order.
+    """
+    from livery import git
+
+    path = root / f"{PART_PREFIX}{git.slug(package_path)}.json"
+    files = {name: sorted(counts.items()) for name, counts in sorted(lines.items())}
+    path.write_text(
+        json.dumps({"package": package_path, "files": files}, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def relativise(
+    lines: dict[str, dict[int, int]], root: Path
+) -> dict[str, dict[int, int]]:
+    """*lines* keyed by workspace-relative posix paths; files outside *root* dropped.
+
+    A measurer names files the way the compiler saw them, absolute and
+    with the host's separators; the row and the floors want the path
+    the repository knows.
+    """
+    base = root.resolve()
+    kept: dict[str, dict[int, int]] = {}
+    for name, counts in lines.items():
+        candidate = Path(PureWindowsPath(name).as_posix() if "\\" in name else name)
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        try:
+            relative = candidate.resolve().relative_to(base).as_posix()
+        except ValueError:
+            continue
+        kept[relative] = dict(counts)
+    return kept
+
+
+def within(
+    lines: dict[str, dict[int, int]], package: Package
+) -> dict[str, dict[int, int]]:
+    """The files of *lines* under *package*, keyed as they are."""
+    prefix = f"{package.path}/"
+    return {name: counts for name, counts in lines.items() if name.startswith(prefix)}
+
+
+def from_lcov(text: str) -> dict[str, dict[int, int]]:
+    """The lines an lcov trace names: ``SF:`` opens a file, ``DA:`` counts a line."""
+    lines: dict[str, dict[int, int]] = {}
+    current: dict[int, int] | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("SF:"):
+            current = lines.setdefault(line[3:], {})
+        elif line.startswith("DA:") and current is not None:
+            number, _, hits = line[3:].partition(",")
+            count = hits.split(",")[0]
+            current[int(number)] = current.get(int(number), 0) + int(count or 0)
+        elif line == "end_of_record":
+            current = None
+    return lines
+
+
+def from_cobertura(text: str) -> dict[str, dict[int, int]]:
+    """The lines a Cobertura report names; a report that is not XML refuses.
+
+    A class's ``filename`` is taken as it is when absolute, else under
+    the report's first ``<source>``.
+    """
+    try:
+        document = ElementTree.fromstring(text)
+    except ElementTree.ParseError as error:
+        fail(f"the coverage report is not XML ({error})")
+    sources = [
+        (node.text or "").strip() for node in document.iter("source") if node.text
+    ]
+    lines: dict[str, dict[int, int]] = {}
+    for klass in document.iter("class"):
+        name = klass.get("filename", "")
+        if not name:
+            continue
+        if not _absolute(name) and sources:
+            name = (
+                sources[0].rstrip("\\/") + ("\\" if "\\" in sources[0] else "/") + name
+            )
+        counts = lines.setdefault(name, {})
+        for row in klass.iter("line"):
+            number = row.get("number")
+            if number is None:
+                continue
+            counts[int(number)] = counts.get(int(number), 0) + int(row.get("hits", "0"))
+    return lines
+
+
+def _absolute(name: str) -> bool:
+    return Path(name).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", name) is not None
+
+
+def from_gcov_json(text: str) -> dict[str, dict[int, int]]:
+    """The lines gcov's ``--json-format`` output names; a non-document refuses.
+
+    Per file, line number to hit count, the counts of a line gcov
+    names twice added up.
+    """
+    lines: dict[str, dict[int, int]] = {}
+    for document in _json_documents(text):
+        files = document.get("files") if isinstance(document, dict) else None
+        if not isinstance(files, list):
+            fail("gcov printed no files table; its JSON format has one")
+        for entry in files:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("file", ""))
+            rows = entry.get("lines")
+            if not name or not isinstance(rows, list):
+                continue
+            counts = lines.setdefault(name, {})
+            for row in rows:
+                if isinstance(row, dict) and "line_number" in row:
+                    line = int(row["line_number"])
+                    counts[line] = counts.get(line, 0) + int(row.get("count", 0))
+    return lines
+
+
+def _json_documents(text: str) -> list[Any]:
+    """Every JSON document in *text*, one per line or one whole; non-JSON refuses."""
+    stripped = text.strip()
+    if not stripped:
+        return []
+    try:
+        return [json.loads(stripped)]
+    except ValueError:
+        pass
+    documents: list[Any] = []
+    for line in stripped.splitlines():
+        if not line.strip():
+            continue
+        try:
+            documents.append(json.loads(line))
+        except ValueError:
+            fail(f"gcov printed a line that is not JSON: {line[:120]}")
+    return documents
 
 
 def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
     """The lines llvm-cov reads from the run's profiles over the test executables."""
-    from livery.workshop import _coverage_lines as lines_
-
     build_dir = package.directory / GATE_BUILD_DIR
     raws = sorted((build_dir / PROFILE_DIR).glob("*.profraw"))
     if not raws:
@@ -487,7 +651,7 @@ def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
             f"{package.name}: llvm-cov exited {result.code}:\n"
             f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
         )
-    return lines_.from_lcov(result.stdout)
+    return from_lcov(result.stdout)
 
 
 def _measure_msvc(
@@ -510,8 +674,6 @@ def _measure_msvc(
             or the collection fails, a test fails, or no report
             comes out; each names what happened.
     """
-    from livery.workshop import _coverage_lines as lines_
-
     profiles = package.directory / GATE_BUILD_DIR / PROFILE_DIR
     objects = _test_objects(package)
     if not objects:
@@ -598,7 +760,7 @@ def _measure_msvc(
             f"{package.name}: dotnet-coverage wrote no report at {report}:\n"
             f"{output[-4000:]}"
         )
-    return lines_.from_cobertura(report.read_text(encoding="utf-8"))
+    return from_cobertura(report.read_text(encoding="utf-8"))
 
 
 def _ctest_program() -> str:

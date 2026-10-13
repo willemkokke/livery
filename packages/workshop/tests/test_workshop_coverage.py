@@ -13,9 +13,13 @@ from typing import Any
 import pytest
 
 from livery import git
+from livery.extensions.coverage import _floors as coverage_floors
+from livery.extensions.coverage import _leg as coverage_leg
+from livery.extensions.coverage import _record as coverage_record
+from livery.extensions.coverage import _union as coverage_union
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
-from livery.workshop import _coverage_store, _verified
+from livery.workshop import _verified
 from livery.workshop._packages import Package
 from workshop_measured import measure
 
@@ -56,7 +60,7 @@ def test_a_floor_beside_required_false_refuses(tmp_path: Path) -> None:
             tmp_path, name, f"[coverage]\nfloor = {floor}\nrequired = false\n"
         )
         with pytest.raises(_FAILURES) as caught:
-            _python.coverage_policy(package)
+            coverage_floors.coverage_policy(package)
         assert (
             f"packages/{name}: [coverage] floor is {shown} beside required ="
             " false; a package nothing judges keeps no floor, so remove one of"
@@ -67,7 +71,7 @@ def test_a_floor_beside_required_false_refuses(tmp_path: Path) -> None:
 def test_a_package_with_coverage_not_required_is_never_judged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _coverage_marks
+    from livery.extensions.coverage import _marks as coverage_marks
 
     package = _package(tmp_path, "thing", "[coverage]\nrequired = false\n")
     (package.directory / "tests").mkdir()
@@ -83,23 +87,23 @@ def test_a_package_with_coverage_not_required_is_never_judged(
         kind="cpp-conan",
         depends=(),
     )
-    unjudged = _python.FloorPolicy(None, False, 0.5, required=False)
-    assert _python.coverage_policy(package) == unjudged
-    assert _python.coverage_floor(package) is None
+    unjudged = coverage_floors.FloorPolicy(None, False, 0.5, required=False)
+    assert coverage_floors.coverage_policy(package) == unjudged
+    assert coverage_floors.coverage_floor(package) is None
 
     def _never(*_args: object, **_kwargs: object) -> str:
         raise AssertionError("a package nothing judges reads and writes no mark")
 
-    monkeypatch.setattr(_coverage_marks, "marks", _never)
-    monkeypatch.setattr(_coverage_marks, "write_mark", _never)
+    monkeypatch.setattr(coverage_marks, "marks", _never)
+    monkeypatch.setattr(coverage_marks, "write_mark", _never)
     measured = {"packages/thing": 12.5}
     monkeypatch.setattr(
-        _python, "measured_coverage", lambda root, packages, **_kw: measured
+        coverage_floors, "measured_coverage", lambda root, packages, **_kw: measured
     )
     _in_ci(monkeypatch, "gate")
     # Far below any floor, and a native suite never measured: no
     # verdict, no mark, and each line says the package is not judged.
-    assert _python.enforce_coverage(tmp_path, (package, native)) == measured
+    assert coverage_floors.enforce_coverage(tmp_path, (package, native)) == measured
     out = capsys.readouterr().out
     assert (
         "  coverage packages/thing: 12.5% (not judged: its [coverage] table sets"
@@ -109,7 +113,7 @@ def test_a_package_with_coverage_not_required_is_never_judged(
         "  coverage packages/native: not measured (not judged: its [coverage]"
         " table sets required = false)\n"
     ) in out
-    _python.report_coverage(tmp_path, (package,))
+    coverage_floors.report_coverage(tmp_path, (package,))
     assert (
         "  coverage packages/thing: 12.5% here (not judged: its [coverage] table"
         " sets required = false)\n"
@@ -121,29 +125,29 @@ def test_a_package_with_tests_and_no_floor_is_judged_at_the_default(
 ) -> None:
     # The fallback first: a package without tests and without a floor
     # has nothing that measures it, so nothing judges it.
-    assert _python.coverage_policy(_package(tmp_path, "bare")) is None
+    assert coverage_floors.coverage_policy(_package(tmp_path, "bare")) is None
     package = _package(tmp_path, "thing")
     (package.directory / "tests").mkdir()
-    assert _python.coverage_policy(package) == _python.FloorPolicy(
+    assert coverage_floors.coverage_policy(package) == coverage_floors.FloorPolicy(
         100.0, False, 0.5, default=True
     )
-    assert _python.coverage_floor(package) == 100.0
+    assert coverage_floors.coverage_floor(package) == 100.0
     measured = {"packages/thing": 99.6}
     monkeypatch.setattr(
-        _python, "measured_coverage", lambda root, packages, **_kw: measured
+        coverage_floors, "measured_coverage", lambda root, packages, **_kw: measured
     )
-    _python.report_coverage(tmp_path, (package,))
+    coverage_floors.report_coverage(tmp_path, (package,))
     assert (
         "  coverage packages/thing: 99.6% here (floor 100.0% by default judges"
         " the CI union)\n"
     ) in capsys.readouterr().out
-    assert _python.enforce_coverage(tmp_path, (package,)) == measured  # inside
+    assert coverage_floors.enforce_coverage(tmp_path, (package,)) == measured  # inside
     assert (
         "  coverage packages/thing: 99.6% (floor 100.0% by default, epsilon 0.5%)\n"
     ) in capsys.readouterr().out
     measured["packages/thing"] = 99.4
     with pytest.raises(_FAILURES) as caught:
-        _python.enforce_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
     assert (
         "packages/thing: 99.4% is below the default floor of 100.0% by more than"
         " the 0.5% epsilon; [coverage] floor in its workshop.toml names another"
@@ -154,18 +158,22 @@ def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
     tmp_path: Path,
 ) -> None:
     bare = _package(tmp_path, "bare")
-    assert _python.coverage_policy(bare) is None
-    assert _python.coverage_floor(bare) is None
+    assert coverage_floors.coverage_policy(bare) is None
+    assert coverage_floors.coverage_floor(bare) is None
     floored = _package(tmp_path, "floored", "[coverage]\nfloor = 87\n")
-    assert _python.coverage_policy(floored) == _python.FloorPolicy(87.0, False, 0.5)
-    assert _python.coverage_floor(floored) == 87.0
+    assert coverage_floors.coverage_policy(floored) == coverage_floors.FloorPolicy(
+        87.0, False, 0.5
+    )
+    assert coverage_floors.coverage_floor(floored) == 87.0
     ratchet = _package(
         tmp_path,
         "ratchet",
         '[coverage]\nfloor = "auto-ratchet"\nepsilon = 1.5\n',
     )
-    assert _python.coverage_policy(ratchet) == _python.FloorPolicy(None, True, 1.5)
-    assert _python.coverage_floor(ratchet) is None
+    assert coverage_floors.coverage_policy(ratchet) == coverage_floors.FloorPolicy(
+        None, True, 1.5
+    )
+    assert coverage_floors.coverage_floor(ratchet) is None
     for name, extra, words in (
         ("odd", '[coverage]\nfloor = "high"\n', "auto-ratchet"),
         (
@@ -176,7 +184,7 @@ def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
         ("negative", "[coverage]\nfloor = 90\nepsilon = -1\n", "negative"),
     ):
         with pytest.raises(_FAILURES, match=words):
-            _python.coverage_policy(_package(tmp_path, name, extra))
+            coverage_floors.coverage_policy(_package(tmp_path, name, extra))
 
 
 def test_enforcement_grants_the_epsilon_and_no_more(
@@ -184,15 +192,19 @@ def test_enforcement_grants_the_epsilon_and_no_more(
 ) -> None:
     package = _package(tmp_path, "thing", "[coverage]\nfloor = 90\n")
     measured = {"packages/thing": 89.6}
-    monkeypatch.setattr(_python, "measured_coverage", lambda root, packages: measured)
-    assert _python.enforce_coverage(tmp_path, (package,)) == measured  # inside
+    monkeypatch.setattr(
+        coverage_floors, "measured_coverage", lambda root, packages: measured
+    )
+    assert coverage_floors.enforce_coverage(tmp_path, (package,)) == measured  # inside
     measured["packages/thing"] = 89.4
     with pytest.raises(_FAILURES) as caught:
-        _python.enforce_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
     assert "below the committed floor" in str(caught.value)
     wide = _package(tmp_path, "wide", "[coverage]\nfloor = 90\nepsilon = 2\n")
     measured["packages/wide"] = 88.1
-    _python.enforce_coverage(tmp_path, (wide,))  # a declared epsilon widens the floor
+    coverage_floors.enforce_coverage(
+        tmp_path, (wide,)
+    )  # a declared epsilon widens the floor
 
 
 def _ratchet(
@@ -210,7 +222,9 @@ def _ratchet(
     else:
         package = _package(tmp_path, "thing", '[coverage]\nfloor = "auto-ratchet"\n')
     monkeypatch.setattr(
-        _python, "measured_coverage", lambda root, packages: {"packages/thing": percent}
+        coverage_floors,
+        "measured_coverage",
+        lambda root, packages: {"packages/thing": percent},
     )
     return package
 
@@ -218,17 +232,19 @@ def _ratchet(
 def test_under_auto_ratchet_an_unreadable_store_falls_open_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _coverage_marks
+    from livery.extensions.coverage import _marks as coverage_marks
 
     package = _ratchet(tmp_path, monkeypatch, 50.0)
-    monkeypatch.setattr(_coverage_marks, "marks", lambda root: (None, "remote down"))
+    monkeypatch.setattr(coverage_marks, "marks", lambda root: (None, "remote down"))
 
     def _never(root: Path, **kw: object) -> str:
         raise AssertionError("an unread store is never written")
 
-    monkeypatch.setattr(_coverage_marks, "write_mark", _never)
+    monkeypatch.setattr(coverage_marks, "write_mark", _never)
     _in_ci(monkeypatch, "check-a")
-    assert _python.enforce_coverage(tmp_path, (package,)) == {"packages/thing": 50.0}
+    assert coverage_floors.enforce_coverage(tmp_path, (package,)) == {
+        "packages/thing": 50.0
+    }
     out = capsys.readouterr().out
     assert "auto-ratchet: remote down; the gate falls open and records nothing" in out
 
@@ -236,21 +252,21 @@ def test_under_auto_ratchet_an_unreadable_store_falls_open_and_writes_nothing(
 def test_the_first_run_records_the_mark_only_in_ci(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _coverage_marks
+    from livery.extensions.coverage import _marks as coverage_marks
 
     package = _ratchet(tmp_path, monkeypatch, 80.0)
-    monkeypatch.setattr(_coverage_marks, "marks", lambda root: ({}, ""))
+    monkeypatch.setattr(coverage_marks, "marks", lambda root: ({}, ""))
     written: list[dict[str, object]] = []
-    monkeypatch.setattr(_coverage_marks, "write_mark", _record(written))
+    monkeypatch.setattr(coverage_marks, "write_mark", _record(written))
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.delenv("GITLAB_CI", raising=False)
-    _python.enforce_coverage(tmp_path, (package,))
+    coverage_floors.enforce_coverage(tmp_path, (package,))
     out = capsys.readouterr().out
     assert "no mark yet; this run records it" in out
     assert "a CI run records the mark; this run does not" in out
     assert written == []
     _in_ci(monkeypatch, "check-a")
-    _python.enforce_coverage(tmp_path, (package,))
+    coverage_floors.enforce_coverage(tmp_path, (package,))
     assert "    recorded" in capsys.readouterr().out
     assert written == [
         {
@@ -265,25 +281,25 @@ def test_the_first_run_records_the_mark_only_in_ci(
 def test_a_clearing_run_ratchets_a_dip_passes_and_a_fall_names_the_accept_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop import _coverage_marks
+    from livery.extensions.coverage import _marks as coverage_marks
 
-    mark = _coverage_marks.Mark("packages/thing", 90.0, "first", "run 3", "", "when")
+    mark = coverage_marks.Mark("packages/thing", 90.0, "first", "run 3", "", "when")
     monkeypatch.setattr(
-        _coverage_marks, "marks", lambda root: ({mark.package: mark}, "")
+        coverage_marks, "marks", lambda root: ({mark.package: mark}, "")
     )
     written: list[dict[str, object]] = []
-    monkeypatch.setattr(_coverage_marks, "write_mark", _record(written))
+    monkeypatch.setattr(coverage_marks, "write_mark", _record(written))
     _in_ci(monkeypatch, "check-a")
     package = _ratchet(tmp_path, monkeypatch, 90.6)
-    _python.enforce_coverage(tmp_path, (package,))
+    coverage_floors.enforce_coverage(tmp_path, (package,))
     assert "new mark: 90.6%" in capsys.readouterr().out
     assert [kw["kind"] for kw in written] == ["ratchet"]
     _ratchet(tmp_path, monkeypatch, 89.6)
-    _python.enforce_coverage(tmp_path, (package,))
+    coverage_floors.enforce_coverage(tmp_path, (package,))
     assert len(written) == 1  # a dip inside epsilon passes and moves nothing
     _ratchet(tmp_path, monkeypatch, 89.4)
     with pytest.raises(_FAILURES) as caught:
-        _python.enforce_coverage(tmp_path, (package,))
+        coverage_floors.enforce_coverage(tmp_path, (package,))
     assert "below its mark of 90.0%" in str(caught.value)
     assert "coverage.accept packages/thing <value> --reason=" in str(caught.value)
 
@@ -331,7 +347,7 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     def refuse(*_args: object) -> None:
         raise AssertionError("enforcement belongs to the aggregating job")
 
-    monkeypatch.setattr(_python, "enforce_coverage", refuse)
+    monkeypatch.setattr(coverage_floors, "enforce_coverage", refuse)
     _in_ci(monkeypatch, "check-a")
     _python.run_test(packages=(thing, other), root=tmp_path)
     # One process for every suite, under the leg's own prefix: the
@@ -348,7 +364,7 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     assert "COVERAGE_PROCESS_START" not in os.environ
     # The workspace's own tests run when their unit is among the
     # packages, and only then.
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     (tmp_path / "tests").mkdir()
     unit = workspace_suite(tmp_path)
@@ -439,10 +455,10 @@ def test_the_preview_tolerates_a_run_that_measured_nothing(
     # returned a result would hide that.
     del monkeypatch
     package = _package(tmp_path, "thing", "[coverage]\nfloor = 1\n")
-    _python.report_coverage(tmp_path, (package,))
+    coverage_floors.report_coverage(tmp_path, (package,))
     assert "nothing measured by this run" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="coverage json exited 1"):
-        _python.measured_coverage(tmp_path, (package,))
+        coverage_floors.measured_coverage(tmp_path, (package,))
 
 
 def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
@@ -464,7 +480,7 @@ def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
     data = CoverageData(basename=str(tmp_path / ".coverage"))
     data.add_lines({str(source): [1], str(gone): [1]})
     data.write()
-    measured = _python.measured_coverage(tmp_path, (package,))
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert measured == {"packages/thing": 50.0}
 
 
@@ -472,7 +488,7 @@ def test_a_python_figure_is_coverage_py_s_own_total(tmp_path: Path) -> None:
     package = _package(tmp_path, "thing")
     measure(package.directory / "src" / "measured.py", tmp_path)
     report = _coverage_json(tmp_path)
-    figure = _python.measured_coverage(tmp_path, (package,))["packages/thing"]
+    figure = coverage_floors.measured_coverage(tmp_path, (package,))["packages/thing"]
     assert figure == report["totals"]["percent_covered"]
     # By hand, from the fixture's lines: 18 statements, the three-line
     # one counted once and the two lines of the `# pragma: no cover`
@@ -502,8 +518,12 @@ def test_without_a_parent_the_meter_and_the_preview_run(
             seen.append(args)
 
     monkeypatch.setattr(_python, "pytest", FakeTool())
+    # The preview is the answer a listed extension gives: coverage's.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     monkeypatch.setattr(
-        _python, "report_coverage", lambda root, packages: enforced.append(root)
+        coverage_floors,
+        "report_coverage",
+        lambda root, packages: enforced.append(root),
     )
     # A runner's own environment would make this a CI run: scrubbed,
     # so the test reads the same on a runner as on a desk.
@@ -522,10 +542,26 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     assert enforced == [tmp_path]
 
 
+def test_a_machines_run_prints_no_preview_while_no_extension_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = _suite(tmp_path, "thing")
+    monkeypatch.setattr(_python, "pytest", _FakePytest())
+    for name in ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
+
+    def _never(root: Path, packages: tuple[Package, ...]) -> None:
+        raise AssertionError("no listed extension answers the preview")
+
+    monkeypatch.setattr(coverage_floors, "report_coverage", _never)
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["ruff"]\n')
+    _python.run_test(packages=(package,), root=tmp_path)
+
+
 def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import workspace_suite
 
     thing = _suite(tmp_path, "thing")
     other = _suite(tmp_path, "other")
@@ -534,7 +570,7 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
     assert unit is not None
     fake = _FakePytest()
     monkeypatch.setattr(_python, "pytest", fake)
-    monkeypatch.setattr(_python, "report_coverage", lambda root, packages: None)
+    monkeypatch.setattr(coverage_floors, "report_coverage", lambda root, packages: None)
     for name in ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
         monkeypatch.delenv(name, raising=False)
     selection = {
@@ -577,21 +613,21 @@ def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
         "packages": ["packages/y", "packages/z"],
         "leg": "a",
     }
-    assert _python.suites_that_ran(full, tmp_path, (x, y, z)) == (x, y)
-    assert _python.suites_that_ran(narrowed, tmp_path, (x, y, z)) == (y,)
+    assert coverage_leg.suites_that_ran(full, tmp_path, (x, y, z)) == (x, y)
+    assert coverage_leg.suites_that_ran(narrowed, tmp_path, (x, y, z)) == (y,)
     for scope in ("verified", "nothing", "unknown"):
         marker = {"scope": scope, "packages": ["packages/x"], "leg": "a"}
-        assert _python.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
+        assert coverage_leg.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
     (tmp_path / "tests").mkdir()
-    ran = _python.suites_that_ran(narrowed, tmp_path, (x, y, z))
+    ran = coverage_leg.suites_that_ran(narrowed, tmp_path, (x, y, z))
     assert [unit.path for unit in ran] == ["packages/y", "tests"]
-    assert _python.units_of(tmp_path, (x, y, z))[-1].path == "tests"
+    assert coverage_leg.units_of(tmp_path, (x, y, z))[-1].path == "tests"
 
 
 def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
     x = _package(tmp_path, "x")
     with pytest.raises(BaseException, match="COVERAGE_PROCESS_START"):
-        _python.combine_leg(tmp_path, (x,))
+        coverage_leg.combine_leg(tmp_path, (x,))
 
 
 def test_a_workspace_with_no_packages_puts_its_scope_alone(
@@ -604,7 +640,7 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     # tests unit is put with no lines, so the union finds what ran.
     (tmp_path / "tests").mkdir()
     _in_ci(monkeypatch, "check-a")
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     write_marker(tmp_path, FULL, leg="check-a")
     put: list[dict[str, object]] = []
@@ -613,14 +649,14 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
         put.append(kw)
         return ""
 
-    monkeypatch.setattr(_coverage_store, "put_run", _capture)
-    _python.combine_leg(tmp_path, ())
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
+    coverage_leg.combine_leg(tmp_path, ())
     assert "no packages to measure" in capsys.readouterr().out
     assert len(put) == 1 and put[0]["scope"] == "full"
     units = put[0]["units"]
     assert isinstance(units, dict) and list(units) == ["tests"]
     unit = units["tests"]
-    assert isinstance(unit, _coverage_store.Unit)
+    assert isinstance(unit, coverage_record.Unit)
     assert unit.files == {} and unit.closure == "k" * 64 and unit.sha == "a" * 40
     # A skipped leg names no unit whatever the packages, so the union
     # carries the tests unit from the record instead of finding it
@@ -628,7 +664,7 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     from livery.workshop._verified import VERIFIED
 
     write_marker(tmp_path, VERIFIED, leg="check-a")
-    _python.combine_leg(tmp_path, ())
+    coverage_leg.combine_leg(tmp_path, ())
     assert put[1]["scope"] == "verified" and put[1]["units"] == {}
 
 
@@ -704,11 +740,11 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
         put.append(kw)
         return ""
 
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
     monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     _in_ci(monkeypatch, "check-a")
-    _python.combine_leg(tmp_path, (x, y))
+    coverage_leg.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
     # Only x's suite ran: its own lines plus the import-time lines of its
     # closure, put once with the scope the gate ran.
@@ -721,10 +757,10 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a" in out
     )
-    assert "coverage store: 1 unit(s) on the run's ref for check-a (affected)" in out
+    assert "coverage store: 1 unit(s) for the run's ref of check-a (affected)" in out
     assert "packages/y" not in out
     assert (tmp_path / ".coverage").is_file()
-    assert not (tmp_path / _python.SUITES_DATA).exists()
+    assert not (tmp_path / coverage_leg.SUITES_DATA).exists()
     # A full leg puts every suite, y's from the import-time lines of
     # its closure alone, and the workspace's own tests as a unit whose
     # closure is everything.
@@ -739,7 +775,7 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
         },
     )
     write_marker(tmp_path, FULL, leg="check-a")
-    _python.combine_leg(tmp_path, (x, y))
+    coverage_leg.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
     units = _units(put[0])
     assert sorted(units) == ["packages/x", "packages/y", "tests"]
@@ -751,13 +787,13 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     assert "coverage store: tests stored for closure kkkkkkkkkkkk on check-a" in out
 
 
-def _units(kw: dict[str, object]) -> dict[str, _coverage_store.Unit]:
+def _units(kw: dict[str, object]) -> dict[str, coverage_record.Unit]:
     units = kw["units"]
     assert isinstance(units, dict)
     return units
 
 
-def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope(
+def test_a_leg_that_cannot_leave_its_lines_is_red_and_a_skipped_leg_leaves_its_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._verified import FULL, VERIFIED, write_marker
@@ -765,19 +801,17 @@ def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope
     x = _suite(tmp_path, "x")
     source = str(_source(tmp_path, "x"))
     _contextual_part(tmp_path, "host.1.X", {"": {source: [1]}})
-    write_marker(tmp_path, FULL, leg="check-a")
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    # A marker with no label leaves the lines no key: the leg is red.
+    write_marker(tmp_path, FULL, leg="")
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
-    monkeypatch.setattr(
-        _coverage_store, "put_run", lambda root, run, **kw: "push refused: down"
-    )
     _in_ci(monkeypatch, "check-a")
     with pytest.raises(
         _FAILURES,
-        match=r"could not be put on its per-run ref \(push refused: down\)",
+        match=r"could not be left for its per-run ref \(refusing: the leg has no label",
     ):
-        _python.combine_leg(tmp_path, (x,))
-    # A leg whose gate skipped measured nothing and says so on its ref,
+        coverage_leg.combine_leg(tmp_path, (x,))
+    # A leg whose gate skipped measured nothing and says so in its file,
     # so the union reads a skip, never a leg that died.
     for part in tmp_path.glob(".coverage*"):
         part.unlink()
@@ -788,8 +822,8 @@ def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope
         put.append(kw)
         return ""
 
-    monkeypatch.setattr(_coverage_store, "put_run", _capture)
-    _python.combine_leg(tmp_path, (x,))
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
+    coverage_leg.combine_leg(tmp_path, (x,))
     out = capsys.readouterr().out
     assert put == [
         {
@@ -797,15 +831,14 @@ def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope
             "scope": "verified",
             "packages": (),
             "units": {},
-            "timing": None,
         }
     ]
     assert "coverage: no data, the gate ran 'verified'; nothing to combine" in out
-    assert "coverage store: 0 unit(s) on the run's ref for check-a (verified)" in out
-    # Outside CI nothing is put, and the measurement is only named.
+    assert "coverage store: 0 unit(s) for the run's ref of check-a (verified)" in out
+    # Outside CI nothing is left, and the measurement is only named.
     monkeypatch.delenv("GITHUB_ACTIONS")
     put.clear()
-    _python.combine_leg(tmp_path, (x,))
+    coverage_leg.combine_leg(tmp_path, (x,))
     assert put == []
     assert "0 unit(s) measured; outside CI nothing is stored" in capsys.readouterr().out
 
@@ -817,21 +850,21 @@ def _leg(
     key: str,
     scope: str,
     packages: tuple[str, ...] = (),
-    units: dict[str, _coverage_store.Unit] | None = None,
+    units: dict[str, coverage_record.Unit] | None = None,
     *,
     label: str = "check-a",
     why: str = "",
-) -> _coverage_store.Leg:
+) -> coverage_record.Leg:
     """What one leg put on its per-run ref, as the union reads it."""
-    return _coverage_store.Leg(key, label, scope, packages, dict(units or {}), why=why)
+    return coverage_record.Leg(key, label, scope, packages, dict(units or {}), why=why)
 
 
 def _unit(
     path: str, files: dict[str, list[int]], *, run: str = "7", closure: str = "k" * 64
-) -> _coverage_store.Unit:
+) -> coverage_record.Unit:
     """A unit whose files hold the arcs of one straight run through the lines given."""
     arcs = {file: _arcs(lines) for file, lines in files.items()}
-    return _coverage_store.Unit(path, closure, run, "a" * 40, arcs)
+    return coverage_record.Unit(path, closure, run, "a" * 40, arcs)
 
 
 def _source(tmp_path: Path, name: str) -> Path:
@@ -843,10 +876,10 @@ def _source(tmp_path: Path, name: str) -> Path:
 
 def _union(
     monkeypatch: pytest.MonkeyPatch,
-    legs: list[_coverage_store.Leg],
+    legs: list[coverage_record.Leg],
     *,
-    held: _coverage_store.Record | None = None,
-    records: dict[str, _coverage_store.Record] | None = None,
+    held: coverage_record.Record | None = None,
+    records: dict[str, coverage_record.Record] | None = None,
     listing: str = "",
     proved: str = "",
 ) -> list[tuple[str, str, list[str], list[str]]]:
@@ -858,14 +891,14 @@ def _union(
     by_base = dict(records or {})
     if held is not None:
         by_base["main"] = held
-    monkeypatch.setattr(_coverage_store, "run_legs", lambda root, run: (legs, listing))
+    monkeypatch.setattr(coverage_record, "run_legs", lambda root, run: (legs, listing))
     monkeypatch.setattr(
-        _coverage_store,
+        coverage_record,
         "recorded",
-        lambda root, *, leg, base="main": by_base.get(base, _coverage_store.Record({})),
+        lambda root, *, leg, base="main": by_base.get(base, coverage_record.Record({})),
     )
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(_python, "_moved_on", lambda git, run, branch: ("", ""))
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_union, "_moved_on", lambda git, run, branch: ("", ""))
     row = _verified.Verified("t", "5", "a" * 40, "full", ("check-a",), branch=proved)
     monkeypatch.setattr(_verified, "tree_id", lambda git, ref="HEAD": "t")
     monkeypatch.setattr(_verified, "record", lambda root, tree: (row, ""))
@@ -876,15 +909,15 @@ def _union(
         run: object,
         *,
         leg: str,
-        fresh: dict[str, _coverage_store.Unit],
+        fresh: dict[str, coverage_record.Unit],
         remove: tuple[str, ...] = (),
         base: str = "main",
-        held: _coverage_store.Record | None = None,
+        held: coverage_record.Record | None = None,
     ) -> str:
         written.append((base, leg, sorted(fresh), sorted(remove)))
         return ""
 
-    monkeypatch.setattr(_coverage_store, "put_record", _put)
+    monkeypatch.setattr(coverage_record, "put_record", _put)
     return written
 
 
@@ -896,7 +929,7 @@ def test_a_union_outside_ci_refuses(
     for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(_FAILURES, match="outside CI there is no run"):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
 
 
 def test_a_union_with_no_leg_on_the_runs_refs_refuses_naming_the_run(
@@ -905,12 +938,12 @@ def test_a_union_with_no_leg_on_the_runs_refs_refuses_naming_the_run(
     _in_ci(monkeypatch, "gate")
     _union(monkeypatch, [])
     with pytest.raises(_FAILURES, match="no check leg left its lines on run 7's refs"):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
     _union(monkeypatch, [], listing="the remote could not be listed")
     with pytest.raises(
         _FAILURES, match=r"could not be read \(the remote could not be listed\)"
     ):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
 
 
 def test_a_leg_without_its_file_its_label_or_a_known_scope_refuses_by_name(
@@ -921,13 +954,13 @@ def test_a_leg_without_its_file_its_label_or_a_known_scope_refuses_by_name(
     with pytest.raises(
         _FAILURES, match=r"leg check-a: refs/x carries no coverage\.json; the leg died"
     ):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
     _union(monkeypatch, [_leg("check-a", "verified", label="")])
     with pytest.raises(_FAILURES, match="leg check-a names no label"):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
     _union(monkeypatch, [_leg("check-a", "odd")])
     with pytest.raises(_FAILURES, match=r"a scope the union does not read \('odd'\)"):
-        _python.combine_union(tmp_path, ())
+        coverage_union.combine_union(tmp_path, ())
 
 
 def test_a_leg_that_ran_a_suite_and_left_its_lines_out_refuses_naming_them(
@@ -940,7 +973,7 @@ def test_a_leg_that_ran_a_suite_and_left_its_lines_out_refuses_naming_them(
     with pytest.raises(
         _FAILURES, match="leg check-a ran 'full' and its ref lacks packages/x, tests"
     ):
-        _python.combine_union(tmp_path, (x,))
+        coverage_union.combine_union(tmp_path, (x,))
 
 
 def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
@@ -953,8 +986,8 @@ def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
         _FAILURES,
         match=r"no record holds packages/x at closure kkkkkkkkkkkk \(main none\)\.",
     ):
-        _python.combine_union(tmp_path, (x,))
-    held = _coverage_store.Record(
+        coverage_union.combine_union(tmp_path, (x,))
+    held = coverage_record.Record(
         {"packages/x": _unit("packages/x", {}, closure="j" * 64)}
     )
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
@@ -964,13 +997,13 @@ def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
         _FAILURES,
         match=r"at closure kkkkkkkkkkkk \(feat/x none, main only at jjjjjjjjjjjj\)",
     ):
-        _python.combine_union(tmp_path, (x,))
-    down = _coverage_store.Record({}, failed=True, reason="remote down")
+        coverage_union.combine_union(tmp_path, (x,))
+    down = coverage_record.Record({}, failed=True, reason="remote down")
     _union(monkeypatch, [_leg("check-a", "verified")], held=down)
     with pytest.raises(
         _FAILURES, match=r"main's record on check-a could not be read \(remote down\)"
     ):
-        _python.combine_union(tmp_path, (x,))
+        coverage_union.combine_union(tmp_path, (x,))
     assert not (tmp_path / ".coverage").exists()
 
 
@@ -988,26 +1021,26 @@ def test_a_suite_whose_row_moved_on_mid_run_is_unioned_from_the_kept_row(
     then_x = _unit("packages/x", {x_source: [1, 2, 3, 4]}, run="5")
     then_y = _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")
     stamp = "2026-10-01T02:05:00+00:00"
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {"packages/x": _unit("packages/x", {}, run="6", closure="j" * 64)},
         kept=(
-            _coverage_store.Kept(
-                _coverage_store.kept_name("packages/x", "k" * 64), then_x, stamp
+            coverage_record.Kept(
+                coverage_record.kept_name("packages/x", "k" * 64), then_x, stamp
             ),
-            _coverage_store.Kept(
-                _coverage_store.kept_name("packages/y", "k" * 64), then_y, stamp
+            coverage_record.Kept(
+                coverage_record.kept_name("packages/y", "k" * 64), then_y, stamp
             ),
         ),
     )
     _union(monkeypatch, [_leg("check-a", "verified")], held=held)
-    assert _python.combine_union(tmp_path, (x, y)) == (x, y)
+    assert coverage_union.combine_union(tmp_path, (x, y)) == (x, y)
     out = capsys.readouterr().out
     for path in ("packages/x", "packages/y"):
         assert (
             f"coverage: {path} on check-a: reused from run 5 (1 files), main's"
             " record, a row kept after its record moved on" in out
         )
-    assert _python.measured_coverage(tmp_path, (x, y)) == {
+    assert coverage_floors.measured_coverage(tmp_path, (x, y)) == {
         "packages/x": 100.0,
         "packages/y": 100.0,
     }
@@ -1022,14 +1055,14 @@ def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branch
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {
             "packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}),
             "tests": _unit("tests", {source: [1]}, run="6"),
         }
     )
     written = _union(monkeypatch, [_leg("check-a", "verified")], held=held)
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "coverage: leg check-a ran 'verified': no suite, no data" in out
     assert "coverage: packages/x on check-a: reused from run 7 (1 files), main's" in out
@@ -1039,11 +1072,11 @@ def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branch
     # which is its own from here.
     assert written == [("feat/x", "check-a", ["packages/x", "tests"], [])]
     assert "coverage record: feat/x/check-a: 0 fresh, 2 carried, 0 removed" in out
-    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
     # A pull request run that names no branch has no record to write.
     monkeypatch.delenv("GITHUB_HEAD_REF")
     written = _union(monkeypatch, [_leg("check-a", "verified")], held=held)
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert written == []
     assert (
@@ -1062,16 +1095,16 @@ def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     # The contract names two legs; a pull request runs the first alone.
     monkeypatch.setattr(
-        _python,
+        coverage_union,
         "expected_legs",
         lambda root, run: (["check-a", "check-b"], ["check-a"]),
     )
-    held = _coverage_store.Record({"packages/x": _unit("packages/x", {source: [3, 4]})})
+    held = coverage_record.Record({"packages/x": _unit("packages/x", {source: [3, 4]})})
     fresh = _unit("packages/x", {source: [1, 2]}, run="7")
     written = _union(
         monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})], held=held
     )
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert (
         "coverage: leg check-b did not run on this pull request"
@@ -1080,7 +1113,7 @@ def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
     assert "coverage: packages/x on check-b: reused from run 7 (1 files), main's" in out
     assert "the union of 1 leg(s) and 1 reused suite(s)" in out
     # The two halves make the whole: lines 1 and 2 fresh, 3 and 4 from main.
-    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
     assert written == [
         ("feat/x", "check-a", ["packages/x"], []),
         ("feat/x", "check-b", ["packages/x"], []),
@@ -1096,25 +1129,25 @@ def test_a_leg_a_pull_request_does_not_run_carries_a_changed_suite_at_its_older_
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     monkeypatch.setattr(
-        _python,
+        coverage_union,
         "expected_legs",
         lambda root, run: (["check-a", "check-b"], ["check-a"]),
     )
     # The change moved x's closure; main measured x on check-b at the old one.
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {"packages/x": _unit("packages/x", {source: [3, 4]}, closure="o" * 64)}
     )
     fresh = _unit("packages/x", {source: [1, 2]}, run="7")
     _union(
         monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})], held=held
     )
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert (
         "coverage: packages/x on check-b: reused from run 7 (1 files), main's record,"
         " at closure oooooooooooo since the leg did not run" in out
     )
-    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 
 def test_a_leg_a_pull_request_does_not_run_passes_a_suite_no_record_has_ever_held(
@@ -1129,7 +1162,7 @@ def test_a_leg_a_pull_request_does_not_run_passes_a_suite_no_record_has_ever_hel
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     monkeypatch.setattr(
-        _python,
+        coverage_union,
         "expected_legs",
         lambda root, run: (["check-a", "check-b"], ["check-a"]),
     )
@@ -1137,15 +1170,15 @@ def test_a_leg_a_pull_request_does_not_run_passes_a_suite_no_record_has_ever_hel
     _union(
         monkeypatch,
         [_leg("check-a", "full", units={"packages/x": fresh})],
-        held=_coverage_store.Record({}),
+        held=coverage_record.Record({}),
     )
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert (
         "coverage: leg check-b has no record of packages/x yet; the merge point"
         " measures it" in out
     )
-    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 
 def test_a_push_carries_no_absent_leg(
@@ -1156,13 +1189,13 @@ def test_a_push_carries_no_absent_leg(
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     monkeypatch.setattr(
-        _python,
+        coverage_union,
         "expected_legs",
         lambda root, run: (["check-a", "check-b"], ["check-a", "check-b"]),
     )
     fresh = _unit("packages/x", {source: [1, 2, 3, 4]}, run="7")
     _union(monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})])
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "did not run on this pull request" not in out
     assert "the union of 1 leg(s) and 0 reused suite(s)" in out
@@ -1177,10 +1210,10 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
-    own = _coverage_store.Record(
+    own = coverage_record.Record(
         {"packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}, run="9")}
     )
-    main = _coverage_store.Record(
+    main = coverage_record.Record(
         {
             "packages/x": _unit("packages/x", {source: [1, 2]}, run="7"),
             "tests": _unit("tests", {source: [3, 4]}, run="6"),
@@ -1189,7 +1222,7 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
     written = _union(
         monkeypatch, [_leg("check-a", "verified")], held=main, records={"feat/x": own}
     )
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert (
         "coverage: packages/x on check-a: reused from run 9 (1 files), feat/x's" in out
@@ -1215,16 +1248,16 @@ def test_a_narrowed_leg_reuses_the_suite_it_skipped(
         ("packages/x",),
         {"packages/x": _unit("packages/x", {x_source: [1, 2, 3, 4]})},
     )
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {"packages/y": _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")}
     )
     _union(monkeypatch, [leg], held=held)
-    assert _python.combine_union(tmp_path, (z, y, x)) == (z, y, x)
+    assert coverage_union.combine_union(tmp_path, (z, y, x)) == (z, y, x)
     out = capsys.readouterr().out
     assert "coverage: packages/y on check-a: reused from run 5 (1 files)" in out
     assert "unjudged" not in out
     assert "the union of 1 leg(s) and 1 reused suite(s)" in out
-    assert _python.measured_coverage(tmp_path, (x, y)) == {
+    assert coverage_floors.measured_coverage(tmp_path, (x, y)) == {
         "packages/x": 100.0,
         "packages/y": 100.0,
     }
@@ -1253,12 +1286,12 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     )
     # y comes from the merged branch's record, named by the verified row;
     # main's own row of y is at another closure and is replaced.
-    branch = _coverage_store.Record(
+    branch = coverage_record.Record(
         {"packages/y": _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")}
     )
     # Main's own row of x is of an older shape: skipped, and replaced by
     # the fresh row of the same name rather than counted as removed.
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {
             "packages/y": _unit("packages/y", {}, run="3", closure="j" * 64),
             "packages/gone": _unit("packages/gone", {}, run="3"),
@@ -1272,7 +1305,7 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     written = _union(
         monkeypatch, [leg], held=held, records={"feat/x": branch}, proved="feat/x"
     )
-    assert _python.combine_union(tmp_path, (x, y)) == (x, y)
+    assert coverage_union.combine_union(tmp_path, (x, y)) == (x, y)
     out = capsys.readouterr().out
     assert "coverage record: main takes feat/x's record for the tree it proved" in out
     assert "coverage: main/check-a: junk.json: does not parse; skipped" in out
@@ -1292,9 +1325,9 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     # A record that cannot be written prints why and never reddens the
     # union: the next run reruns what it cannot reuse.
     monkeypatch.setattr(
-        _coverage_store, "put_record", lambda root, run, **kw: "push refused: down"
+        coverage_record, "put_record", lambda root, run, **kw: "push refused: down"
     )
-    assert _python.combine_union(tmp_path, (x, y)) == (x, y)
+    assert coverage_union.combine_union(tmp_path, (x, y)) == (x, y)
     assert (
         "coverage record: main/check-a not written (push refused: down)"
         in capsys.readouterr().out
@@ -1322,8 +1355,8 @@ def test_a_run_whose_branch_moved_on_judges_but_never_writes_the_record(
         asked.append(branch)
         return "b" * 40, "a" * 40
 
-    monkeypatch.setattr(_python, "_moved_on", _elsewhere)
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    monkeypatch.setattr(coverage_union, "_moved_on", _elsewhere)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "the union of 1 leg(s) and 0 reused suite(s)" in out
     assert asked == ["feat/x"]
@@ -1342,14 +1375,14 @@ def test_a_push_of_an_unnamed_tree_carries_from_main_alone_and_writes_nothing_ne
     (tmp_path / "tests").mkdir()
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {
             "packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}),
             "tests": _unit("tests", {source: [1]}, run="6"),
         }
     )
     written = _union(monkeypatch, [_leg("check-a", "verified")], held=held)
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "the union of 0 leg(s) and 2 reused suite(s)" in out
     assert "main takes" not in out
@@ -1382,12 +1415,12 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
         ),
     ]
     _union(monkeypatch, legs)
-    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert coverage_union.combine_union(tmp_path, (package,)) == (package,)
     assert (tmp_path / ".coverage").is_file()
     assert "the union of 2 leg(s) and 0 reused suite(s)" in capsys.readouterr().out
-    measured = _python.measured_coverage(tmp_path, (package,))
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert measured == {"packages/x": 100.0}
-    _python.enforce_coverage(
+    coverage_floors.enforce_coverage(
         tmp_path, (package,)
     )  # each leg alone: 50%; the union: 100%
 
@@ -1423,7 +1456,7 @@ def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_is_p
         _leg("check-b", "full", units={"packages/x": linux}, label="check-b"),
     ]
     _union(monkeypatch, legs)
-    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert coverage_union.combine_union(tmp_path, (package,)) == (package,)
     union = _coverage_json(tmp_path)["files"]["packages/x/src/livery/x/split.py"]
     assert union["executed_branches"] == [[2, 3], [2, 5], [6, 8]]
     assert union["missing_branches"] == [[6, 7]]
@@ -1431,7 +1464,7 @@ def test_a_branch_one_leg_took_is_covered_in_the_union_and_one_neither_took_is_p
     assert union["missing_lines"] == [7]
     # 6 of the 7 statements ran, all but line 7, and 3 of the 4
     # branches; each leg alone ran 5 statements and 2 branches.
-    assert _python.measured_coverage(tmp_path, (package,)) == {
+    assert coverage_floors.measured_coverage(tmp_path, (package,)) == {
         "packages/x": 100.0 * (6 + 3) / (7 + 4)
     }
 
@@ -1466,11 +1499,11 @@ def test_a_source_file_no_test_reached_is_left_out_of_the_figure(
         put.append(kw)
         return ""
 
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
     monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     _in_ci(monkeypatch, "check-a")
-    _python.combine_leg(tmp_path, (x,))
+    coverage_leg.combine_leg(tmp_path, (x,))
     units = _units(put[0])
     assert units["packages/x"].files == {
         "packages/x/src/livery/x/mod.py": _arcs([1, 2, 3, 4])
@@ -1479,8 +1512,52 @@ def test_a_source_file_no_test_reached_is_left_out_of_the_figure(
     (tmp_path / ".coverage").unlink()
     _in_ci(monkeypatch, "gate")
     _union(monkeypatch, [_leg("check-a", "full", units=units)])
-    assert _python.combine_union(tmp_path, (x,)) == (x,)
-    assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+
+
+def test_the_preview_and_the_union_leave_out_a_file_the_meter_named_with_no_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from coverage import CoverageData
+
+    from livery.workshop._verified import FULL, write_marker
+
+    x = _suite(tmp_path, "x")
+    reached = _source(tmp_path, "x")
+    unreached = reached.with_name("unreached.py")
+    unreached.write_text("e = 5\nf = 6\n")
+    (tmp_path / ".coveragerc").write_text("[run]\nrelative_files = true\n")
+    # A run whose meter names a source nothing imported, with no lines:
+    # coverage.py's own report counts it, four of six statements run.
+    part = CoverageData(basename=str(tmp_path / ".coverage"), suffix="host.1.X")
+    part.set_context("packages/x/tests/test_mod.py::test_one|run")
+    part.add_arcs({str(reached): set(_arcs([1, 2, 3, 4]))})
+    part.touch_files([str(unreached)])
+    part.write()
+    write_marker(tmp_path, FULL, leg="check-a")
+    put: list[dict[str, object]] = []
+
+    def _capture(root: Path, run: object, **kw: object) -> str:
+        put.append(kw)
+        return ""
+
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
+    monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
+    _in_ci(monkeypatch, "check-a")
+    coverage_leg.combine_leg(tmp_path, (x,))
+    assert _coverage_json(tmp_path)["totals"]["percent_covered"] == 100.0 * 4 / 6
+    # The preview reads the run's own data through the one figure, which
+    # leaves the file out...
+    preview = coverage_floors.measured_coverage(tmp_path, (x,))
+    assert preview == {"packages/x": 100.0}
+    # ...as the union of what the leg left does.
+    (tmp_path / ".coverage").unlink()
+    _in_ci(monkeypatch, "gate")
+    _union(monkeypatch, [_leg("check-a", "full", units=_units(put[0]))])
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == preview
 
 
 def _native_suite(tmp_path: Path, name: str) -> Package:
@@ -1503,19 +1580,19 @@ def _native_suite(tmp_path: Path, name: str) -> Package:
 
 def _lines_unit(
     path: str, files: dict[str, dict[int, int]], *, run: str = "7"
-) -> _coverage_store.Unit:
+) -> coverage_record.Unit:
     """A native suite's unit: line and hit count pairs under the lines measurer."""
-    from livery.workshop._coverage_lines import pairs
+    from livery.extensions.coverage._lines import pairs
 
-    return _coverage_store.Unit(
-        path, "k" * 64, run, "a" * 40, pairs(files), measurer=_coverage_store.LINES
+    return coverage_record.Unit(
+        path, "k" * 64, run, "a" * 40, pairs(files), measurer=coverage_record.LINES
     )
 
 
 def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._coverage_lines import write_part
+    from livery.extensions.coverage._lines import write_part
     from livery.workshop._verified import FULL, write_marker
 
     x = _suite(tmp_path, "x")
@@ -1537,11 +1614,11 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
         put.append(kw)
         return ""
 
-    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(coverage_record, "leave_run", _capture)
     monkeypatch.setattr(git, "head_sha", lambda root: "a" * 40)
     _in_ci(monkeypatch, "check-a")
-    _python.combine_leg(tmp_path, (x, n))
+    coverage_leg.combine_leg(tmp_path, (x, n))
     units = _units(put[0])
     assert sorted(units) == ["packages/n", "packages/x"]
     assert units["packages/n"].measurer == "lines"
@@ -1555,7 +1632,7 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
     for part in tmp_path.glob(".coverage-lines.*.json"):
         part.unlink()
     _contextual_part(tmp_path, "host.2.X", {"": {x_source: [1]}})
-    _python.combine_leg(tmp_path, (x, n))
+    coverage_leg.combine_leg(tmp_path, (x, n))
     assert sorted(_units(put[0])) == ["packages/x"]
     assert "packages/n ran without a measurement" in capsys.readouterr().out
 
@@ -1563,7 +1640,7 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
 def test_the_union_of_two_legs_lines_covers_what_each_left_uncovered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._coverage_lines import read_parts
+    from livery.extensions.coverage._lines import read_parts
 
     package = _native_suite(tmp_path, "n")
     source = "packages/n/src/x.cpp"
@@ -1583,21 +1660,23 @@ def test_the_union_of_two_legs_lines_covers_what_each_left_uncovered(
         ),
     ]
     _union(monkeypatch, legs)
-    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert coverage_union.combine_union(tmp_path, (package,)) == (package,)
     assert read_parts(tmp_path) == {"packages/n": {source: {1: 1, 2: 2}}}
     out = capsys.readouterr().out
     assert "1 native package(s) unioned by lines" in out
     assert "the union of 2 leg(s) and 0 reused suite(s)" in out
     assert not (tmp_path / ".coverage").exists()  # no arcs, no coverage.py combine
-    assert _python.measured_coverage(tmp_path, (package,)) == {"packages/n": 100.0}
-    _python.enforce_coverage(
+    assert coverage_floors.measured_coverage(tmp_path, (package,)) == {
+        "packages/n": 100.0
+    }
+    coverage_floors.enforce_coverage(
         tmp_path, (package,)
     )  # each leg alone: 50%; the union: 100%
     # A skipped leg reuses the native suite from the record, lines and all.
-    held = _coverage_store.Record(
+    held = coverage_record.Record(
         {"packages/n": _lines_unit("packages/n", {source: {1: 1, 2: 1}}, run="5")}
     )
     _union(monkeypatch, [_leg("check-a", "verified")], held=held)
-    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert coverage_union.combine_union(tmp_path, (package,)) == (package,)
     assert "packages/n on check-a: reused from run 5" in capsys.readouterr().out
     assert read_parts(tmp_path) == {"packages/n": {source: {1: 1, 2: 1}}}

@@ -10,13 +10,16 @@ from the trace's pytest slices.
 
 Two writers, both inside CI. Each check leg ends with `put_leg`: it
 reads the trace the profiled gate wrote and puts the task half of
-its row on the leg's per-run ref. The run's gate job runs `collect`:
-it reads the per-run refs, asks the forge for the run's jobs, joins
-the two halves, puts the run's file on the series under its window,
-and drops the per-run refs. Both fail open loudly, a printed reason
-and never a red leg. Local runs read: `render` is what `fm
-ci.timings` prints, the latest value, p50, and p90 per metric over
-the window, and the movers against a base window.
+its row on the leg's per-run ref, in one write with every file the
+leg's other entries left in its spool (`LEG_SPOOL`); a write that
+fails is a red leg. The run's gate job runs `collect`: it reads the
+per-run refs, asks the forge for the run's jobs, joins the two
+halves, folds in the sections the job's judges left (`RUN_ROW`),
+puts the run's file on the series under its window, and drops the
+per-run refs; it fails open loudly, a printed reason and never a
+red job. Local runs read: `render` is what `fm ci.timings` prints,
+the latest value, p50, and p90 per metric over the window, the
+movers against a base window, and each section's trend.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -45,24 +49,29 @@ SCHEMA = 1
 SERIES = git.Series("metrics", window=300, schema=SCHEMA)
 
 #: The per-run family: one series per run and check leg, holding the
-#: leg's half of its timing row, and beside it the scope its gate ran
-#: with the lines of every suite it measured
-#: ([livery.workshop._coverage_store.put_run][]), until the run's gate
-#: job collects the halves and drops the refs, lines included. A half
+#: leg's half of its timing row, and beside it every file the leg's
+#: entries left for its one write, until the run's gate job collects
+#: the halves and drops the refs, those files included. A half
 #: older than six hours outlived a run that was cancelled or died
 #: before its gate job could collect, and the janitor drops it: no
 #: run lasts that long, and the forge has no run-by-id lookup to ask.
 RUNS = git.Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6))
 
-#: The one file a leg puts on its per-run ref.
+#: The leg's own file on its per-run ref: the task half of its row.
 ROW_FILE = "row.json"
+
+#: Where a check leg's entries leave the files its one write puts on
+#: its per-run ref beside the row, one JSON object per file, each put
+#: under its own name.
+LEG_SPOOL = ".workshop/leg"
+
+#: Where the gate job's entries leave the sections the run's file
+#: carries beside the timings, one file per section, named after it:
+#: a number per package, which `fm ci.timings` renders as a trend.
+RUN_ROW = ".workshop/run-row"
 
 #: The slowest tests a leg's row names, by their call phase.
 SLOWEST = 20
-
-#: The union's per-package percentages, left by the gate job's
-#: coverage entry for the collect entry to fold into the run's file.
-COVERAGE_ROW = "fm-coverage.json"
 
 
 def run_ref(run: RunContext, leg: str) -> str:
@@ -70,31 +79,97 @@ def run_ref(run: RunContext, leg: str) -> str:
     return RUNS.series(run.run_id, leg).ref
 
 
-def write_coverage_row(root: Path, measured: dict[str, float]) -> str:
-    """Leave the union's percentages beside the trace; the line to print."""
-    (root / COVERAGE_ROW).write_text(
-        json.dumps({path: round(value, 2) for path, value in sorted(measured.items())}),
+def leave_leg_file(root: Path, name: str, data: Mapping[str, Any]) -> Path:
+    """Leave *data* in the leg's spool as *name*, for the leg's one write; the path.
+
+    The leg's last entry, ``ci.leg``, puts every file the spool holds
+    on the leg's per-run ref beside the row
+    ([livery.workshop._metrics.put_leg][]).
+    """
+    spool = root / LEG_SPOOL
+    spool.mkdir(parents=True, exist_ok=True)
+    path = spool / name
+    path.write_text(json.dumps(data, sort_keys=True), encoding="utf-8")
+    return path
+
+
+def leg_files(root: Path) -> tuple[dict[str, dict[str, Any]], str]:
+    """The files the leg's entries left in its spool, by name; or why one cannot ride.
+
+    A file that is not a JSON object, or one named as the leg's own
+    row, refuses by name: the write would carry what no reader takes.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    spool = root / LEG_SPOOL
+    if not spool.is_dir():
+        return found, ""
+    for path in sorted(spool.glob("*.json")):
+        if path.name == ROW_FILE:
+            return (
+                {},
+                f"{LEG_SPOOL}/{ROW_FILE} is the leg's own row; name the file otherwise",
+            )
+        try:
+            loaded = json.loads(path.read_text("utf-8"))
+        except (OSError, ValueError) as error:
+            return {}, f"{LEG_SPOOL}/{path.name} does not parse ({error})"
+        if not isinstance(loaded, dict):
+            return {}, f"{LEG_SPOOL}/{path.name} is not a JSON object"
+        found[path.name] = loaded
+    return found, ""
+
+
+def leave_section(
+    root: Path, name: str, packages: Mapping[str, float], *, unit: str = ""
+) -> str:
+    """Leave a section of the run's row, a number per package; the line to print.
+
+    The gate job's collect folds every section into the run's file
+    ([livery.workshop._metrics.collect][]), and `fm ci.timings` renders
+    each as a trend, the numbers followed by *unit*.
+    """
+    directory = root / RUN_ROW
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{name}.json").write_text(
+        json.dumps({"unit": unit, "packages": dict(sorted(packages.items()))}),
         encoding="utf-8",
     )
-    return f"coverage row: {len(measured)} package(s) for the run's record"
+    return f"{name} row: {len(packages)} package(s) for the run's record"
 
 
-def read_coverage_row(root: Path) -> dict[str, float] | None:
-    """The union's percentages the gate job left, or ``None`` when it left none."""
-    path = root / COVERAGE_ROW
-    if not path.is_file():
+def sections(root: Path) -> dict[str, dict[str, Any]]:
+    """The sections the gate job's entries left, by name; a malformed file is left out.
+
+    A section is its unit and a number per package.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    directory = root / RUN_ROW
+    if not directory.is_dir():
+        return found
+    for path in sorted(directory.glob("*.json")):
+        try:
+            loaded = json.loads(path.read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        section = _section(loaded)
+        if section is not None:
+            found[path.stem] = section
+    return found
+
+
+def _section(raw: Any) -> dict[str, Any] | None:
+    """*raw* as a section, its unit and a number per package; None when it is none."""
+    if not isinstance(raw, dict):
         return None
-    try:
-        loaded = json.loads(path.read_text("utf-8"))
-    except (OSError, ValueError):
+    packages = raw.get("packages")
+    if not isinstance(packages, dict):
         return None
-    if not isinstance(loaded, dict):
-        return None
-    out: dict[str, float] = {}
-    for name, value in loaded.items():
-        if isinstance(value, int | float) and not isinstance(value, bool):
-            out[str(name)] = float(value)
-    return out
+    numbers = {
+        str(name): float(value)
+        for name, value in packages.items()
+        if isinstance(value, int | float) and not isinstance(value, bool)
+    }
+    return {"unit": str(raw.get("unit", "") or ""), "packages": numbers}
 
 
 def _ms(event: dict[str, Any]) -> float:
@@ -224,21 +299,48 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     }, ""
 
 
-def put_leg(root: Path, run: RunContext, *, job: str, label: str, trace: Path) -> str:
-    """Put *job*'s task half on the leg's per-run ref; ``""`` or the reason."""
+def put_leg(
+    root: Path, run: RunContext, *, job: str, label: str, trace: Path
+) -> tuple[list[str], str]:
+    """Put *job*'s task half and the leg's spool on its per-run ref, in one write.
+
+    Returns the lines to print and why the write failed, ``""`` when
+    it landed or there was nothing to write. The row is read from
+    *trace* ([livery.workshop._metrics.leg_row][]), with the scope the
+    gate ran; a trace that cannot be read leaves the row out, says
+    why, and the spool's files go alone. Every file the leg's entries
+    left in `LEG_SPOOL` rides beside the row under its own name
+    ([livery.workshop._metrics.leg_files][]), so the leg writes its
+    ref once. A leg without a label, and a spool file no reader takes,
+    fail the write by name.
+    """
+    lines: list[str] = []
+    if not label:
+        return lines, "the leg has no label, so its row has no key"
+    files: dict[str, Mapping[str, Any]] = {}
     row, why = leg_row(trace, job=job)
     if row is None:
-        return why
-    from livery.workshop._verified import read_marker
+        lines.append(f"  {job}: {why}; the timing row stays unwritten")
+    else:
+        from livery.workshop._verified import read_marker
 
-    # The scope the gate ran, from the marker it left beside the
-    # trace: the stamp after the verdict reads it back per leg.
-    row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
-    return RUNS.series(run.run_id, label).put(
-        state_store(root),
-        {ROW_FILE: row},
-        message=f"metrics: {job} of run {run.run_id}",
+        # The scope the gate ran, from the marker it left beside the
+        # trace: the stamp after the verdict reads it back per leg.
+        row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
+        files[ROW_FILE] = row
+    spooled, why = leg_files(root)
+    if why:
+        return lines, why
+    files.update(spooled)
+    if not files:
+        return lines, ""
+    why = RUNS.series(run.run_id, label).put(
+        state_store(root), files, message=f"metrics: {job} of run {run.run_id}"
     )
+    if why:
+        return lines, why
+    lines.append(f"  {label}: {', '.join(sorted(files))} on run {run.run_id}'s ref")
+    return lines, ""
 
 
 def _moment(stamp: str) -> datetime | None:
@@ -409,10 +511,13 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         if entry["started_at"]
         else None
     )
-    coverage = read_coverage_row(root)
-    if coverage is not None:
-        entry["coverage"] = coverage
-        lines.append(f"  coverage: {len(coverage)} package(s) recorded on the run")
+    left = sections(root)
+    if left:
+        entry["sections"] = left
+        for name, section in left.items():
+            lines.append(
+                f"  {name}: {len(section['packages'])} package(s) recorded on the run"
+            )
     why = SERIES.put(
         state_store(root),
         {run_file(run.run_id): entry},
@@ -564,28 +669,55 @@ def render(
                 f"    {sign}{abs(delta) / 1000:.1f}s  {job}: {metric}"
                 f" ({then / 1000:.1f}s -> {now / 1000:.1f}s)"
             )
-    lines.extend(_render_coverage(entries))
+    lines.extend(_render_sections(entries))
     return lines
 
 
-def _render_coverage(entries: list[dict[str, Any]]) -> list[str]:
-    """The coverage rows: per package the latest, p50, and p90 percentage."""
-    series: dict[str, list[float]] = defaultdict(list)
-    latest: dict[str, float] = {}
+def _sections_of(entry: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The sections *entry* carries, by name, each its unit and its numbers per package.
+
+    A row collected before the run's file named its sections carries
+    the coverage extension's percentages under ``coverage`` alone;
+    the series' window holds such rows until it rolls past them, and
+    they read as that section.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    raw = entry.get("sections")
+    if isinstance(raw, dict):
+        for name, value in raw.items():
+            section = _section(value)
+            if section is not None:
+                found[str(name)] = section
+    older = entry.get("coverage")
+    if "coverage" not in found and isinstance(older, dict):
+        section = _section({"unit": "%", "packages": older})
+        if section is not None:
+            found["coverage"] = section
+    return found
+
+
+def _render_sections(entries: list[dict[str, Any]]) -> list[str]:
+    """Each section's rows: per package the latest, p50, and p90 number."""
+    series: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    latest: dict[str, dict[str, float]] = defaultdict(dict)
+    units: dict[str, str] = {}
     for entry in entries:
-        row = entry.get("coverage")
-        if not isinstance(row, dict):
-            continue
-        for package, value in sorted(row.items()):
-            if isinstance(value, int | float) and not isinstance(value, bool):
-                series[str(package)].append(float(value))
-                latest[str(package)] = float(value)
-    if not series:
-        return []
-    lines = ["  coverage", f"    {'package':<44} {'latest':>9} {'p50':>9} {'p90':>9}"]
-    for package, values in sorted(series.items()):
-        lines.append(
-            f"    {package[:44]:<44} {latest[package]:8.1f}%"
-            f" {_percentile(values, 0.5):8.1f}% {_percentile(values, 0.9):8.1f}%"
-        )
+        for name, section in _sections_of(entry).items():
+            units[name] = section["unit"]
+            for package, value in sorted(section["packages"].items()):
+                series[name][package].append(value)
+                latest[name][package] = value
+    lines: list[str] = []
+    for name in sorted(series):
+        unit = units[name]
+        lines += [
+            f"  {name}",
+            f"    {'package':<44} {'latest':>9} {'p50':>9} {'p90':>9}",
+        ]
+        for package, values in sorted(series[name].items()):
+            lines.append(
+                f"    {package[:44]:<44} {latest[name][package]:8.1f}{unit}"
+                f" {_percentile(values, 0.5):8.1f}{unit}"
+                f" {_percentile(values, 0.9):8.1f}{unit}"
+            )
     return lines
