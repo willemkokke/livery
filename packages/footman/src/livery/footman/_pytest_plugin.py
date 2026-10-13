@@ -114,6 +114,40 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.register(_TraceRecorder(sink), "footman-profile-trace")
 
 
+#: The variable pytest itself sets around each phase of a test, left to pytest.
+_PYTEST_OWN = "PYTEST_CURRENT_TEST"
+
+
+@pytest.fixture(autouse=True)
+def _environment_stays() -> Iterator[None]:
+    """Give the process environment back as the test found it.
+
+    A run inside a test writes the environment as a process of its own
+    would: an env file it loaded, a variable a hook set, a profiled run's
+    clock anchor, one set before an exec the test replaced. A process of
+    its own ends and takes those writes with it; a test's process goes on
+    to the next test, so they are undone here. A variable the test added
+    is removed, and one it changed or removed gets its value back.
+    pytest's own variable for the running test is left to pytest.
+    """
+    import os
+
+    # pytest registers a plugin's autouse fixtures in the order `dir()`
+    # lists them, which is alphabetical. This name sorts before
+    # `_no_inherited_drop_box`, which asks for `monkeypatch`, so this
+    # fixture is set up first and torn down after `monkeypatch` undoes
+    # its changes, and a value `monkeypatch` puts back is replaced by the
+    # one the test started with.
+    before = dict(os.environ)
+    yield
+    for name in [name for name in os.environ if name not in before]:
+        if name != _PYTEST_OWN:
+            del os.environ[name]
+    for name, value in before.items():
+        if name != _PYTEST_OWN and os.environ.get(name) != value:
+            os.environ[name] = value
+
+
 @pytest.fixture(autouse=True)
 def _no_inherited_drop_box(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test behaves differently for running inside a profiled run.

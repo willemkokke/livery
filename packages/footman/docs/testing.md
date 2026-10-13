@@ -194,6 +194,13 @@ dependency):
 - **`fm_record`** — a recording context for the whole test; steps append as
   task code runs.
 
+The plugin also gives the process environment back after every test. A
+`Runner` inside a test writes the environment as a process of its own
+would: an env file it loaded, a variable a hook set, a profiled run's
+clock anchor. A process of its own ends and takes those writes with it,
+and a test's process goes on to the next test, so the next test finds the
+environment the one before it found.
+
 Footman's own suite uses these fixtures and `Runner`. The harness tests the
 framework that ships it, which is the strongest claim a testing story can
 make about itself.
