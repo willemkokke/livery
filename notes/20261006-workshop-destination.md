@@ -1172,8 +1172,7 @@ slices, each mergeable alone:
    its release leg keep it. Until slice 6 the base imports it: the
    python kind's registration takes the extension's code as its
    backend, and the base modules that code serves (the nanobind kind,
-   the quality verbs, the release driver) import it as they imported
-   the backend. `BASE_EXTENSION_IMPORTS`, the allowance of the
+   the release driver) import it as they imported the backend. `BASE_EXTENSION_IMPORTS`, the allowance of the
    layering check's `base-imports-no-extension` rule, names each such
    module; it only shrinks, and a test keeps it exact.
    1. **The move** (issue #1352): the kind's backend becomes the
@@ -1475,6 +1474,8 @@ neither needs nor rules out).
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
+| `_unmetered` and `_write_unit` copied into the coverage extension's `_pages` beside the python extension's | one copy, in the coverage extension, when the union moves there (12e, P2b) |
+| the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
@@ -2870,6 +2871,26 @@ neither needs nor rules out).
   another distribution's privates, which the rule refuses, so the
   refactor cannot be skipped, and the public names are then made from
   the code as it stands at the move.
+
+- 2026-10-13, 12e's P2b (#1565): the coverage machinery leaves the base
+  for the coverage extension: the record, the line reader, the marks,
+  the floors, the leg's combine and the union are its modules, and its
+  verbs its own task group. Coverage joins each check leg through
+  `[ci.jobs.gate.check]` and judges in the gate job through `judges`,
+  a new key of a join of the verdict job whose entries run before the
+  run's row is collected and stop the job when red. The base keeps the
+  leg's one write, `ci.leg`, which puts the files the leg left in its
+  spool; the run row takes the sections extensions leave; the state
+  store's series are the workspace query `store.series`; the suites
+  no record holds are measured through `livery.workshop.run_phase_over`.
+  A workspace that does not list coverage runs no coverage entry at any
+  point. The import rule, which lets an extension import another only
+  when it requires it, shaped two seams: the python extension reaches
+  the local preview through `python.test.preview`, a query coverage
+  answers, and the cmake extension owns its gcov, lcov and Cobertura
+  readers and writes its parts itself, pinned byte for byte against
+  coverage's writer. The loop's interim of 2026-10-11, an extension pass
+  born beside pytest, is gone with it.
 
 ## Open
 
