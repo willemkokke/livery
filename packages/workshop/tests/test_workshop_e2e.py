@@ -14,9 +14,10 @@ import pytest
 from livery import git
 from livery.forge import Conclusion, Repository
 from livery.forge.testing import FakeForge
-from livery.workshop import _e2e
+from livery.workshop import _devenv, _e2e
 from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
+from workshop_rig import Machine, machine_fixture, rig_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -1528,6 +1529,193 @@ def test_the_forge_credentials_come_from_the_environment_in_host_mode(
     _forge, token = _e2e._dev_forge("gitea")  # pyright: ignore[reportPrivateUsage]
     assert token == "token-abc"
     assert connected == [("gitea", "http://localhost:43210", "token-abc")]
+
+
+# --- a pass after another: every client names this pass's forge ---------------
+
+
+def _registry(port: int) -> str:
+    """The forge's own conan registry, for a forge on *port*."""
+    return f"http://localhost:{port}/api/packages/{_e2e.E2E_OWNER}/conan"
+
+
+def _point_the_remote(url: str, cwd: Path, home: Path | None = None) -> None:
+    """Point conan's ``workshop`` remote at *url*, as a release does first.
+
+    The release's publish and its serving probe both run this command
+    before they upload or list. It goes to the conan home the process
+    environment names, or to *home*: a runner's job runs with its
+    runner's home.
+    """
+    from livery.extensions.conan import _package
+
+    added = _package._conan(  # pyright: ignore[reportPrivateUsage]
+        cwd,
+        "remote",
+        "add",
+        _package.CONAN_REMOTE,
+        url,
+        "--force",
+        env={"CONAN_HOME": str(home)} if home is not None else None,
+    )
+    assert added.code == 0, added.stderr
+
+
+def _remotes(home: Path, cwd: Path) -> dict[str, str]:
+    """The remotes conan lists in *home*, name to URL, read from its JSON."""
+    import json
+
+    from livery.extensions.conan import _package
+
+    listed = _package._conan(  # pyright: ignore[reportPrivateUsage]
+        cwd, "remote", "list", "--format=json", env={"CONAN_HOME": str(home)}
+    )
+    assert listed.code == 0, listed.stderr
+    entries = json.loads(listed.stdout)
+    return {str(entry["name"]): str(entry["url"]) for entry in entries}
+
+
+def _runner_home(environment: _devenv.Environment) -> Path:
+    """The conan home the first runner's configuration hands its jobs."""
+    config = (environment.runner_dir(1) / "config.yaml").read_text()
+    found = re.search(r"^    CONAN_HOME: (.+)$", config, re.M)
+    assert found is not None, config
+    return Path(found.group(1))
+
+
+@pytest.fixture
+def pass_environment(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """What entering an environment writes, put back after the test; the task's env.
+
+    Each variable is set first, so the test's end restores it whether
+    or not the process had it.
+    """
+    from types import SimpleNamespace
+
+    names = (
+        "GITEA_URL",
+        "GITEA_TOKEN",
+        "FORGE_TOKEN",
+        "FORGE_ADMIN_TOKEN",
+        "CONAN_HOME",
+    )
+    for name in names:
+        monkeypatch.setenv(name, "from-the-job")
+    monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
+    task_env: dict[str, str] = {}
+    monkeypatch.setattr("livery.footman.current", lambda: SimpleNamespace(env=task_env))
+    return task_env
+
+
+def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
+    rig: Path,
+    machine: Machine,
+    pass_environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Two passes in one hosted job, the second fresh: the first's forge
+    # listened on 47615 and its release pointed conan's remote there; the
+    # second's forge listens on 57713, and its members' build asked
+    # conan's remotes for a binary and could not reach 47615.
+    ports = iter((47615, 57713))
+    monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
+    # The home a hosted job's entry places under the runner's temp: every
+    # pass of the job inherits it.
+    job_home = tmp_path / "job-conan"
+    monkeypatch.setenv("CONAN_HOME", str(job_home))
+    first = _e2e.enter_environment("e2e")
+    assert first.url == "http://localhost:47615"
+    # The release points the remote at the pass's forge from the host, in
+    # the home the pass runs conan with, and from the runner, in the home
+    # its configuration hands the jobs.
+    _point_the_remote(_registry(47615), tmp_path)
+    _point_the_remote(_registry(47615), tmp_path, home=_runner_home(first))
+    first_home = Path(os.environ["CONAN_HOME"])
+    assert _remotes(first_home, tmp_path)["workshop"] == _registry(47615)
+    second = _e2e.enter_environment("e2e", fresh=True)
+    assert second.url == "http://localhost:57713"
+    # Before the second pass's release runs, no home that the pass or its
+    # runner builds with names the first forge.
+    pass_home = Path(os.environ["CONAN_HOME"])
+    for home in (pass_home, _runner_home(second)):
+        assert not [url for url in _remotes(home, tmp_path).values() if "47615" in url]
+    _point_the_remote(_registry(57713), tmp_path)
+    assert _remotes(pass_home, tmp_path)["workshop"] == _registry(57713)
+    # Both homes are the environment's own, and the job's home never held
+    # the loop's remote.
+    assert first_home == pass_home == second.conan_home
+    assert pass_environment["CONAN_HOME"] == str(second.conan_home)
+    assert _runner_home(second) == second.runner_dir(1) / "conan"
+    assert "workshop" not in _remotes(job_home, tmp_path)
+    # A pass that is not fresh keeps the environment, its forge, and the
+    # remote that names it.
+    third = _e2e.enter_environment("e2e")
+    assert third.url == "http://localhost:57713"
+    assert _remotes(third.conan_home, tmp_path)["workshop"] == _registry(57713)
+
+
+def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A fresh pass took a new forge, and the workspace an earlier pass
+    # left names the earlier forge in its origin. A pass for another stack
+    # starts over, and the start-over asks the origin for the commits it
+    # has not seen: the origin names this pass's forge and token first.
+    root = tmp_path / _e2e.E2E_REPO
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    earlier = "http://oauth2:token-old@localhost:47615/livery/ci-e2e-loop.git"
+    subprocess.run(["git", "remote", "add", "origin", earlier], cwd=root, check=True)
+    seen: list[str] = []
+
+    class _Stop(Exception):
+        pass
+
+    def start_over(
+        lane: object, token: str, root: Path, *, url: str, kind: str = "gitea"
+    ) -> list[str]:
+        asked = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        seen.append(asked.stdout.strip())
+        raise _Stop
+
+    monkeypatch.setattr(
+        _e2e,
+        "CURRENT",
+        _e2e.Current("e2e", "host", "http://localhost:57713", "token-new", "e2e-01"),
+    )
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-new"))
+    monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
+    monkeypatch.setattr(_e2e, "_listed_extensions", lambda root: ("docs",))
+    monkeypatch.setattr(_e2e, "start_over", start_over)
+    fresh = _e2e.Pass("gitea", "http://localhost:57713", fresh=True, stack=("ruff",))
+    with pytest.raises(_Stop):
+        _e2e._born(fresh)  # pyright: ignore[reportPrivateUsage]
+    assert seen == ["http://oauth2:token-new@localhost:57713/livery/ci-e2e-loop.git"]
+
+
+def test_a_docker_pass_runs_conan_with_the_docker_environment_s_own_home(
+    rig: Path, pass_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The compose rig is long-lived and keeps its address, so nothing is
+    # brought up or removed, fresh or not; conan's home is still the
+    # environment's, never the person's own.
+    monkeypatch.setenv("CONAN_HOME", str(rig / "person-conan"))
+    docker = _devenv.environment("dev")
+    docker.update({"MODE": "docker", "GITEA_URL": "http://localhost:3000"})
+    entered = _e2e.enter_environment("dev", fresh=True)
+    assert entered.directory == docker.directory and docker.env_file.is_file()
+    assert (_e2e.CURRENT.name, _e2e.CURRENT.mode) == ("dev", "docker")
+    assert os.environ["CONAN_HOME"] == str(docker.conan_home)
+    assert pass_environment["CONAN_HOME"] == str(docker.conan_home)
+    # Made before anything mounts it into a container.
+    assert docker.conan_home.is_dir()
 
 
 def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(

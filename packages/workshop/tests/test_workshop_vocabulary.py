@@ -49,7 +49,7 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 #: What the base still knows of a kind: (module, word) to count. Only falls.
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_ci_generate", "conanfile.py"): 1,
-    ("_devenv", "conan"): 2,
+    ("_devenv", "conan"): 1,
     ("_e2e", BACKEND_IMPORT): 1,
     ("_e2e", "conan"): 4,
     ("_e2e", "pyproject.toml"): 1,

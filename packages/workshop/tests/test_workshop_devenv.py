@@ -9,19 +9,7 @@ import pytest
 
 from livery.footman import Failed
 from livery.workshop import _devenv
-
-
-@pytest.fixture
-def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A rig under a temporary data directory, with the config directory beside it."""
-    data = tmp_path / "data"
-    config = tmp_path / "config"
-    data.mkdir()
-    config.mkdir()
-    monkeypatch.setattr("livery.footman._context.data_dir", lambda: data)
-    monkeypatch.setattr("livery.footman._context.config_dir", lambda: config)
-    return data / "forge-dev"
-
+from workshop_rig import Machine, machine_fixture, rig_fixture  # noqa: F401
 
 # --- the refusals ---------------------------------------------------------------
 
@@ -68,74 +56,8 @@ def test_down_and_rm_refuse_or_say_nothing_for_an_absent_environment(
 # --- host mode ------------------------------------------------------------------
 
 
-class _Machine:
-    """The seams: processes started, alive and stopped, the health and the API."""
-
-    def __init__(self) -> None:
-        self.spawned: list[tuple[list[str], Path]] = []
-        self.pids: set[int] = set()
-        self.stopped: list[int] = []
-        self.next_pid = 4000
-
-    def spawn(self, argv: list[str], *, cwd: Path, log: Path) -> int:
-        self.spawned.append((list(argv), cwd))
-        self.next_pid += 1
-        self.pids.add(self.next_pid)
-        log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text("started\n")
-        return self.next_pid
-
-    def alive(self, pid: int) -> bool:
-        return pid in self.pids
-
-    def stop(self, pid: int, **kwargs: object) -> bool:
-        self.stopped.append(pid)
-        self.pids.discard(pid)
-        return True
-
-
-@pytest.fixture
-def machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Machine:
-    fake = _Machine()
-    monkeypatch.setattr(_devenv, "SPAWN", fake.spawn)
-    monkeypatch.setattr(_devenv, "ALIVE", fake.alive)
-    monkeypatch.setattr(_devenv, "STOP", fake.stop)
-    monkeypatch.setattr(_devenv, "HEALTHY", lambda url: True)
-    monkeypatch.setattr(_devenv, "API", lambda url, path, token, **kw: 200)
-    monkeypatch.setattr(_devenv, "this_host", lambda: "macos-arm")
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    for name in ("gitea", "gitea-runner"):
-        (binaries / name).write_text("#!/bin/sh\n")
-    monkeypatch.setattr(
-        _devenv,
-        "BINARY",
-        lambda name, version, **kw: binaries / name.replace("_", "-"),
-    )
-
-    def cli(argv: list[str], **kwargs: object) -> object:
-        class _Result:
-            code = 0
-            stderr = ""
-
-            def __init__(self, out: str) -> None:
-                self.stdout = out
-
-        if "generate-access-token" in argv:
-            return _Result("token-abc\n")
-        if "generate-runner-token" in argv:
-            return _Result("reg-xyz\n")
-        return _Result("")
-
-    import livery.footman as footman
-
-    monkeypatch.setattr(footman, "run", cli)
-    monkeypatch.setattr(_devenv, "free_port", lambda: 43210)
-    return fake
-
-
 def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
-    rig: Path, machine: _Machine, capsys: pytest.CaptureFixture[str]
+    rig: Path, machine: Machine, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _devenv.devenv_up("dev", runners="host*2")
     env = _devenv.environment("dev")
@@ -154,8 +76,18 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
     assert "cache:\n  enabled: true" in config
     assert str(_devenv.cache_dir() / "uv") in config
     assert str(env.runner_dir(1) / "work") in config
-    # The caches every environment shares exist, beside the environments.
+    # Conan's home is each runner's own, inside the environment: a release
+    # writes a remote there that names this environment's forge. It exists
+    # before any job, so a container's bind mount never creates it as root.
+    assert f"CONAN_HOME: {env.runner_dir(1) / 'conan'}\n" in config
+    second = (env.runner_dir(2) / "config.yaml").read_text()
+    assert f"CONAN_HOME: {env.runner_dir(2) / 'conan'}\n" in second
+    assert (env.runner_dir(1) / "conan").is_dir()
+    assert (env.runner_dir(2) / "conan").is_dir()
+    # The caches every environment shares exist, beside the environments,
+    # and conan's home is not one of them.
     assert (rig / "cache" / "footman").is_dir() and (rig / "cache" / "uv").is_dir()
+    assert not (rig / "cache" / "conan").exists()
     # The cascade's current forge is this environment.
     from livery.footman import config_dir
 
@@ -174,7 +106,7 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
 
 
 def test_down_stops_the_processes_and_rm_removes_the_directory_and_the_cascade_keys(
-    rig: Path, machine: _Machine, capsys: pytest.CaptureFixture[str]
+    rig: Path, machine: Machine, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.footman import config_dir
 
@@ -205,7 +137,7 @@ def test_down_stops_the_processes_and_rm_removes_the_directory_and_the_cascade_k
 
 
 def test_gitea_that_never_answers_or_exits_early_fails_naming_its_log(
-    rig: Path, machine: _Machine, monkeypatch: pytest.MonkeyPatch
+    rig: Path, machine: Machine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(_devenv, "HEALTHY", lambda url: False)
     monkeypatch.setattr(_devenv, "HEALTH_TIMEOUT", 0.2)

@@ -4,11 +4,18 @@ An environment is a forge with its runners and its seeded accounts,
 brought up by name, kept until removed, and removed whole by one
 verb. Its state is one directory under the runner's data directory,
 `forge-dev/envs/<name>/`: the forge's data, the runners' registrations
-and working directories, the seed's credentials, the port it took and
-the pid files of its processes. The caches every environment shares,
-the tool store, uv's cache, conan's home and footman's data for the
-jobs, live beside them in `forge-dev/cache/`, so a new environment is
-warm from its first job and removing one removes no cache.
+and working directories, the seed's credentials, the port it took, the
+pid files of its processes, and conan's homes. Conan keeps its remotes
+and logins in its home, and a release writes a remote there that names
+the environment's forge, so the conan homes go with the environment:
+one in each runner's directory for its jobs, and one in the
+environment's directory for a pass of the loop
+([livery.workshop._devenv.Environment][]). The caches every
+environment shares, the tool store, uv's cache and footman's data for
+the jobs, live beside them in `forge-dev/cache/`, and removing an
+environment removes none of them. A new environment is warm from its
+first job, except that its conan homes start empty: its first native
+build fetches its conan packages again.
 
 Host mode runs Gitea and its runners as processes of this machine,
 from the `gitea` and `gitea_runner` records the store supplies; no
@@ -64,7 +71,7 @@ ADMIN = "livery-admin"
 ORG = "livery"
 """The seeded organisation the loop's repositories live in."""
 
-CACHES = ("footman", "uv", "conan", "actcache")
+CACHES = ("footman", "uv", "actcache")
 """The rig's shared caches under `forge-dev/cache/`, one directory each."""
 
 HEALTH_TIMEOUT = 60.0
@@ -169,6 +176,28 @@ class Environment:
     def runner_dir(self, number: int) -> Path:
         """Runner *number*'s directory."""
         return self.runners_dir / f"{number:02d}"
+
+    @property
+    def conan_home(self) -> Path:
+        """Conan's home for a pass of the loop on this environment.
+
+        The pass and every process it starts run conan with it. A
+        release writes the ``workshop`` remote into the home conan runs
+        with, naming this environment's forge, so the home is in the
+        environment's directory and goes with it. Each runner's jobs
+        have their own home in the runner's directory
+        ([livery.workshop._devenv.Environment.runner_conan_home][]), so
+        the pass and a job never run conan on one cache at the same
+        time.
+        """
+        return self.directory / "conan"
+
+    def runner_conan_home(self, number: int) -> Path:
+        """Conan's home for runner *number*'s jobs, in the runner's directory.
+
+        It takes the name the pass's home has, one level down.
+        """
+        return self.runner_dir(number) / self.conan_home.name
 
     def values(self) -> dict[str, str]:
         """The env file's pairs; empty when there is none yet."""
@@ -433,7 +462,14 @@ def app_ini(env: Environment, port: int) -> str:
 
 
 def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
-    """The runner's configuration: the rig's caches in its jobs' environment."""
+    """The runner's configuration: the rig's shared caches and its own conan home.
+
+    All of them go into the jobs' environment. Conan's home is in the
+    runner's directory, never among the shared caches: a release the
+    runner runs writes the ``workshop`` remote into it, naming this
+    environment's forge, and a home shared between environments keeps
+    that remote after its forge is gone.
+    """
     from livery.footman import directory_variable
 
     caches = cache_dir()
@@ -446,7 +482,7 @@ def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
         "  envs:\n"
         f"    {directory_variable('DATA_DIR')}: {caches / 'footman'}\n"
         f"    UV_CACHE_DIR: {caches / 'uv'}\n"
-        f"    CONAN_HOME: {caches / 'conan'}\n"
+        f"    CONAN_HOME: {env.runner_conan_home(number)}\n"
         "  timeout: 3h\n"
         "  fetch_interval: 2s\n"
         "cache:\n"
@@ -655,8 +691,14 @@ def _start_runner(
                 f"\n{registered.stdout}{registered.stderr}"
             )
     (home / "config.yaml").write_text(runner_config(env, number), encoding="utf-8")
-    for name in CACHES:
-        (cache_dir() / name).mkdir(parents=True, exist_ok=True)
+    # Conan's home exists before any job: a native wheel build mounts it
+    # into a container with `docker -v`, which creates a missing source
+    # directory owned by root.
+    for directory in (
+        *(cache_dir() / name for name in CACHES),
+        env.runner_conan_home(number),
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
     pid = SPAWN(
         [str(exe), "daemon", "--config", str(home / "config.yaml")],
         cwd=home,

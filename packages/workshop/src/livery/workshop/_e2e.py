@@ -41,6 +41,7 @@ from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge import Forge, Job, Repository, Run
+    from livery.workshop._devenv import Environment
     from livery.workshop._packages import Package
 
 #: The seeded organisation and the loop's one scratch repository.
@@ -370,6 +371,46 @@ def _enter_host(values: Mapping[str, str], env: str) -> None:
     lane = LANES["gitea"]
     os.environ[lane.url_var], os.environ[lane.token_var] = CURRENT.url, CURRENT.token
     os.environ["FORGE_TOKEN"] = os.environ["FORGE_ADMIN_TOKEN"] = CURRENT.token
+
+
+def enter_environment(name: str, *, fresh: bool = False) -> Environment:
+    """Run the pass on environment *name*, brought up first; the environment.
+
+    A host-mode environment is brought up; with *fresh* it is removed
+    first, so the pass gets a new forge. The forge's URL and token then
+    go into the pass's environment
+    ([livery.workshop._e2e._enter_host][]). A docker-mode environment
+    is the compose rig, used as it is, fresh or not.
+
+    In both modes the pass and every process it starts then run conan
+    with the environment's own home. A release writes the ``workshop``
+    remote into the home conan runs with, naming the environment's
+    forge. A home shared with an earlier pass keeps that remote after
+    the forge is gone, and a later ``conan install`` that asks the
+    remotes for a binary tries it and fails. The environment's home
+    goes with the environment, so a fresh pass starts with no remote
+    an earlier one wrote.
+    """
+    from livery.workshop import _devenv
+
+    place = _devenv.environment(name)
+    if fresh and place.mode == "host":
+        for line in _devenv.remove(place):
+            print(line)
+        place = _devenv.environment(name)
+    if place.mode == "docker":
+        CURRENT.name, CURRENT.mode = name, "docker"
+    else:
+        _devenv.up_host(place, ("host",))
+        place = _devenv.environment(name)
+        _enter_host(place.values(), name)
+    # Made here, before a native wheel build mounts it into a container
+    # with `docker -v`, which creates a missing source directory owned
+    # by root.
+    place.conan_home.mkdir(parents=True, exist_ok=True)
+    edit_environments({"CONAN_HOME": str(place.conan_home)})
+    print(f"  conan home: {place.conan_home}")
+    return place
 
 
 def _dev_forge(kind: str) -> tuple[Forge, str]:
@@ -3088,6 +3129,12 @@ def _born(pass_: Pass) -> None:
     forge = pass_.forge
     lane, lane_token = _dev_forge(forge)
     root = _loop_home(forge) / E2E_REPO
+    if (root / ".git").is_dir() and _has_remote(root):
+        # The origin names the forge of the pass that last wrote it,
+        # which a fresh pass removed with its environment, so it is
+        # pointed at this pass's forge before the start-over below asks
+        # it for commits it has not seen.
+        _authenticate_remote(root, lane_token, forge)
     if _listed_extensions(root) not in ((), _stack_of(pass_)):
         # A workspace born for another stack is not this pass's: an
         # extension pass and a plain one take turns in one environment.
@@ -3103,14 +3150,13 @@ def _born(pass_: Pass) -> None:
         shutil.rmtree(root, ignore_errors=True)
     if (root / ".git").is_dir() and _has_remote(root):
         # A resumed birth pushes before it returns, so an existing
-        # workspace authenticates first; birth resets the remote, so
+        # workspace authenticated above; birth resets the remote, so
         # it authenticates again after. Main then fast-forwards onto
         # the merges the loop itself made: without the reconcile,
         # birth's foreign-repo guard reads our own squash as a
         # stranger's history and refuses. A birth that failed before
         # the forge held the repository left no remote, and resumes
         # as a first birth does.
-        _authenticate_remote(root, lane_token, forge)
         _align_main(root)
     from livery.workshop._extensions import workspace_root
 
@@ -3358,6 +3404,8 @@ if _WORKSHOP_TESTS.is_dir():
         again, so a fresh pass is a new forge, and ``--purge-cache``
         removes the rig's shared caches first. The docker-mode
         environment ``dev`` is the compose rig, addressed as before.
+        The pass runs conan with a home inside the environment, so the
+        remote a release writes there goes with the environment's forge.
         ``--scenario`` names what the pass proves: scenario names, set
         names, or both, comma-separated. The sets are ``develop``
         (birth, the verified skip, the members, the scoped leg), the
@@ -3410,16 +3458,7 @@ if _WORKSHOP_TESTS.is_dir():
             if purge_cache:
                 for line in _devenv.purge_cache():
                     print(line)
-            place = _devenv.environment(env)
-            if fresh and place.mode == "host":
-                for line in _devenv.remove(place):
-                    print(line)
-                place = _devenv.environment(env)
-            if place.mode == "docker":
-                CURRENT.name, CURRENT.mode = env, "docker"
-            else:
-                _devenv.up_host(place, ("host",))
-                _enter_host(place.values(), env)
+            enter_environment(env, fresh=fresh)
             # Every commit the pass makes, the driver's, the birth's and
             # the loop's own fm's, is unsigned and carries the tools'
             # identity: the task's marks and the git plugin put both in
