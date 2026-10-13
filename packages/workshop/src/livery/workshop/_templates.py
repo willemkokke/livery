@@ -6,7 +6,7 @@ are generated from the contract. `drift_check` judges both against the
 repository as the gate's `fm drift.check`; `apply_project` writes both,
 and `fm sync` runs it, which is the recovery for drift. ``fm
 new.package`` writes a member's seeds (`livery.workshop._seeds`) into
-``packages/<name>`` and adds it to the project files.
+``packages/<name>``, and a fresh runner adds it to the project files.
 """
 
 from __future__ import annotations
@@ -16,14 +16,14 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman as footman
-from livery.footman import doc, fail, group
+from livery.footman import doc, fail, group, hidden
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
     stack_entries,
     workspace_root,
 )
 from livery.workshop._identity import identity, python_dirs
-from livery.workshop._pythons import python_floor
+from livery.workshop._pythons import python_floor, runner_script
 
 new = group("new", help="Create a project or a package from the extensions' seeds")
 
@@ -339,27 +339,63 @@ def new_package(
     kind: Annotated[
         str, doc("seed tree (package-python, package-cpp-conan, ...)")
     ] = "package-python",
+    resume: Annotated[bool, hidden] = False,
 ) -> None:
     """Create a package from *kind*'s seeds and wire it into the workspace.
 
     Writes the seeds of the kind's chain into ``packages/<name>``, with
-    the distribution named ``<namespace>-<name>``, writes the project
+    the distribution named ``<namespace>-<name>``. Then the runner the
+    workspace's environment holds wires the member, run as
+    ``new.package <name> --resume``
+    ([livery.workshop._templates.wire_member][]): it writes the project
     files again so every per-package list picks the member up, and
-    locks the environment again. A non-python kind joins the roster
-    without a dev-group entry: there is no distribution to install.
+    locks and syncs the environment and the tools. A process mounts the
+    extensions the packages hold when it starts, and the project files
+    and the tool lock read that mount, so a process started after the
+    member exists writes them. ``--resume`` wires a member that exists,
+    which is also the recovery after a wiring that stopped part way. A
+    non-python kind joins the roster without a dev-group entry: there
+    is no distribution to install.
     """
-    wire_package(_root(), name, kind=kind)
+    root = _root()
+    if resume:
+        wire_member(root, name)
+        return
+    render_member(root, name, kind=kind)
+    prog = footman.prog()
+    runner = runner_script(root / ".venv")
+    if not runner.is_file():
+        fail(
+            f"{runner} is missing: {root}'s environment has no {prog} to wire"
+            f" packages/{name} with. `uv sync` in {root} installs it; then run"
+            f" `{prog} new.package {name} --resume` there"
+        )
+    print(f"  packages/{name}: seeded; the wiring continues with {runner}")
+    footman.run([str(runner), "new.package", name, "--resume"], cwd=root, capture=False)
 
 
-def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
-    """Create one *kind* package in *root* and wire it; the import path.
+def wire_member(root: Path, name: str) -> None:
+    """Wire the package under ``packages/<name>`` into *root*.
 
-    The shared core of ``new.package`` and the birth verb's extension
-    arm: `render_member`, then the project re-apply, lock and sync.
-    Idempotent by refusal: an existing directory is named, never
-    overwritten.
+    Writes the composed and generated files again, so every
+    per-package list picks the member up, then locks and syncs the
+    environment and the tools. The files and the tool lock read the
+    extensions this process mounted, and a process mounts what the
+    packages hold when it starts: run in a process started before the
+    member existed, the files it writes lack what the member brings
+    and differ from what the next command renders, so ``new.package``
+    runs it in a fresh runner.
+
+    Raises:
+        Failed: when *name* breaks the package naming rule, or
+            ``packages/<name>`` holds no package.
     """
-    import_path = render_member(root, name, kind=kind)
+    _check_member_name(name)
+    if not (root / "packages" / name / "workshop.toml").is_file():
+        fail(
+            f"packages/{name} holds no package to wire:"
+            f" `{footman.prog()} new.package {name}` creates one"
+        )
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
     from livery.workshop._tool_tasks import sync_tools
@@ -373,7 +409,15 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     # follows finds them, as it does after a birth.
     sync_tools(root)
     print(f"  packages/{name}: seeded, wired, and installed")
-    return import_path
+
+
+def _check_member_name(name: str) -> None:
+    """Refuse a package name ``packages/<name>`` cannot hold."""
+    if not re.fullmatch(r"([a-z][a-z0-9-]*/)?[a-z][a-z0-9-]*", name):
+        fail(
+            f"package name {name!r}: use lowercase letters, digits, hyphens,"
+            " and at most one group directory (extensions/widgets)"
+        )
 
 
 def render_member(root: Path, name: str, *, kind: str = "package-python") -> str:
@@ -383,15 +427,11 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
     and the files the records compose for it. The member's own contract
     is one of the seeds, and discovery finds the member through it, so
     the roster needs no write. The project files, the lock and the
-    install are the caller's: `wire_package` runs them for one member,
+    install are the caller's: `wire_member` runs them for one member,
     and a caller adding many members runs them once after the last.
     Refuses an existing directory, naming it.
     """
-    if not re.fullmatch(r"([a-z][a-z0-9-]*/)?[a-z][a-z0-9-]*", name):
-        fail(
-            f"package name {name!r}: use lowercase letters, digits, hyphens,"
-            " and at most one group directory (extensions/widgets)"
-        )
+    _check_member_name(name)
     destination = root / "packages" / name
     if destination.exists():
         fail(f"{destination} already exists")
