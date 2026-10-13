@@ -590,7 +590,8 @@ the repository's own settings go in its region at the end. It declares
 `typecomplete.basedpyright` off, and a root contract with
 `[phases.typecomplete.basedpyright] enabled = true` registers it too; it
 verifies that each package's public API is type-complete.
-`fm new.project` lists `docs`, `ruff` and `basedpyright`.
+`fm new.project` lists `changelog`, `docs`, `ruff`, `basedpyright`,
+`pytest` and `coverage`.
 
 mypy is an extension of its own as well, `livery-extensions-mypy`,
 listed as `mypy`. Listed, it registers `typecheck.mypy`, which checks
@@ -1113,18 +1114,23 @@ every event; nothing passes `--full`.
 
 ## Coverage floors
 
-Each package's `workshop.toml` may declare `[qa] coverage-floor`: a
-percentage of statements and branches the gate enforces, or the mode
-`"auto-ratchet"`, under
-which the floor is the package's mark on the state store. Both modes
-pass at the floor minus the package's `coverage-epsilon` (percentage
-points, 0.5 when absent). Under auto-ratchet the first gated run
+A package states its coverage policy in the `[coverage]` table of its
+`workshop.toml`, a table the coverage extension declares: while
+`[workspace] extensions` does not list `coverage`, the table refuses,
+naming the extension. `floor` is a percentage of statements and
+branches the gate enforces, or the mode `"auto-ratchet"`, under which
+the floor is the package's mark on the state store; a package with
+tests that names no floor is judged at 100. Both modes pass at the
+floor minus the package's `epsilon` (percentage points, 0.5 when
+absent). `required = false` leaves a package unjudged on purpose: it
+gets no verdict and no mark, its coverage line says so, and a `floor`
+beside it refuses. Under auto-ratchet the first gated run
 records the mark, a run that clears it by more than epsilon raises
 it, and a store that cannot be read falls open with its reason and
 writes nothing. Lowering a mark is a person's act:
 `fm coverage.accept <package> <value> --reason=<why>` writes a row
 naming who and why, and refuses without a reason, at or above the
-current mark, or for a package with a committed floor. The number
+current mark, or for a package not under auto-ratchet. The number
 that is judged is the CI union: on every leg the tests run measured,
 each process a test starts included and the gate's own driver never,
 so a line counts only when a test reached it, and the gate job

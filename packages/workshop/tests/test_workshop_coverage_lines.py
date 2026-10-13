@@ -41,14 +41,14 @@ COBERTURA = (
 )
 
 
-def _native(tmp_path: Path, floor: str = "coverage-floor = 100") -> Package:
+def _native(tmp_path: Path, floor: str = "floor = 100") -> Package:
     directory = tmp_path / "packages" / "n"
     (directory / "src").mkdir(parents=True, exist_ok=True)
     (directory / "tests").mkdir(exist_ok=True)
     (directory / "src" / "x.cpp").write_text("int f() { return 1; }\n")
     (directory / "tests" / "test_x.cpp").write_text("int main() { return 0; }\n")
     (directory / "workshop.toml").write_text(
-        f'kind = "cpp-conan"\nname = "acme-n"\n[qa]\n{floor}\n'
+        f'kind = "cpp-conan"\nname = "acme-n"\n[coverage]\n{floor}\n'
     )
     return Package(
         directory=directory,
@@ -197,7 +197,7 @@ def test_a_native_package_unmeasured_refuses_and_below_its_floor_shares_the_pros
         in capsys.readouterr().out
     )
     # At its floor it passes, with the numbers on screen.
-    package = _native(tmp_path, "coverage-floor = 50")
+    package = _native(tmp_path, "floor = 50")
     assert _python.enforce_coverage(tmp_path, (package,)) == {"packages/n": 50.0}
     assert (
         "coverage packages/n: 50.0% (floor 50.0%, epsilon 0.5%)"

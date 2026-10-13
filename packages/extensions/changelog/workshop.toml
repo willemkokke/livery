@@ -28,10 +28,10 @@ path = "packages/forge"
 kind = "runtime"
 floor = "0.6.0"
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
-coverage-floor = 100
+floor = 100
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.

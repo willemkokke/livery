@@ -372,7 +372,7 @@ def _chain(
     # Stock fm's births list the stock extensions; the home adds itself.
     assert (
         'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
-        ' "dummy.brandx"]' in contract
+        ' "coverage", "dummy.brandx"]' in contract
     )
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
@@ -507,7 +507,7 @@ def _chain(
     natives = "".join(f'"{name}", ' for name in NATIVE) if resumed else ""
     assert (
         'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
-        f" {natives}"
+        f' "coverage", {natives}'
         '"dummy.brandx"]' in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()

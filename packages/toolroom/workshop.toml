@@ -19,11 +19,11 @@ python-paths = ["docs/_generated/stubs"]
 # the shim and this package release identically, under one number.
 baseline = "0.6.2"
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces, just under what the
 # CI union measures; raise it as the suite grows, lower it only
 # deliberately.
-coverage-floor = 95
+floor = 95
 
 [owners]
 users = ["willemkokke"]

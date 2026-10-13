@@ -160,8 +160,9 @@ def strip_own_suites(root: Path) -> list[str]:
     ``test_*.py`` modules and keeps its helpers, since the rendered
     checker configuration names its ``tests`` directory; a directory
     left with no module gets one, named after the package. Its
-    coverage floor is set to 0. The root ``tests`` directory is the
-    project render's and stays as it is.
+    ``[coverage]`` floor gives way to ``required = false``, so nothing
+    judges its coverage. The root ``tests`` directory is the project
+    render's and stays as it is.
     """
     from livery.workshop._packages import discover_packages
 
@@ -179,8 +180,9 @@ def strip_own_suites(root: Path) -> list[str]:
                 )
         contract = package.directory / "workshop.toml"
         text = contract.read_text("utf-8")
+        # A [coverage] floor is a number; a [[depends]] floor is a quoted version.
         contract.write_text(
-            re.sub(r"(?m)^coverage-floor = \d+", "coverage-floor = 0", text),
+            re.sub(r"(?m)^floor = [\d.]+$", "required = false", text),
             encoding="utf-8",
         )
         stripped.append(package.path)

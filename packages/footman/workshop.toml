@@ -21,10 +21,10 @@ api = false
 # the shim and this package release identically, under one number.
 baseline = "0.52.2"
 
-[qa]
+[coverage]
 # The imported suite's measured mark rides in with the code; raise
 # it as the suite grows, lower it only deliberately.
-coverage-floor = 92
+floor = 92
 
 [owners]
 users = ["willemkokke"]

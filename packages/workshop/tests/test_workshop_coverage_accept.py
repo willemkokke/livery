@@ -29,14 +29,13 @@ def _refusal(action: Callable[[], object]) -> str:
 
 @pytest.fixture
 def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Package]:
-    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     members = []
     for name, floor in (("x", '"auto-ratchet"'), ("y", "90")):
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{name}"\n\n'
-            f"[qa]\ncoverage-floor = {floor}\n"
+            f'kind = "python"\nname = "livery-{name}"\n\n[coverage]\nfloor = {floor}\n'
         )
         members.append(
             Package(

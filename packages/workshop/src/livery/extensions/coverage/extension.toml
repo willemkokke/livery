@@ -1,11 +1,30 @@
-# The coverage extension: the site's coverage pages, drawn from the
-# workspace's measured data.
+# The coverage extension: each package's coverage policy, and the
+# site's coverage pages, drawn from the workspace's measured data.
 # Read at every mount; a query's answer is imported when it is asked.
 
 [extension]
 api-version = 1
 # Listed in [workspace] extensions.
 levels = ["workspace"]
+
+# A package's coverage policy: the floor its coverage keeps, how far a
+# run may fall below it, and whether anything judges it. A package with
+# tests that names no floor is judged at 100.
+[contract.package.coverage]
+types = ["table"]
+doc = "the package's coverage policy"
+
+[contract.package.coverage.floor]
+types = ["number", "str"]
+doc = "the coverage the package keeps: a percentage, or auto-ratchet for the mark its CI runs record; 100 when absent and the package has tests"
+
+[contract.package.coverage.epsilon]
+types = ["number"]
+doc = "how far, in percentage points, coverage may fall below the floor; 0.5 when absent"
+
+[contract.package.coverage.required]
+types = ["bool"]
+doc = "whether anything judges the package's coverage; true when absent, and false gives no verdict, records no mark and takes no floor"
 
 # While docs is listed, the function that draws the coverage pages of
 # the packages that declare an htmlcov report: coverage.py's own HTML

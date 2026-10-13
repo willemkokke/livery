@@ -1126,8 +1126,8 @@ def coverage_accept(
     policy = _python.coverage_policy(found)
     if policy is None or not policy.ratchet:
         fail(
-            f"{package} is not under auto-ratchet: its floor is committed in its"
-            " workshop.toml, so lower it there"
+            f"{package} is not under auto-ratchet: its workshop.toml sets its"
+            " floor under [coverage], so change it there"
         )
     if not 0 <= value <= 100:
         fail(f"the mark is a percentage; {value!r} is not")

@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from livery.footman import fail
 
@@ -113,10 +113,11 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
     return data
 
 
-#: Each key a contract spells another way, by its table and name, to the
-#: line refusing it: the judge would call the key unknown without naming
-#: the spelling that says it.
-OTHER_SPELLINGS: dict[tuple[str, str], str] = {
+#: Each key a contract spells another way, by its path from the top
+#: level, to the line refusing it: the judge would call the key unknown
+#: without naming the spelling that says it. A path of one name is a
+#: whole table.
+OTHER_SPELLINGS: dict[tuple[str, ...], str] = {
     ("release", "prove-floors"): (
         "[release] prove-floors is not a key: [release] prove lists the"
         " resolutions a release tests each member at, from floor, latest and"
@@ -126,6 +127,11 @@ OTHER_SPELLINGS: dict[tuple[str, str], str] = {
         "[ci] wheel-platforms is not a key: a package that holds nanobind"
         " names the runner labels that build its platform wheels under"
         " [nanobind] wheel-platforms"
+    ),
+    ("qa",): (
+        "[qa] is not a table: a package's coverage policy is its [coverage]"
+        " table, where coverage-floor is floor and coverage-epsilon is epsilon,"
+        " read while [workspace] extensions lists coverage"
     ),
 }
 
@@ -137,9 +143,12 @@ def other_spellings(data: dict[str, Any]) -> list[str]:
     ([livery.workshop._contract.OTHER_SPELLINGS][]).
     """
     found: list[str] = []
-    for (table, key), line in OTHER_SPELLINGS.items():
-        held = data.get(table)
-        if isinstance(held, dict) and key in held:
+    for path, line in OTHER_SPELLINGS.items():
+        table = data
+        for name in path[:-1]:
+            nested = table.get(name)
+            table = cast("dict[str, Any]", nested) if isinstance(nested, dict) else {}
+        if path[-1] in table:
             found.append(line)
     return found
 

@@ -181,13 +181,16 @@ def test_the_copy_is_the_committed_tree_alone_with_no_remote(tmp_path: Path) -> 
 
 def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
-    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     helped = _member(tmp_path, "helped")
     (helped / "tests").mkdir()
     (helped / "tests" / "test_helped.py").write_text("def test_x() -> None: ...\n")
     (helped / "tests" / "helped_seeds.py").write_text('"""Seeds."""\n')
     with (helped / "workshop.toml").open("a") as handle:
-        handle.write("\n[qa]\ncoverage-floor = 87\n")
+        handle.write(
+            '\n[[depends]]\npath = "packages/bare-one"\nkind = "runtime"\n'
+            'floor = "0.1.0"\n\n[coverage]\nfloor = 87\n'
+        )
     bare = _member(tmp_path, "bare-one")
     (bare / "tests").mkdir()
     (bare / "tests" / "test_bare.py").write_text("def test_x() -> None: ...\n")
@@ -197,7 +200,12 @@ def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
     stripped = _scale.strip_own_suites(tmp_path)
     assert stripped == ["packages/bare-one", "packages/helped"]
     assert [p.name for p in (helped / "tests").iterdir()] == ["helped_seeds.py"]
-    assert "coverage-floor = 0\n" in (helped / "workshop.toml").read_text()
+    # The coverage floor gives way; the edge's version floor stays.
+    assert (
+        (helped / "workshop.toml")
+        .read_text()
+        .endswith('floor = "0.1.0"\n\n[coverage]\nrequired = false\n')
+    )
     # A directory left with no module keeps one for the checkers to read.
     assert [p.name for p in (bare / "tests").iterdir()] == ["bare_one_copy.py"]
     assert (tmp_path / "tests" / "test_workspace.py").exists()

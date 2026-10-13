@@ -8,7 +8,7 @@ kind = "python"
 name = "livery-strongroom"
 description = "Content-addressed storage: one address space, every tenant."
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
-coverage-floor = 100
+floor = 100

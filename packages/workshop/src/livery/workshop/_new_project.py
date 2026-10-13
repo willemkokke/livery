@@ -189,16 +189,17 @@ def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
 
     Footman's own providers and the base are never listed. A stock App
     (the base among its builtins) lists the changelog's extension, the
-    site's, the python formatter's, the type checker's and the test
-    runner's first, as ruled; the list is in precedence order, so a
-    brand's own extensions follow them and win. An agent's files are a
-    choice the project makes, so no agent's extension is among them.
+    site's, the python formatter's, the type checker's, the test
+    runner's and coverage's first, as ruled; the list is in precedence
+    order, so a brand's own extensions follow them and win. An agent's
+    files are a choice the project makes, so no agent's extension is
+    among them.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
     stack = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack[:0] = ["changelog", "docs", "ruff", "basedpyright", "pytest"]
+        stack[:0] = ["changelog", "docs", "ruff", "basedpyright", "pytest", "coverage"]
     return stack
 
 
@@ -293,7 +294,7 @@ def new_project(
     # list is the running App's own builtin providers, minus footman's
     # and the base, which is never listed (contract 19): a branded App's
     # children carry its extensions. Stock fm's carry the site's
-    # extension, which rides in the workshop wheel.
+    # extension and coverage's, which ride in the workshop wheel.
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
     # runtime accessor is footman#536's family).

@@ -18,7 +18,7 @@ path = "packages/strongroom"
 kind = "runtime"
 floor = "0.4.0"
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
-coverage-floor = 100
+floor = 100

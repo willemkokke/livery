@@ -9,11 +9,11 @@ dev-extras = ["github-secrets"]
 # No [[depends]]: livery.forge is stdlib-only at runtime, and the root
 # contracts test enforces it.
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces, statements and
 # branches together; raise it as the suite grows, lower it only
 # deliberately.
-coverage-floor = 87
+floor = 87
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.
