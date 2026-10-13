@@ -1,13 +1,14 @@
 """Parse each python source once, and say what it references.
 
 The layering phase reads every python source through this module: the
-python extension's ``references`` answer, its private-reaches step and
-each rule that walks the syntax. ``parsed_source`` parses a file once
-for a given content, memoised by the file's path, size and
-modification time, so the steps, which run in one process, read one
-tree, and an unchanged file is never parsed twice. ``parsed_modules``
-hands a rule the sources in its scope, every one or the files a
-narrowed run selects.
+python extension's ``references`` answer and its layering steps,
+private-reaches, runner-terminal and declared-imports. ``parsed_source``
+parses a file once for a given content, memoised by the file's path,
+size and modification time, so the steps, which run in one process,
+read one tree, and an unchanged file is never parsed twice.
+``parsed_modules`` hands a rule the sources in its scope, every one or
+the files a narrowed run selects, and ``graph_changed`` is what each
+step's inputs widen on.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, cast
 from livery.workshop._packages import ReferencedName
 
 if TYPE_CHECKING:
+    from livery.workshop import Changes
     from livery.workshop._packages import Package
 
 
@@ -278,4 +280,24 @@ def _collect(
             dotted=dotted_name(source, base) if area == "src" else "",
             tree=parsed.tree,
         )
+    )
+
+
+def graph_changed(changes: Changes) -> bool:
+    """Whether a contract, a native manifest or a root ``src/`` changed.
+
+    The layering steps' inputs widen on them: the distributions' roots
+    and declarations come from the manifests, and the allowances from
+    the root contract, so a change there judges every source, as the
+    base's layering steps do.
+    """
+    from livery.workshop._categories import matches
+    from livery.workshop._steps import NOT_INPUTS, graph_files
+
+    patterns = graph_files(changes.root)
+    return any(
+        matches(pattern, path)
+        for path in changes.paths
+        if not any(matches(ignored, path) for ignored in NOT_INPUTS)
+        for pattern in patterns
     )

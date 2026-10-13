@@ -303,12 +303,6 @@ def compile_commands(package: Package) -> Path | None:
     return None if found is None else cast("Path | None", found(package))
 
 
-def plugin_modules(package: Package) -> tuple[str, ...]:
-    """The modules *package* declares as footman task entry points; empty for none."""
-    reader = _optional(package, "plugin_modules")
-    return () if reader is None else tuple(reader(package))
-
-
 def references(package: Package) -> tuple[SourceReferences, ...]:
     """What each of *package*'s sources references, one record per source.
 

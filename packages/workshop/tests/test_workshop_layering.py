@@ -31,23 +31,16 @@ def _package(
     )
 
 
-def _forge_stub(root: Path, *, plugin: str = "") -> None:
-    # The stdlib rule walks packages/forge/src; give the tree a clean one.
+def _forge_stub(root: Path) -> None:
+    # A member the graph's edges point at, with one clean source.
     src = root / "packages" / "forge" / "src"
     src.mkdir(parents=True)
     (src / "ok.py").write_text("import json\n")
     (root / "packages" / "forge" / "workshop.toml").write_text(
         'kind = "python"\nname = "livery-forge"\n'
     )
-    # *plugin* is a dotted module declared as a footman task entry
-    # point, which is what exempts it from the stdlib-only rule.
-    entry = (
-        f'\n[project.entry-points."footman.tasks"]\nforge = "{plugin}:tasks"\n'
-        if plugin
-        else ""
-    )
     (root / "packages" / "forge" / "pyproject.toml").write_text(
-        f'[project]\nname = "livery-forge"\ndependencies = []\n{entry}'
+        '[project]\nname = "livery-forge"\ndependencies = []\n'
     )
 
 
@@ -115,136 +108,6 @@ def _module(root: Path, package: str, name: str, body: str) -> Path:
     path = src / name
     path.write_text(body)
     return path
-
-
-def test_a_module_importing_the_runner_may_not_ask_the_terminal(
-    tmp_path: Path,
-) -> None:
-    _package(tmp_path, "tool")
-    _module(
-        tmp_path,
-        "tool",
-        "verbs.py",
-        "import sys\nimport livery.footman as footman\n\n"
-        "def go() -> bool:\n    return sys.stdin.isatty()\n",
-    )
-    with pytest.raises(ValueError, match=r"attended\(\)") as caught:
-        verify_workspace(tmp_path)
-    assert "sys.stdin.isatty()" in str(caught.value)
-    # The stdout spelling is the same question, and so is a name
-    # imported from sys directly.
-    _module(
-        tmp_path,
-        "tool",
-        "verbs.py",
-        "from sys import stdout\nfrom livery import footman\n\n"
-        "def go() -> bool:\n    return stdout.isatty()\n",
-    )
-    with pytest.raises(ValueError, match=r"attended\(\)"):
-        verify_workspace(tmp_path)
-    # stderr and os.isatty ask the same terminal.
-    _module(
-        tmp_path,
-        "tool",
-        "verbs.py",
-        "import os\nimport sys\nimport livery.footman as footman\n\n"
-        "def go() -> bool:\n    return sys.stderr.isatty() or os.isatty(1)\n",
-    )
-    with pytest.raises(ValueError, match=r"attended\(\)") as caught:
-        verify_workspace(tmp_path)
-    assert "os.isatty()" in str(caught.value)
-
-
-def test_the_runner_and_plain_application_code_may_ask(tmp_path: Path) -> None:
-    # The runner implements the answer, so its own sources ask freely.
-    _package(tmp_path, "footman")
-    _module(
-        tmp_path,
-        "footman",
-        "context.py",
-        "import sys\nfrom livery.footman import task\n\n"
-        "def attended() -> bool:\n    return sys.stdin.isatty()\n",
-    )
-    # A module that never imports the runner is the workspace's own
-    # business, whatever it asks.
-    _package(tmp_path, "app")
-    _module(
-        tmp_path,
-        "app",
-        "ui.py",
-        "import sys\n\ndef colour() -> bool:\n    return sys.stdout.isatty()\n",
-    )
-    verify_workspace(tmp_path)
-    # And the runner's own answer is what a task module should call.
-    _package(tmp_path, "tool")
-    _module(
-        tmp_path,
-        "tool",
-        "verbs.py",
-        "import livery.footman as footman\n\n"
-        "def go() -> bool:\n    return footman.attended()\n",
-    )
-    verify_workspace(tmp_path)
-
-
-def test_a_forge_third_party_import_is_refused(tmp_path: Path) -> None:
-    _forge_stub(tmp_path)
-    src = tmp_path / "packages" / "forge" / "src"
-    (src / "bad.py").write_text("import requests\n")
-    with pytest.raises(ValueError, match="stdlib-only at import time"):
-        verify_workspace(tmp_path)
-
-
-def test_only_a_declared_plugin_module_may_import_what_the_runner_brings(
-    tmp_path: Path,
-) -> None:
-    """The exemption follows the entry point, never a path spelled twice.
-
-    A module the runner loads as a plugin has the runner present by
-    construction, and the mounted extensions with it. The package's own
-    metadata is where that is declared, so a module at the same path
-    with no entry point naming it is not exempt, and renaming the
-    module in the metadata moves the exemption with it.
-    """
-    _forge_stub(tmp_path)
-    inside = tmp_path / "packages" / "forge" / "src" / "livery" / "forge"
-    plugin_dir = inside / "_dev"
-    plugin_dir.mkdir(parents=True)
-    plugin_dir.joinpath("__init__.py").write_text("import livery.footman as footman\n")
-    # The refusals first. Nothing declares this module, so its import of
-    # the runner is the ordinary violation however it is spelled.
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
-        verify_workspace(tmp_path)
-    # A module outside it is refused the same way when one is declared.
-    _forge_stub_replace(tmp_path, plugin="livery.forge._dev")
-    bad = inside / "_bad.py"
-    bad.write_text("import livery.footman as footman\n")
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
-        verify_workspace(tmp_path)
-    bad.unlink()
-    # The exemption covers what the runner brings, not a third party.
-    plugin_dir.joinpath("__init__.py").write_text(
-        "import livery.footman as footman\nimport requests\n"
-    )
-    with pytest.raises(ValueError, match="stdlib-only at import time"):
-        verify_workspace(tmp_path)
-    plugin_dir.joinpath("__init__.py").write_text(
-        "import livery.footman as footman\nfrom livery.toolroom import tools\n"
-        "from livery.forge import Forge\n"
-    )
-    verify_workspace(tmp_path)
-    # The metadata decides: name another module and this one is refused.
-    _forge_stub_replace(tmp_path, plugin="livery.forge._other")
-    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
-        verify_workspace(tmp_path)
-
-
-def _forge_stub_replace(root: Path, *, plugin: str) -> None:
-    """Rewrite forge's manifest to declare *plugin* as its task entry point."""
-    entry = f'\n[project.entry-points."footman.tasks"]\nforge = "{plugin}:tasks"\n'
-    (root / "packages" / "forge" / "pyproject.toml").write_text(
-        f'[project]\nname = "livery-forge"\ndependencies = []\n{entry}'
-    )
 
 
 def test_a_clean_tree_passes(tmp_path: Path) -> None:
@@ -773,9 +636,10 @@ def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
 def test_the_layering_phase_parses_each_source_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.python import _parse
+    from livery.extensions.python import _declared, _parse, _terminal
     from livery.extensions.python._reaches import scan
     from livery.workshop import _lifecycle
+    from livery.workshop._packages import RuleContext
 
     _package(tmp_path, "tool")
     _module(tmp_path, "tool", "a.py", "import json\n")
@@ -790,16 +654,18 @@ def test_the_layering_phase_parses_each_source_once(
         return real(path)
 
     def gate() -> None:
-        # The base's rules, the python extension's private-reaches scan,
-        # and each package's references answer.
+        # The base's rules, the python extension's three steps, and each
+        # package's references answer.
         packages = verify_workspace(tmp_path)
-        assert scan(_parse.parsed_modules(tmp_path, packages), packages) == {}
+        modules = _parse.parsed_modules(tmp_path, packages)
+        assert scan(modules, packages) == {}
+        assert _terminal.problems(modules) == []
+        assert _declared.problems(RuleContext(tmp_path, packages)) == []
         for package in packages:
             assert _lifecycle.references(package)
 
     monkeypatch.setattr(_parse, "_parse", counting)
     _parse._PARSED.clear()
-    assert len(RULES) >= 3
     gate()
     assert sorted(p.name for p in counted) == ["a.py", "b.py", "ok.py", "tasks.py"]
     # The memo: a second gate over the same bytes parses nothing.
@@ -830,18 +696,19 @@ def test_a_base_step_refuses_with_its_rules_findings_and_the_others_hold(
     from livery.workshop._phases import PhaseContext
     from livery.workshop._steps import step_for
 
-    _package(tmp_path, "tool")
-    _forge_stub(tmp_path)
-    (tmp_path / "packages" / "forge" / "src" / "bad.py").write_text("import requests\n")
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
     ctx = PhaseContext(root=tmp_path, packages=discover_packages(tmp_path))
     with pytest.raises(Failed) as raised:
-        step_for("layering.forge-stdlib-only").run(ctx)
+        step_for("layering.sibling-references").run(ctx)
     assert str(raised.value).startswith("the workspace breaks its layering:\n  ")
-    assert "imports 'requests': livery.forge is stdlib-only at import time" in str(
+    assert "packages/high: uses livery-low, and nothing it depends on" in str(
         raised.value
     )
-    for step in ("runner-terminal", "base-imports-no-extension", "sibling-references"):
-        step_for(f"layering.{step}").run(ctx)
+    assert set(RULES) == {"base-imports-no-extension", "sibling-references"}
+    step_for("layering.base-imports-no-extension").run(ctx)
 
 
 def test_the_sibling_fix_rewrites_then_locks_a_moved_manifest_then_judges(

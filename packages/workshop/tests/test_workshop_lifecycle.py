@@ -62,7 +62,6 @@ def _package(tmp_path: Path, kind_name: str) -> Package:
 def _answers_nothing(package: Package) -> None:
     assert _lifecycle.declared_requirements(package) is None
     assert _lifecycle.module_roots(package) == ()
-    assert _lifecycle.plugin_modules(package) == ()
     assert _lifecycle.references(package) == ()
 
 

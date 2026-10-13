@@ -706,24 +706,48 @@ tools sections render from the registries, so no fragment names a
 checker by hand.
 
 Each rule over the sources is a step of the layering phase: the
-base's four (the runner's one-answer rule, the base importing no
-extension, the forge's stdlib rule, and the sibling references, whose
-fix writes the edges the graph already reaches), and an extension's
-own, declared as `[phases.layering.<step>]` with
-`main = "module:function"`, called with the gate's context. The base
-importing no extension and the sibling references read each package's
-`references` answer, one record per source: the file, the name other
-code references it by, each name the source references, and the names
-its language's conventions account for. Each name says whether the
-source makes the reference at import time or lazily, inside a function
-or a method body, and whether only a type checker makes it or the
-source runs without it. A record names a file inside its package, and
-one extension answers for each file. The python extension answers for
-python sources from one parse per gate, memoised by the file's path,
-size and modification time, and the other steps over python syntax
-read the same parse, over the files a narrowed run reaches or every
-source. A step's fix runs inside the gate's rewrite, before the
-judges.
+base's two (the base importing no extension, and the sibling
+references, whose fix writes the edges the graph already reaches), and
+an extension's own, declared as `[phases.layering.<step>]` with
+`main = "module:function"`, called with the gate's context. The base's
+two read each package's `references` answer, one record per source:
+the file, the name other code references it by, each name the source
+references, and the names its language's conventions account for. Each
+name says whether the source makes the reference at import time or
+lazily, inside a function or a method body, and whether only a type
+checker makes it or the source runs without it. A record names a file
+inside its package, and one extension answers for each file. The
+python extension answers for python sources from one parse per gate,
+memoised by the file's path, size and modification time, and its own
+three steps read the same parse, over the files a narrowed run reaches
+or every source:
+
+- `private-reaches`: no package's source reaches another
+  distribution's private name, apart from the reaches the root
+  contract's `[[python.private-reaches]]` allows, each with its reason.
+- `runner-terminal`: a module that imports the runner asks
+  `livery.footman.attended()` whether a person is there, never the
+  terminal (`sys.stdin.isatty()` and its relatives), since the
+  terminal knows nothing of `--no-input` or `--dry-run`. The runner's
+  own sources, and a module that never imports the runner, are exempt.
+  The step judges the root's `tasks.py` with the packages' sources,
+  while the python extension is mounted.
+- `declared-imports`: at import time, a module under a package's `src`
+  imports the standard library, the workspace's own members, and the
+  distributions its `pyproject.toml` declares in
+  `[project.dependencies]`. Inside a function it may also import a
+  distribution an optional extra declares. An import under
+  `TYPE_CHECKING`, or in a `try` that handles `ImportError`, is not
+  judged. A module a program loads as a plugin, named under the
+  `footman.tasks` or `footman.builtin` entry points for the runner or
+  `pytest11` for pytest, may also import what that program brings: its
+  distribution and the distributions it requires. Which distribution
+  provides a module is read from the metadata of what the workspace's
+  environment installed, so a module that no installed distribution
+  provides refuses, naming it. A refusal names the source, the module,
+  the distribution and the `pyproject.toml` to declare it in.
+
+A step's fix runs inside the gate's rewrite, before the judges.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into

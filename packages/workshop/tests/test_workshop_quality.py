@@ -27,11 +27,7 @@ PYTHON_JUDGES = (
 # The base's layering steps over the sources: the one that rewrites,
 # and the ones that only judge, sorted.
 LAYERING_FIXER = "layering.sibling-references"
-LAYERING_JUDGES = (
-    "layering.base-imports-no-extension",
-    "layering.forge-stdlib-only",
-    "layering.runner-terminal",
-)
+LAYERING_JUDGES = ("layering.base-imports-no-extension",)
 LAYERING_STEPS = (LAYERING_FIXER, *LAYERING_JUDGES)
 
 

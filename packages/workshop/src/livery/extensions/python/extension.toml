@@ -67,15 +67,31 @@ test = ["tests/**/test_*.py", "tests/**/*_test.py"]
 test-support = ["tests/**"]
 source = ["src/**"]
 
+# The layering phase's steps over the one parse of the python sources:
+# a narrowed run judges the changed sources, and every one when a
+# contract, a manifest or a root src/ changed, as the base's layering
+# steps do.
+#
 # No package's source reaches another distribution's private names; the
 # root contract's [[python.private-reaches]] lists the reaches allowed.
-# A step of the layering phase over the one parse of the python
-# sources: a narrowed run judges the changed sources, and every one
-# when a contract, a manifest or a root src/ changed, as the base's
-# layering steps do.
 [phases.layering.private-reaches]
 main = "livery.extensions.python._reaches:private_reaches"
-inputs = { reads = ["tasks.py", "packages/**/*.py"], widen = "livery.extensions.python._reaches:graph_changed", ignores = ["**/*.md", "LICENSE", "**/LICENSE"] }
+inputs = { reads = ["tasks.py", "packages/**/*.py"], widen = "livery.extensions.python._parse:graph_changed", ignores = ["**/*.md", "LICENSE", "**/LICENSE"] }
+
+# A module that imports the runner asks livery.footman.attended(), never
+# the terminal: the root's tasks.py and every package's src, apart from
+# the runner's own.
+[phases.layering.runner-terminal]
+main = "livery.extensions.python._terminal:runner_terminal"
+inputs = { reads = ["tasks.py", "packages/**/*.py"], widen = "livery.extensions.python._parse:graph_changed", ignores = ["**/*.md", "LICENSE", "**/LICENSE"] }
+
+# What a package's src imports at import time is the standard library,
+# a member's, or a distribution its pyproject.toml declares in
+# [project.dependencies]; an optional extra's only inside a function; a
+# plugin module's also what the program that loads it brings.
+[phases.layering.declared-imports]
+main = "livery.extensions.python._declared:declared_imports"
+inputs = { reads = ["packages/**/*.py"], widen = "livery.extensions.python._parse:graph_changed", ignores = ["**/*.md", "LICENSE", "**/LICENSE"] }
 
 # The root contract's [python] table.
 [contract.root.python]
