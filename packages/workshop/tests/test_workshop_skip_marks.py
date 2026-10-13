@@ -6,6 +6,7 @@ import json
 import textwrap
 
 from livery.footman.testing import Runner
+from workshop_traced import environment_kept
 
 TASKS = textwrap.dedent(
     """
@@ -34,7 +35,8 @@ def test_a_skip_is_an_event_on_the_timeline(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "tasks.py"
     src.write_text(TASKS)
-    result = Runner().invoke("--profile gated", tasks=src)
+    with environment_kept():
+        result = Runner().invoke("--profile gated", tasks=src)
     assert result.ok, result.stderr
     assert "proved green by fm check; skipping" in result.stdout
     events = json.loads((tmp_path / "fm-profile.json").read_text())["traceEvents"]

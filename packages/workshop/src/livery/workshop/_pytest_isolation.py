@@ -24,6 +24,19 @@ them; a production module a test imported lazily is dropped the same
 way as at collection. The registry is
 restored either way, so the next test in the same worker never
 inherits anything.
+
+What an extension mount writes is put back after every test as well:
+the steps the listed extensions declare, the CI jobs they contribute
+and join, the task tree a run keeps, and the mount's record of what it
+found. Each of the three modules that hold them saves and restores its
+own state ([livery.workshop._steps.snapshot][],
+[livery.workshop._points.snapshot][] and
+[livery.workshop._extensions.snapshot][]). These registries are the
+workshop's own, so footman's registry capture does not hold them.
+Without the guard, a step one test mounted would judge the changes of
+every later test in the worker. Registries the test loaded itself go
+back as a process starts with them, and a session that loads none of
+them imports nothing for the guard.
 """
 
 from __future__ import annotations
@@ -32,6 +45,7 @@ import contextlib
 import inspect
 import os
 import shutil
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -198,3 +212,47 @@ def _global_registry_stays() -> Iterator[None]:
             f"the test left tasks in the global registry: {', '.join(left)};"
             " register under registry.capture() instead"
         )
+
+
+#: The workshop modules that hold what an extension mount writes.
+MOUNT_MODULES = (
+    "livery.workshop._extensions",
+    "livery.workshop._points",
+    "livery.workshop._steps",
+)
+
+
+def _mount_loaded() -> bool:
+    """Whether this process has loaded any module a mount writes into."""
+    return any(name in sys.modules for name in MOUNT_MODULES)
+
+
+def _mount_reset() -> None:
+    """Put the mount's registries back as a process starts with them."""
+    from livery.workshop import _extensions, _points, _steps
+
+    _steps.restore(_steps.snapshot(initial=True))
+    _points.restore(_points.snapshot(initial=True))
+    _extensions.restore(_extensions.snapshot(initial=True))
+
+
+@pytest.fixture(autouse=True)
+def _mount_state_stays() -> Iterator[None]:
+    """Put back what an extension mount wrote during the test.
+
+    The registries go back as they were before the test. When the test
+    loaded them itself, they go back as a process starts with them. A
+    session that loads none of them imports nothing here.
+    """
+    if not _mount_loaded():
+        yield
+        if _mount_loaded():
+            _mount_reset()
+        return
+    from livery.workshop import _extensions, _points, _steps
+
+    steps, jobs, record = _steps.snapshot(), _points.snapshot(), _extensions.snapshot()
+    yield
+    _steps.restore(steps)
+    _points.restore(jobs)
+    _extensions.restore(record)

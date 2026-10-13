@@ -355,8 +355,7 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
     try:
         for root, jobs in ((pure, ("publish",)), (native, ("wheels", "publish"))):
             with jobs_restored(), registry.capture():
-                _points._CONTRIBUTED_JOBS.clear()
-                _points._JOINED_JOBS.clear()
+                _points.restore(_points.snapshot(initial=True))
                 mount_extensions(root)
                 assert _points.jobs_of(root, "release") == jobs
     finally:
