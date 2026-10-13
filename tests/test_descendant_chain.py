@@ -40,6 +40,10 @@ BRAND = "brandx"
 #: The extensions a project lists for its native members' format and
 #: lint checks, which the child adds once it has native members.
 NATIVE = ("clang-format", "clang-tidy")
+#: The extension that writes the agent's files, which a project lists
+#: when it chooses its agent: the child adds it once it is born, and
+#: the brand's fragment and skill reach the child through it.
+AGENT = "claude"
 
 
 def _rig() -> tuple[str, str]:
@@ -308,7 +312,7 @@ def _chain(
         from livery.workshop._e2e import checkout_index
         from livery.workshop._new_project import birth_extensions
 
-        checkout_index(ROOT, index, [*birth_extensions(()), *NATIVE])
+        checkout_index(ROOT, index, [*birth_extensions(()), *NATIVE, AGENT])
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir(exist_ok=True)
     # The tool store is a content-addressed cache every checkout on
@@ -503,17 +507,29 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
-    # The resumed pass finds the native extensions the first one listed.
-    natives = "".join(f'"{name}", ' for name in NATIVE) if resumed else ""
+    # The resumed pass finds the agent's and the native extensions the
+    # first one listed.
+    added = "".join(f'"{name}", ' for name in (AGENT, *NATIVE)) if resumed else ""
     assert (
         'extensions = ["changelog", "docs", "ruff", "basedpyright", "pytest",'
-        f' "coverage", {natives}'
+        f' "coverage", {added}'
         '"dummy.brandx"]' in child_contract
     )
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's replacement reached the child's composed file.
     assert "brandx-build/" in (child / ".gitignore").read_text()
+    if not resumed:
+        # The child chooses its agent's files, ahead of the brand's own;
+        # the brand's sync installs the extension and writes them, and
+        # the files it renders name the brand's runner.
+        contract_file = child / "workshop.toml"
+        contract_file.write_text(
+            contract_file.read_text().replace(
+                '"dummy.brandx"]', f'"{AGENT}", "dummy.brandx"]', 1
+            )
+        )
+        _run([str(brand_cli), "sync"], child, _hermetic(env, tool))
     # The brand's content arrived through sync.
     assert (
         "Always speak plainly."

@@ -13,7 +13,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from livery.footman import fail
+from livery.footman import fail, prog
 from livery.workshop._contract import load_contract
 
 
@@ -29,6 +29,17 @@ def scripts_dir(venv: Path) -> Path:
 def venv_python(venv: Path) -> Path:
     """*venv*'s interpreter: ``python.exe`` under `scripts_dir` on Windows."""
     return scripts_dir(venv) / ("python.exe" if sys.platform == "win32" else "python")
+
+
+def runner_script(venv: Path) -> Path:
+    """The console script in *venv* of the runner this process runs as.
+
+    Named as the running brand names its runner, with ``.exe`` on
+    Windows, so a branded runner hands work to itself in another
+    environment.
+    """
+    name = prog()
+    return scripts_dir(venv) / (f"{name}.exe" if sys.platform == "win32" else name)
 
 
 #: The oldest Python a workspace being born supports; the floor once

@@ -16,6 +16,7 @@ from livery.workshop._templates import new_package
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
 from workshop_composed import IDENTITY
+from workshop_members import wired_here
 from workshop_seeds import Seeds, _seed_home, seed_copier, wire_pushes  # noqa: F401
 
 # Bound before the autouse no-op fixture patches the module attribute,
@@ -613,6 +614,7 @@ def test_new_package_renders_and_wires(
     monkeypatch.setattr(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
+    wired_here(monkeypatch, root)
     with pytest.raises(_FAILURES):
         new_package("Bad Name")
     new_package("scratch")

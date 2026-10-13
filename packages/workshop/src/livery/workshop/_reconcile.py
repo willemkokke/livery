@@ -1,13 +1,17 @@
-"""The per-command hook: the sync verb runs before a command, frozen and offline.
+"""The per-command hook: a sync runs before a command, frozen and offline.
 
 Runs at footman's per-task moment, before the first task of a command,
-from the hook in [livery.workshop._env_tasks][]. It calls the ``sync``
-verb as a function, in the mode that changes nothing a commit holds
-and touches no network. The verb reads the receipts a checkout keeps
-of its last sync ([livery.workshop._reconcile.current][]): the uv lock
-and the manifests the venv was installed from, the tool receipts
-against ``toolroom.lock``, and the receipt of the files the extensions
-write for the checkout alone. A current checkout costs those reads and
+from the hook in [livery.workshop._env_tasks][]. It runs the ``sync``
+verb's work on the root the hook found
+([livery.workshop._sync.sync_checkout][]), in the mode that changes
+nothing a commit holds and touches no network, as a plain call: footman
+gives a task called from a hook a directory of its own and a row in the
+run's report, and a failed row fails the command. The sync reads the
+receipts a checkout keeps of its last sync
+([livery.workshop._reconcile.current][]): the uv lock and the
+manifests the venv was installed from, the tool receipts against
+``toolroom.lock``, and the receipt of the files the extensions write
+for the checkout alone. A current checkout costs those reads and
 nothing else; one that is not is brought current from what the machine
 holds, and the command re-runs on the installed code when that sync
 changed it, so a pull that moved the lock never judges from stale
@@ -251,18 +255,20 @@ def _say(message: str) -> None:
 
 
 def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
-    """Run the ``sync`` verb before *task*, the command's first; whether it did work.
+    """Sync *root* before *task*, the command's first; whether the sync did work.
 
     Nothing happens when *task* is ``sync``, the verb itself, or inside
     a process the hook's own sync started, which *env*, the task's own
     environment, marks for the processes the sync starts. Otherwise the
-    verb runs as a function, frozen and offline, its lines on stderr so
-    a command whose stdout a shell evaluates stays clean. The verb reads
-    the receipts first and does nothing, silently, for a current
-    checkout; otherwise it says what is off and brings the checkout
-    current, and the command re-runs on the installed code when that
-    changed it. A sync that fails is said and the command runs on what
-    is here.
+    verb's work runs on *root*, frozen and offline, as a plain call
+    ([livery.workshop._sync.sync_checkout][]), its lines on stderr so
+    a command whose stdout a shell evaluates stays clean. It reads the
+    receipts first and does nothing, silently, for a current checkout;
+    otherwise it says what is off and brings the checkout current, and
+    the command re-runs on the installed code when that changed it. A
+    sync that fails is said and the command runs on what is here: the
+    sync is not a task of the run, so its failure adds no failed row,
+    and the command's verdict is its own.
 
     Returns:
         Whether the sync did work. The caller entered the environment
@@ -281,10 +287,10 @@ def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
     # and no sibling does, and removed after them.
     env[_SYNCING] = "1"
     try:
-        from livery.workshop._sync import sync
+        from livery.workshop._sync import sync_checkout
 
         with contextlib.redirect_stdout(sys.stderr):
-            worked = sync(frozen=True, offline=True)
+            worked = sync_checkout(root, frozen=True, offline=True)
     except Exception as error:  # the hook never stops the command it precedes
         _say(f"{prog}: the sync did not complete ({error}); running on what is here")
         return False

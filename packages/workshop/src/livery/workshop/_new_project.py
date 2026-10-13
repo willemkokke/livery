@@ -79,14 +79,10 @@ def _hand_off(
     Raises:
         Failed: when the environment has no runner, naming it.
     """
-    import sys
-
-    from livery.workshop._pythons import scripts_dir
+    from livery.workshop._pythons import runner_script
 
     prog = footman.prog()
-    runner = scripts_dir(root / ".venv") / (
-        f"{prog}.exe" if sys.platform == "win32" else prog
-    )
+    runner = runner_script(root / ".venv")
     if not runner.is_file():
         fail(
             f"{runner} is missing: {root}'s environment has no {prog} to finish"
@@ -524,12 +520,17 @@ def _add_extension(root: Path, extension: str) -> None:
     commit. Idempotent: an already-listed extension walks past.
     """
     from livery.workshop._sync import sync_workspace
-    from livery.workshop._templates import wire_package
+    from livery.workshop._templates import render_member, wire_member
 
     if (root / "packages" / extension).exists():
         print(f"  extension: packages/{extension} already scaffolded")
         return
-    import_path = wire_package(root, extension, kind="package-extension")
+    import_path = render_member(root, extension, kind="package-extension")
+    # Wired in the birth's own process, whose mount predates the member.
+    # The member holds python alone, and mounting python changes none of
+    # the files the wiring writes; a seed that holds more needs the
+    # fresh runner new.package wires its member with.
+    wire_member(root, extension)
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")
     if f'"{import_path}"' not in text:

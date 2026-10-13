@@ -775,11 +775,46 @@ def _wheel_instance(tmp_path: Path) -> Path:
     return compose_into(root)
 
 
+def test_resuming_a_package_that_does_not_exist_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._templates import new_package
+
+    root = _wheel_instance(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    with pytest.raises(BaseException, match="packages/ghost holds no package"):
+        new_package("ghost", resume=True)
+    with pytest.raises(BaseException, match="package name"):
+        new_package("../ghost", resume=True)
+
+
+def test_a_seeded_package_without_a_runner_to_wire_it_names_the_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The seeds are written; the environment has no runner of its own
+    # to wire them with, and the refusal names the verb that finishes.
+    from livery.workshop._templates import new_package
+
+    root = _wheel_instance(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    with pytest.raises(BaseException) as caught:
+        new_package("thing")
+    assert "environment has no fm to wire packages/thing" in str(caught.value)
+    assert "`fm new.package thing --resume`" in str(caught.value)
+    assert (root / "packages" / "thing" / "workshop.toml").is_file()
+
+
 def test_new_package_writes_the_installed_seeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The member's seeds come from the installed extensions.
+    # The member's seeds come from the installed extensions, and the
+    # runner the workspace's environment holds wires it.
     from livery.workshop._templates import new_package
+    from workshop_members import wired_here
 
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
@@ -792,13 +827,55 @@ def test_new_package_writes_the_installed_seeds(
     monkeypatch.setattr(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
+    handed = wired_here(monkeypatch, root)
     new_package("thing")
+    assert [argv[1:] for argv in handed] == [["new.package", "thing", "--resume"]]
     assert (root / "packages" / "thing" / "README.md").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
     assert (root / "packages" / "thing" / "docs" / "index.md").is_file()
     assert synced == ["lock", "sync"]
     # The member reached the composed project file.
     assert "acme-thing" in (root / "pyproject.toml").read_text()
+
+
+def test_a_member_is_wired_by_a_runner_started_after_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A process mounts what the packages hold when it starts, and a
+    # nanobind member holds nanobind, whose mount adds the release's
+    # wheels job. new.package seeds the member in a process that
+    # mounted without it, and a runner started after it wires it: the
+    # next command renders what the wiring wrote.
+    from livery.workshop import _steps
+    from livery.workshop._shipped_files import shipped_drift
+    from livery.workshop._templates import new_package
+    from workshop_docs_declared import jobs_restored
+    from workshop_members import mounted_now, wired_here
+
+    root = _wheel_instance(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
+    release = root / ".github" / "workflows" / "release.yml"
+    state = _steps.snapshot()
+    try:
+        with jobs_restored():
+            assert "nanobind" not in mounted_now(monkeypatch, root)
+            handed = wired_here(
+                monkeypatch, root, starting=lambda: mounted_now(monkeypatch, root)
+            )
+            new_package("ext", kind="package-python-nanobind")
+            # The next command mounts nanobind too, and nothing drifts.
+            assert "nanobind" in mounted_now(monkeypatch, root)
+            assert shipped_drift(root) + project_drift(root) == []
+            assert "\n  wheels:\n" in release.read_text()
+            assert len(handed) == 1
+    finally:
+        _steps.restore(state)
 
 
 def test_a_tree_no_listed_extension_seeds_refuses_naming_it(

@@ -107,15 +107,16 @@ def sync_first(inv: footman.Invocation, task: Any) -> None:
     """Bring the checkout current before the command's first task runs.
 
     Once per process, at the first task's per-task moment, which is
-    inside the run: footman refuses a task call at discovery, where the
-    completion child would make it on a Tab press. The sync verb
-    decides from the checkout's receipts
-    ([livery.workshop._reconcile.apply][]). A sync that wrote receipts
-    this process entered without enters again, into the task's own
-    environment, `task.env`: the task's body, the processes it starts
-    and the tasks it calls read it. Never `os.environ`: inside a task
-    footman notes that write as a misuse, and a workspace's notes policy
-    can fail the task for it.
+    inside the run: discovery also runs in the child that rebuilds the
+    completion manifest, where a sync would run on a Tab press. The
+    sync runs on the workspace above the task's directory and decides
+    from the checkout's receipts ([livery.workshop._reconcile.apply][]);
+    the steps it runs are recorded as the task's own. A sync that wrote
+    receipts this process entered without enters again, into the
+    task's own environment, `task.env`: the task's body, the processes
+    it starts and the tasks it calls read it. Never `os.environ`: inside
+    a task footman notes that write as a misuse, and a workspace's notes
+    policy can fail the task for it.
     """
     from livery.workshop._extensions import workspace_root
 
