@@ -166,57 +166,90 @@ class _Stamper:
         return changed
 
 
+#: The floor a package with tests is judged at when its contract names none.
+DEFAULT_FLOOR = 100.0
+
+#: What a coverage line says of a package its contract leaves unjudged.
+UNJUDGED = "not judged: its [coverage] table sets required = false"
+
+
 @dataclass(frozen=True)
 class FloorPolicy:
-    """How a package's coverage is judged: a committed floor, or the ratchet.
+    """How a package's coverage is judged: a floor, the ratchet, or not at all.
 
     Attributes:
-        floor: The committed percentage, or ``None`` under auto-ratchet.
+        floor: The percentage, or ``None`` under auto-ratchet and when
+            nothing judges the package.
         ratchet: Whether the mark on the store is the floor.
         epsilon: The tolerance in percentage points, in both modes.
+        required: Whether anything judges the package; ``False`` gives
+            no verdict and records no mark.
+        default: Whether the floor is the default, the contract naming none.
     """
 
     floor: float | None
     ratchet: bool
     epsilon: float
+    required: bool = True
+    default: bool = False
 
 
 def coverage_policy(package: Package) -> FloorPolicy | None:
-    """The package's ``[qa] coverage-floor`` policy, or ``None`` when it has none.
+    """The package's ``[coverage]`` policy, or ``None`` when it has none.
 
     The floor is a percentage, or the mode ``"auto-ratchet"``; anything
-    else refuses by name. ``coverage-epsilon`` is a number of
-    percentage points, 0.5 when absent; a negative or non-numeric one
-    refuses.
+    else refuses by name. A package with tests that names no floor is
+    judged at the default floor, 100, and one without tests that names
+    none has no policy. ``required = false`` leaves the package unjudged
+    on purpose, and a floor beside it refuses. ``epsilon`` is a number of
+    percentage points, 0.5 when absent; a negative one refuses.
     """
     from livery.workshop._coverage_marks import AUTO_RATCHET, DEFAULT_EPSILON
 
-    qa = load_contract(package.directory / "workshop.toml").get("qa") or {}
-    raw = qa.get("coverage-floor")
-    if raw is None:
-        return None
-    # The contract's judge holds the epsilon to a number.
-    epsilon = float(qa.get("coverage-epsilon", DEFAULT_EPSILON))
+    table = load_contract(package.directory / "workshop.toml").get("coverage") or {}
+    raw = table.get("floor")
+    # The contract's judge holds the epsilon to a number and required
+    # to a boolean.
+    epsilon = float(table.get("epsilon", DEFAULT_EPSILON))
     if epsilon < 0:
-        fail(f"{package.path}: [qa] coverage-epsilon must not be negative")
+        fail(f"{package.path}: [coverage] epsilon must not be negative")
+    if not table.get("required", True):
+        if raw is not None:
+            fail(
+                f"{package.path}: [coverage] floor is {raw!r} beside required ="
+                " false; a package nothing judges keeps no floor, so remove one"
+                " of the two"
+            )
+        return FloorPolicy(None, False, epsilon, required=False)
+    if raw is None:
+        if not suites_of((package,)):
+            return None
+        return FloorPolicy(DEFAULT_FLOOR, False, epsilon, default=True)
     if raw == AUTO_RATCHET:
         return FloorPolicy(None, True, epsilon)
     if isinstance(raw, str):
         fail(
-            f"{package.path}: [qa] coverage-floor is a percentage or"
+            f"{package.path}: [coverage] floor is a percentage or"
             f' "{AUTO_RATCHET}"; found {raw!r}'
         )
     return FloorPolicy(float(raw), False, epsilon)
 
 
 def coverage_floor(package: Package) -> float | None:
-    """The committed coverage floor from the package's contract, or None.
+    """The floor the package's coverage is judged at, or None.
 
     ``None`` under auto-ratchet too, whose floor is the mark on the
-    store; ``coverage_policy`` tells the two apart.
+    store, and when nothing judges the package; ``coverage_policy``
+    tells them apart.
     """
     policy = coverage_policy(package)
     return None if policy is None else policy.floor
+
+
+def _floor_words(policy: FloorPolicy) -> str:
+    """The floor as a coverage line names it, saying when it is the default."""
+    assert policy.floor is not None
+    return f"floor {policy.floor:.1f}%" + (" by default" if policy.default else "")
 
 
 #: What coverage.py says when the run left no data: a selection of
@@ -339,11 +372,12 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         elif not arcs_measured:
             continue
         percent = measured.get(package.path, 0.0)
-        judged = (
-            "the mark on the store judges the CI union"
-            if policy.ratchet
-            else f"floor {policy.floor:.1f}% judges the CI union"
-        )
+        if not policy.required:
+            judged = UNJUDGED
+        elif policy.ratchet:
+            judged = "the mark on the store judges the CI union"
+        else:
+            judged = f"{_floor_words(policy)} judges the CI union"
         print(f"  coverage {package.path}: {percent:.1f}% here ({judged})")
 
 
@@ -1088,13 +1122,15 @@ def _record_bases(root: Path, run: RunContext) -> tuple[tuple[str, ...], str]:
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
     """Fail any package measurably below its floor; the measured percentages.
 
-    A committed floor passes at the floor minus the package's epsilon.
-    Under auto-ratchet the floor is the mark on the store minus
-    epsilon: a run with no mark records one and passes, a run that
-    clears the mark by more than epsilon raises it (a CI run writes;
-    a local run says it would), and a store that cannot be read falls
-    open with its reason and writes nothing. Every verdict prints with
-    its numbers, so the numbers on screen are the numbers enforced.
+    A floor, the package's own or the default, passes at the floor
+    minus the package's epsilon. Under auto-ratchet the floor is the
+    mark on the store minus epsilon: a run with no mark records one and
+    passes, a run that clears the mark by more than epsilon raises it
+    (a CI run writes; a local run says it would), and a store that
+    cannot be read falls open with its reason and writes nothing. A
+    package whose contract sets ``required = false`` gets no verdict and
+    no mark, and its line says so. Every verdict prints with its
+    numbers, so the numbers on screen are the numbers enforced.
     """
     from livery.workshop import _coverage_marks
     from livery.workshop._ci_context import run_context
@@ -1114,6 +1150,11 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
         policy = policies[package.path]
         if policy is None:
             continue
+        if not policy.required:
+            reached = measured.get(package.path)
+            figure = "not measured" if reached is None else f"{reached:.1f}%"
+            print(f"  coverage {package.path}: {figure} ({UNJUDGED})")
+            continue
         if package.path not in measured and measures_lines(package):
             print(f"  coverage {package.path}: not measured")
             problems.append(
@@ -1126,13 +1167,19 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
             assert policy.floor is not None
             print(
                 f"  coverage {package.path}: {percent:.1f}%"
-                f" (floor {policy.floor:.1f}%, epsilon {policy.epsilon}%)"
+                f" ({_floor_words(policy)}, epsilon {policy.epsilon}%)"
             )
             if percent < policy.floor - policy.epsilon:
+                which = "default" if policy.default else "committed"
+                hint = (
+                    "; [coverage] floor in its workshop.toml names another"
+                    if policy.default
+                    else ""
+                )
                 problems.append(
-                    f"{package.path}: {percent:.1f}% is below the committed"
-                    f" floor of {policy.floor:.1f}% by more than the"
-                    f" {policy.epsilon}% epsilon"
+                    f"{package.path}: {percent:.1f}% is below the {which} floor of"
+                    f" {policy.floor:.1f}% by more than the {policy.epsilon}%"
+                    f" epsilon{hint}"
                 )
             continue
         if current is None:

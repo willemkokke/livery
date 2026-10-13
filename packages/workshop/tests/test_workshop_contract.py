@@ -180,6 +180,49 @@ def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> N
     }
 
 
+def test_qa_refuses_naming_the_coverage_table(tmp_path: Path) -> None:
+    refusal = (
+        "  [qa] is not a table: a package's coverage policy is its [coverage]"
+        " table, where coverage-floor is floor and coverage-epsilon is epsilon,"
+        " read while [workspace] extensions lists coverage"
+    )
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n\n[qa]\ncoverage-floor = 90\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+    # An empty table refuses the same way, and so does one in a
+    # workspace that already lists coverage.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    member.write_text('kind = "python"\nname = "m"\n\n[qa]\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+    # The policy in coverage's table loads.
+    member.write_text('kind = "python"\nname = "m"\n\n[coverage]\nfloor = 90\n')
+    assert _contract.load_contract(member)["coverage"] == {"floor": 90}
+
+
+def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
+    tmp_path: Path,
+) -> None:
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n\n[coverage]\nfloor = 90\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f"{member}:\n  coverage is a key of coverage, which [workspace] extensions"
+        " does not list; list the extension, or remove the key"
+    )
+    # Each of its keys is coverage's, judged by type once it is listed.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    member.write_text(
+        'kind = "python"\nname = "m"\n\n[coverage]\nepsilon = "wide"\n'
+        'required = "no"\nceiling = 90\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)).splitlines()[1:] == [
+        "  coverage.epsilon is a string ('wide'); it takes a number",
+        "  coverage.required is a string ('no'); it takes true or false",
+        "  [coverage] has no key 'ceiling': it takes epsilon, floor, required",
+    ]
+
+
 def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> None:
     path = _workspace(tmp_path, '\n[toolroom.modes]\nruff = "link"\nmypy = "copy"\n')
     assert "toolroom.modes.mypy is 'copy'; it takes one of link, path, none" in (
@@ -248,7 +291,7 @@ def test_nested_tables_and_arrays_of_tables_are_judged_too() -> None:
 
 def test_load_contract_names_the_file(tmp_path: Path) -> None:
     contract = tmp_path / "workshop.toml"
-    contract.write_text("[qa]\ncoverage_floor = 90\n")
+    contract.write_text('[ci]\nrequired_context = "gate"\n')
     message = _refusal(lambda: _contract.load_contract(contract))
     assert message.startswith(f"{contract}: ")
 

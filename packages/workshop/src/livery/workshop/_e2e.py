@@ -2233,11 +2233,12 @@ RATCHET_MEMBER = "loop-native"
 def _prepare_ratchet(root: Path, kind: str) -> None:
     """Put the ratchet member under auto-ratchet, then lower its mark for the proof.
 
-    The member's contract lands through the loop's own gate while it
-    still commits a literal floor: that pull request's run records the
-    first mark, and main's run after the squash judges it; the pass
-    waits for that run, or the accept below would be consumed there
-    instead of by the member-only pull request. Then
+    The member's seed names no floor, so it is judged at the default
+    floor until its contract gains ``[coverage] floor = "auto-ratchet"``,
+    which lands through the loop's own gate: that pull request's run
+    records the first mark, and main's run after the squash judges it;
+    the pass waits for that run, or the accept below would be consumed
+    there instead of by the member-only pull request. Then
     `fm coverage.accept` lowers the mark to 90 with a reason, so the
     pull request that follows judges from the accepted row and
     ratchets the mark back up. A refusal (a mark a pass that did not
@@ -2246,14 +2247,19 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     """
     contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
     body = contract.read_text("utf-8")
-    if 'coverage-floor = "auto-ratchet"' not in body:
+    if 'floor = "auto-ratchet"' not in body:
+        if "[coverage]" in body:
+            fail(
+                f"{contract}: a [coverage] table the seed does not write; the"
+                " loop adds the member's own, with its floor the mark"
+            )
         _fresh_branch(root, "chore/ratchet-member")
-        switched = body.replace(
-            "coverage-floor = 100", 'coverage-floor = "auto-ratchet"'
+        contract.write_text(
+            body.rstrip("\n")
+            + "\n\n[coverage]\n# The floor is the mark on the store.\n"
+            + 'floor = "auto-ratchet"\n',
+            "utf-8",
         )
-        if switched == body:
-            fail(f"{contract}: no literal floor to switch to auto-ratchet")
-        contract.write_text(switched, "utf-8")
         git.commit_all(
             root,
             f"chore({RATCHET_MEMBER}): the member's floor is the mark on the"

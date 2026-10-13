@@ -47,30 +47,133 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     )
 
 
+def test_a_floor_beside_required_false_refuses(tmp_path: Path) -> None:
+    for name, floor, shown in (
+        ("numbered", "90", "90"),
+        ("ratcheted", '"auto-ratchet"', "'auto-ratchet'"),
+    ):
+        package = _package(
+            tmp_path, name, f"[coverage]\nfloor = {floor}\nrequired = false\n"
+        )
+        with pytest.raises(_FAILURES) as caught:
+            _python.coverage_policy(package)
+        assert (
+            f"packages/{name}: [coverage] floor is {shown} beside required ="
+            " false; a package nothing judges keeps no floor, so remove one of"
+            " the two"
+        ) in str(caught.value)
+
+
+def test_a_package_with_coverage_not_required_is_never_judged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _coverage_marks
+
+    package = _package(tmp_path, "thing", "[coverage]\nrequired = false\n")
+    (package.directory / "tests").mkdir()
+    native_directory = tmp_path / "packages" / "native"
+    (native_directory / "tests").mkdir(parents=True)
+    (native_directory / "workshop.toml").write_text(
+        'kind = "cpp-conan"\nname = "acme-native"\n[coverage]\nrequired = false\n'
+    )
+    native = Package(
+        directory=native_directory,
+        path="packages/native",
+        name="acme-native",
+        kind="cpp-conan",
+        depends=(),
+    )
+    unjudged = _python.FloorPolicy(None, False, 0.5, required=False)
+    assert _python.coverage_policy(package) == unjudged
+    assert _python.coverage_floor(package) is None
+
+    def _never(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("a package nothing judges reads and writes no mark")
+
+    monkeypatch.setattr(_coverage_marks, "marks", _never)
+    monkeypatch.setattr(_coverage_marks, "write_mark", _never)
+    measured = {"packages/thing": 12.5}
+    monkeypatch.setattr(
+        _python, "measured_coverage", lambda root, packages, **_kw: measured
+    )
+    _in_ci(monkeypatch, "gate")
+    # Far below any floor, and a native suite never measured: no
+    # verdict, no mark, and each line says the package is not judged.
+    assert _python.enforce_coverage(tmp_path, (package, native)) == measured
+    out = capsys.readouterr().out
+    assert (
+        "  coverage packages/thing: 12.5% (not judged: its [coverage] table sets"
+        " required = false)\n"
+    ) in out
+    assert (
+        "  coverage packages/native: not measured (not judged: its [coverage]"
+        " table sets required = false)\n"
+    ) in out
+    _python.report_coverage(tmp_path, (package,))
+    assert (
+        "  coverage packages/thing: 12.5% here (not judged: its [coverage] table"
+        " sets required = false)\n"
+    ) in capsys.readouterr().out
+
+
+def test_a_package_with_tests_and_no_floor_is_judged_at_the_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The fallback first: a package without tests and without a floor
+    # has nothing that measures it, so nothing judges it.
+    assert _python.coverage_policy(_package(tmp_path, "bare")) is None
+    package = _package(tmp_path, "thing")
+    (package.directory / "tests").mkdir()
+    assert _python.coverage_policy(package) == _python.FloorPolicy(
+        100.0, False, 0.5, default=True
+    )
+    assert _python.coverage_floor(package) == 100.0
+    measured = {"packages/thing": 99.6}
+    monkeypatch.setattr(
+        _python, "measured_coverage", lambda root, packages, **_kw: measured
+    )
+    _python.report_coverage(tmp_path, (package,))
+    assert (
+        "  coverage packages/thing: 99.6% here (floor 100.0% by default judges"
+        " the CI union)\n"
+    ) in capsys.readouterr().out
+    assert _python.enforce_coverage(tmp_path, (package,)) == measured  # inside
+    assert (
+        "  coverage packages/thing: 99.6% (floor 100.0% by default, epsilon 0.5%)\n"
+    ) in capsys.readouterr().out
+    measured["packages/thing"] = 99.4
+    with pytest.raises(_FAILURES) as caught:
+        _python.enforce_coverage(tmp_path, (package,))
+    assert (
+        "packages/thing: 99.4% is below the default floor of 100.0% by more than"
+        " the 0.5% epsilon; [coverage] floor in its workshop.toml names another"
+    ) in str(caught.value)
+
+
 def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
     tmp_path: Path,
 ) -> None:
     bare = _package(tmp_path, "bare")
     assert _python.coverage_policy(bare) is None
     assert _python.coverage_floor(bare) is None
-    floored = _package(tmp_path, "floored", "[qa]\ncoverage-floor = 87\n")
+    floored = _package(tmp_path, "floored", "[coverage]\nfloor = 87\n")
     assert _python.coverage_policy(floored) == _python.FloorPolicy(87.0, False, 0.5)
     assert _python.coverage_floor(floored) == 87.0
     ratchet = _package(
         tmp_path,
         "ratchet",
-        '[qa]\ncoverage-floor = "auto-ratchet"\ncoverage-epsilon = 1.5\n',
+        '[coverage]\nfloor = "auto-ratchet"\nepsilon = 1.5\n',
     )
     assert _python.coverage_policy(ratchet) == _python.FloorPolicy(None, True, 1.5)
     assert _python.coverage_floor(ratchet) is None
     for name, extra, words in (
-        ("odd", '[qa]\ncoverage-floor = "high"\n', "auto-ratchet"),
+        ("odd", '[coverage]\nfloor = "high"\n', "auto-ratchet"),
         (
             "tight",
-            '[qa]\ncoverage-floor = 90\ncoverage-epsilon = "tight"\n',
+            '[coverage]\nfloor = 90\nepsilon = "tight"\n',
             "it takes a number",
         ),
-        ("negative", "[qa]\ncoverage-floor = 90\ncoverage-epsilon = -1\n", "negative"),
+        ("negative", "[coverage]\nfloor = 90\nepsilon = -1\n", "negative"),
     ):
         with pytest.raises(_FAILURES, match=words):
             _python.coverage_policy(_package(tmp_path, name, extra))
@@ -79,7 +182,7 @@ def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
 def test_enforcement_grants_the_epsilon_and_no_more(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 90\n")
+    package = _package(tmp_path, "thing", "[coverage]\nfloor = 90\n")
     measured = {"packages/thing": 89.6}
     monkeypatch.setattr(_python, "measured_coverage", lambda root, packages: measured)
     assert _python.enforce_coverage(tmp_path, (package,)) == measured  # inside
@@ -87,9 +190,7 @@ def test_enforcement_grants_the_epsilon_and_no_more(
     with pytest.raises(_FAILURES) as caught:
         _python.enforce_coverage(tmp_path, (package,))
     assert "below the committed floor" in str(caught.value)
-    wide = _package(
-        tmp_path, "wide", "[qa]\ncoverage-floor = 90\ncoverage-epsilon = 2\n"
-    )
+    wide = _package(tmp_path, "wide", "[coverage]\nfloor = 90\nepsilon = 2\n")
     measured["packages/wide"] = 88.1
     _python.enforce_coverage(tmp_path, (wide,))  # a declared epsilon widens the floor
 
@@ -107,7 +208,7 @@ def _ratchet(
             depends=(),
         )
     else:
-        package = _package(tmp_path, "thing", '[qa]\ncoverage-floor = "auto-ratchet"\n')
+        package = _package(tmp_path, "thing", '[coverage]\nfloor = "auto-ratchet"\n')
     monkeypatch.setattr(
         _python, "measured_coverage", lambda root, packages: {"packages/thing": percent}
     )
@@ -214,7 +315,7 @@ class _FakePytest:
 
 
 def _suite(tmp_path: Path, name: str) -> Package:
-    package = _package(tmp_path, name, "[qa]\ncoverage-floor = 1\n")
+    package = _package(tmp_path, name, "[coverage]\nfloor = 1\n")
     (package.directory / "tests").mkdir()
     return package
 
@@ -337,7 +438,7 @@ def test_the_preview_tolerates_a_run_that_measured_nothing(
     # raises on a non-zero exit unless told not to, and a fake that
     # returned a result would hide that.
     del monkeypatch
-    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+    package = _package(tmp_path, "thing", "[coverage]\nfloor = 1\n")
     _python.report_coverage(tmp_path, (package,))
     assert "nothing measured by this run" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="coverage json exited 1"):
@@ -355,7 +456,7 @@ def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
     pytest.importorskip("coverage")
     from coverage import CoverageData
 
-    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+    package = _package(tmp_path, "thing", "[coverage]\nfloor = 1\n")
     source = package.directory / "src" / "livery" / "thing" / "__init__.py"
     source.parent.mkdir(parents=True)
     source.write_text("a = 1\nb = 2\n")
@@ -389,7 +490,7 @@ def test_a_python_figure_is_coverage_py_s_own_total(tmp_path: Path) -> None:
 def test_without_a_parent_the_meter_and_the_preview_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+    package = _package(tmp_path, "thing", "[coverage]\nfloor = 1\n")
     seen: list[tuple[str, ...]] = []
     enforced: list[Path] = []
 
@@ -1104,7 +1205,7 @@ def test_a_narrowed_leg_reuses_the_suite_it_skipped(
 ) -> None:
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
-    z = _package(tmp_path, "z", "[qa]\ncoverage-floor = 1\n")  # no suite of its own
+    z = _package(tmp_path, "z", "[coverage]\nfloor = 1\n")  # no suite of its own
     x_source = str(_source(tmp_path, "x"))
     y_source = str(_source(tmp_path, "y"))
     _in_ci(monkeypatch, "gate")
@@ -1262,7 +1363,7 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
 ) -> None:
     package = _suite(tmp_path, "x")
     (tmp_path / "packages" / "x" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[qa]\ncoverage-floor = 95\n'
+        'kind = "python"\nname = "livery-x"\n[coverage]\nfloor = 95\n'
     )
     source = str(_source(tmp_path, "x"))
     _in_ci(monkeypatch, "gate")
@@ -1389,7 +1490,7 @@ def _native_suite(tmp_path: Path, name: str) -> Package:
     (directory / "tests").mkdir()
     (directory / "src" / "x.cpp").write_text("int f() { return 1; }\n")
     (directory / "workshop.toml").write_text(
-        f'kind = "cpp-conan"\nname = "acme-{name}"\n[qa]\ncoverage-floor = 95\n'
+        f'kind = "cpp-conan"\nname = "acme-{name}"\n[coverage]\nfloor = 95\n'
     )
     return Package(
         directory=directory,

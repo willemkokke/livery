@@ -1,9 +1,9 @@
 """The coverage marks: a package's high-water mark, and how it moves.
 
-A package whose contract declares ``[qa] coverage-floor = "auto-ratchet"``
+A package whose contract declares ``[coverage] floor = "auto-ratchet"``
 is judged against the mark recorded on the CI state store instead of a
 committed number. Enforcement passes at the mark minus the package's
-epsilon (``[qa] coverage-epsilon``, in percentage points, 0.5 when
+epsilon (``[coverage] epsilon``, in percentage points, 0.5 when
 absent), and the mark ratchets up only when a run clears it by more than
 epsilon, so the scheduling wobble of a parallel suite neither fails the
 gate nor moves the mark. The first run records the mark and never

@@ -273,7 +273,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     package_dir = tmp_path / "packages" / "thing"
     (package_dir / "src").mkdir(parents=True)
     (package_dir / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 50\n'
+        'kind = "python"\nname = "livery-thing"\n[coverage]\nfloor = 50\n'
     )
     module = package_dir / "src" / "mod.py"
     module.write_text("def run():\n    return 1\n\nrun()\n")
@@ -311,7 +311,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     assert measured["packages/thing"] > 0
     _python.enforce_coverage(tmp_path, (package,))  # above its floor
     (package_dir / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 101\n'
+        'kind = "python"\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
     )
     with pytest.raises(_FAILURES):
         _python.enforce_coverage(tmp_path, (package,))

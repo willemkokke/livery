@@ -28,11 +28,11 @@ floor = "0.3.0"
 # served by the site's deploy as static files.
 generators = ["toolroom.index.build"]
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces, just under what the
 # CI union measures; raise it as the suite grows, lower it only
 # deliberately.
-coverage-floor = 89
+floor = 89
 
 # The six-host verification point: every downloaded tool installs,
 # runs and reads on the host it was built for, fortnightly. One

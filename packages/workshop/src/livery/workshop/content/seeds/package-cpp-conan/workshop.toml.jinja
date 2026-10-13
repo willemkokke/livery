@@ -10,9 +10,3 @@ kind = "cpp-conan"
 extensions = ["cmake", "conan"]
 name = "{{ package_name }}"
 description = "{{ package_description }}"
-
-[qa]
-# The coverage high-water mark the gate enforces, line coverage for
-# a native kind; raise it as the suite grows, lower it only
-# deliberately.
-coverage-floor = 100

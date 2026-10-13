@@ -16,10 +16,10 @@ path = "packages/toolroom"
 kind = "runtime"
 floor = "0.11.0"
 
-[qa]
+[coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
-coverage-floor = 100
+floor = 100
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.

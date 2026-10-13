@@ -378,12 +378,18 @@ def test_no_rendered_python_line_of_a_cpp_member_is_over_the_column_limit(
     assert over == []
 
 
-def test_the_cpp_template_seeds_a_line_coverage_floor(tmp_path: Path) -> None:
-    """A native member is judged like the others: its contract carries a floor."""
+def test_the_cpp_template_seeds_no_floor_and_the_default_judges_it(
+    tmp_path: Path,
+) -> None:
+    """A native member is judged like the others: at the default floor, 100."""
     from livery.extensions.python import _backend as _python
+    from livery.workshop._contract import load_contract
 
     package = _render_cpp(tmp_path)
-    assert _python.coverage_floor(package) == 100.0
+    assert "coverage" not in load_contract(package.directory / "workshop.toml")
+    assert _python.coverage_policy(package) == _python.FloorPolicy(
+        100.0, False, 0.5, default=True
+    )
 
 
 def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> None:

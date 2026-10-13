@@ -428,18 +428,6 @@ doc = "an option for every step of the phase, or a table of options for one step
 types = ["any"]
 doc = "an option of the step; the option's default when absent"
 
-[contract.package.qa]
-types = ["table"]
-doc = "the package's coverage policy"
-
-[contract.package.qa.coverage-epsilon]
-types = ["number"]
-doc = "how far, in percentage points, coverage may fall below the floor; 0.5 when absent"
-
-[contract.package.qa.coverage-floor]
-types = ["number", "str"]
-doc = "the coverage the package keeps: a percentage, or auto-ratchet for the mark its CI runs record; nothing judged when absent"
-
 [contract.package.release]
 types = ["table"]
 doc = "how the release train releases the package"
