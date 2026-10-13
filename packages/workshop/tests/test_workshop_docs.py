@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Iterator
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +24,7 @@ from livery.workshop._docs_contract import (
     module_docs_dir,
 )
 from livery.workshop._packages import discover_packages
+from workshop_coverage_pages import read_page
 from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_extension_fakes import fake_extensions
 from workshop_measured import measure
@@ -1407,23 +1407,19 @@ _DRAWN = 'extensions = ["docs", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from coverage import CoverageData
-
     from livery.extensions.docs import _site as _docs
+    from livery.workshop._coverage_lines import write_part
 
-    monkeypatch.setattr(
-        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
-    )
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     root = _workspace(tmp_path)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
-    # Measured data a drawer reads, so the listing alone differs below.
+    # Measured data the drawer reads itself, so the listing alone differs
+    # below: a native measurer's lines.
     source = root / "packages" / "core" / "src" / "acme" / "core" / "mod.py"
     source.write_text("a = 1\n")
-    data = CoverageData(basename=str(root / ".coverage"))
-    data.add_arcs({str(source): {(-1, 1), (1, -1)}})
-    data.write()
+    write_part(root, "packages/core", {"packages/core/src/acme/core/mod.py": {1: 1}})
     report = root / "packages" / "core" / "htmlcov"
     # Docs alone, and docs beside coverage whose `for` list leaves docs
     # out, so its [for.docs] answer is never asked: no listed extension
@@ -1446,29 +1442,34 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from coverage import CoverageData
-
     from livery.extensions.docs import _site as _docs
+    from livery.workshop._coverage_store import LINES, Unit
 
     root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
-    source = root / "packages" / "core" / "src" / "core" / "mod.py"
+    source = root / "packages" / "core" / "src" / "core" / "mod.c"
     source.parent.mkdir(parents=True, exist_ok=True)
-    source.write_text("a = 1\nb = 2\n")
+    source.write_text("int a = 1;\nint b = 2;\n")
     # Outside CI nothing is pulled: no data, nothing rendered.
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     assert _docs.render_coverage_pages(root) == []
     # Inside CI the store's units stand in for the legs' data.
-    stored = root / "coverage-data" / "check-a" / "reuse-core.coverage"
-    stored.parent.mkdir(parents=True)
-    data = CoverageData(basename=str(stored))
-    data.add_arcs({str(source): {(-1, 1), (1, 2), (2, -1)}})
-    data.write()
+    stored = Unit(
+        "packages/core",
+        "k" * 64,
+        "7",
+        "a" * 40,
+        {"packages/core/src/core/mod.c": [(1, 1), (2, 0)]},
+        measurer=LINES,
+    )
     monkeypatch.setattr(
-        "livery.extensions.coverage._pages._stored_legs",
-        lambda root: ([stored], ["packages/other on check-a"]),
+        "livery.extensions.coverage._pages._stored",
+        lambda root: (
+            {"check-a": {"packages/core": stored}},
+            ["main/check-b: nothing recorded"],
+        ),
     )
     # A declared package the data never touched states the absence.
     _declare_generators(
@@ -1476,115 +1477,10 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     )
     assert _docs.render_coverage_pages(root) == ["core"]
     out = capsys.readouterr().out
-    assert "packages/other on check-a: not in the record; the pages render" in out
-    assert "the pages read 1 recorded unit file(s)" in out
+    assert "  coverage: main/check-b: nothing recorded\n" in out
     assert "bare: no measured data; its page states the absence" in out
     assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
     assert not (root / "packages" / "bare" / "htmlcov").exists()
-
-
-def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from coverage import CoverageData
-
-    from livery.extensions.docs import _site as _docs
-
-    root = _workspace(tmp_path, docs_table=_DRAWN)
-    _declare_generators(
-        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
-    )
-    kept = root / "packages" / "core" / "src" / "core" / "kept.py"
-    kept.parent.mkdir(parents=True, exist_ok=True)
-    kept.write_text("a = 1\n")
-    gone = root / "packages" / "core" / "src" / "core" / "gone.py"
-    data = CoverageData(basename=str(root / ".coverage"))
-    data.add_arcs({str(kept): {(-1, 1), (1, -1)}, str(gone): {(-1, 1), (1, -1)}})
-    data.write()
-    stale = root / "packages" / "core" / "htmlcov"
-    stale.mkdir(parents=True)
-    (stale / "index.html").write_text("an older report")
-    monkeypatch.setattr(
-        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
-    )
-    # Inside CI the data is the record of the tree being built: red.
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
-    with pytest.raises(_FAILURES, match="coverage html for core exited 1"):
-        _docs.render_coverage_pages(root)
-    # On a desk the data outlived a move: the page states the absence.
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    assert _docs.render_coverage_pages(root) == []
-    out = capsys.readouterr().out
-    assert "core: the local data names files that moved or went" in out
-    assert not stale.exists()
-
-
-class _PageReader(HTMLParser):
-    """What a reader sees on a coverage page: its source lines and its table rows.
-
-    A source line is keyed by its ``tN`` anchor and holds its classes and
-    its text. A table row maps each column's heading to the cell's text,
-    the last of a repeated heading winning, and ``href`` to the row's
-    first link. Text has its runs of whitespace, the no-break spaces
-    included, collapsed to one space.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.lines: dict[int, tuple[set[str], str]] = {}
-        self.rows: list[dict[str, str]] = []
-        self._headings: list[str] = []
-        self._line: set[str] | None = None
-        self._number = 0
-        self._cells: list[str] | None = None
-        self._heading_row = False
-        self._href = ""
-        self._text: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        found = dict(attrs)
-        if tag == "p":
-            self._line = set((found.get("class") or "").split())
-            self._number = 0
-            self._text = []
-        elif tag == "tr":
-            self._cells = []
-            self._href = ""
-        elif tag in ("td", "th"):
-            self._heading_row = tag == "th"
-            self._text = []
-        elif tag == "a":
-            anchor = found.get("id") or ""
-            if self._line is not None and anchor[:1] == "t" and anchor[1:].isdigit():
-                self._number = int(anchor[1:])
-            if self._cells is not None and not self._href:
-                self._href = found.get("href") or ""
-
-    def handle_data(self, data: str) -> None:
-        self._text.append(data)
-
-    def handle_endtag(self, tag: str) -> None:
-        text = " ".join("".join(self._text).split())
-        if tag == "p" and self._line is not None:
-            if self._number:
-                self.lines[self._number] = (self._line, text)
-            self._line = None
-        elif tag in ("td", "th") and self._cells is not None:
-            self._cells.append(text)
-        elif tag == "tr" and self._cells is not None:
-            if self._heading_row:
-                self._headings = self._cells
-            else:
-                cells = zip(self._headings, self._cells, strict=True)
-                row = {heading: cell for heading, cell in cells if heading}
-                self.rows.append({**row, "href": self._href})
-            self._cells = None
-
-
-def _read_page(page: Path) -> _PageReader:
-    reader = _PageReader()
-    reader.feed(page.read_text("utf-8"))
-    return reader
 
 
 def _region_rows(rows: list[dict[str, str]], noun: str) -> list[tuple[str, ...]]:
@@ -1612,21 +1508,25 @@ def _region_rows(rows: list[dict[str, str]], noun: str) -> list[tuple[str, ...]]
 def test_a_partial_line_s_page_names_the_jump_that_never_ran(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # coverage.py's arcs reach the pages through the pytest extension's
+    # reduction, a distribution of its own: a run of this wheel alone
+    # has none.
+    pytest.importorskip("livery.extensions.pytest")
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path, docs_table=_DRAWN)
+    root = _workspace(
+        tmp_path, docs_table='extensions = ["docs", "pytest", "coverage"]\n'
+    )
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
-    monkeypatch.setattr(
-        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
-    )
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     assert _docs.render_coverage_pages(root) == ["core"]
     report = root / "packages" / "core" / "htmlcov"
     # Each function and class has its row, narrowed to its own lines and
     # linked to its first; the lines outside every one have a row too.
-    functions = _read_page(report / "function_index.html").rows
+    functions = read_page(report / "function_index.html").rows
     assert _region_rows(functions, "function") == [
         ("Tally.__init__", "t2", "1", "0", "0", "0", "0", "100%"),
         ("Tally.note", "t5", "2", "0", "0", "2", "1", "75%"),
@@ -1634,19 +1534,17 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
         ("unused", "t19", "0", "0", "1", "0", "0", "100%"),
         ("(no function)", "", "9", "0", "1", "2", "0", "100%"),
     ]
-    assert _region_rows(_read_page(report / "class_index.html").rows, "class") == [
+    assert _region_rows(read_page(report / "class_index.html").rows, "class") == [
         ("Tally", "t1", "3", "0", "0", "2", "1", "80%"),
         ("(no class)", "", "15", "2", "2", "6", "2", "81%"),
     ]
     # The file's page, as the index links it: each partial line carries
-    # the partial class and names its untaken jump, with the sentence
+    # the partial category and names its untaken jump, with the sentence
     # that says why. The line whose untaken jump `# pragma: no branch`
     # waives is not partial.
     page = next(row["href"] for row in functions if row.get("function") == "total")
-    lines = _read_page(report / page.partition("#")[0]).lines
-    partial = {
-        number: text for number, (classes, text) in lines.items() if "par" in classes
-    }
+    lines = read_page(report / page.partition("#")[0]).lines
+    partial = {number: line for number, line in lines.items() if line.category == "par"}
     assert sorted(partial) == [6, 12, 14]
     for number, jump, sentence in (
         (
@@ -1667,8 +1565,8 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
             " never true",
         ),
     ):
-        assert jump in partial[number]
-        assert sentence in partial[number]
+        assert partial[number].jumps == [jump]
+        assert partial[number].whys == [sentence]
 
 
 def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
@@ -1752,43 +1650,6 @@ def test_the_generators_output_is_printed_in_ci_only() -> None:
         "    Build finished in 0.04s",
         "    warn",
     ]
-
-
-def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.extensions.coverage import _pages
-
-    root = _workspace(tmp_path)
-    calls: list[tuple[list[str], Path]] = []
-
-    def _pull(
-        root_: Path, labels: list[str], into: Path
-    ) -> tuple[list[Path], list[str]]:
-        calls.append((labels, into))
-        return [into / "x.coverage"], ["packages/bare on check-a"]
-
-    monkeypatch.setattr(_pages, "stored_union", _pull)
-    monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    assert _pages._stored_legs(root) == ([], [])
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
-    monkeypatch.setenv("WORKSHOP_POINT", "gate")
-    monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _pages._stored_legs(root) == ([], [])
-    # The merge point's docs job builds the site without the trees:
-    # the gate job renders them after its union.
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _pages._stored_legs(root) == ([], [])
-    monkeypatch.setenv("WORKSHOP_POINT", "merge")
-    monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    files, misses = _pages._stored_legs(root)
-    assert files == [root / "coverage-data" / "x.coverage"]
-    assert misses == ["packages/bare on check-a"]
-    assert calls == [(["check-a"], root / "coverage-data")]
 
 
 def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:

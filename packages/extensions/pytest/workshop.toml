@@ -26,3 +26,8 @@ floor = "0.58.0"
 [docs]
 # Inside the workshop's entry of the site's Packages tree.
 name = "workshop.extensions.pytest"
+
+[[depends]]
+path = "packages/git"
+kind = "test"
+floor = "0.1.0"

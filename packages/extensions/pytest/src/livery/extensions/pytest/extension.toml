@@ -51,3 +51,8 @@ value = [
 # The options the rendered pytest.toml hands every run.
 [queries."python.test.addopts"]
 value = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]
+
+# While coverage is listed, the reduction of coverage.py's arcs, the
+# measurer of every python suite, to the line format its pages draw.
+[for.coverage.queries]
+"coverage.measurers" = "livery.extensions.pytest._coverage:measurers"

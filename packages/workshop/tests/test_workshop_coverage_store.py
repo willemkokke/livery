@@ -570,10 +570,10 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     assert _coverage_store.recorded(work, leg=LEG).units == fresh
 
 
-def test_the_stored_union_pulls_every_recorded_unit_and_names_the_misses(
+def test_the_stored_rows_are_every_recorded_unit_and_the_misses_are_named(
     work: Path, tmp_path: Path
 ) -> None:
-    from livery.extensions.coverage._pages import stored_union
+    from livery.extensions.coverage._pages import stored_rows
 
     fresh = {
         "packages/base": _unit(
@@ -584,17 +584,15 @@ def test_the_stored_union_pulls_every_recorded_unit_and_names_the_misses(
         ),
     }
     assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
-    into = tmp_path / "pages"
-    files, misses = stored_union(work, [LEG, "check-other"], into)
-    assert sorted(path.name for path in files) == [
-        "reuse-packages-base.coverage",
-        "reuse-packages-top.coverage",
-    ]
-    assert all(path.parent == into / LEG for path in files)
+    held, misses = stored_rows(work, [LEG, "check-other"])
+    assert held == {LEG: fresh}
     assert misses == ["main/check-other: nothing recorded"]
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    _files, misses = stored_union(work, [LEG], into)
-    assert len(misses) == 1 and misses[0].startswith(f"main/{LEG} (")
+    held, misses = stored_rows(work, [LEG])
+    assert held == {}
+    assert len(misses) == 1
+    assert misses[0].startswith(f"main/{LEG}: the record could not be read (")
+    assert misses[0].endswith("); the pages draw without it")
 
 
 # --- the workspace's own tests, a unit keyed by the whole tree -----------------

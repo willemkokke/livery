@@ -37,7 +37,7 @@ extensions = [
     "pyrefly",
     # The test runner and its coverage meter, configured by the root
     # pytest.toml and .coveragerc.
-    "pytest",
+    { name = "pytest", for = ["coverage"] },
     # The site's coverage pages, drawn from the measured data; shipped
     # in the workshop wheel.
     { name = "coverage", for = ["docs"] },

@@ -315,7 +315,7 @@ every kind the check judges"). What changes:
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; coverage.py draws the pages | coverage's step of the docs phase, one renderer for every language, reading the line format |
+| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; its own renderer draws every language's pages from parts in the line format, made at render time from the record's rows, a measurer's rows reduced through `coverage.measurers`, which pytest answers in `[for.coverage]` | coverage's step of the docs phase, reading the parts the record stores |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | `[qa] coverage-floor` and `coverage-epsilon`, `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
@@ -1475,6 +1475,7 @@ neither needs nor rules out).
 | `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
 | `_unmetered` and `_write_unit` copied into the coverage extension's `_pages` beside the python extension's | one copy, in the coverage extension, when the union moves there (12e, P2b) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
+| `[qa] coverage-floor`, `coverage-epsilon` and the coverage machinery in the base | the coverage extension (phase 12e) |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
@@ -2829,6 +2830,35 @@ neither needs nor rules out).
   `fm new.project` lists coverage. Every package here keeps its figure
   and floor. The change touches every package's contract, so until
   #1328 is fixed each package's next changelog carries it.
+- 2026-10-13, 12e's P3 (#1554): the coverage extension draws the pages
+  itself, from parts in the line format, version 1 (`_format`), with a
+  renderer of its own markup (`_render`, its stylesheet and script in
+  `content/assets`), Pygments highlighting each file, and `coverage
+  html` leaves the pages path. The record stores what it stored; the
+  pages make parts from it when they render: a row of the lines
+  measurer is read by the extension as counts alone, any other row
+  through `coverage.measurers`, a workspace query coverage declares and
+  pytest answers in `[for.coverage]` for coverage.py's arcs. The
+  reduction is coverage.py's own analysis of each file, its parser read
+  once per file, and each file's numbers are checked against coverage.py's
+  before a part is handed over. Parity is pinned against coverage.py
+  7.16.2's `HtmlDataGeneration` and its JSON report, format 3, on P0's
+  fixture and a module of every shape: each file's and region's
+  numbers, each line's category of the eight, each untaken jump's short
+  and long annotation, and each line's contexts; a nightly test compares
+  the reduction with coverage.py's JSON report for every file of the
+  workshop suite's row. Taken in the part: a digest is the git blob id
+  of the file's bytes, empty for a file the measurer could not read; on
+  a desk a measured file the checkout no longer has is named on its
+  package's index and the rest is drawn, where P1 left the package
+  without pages; the floor line the plan lists beyond coverage.py's
+  pages waits for P2b, since the floor policy lives in the python
+  extension until then and an extension imports another only when it
+  requires it; Pygments' stubs join the workshop's dev extra. The
+  copies of `_unmetered` and `_write_unit` left the coverage extension
+  with `coverage html`, so their temporary row is gone. Measured on a
+  desk: main's record, 57 rows on three legs, read in 19.2 s, and the
+  workshop's 130 files reduced, merged and drawn in 8.0 s.
 
 ## Open
 

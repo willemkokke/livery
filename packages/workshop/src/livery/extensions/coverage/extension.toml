@@ -1,5 +1,6 @@
 # The coverage extension: each package's coverage policy, and the
-# site's coverage pages, drawn from the workspace's measured data.
+# site's coverage pages, drawn from the workspace's measured data in
+# the line format.
 # Read at every mount; a query's answer is imported when it is asked.
 
 [extension]
@@ -27,8 +28,18 @@ types = ["bool"]
 doc = "whether anything judges the package's coverage; true when absent, and false gives no verdict, records no mark and takes no floor"
 
 # While docs is listed, the function that draws the coverage pages of
-# the packages that declare an htmlcov report: coverage.py's own HTML
-# report, from main's record in the merge point's gate job and from the
-# local data a gate run left anywhere else.
+# the packages that declare an htmlcov report: each file's lines,
+# branches, functions and classes as coverage.py counts them, from
+# main's record in the merge point's gate job and from the data a gate
+# run left anywhere else.
 [for.docs.queries]
 "docs.coverage-pages" = "livery.extensions.coverage._pages:renderer"
+
+# Who reduces the stored rows of a measurer this extension does not
+# read itself, coverage.py's arcs say: each listed extension answers
+# with a function of the workspace root that returns its reductions, by
+# the name a row's measurer carries. One extension reduces each
+# measurer, and the lines measurer's rows are read here.
+[queries."coverage.measurers"]
+level = "workspace"
+combine = "livery.extensions.coverage._pages:measurers_by_name"
