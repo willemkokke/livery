@@ -33,8 +33,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 # An extension is the workshop, extended: its plugin and its App stand on
-# the base extension's wheel, which brings footman with it.
-dependencies = ["livery-workshop"]
+# the base extension's wheel, and its App imports the runner, footman.
+dependencies = ["livery-workshop", "livery-footman"]
 
 [project.urls]
 {%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}

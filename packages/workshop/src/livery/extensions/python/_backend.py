@@ -464,6 +464,43 @@ def _declared_modules(package: Package) -> tuple[str, ...]:
     return ()
 
 
+#: The runner's distribution. Its own sources implement the answer to
+#: whether a person is there, and it loads the modules a package names
+#: under its entry-point groups.
+RUNNER_DISTRIBUTION = "livery-footman"
+
+#: The entry-point groups whose modules a program loads as plugins, each
+#: to that program's distribution. A module named in one runs inside the
+#: program alone, so what the program brings is present whenever the
+#: module runs.
+PLUGIN_GROUPS: Mapping[str, str] = {
+    "footman.tasks": RUNNER_DISTRIBUTION,
+    "footman.builtin": RUNNER_DISTRIBUTION,
+    "pytest11": "pytest",
+}
+
+
+def plugin_hosts(package: Package) -> dict[str, frozenset[str]]:
+    """Each module *package* names in a plugin group, to the programs that load it.
+
+    Read from the ``[project.entry-points]`` tables of the package's
+    ``pyproject.toml``, for the groups ``PLUGIN_GROUPS`` names, each
+    program by its distribution. A module under one of these modules
+    is loaded with it. Empty for a package that names none.
+    """
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return {}
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    groups = data.get("project", {}).get("entry-points", {})
+    hosts: dict[str, set[str]] = {}
+    for group, program in PLUGIN_GROUPS.items():
+        for target in (groups.get(group) or {}).values():
+            module = str(target).partition(":")[0].strip()
+            hosts.setdefault(module, set()).add(program)
+    return {module: frozenset(programs) for module, programs in hosts.items()}
+
+
 def plugin_modules(package: Package) -> tuple[str, ...]:
     """The modules *package* declares as footman task entry points.
 
@@ -473,16 +510,11 @@ def plugin_modules(package: Package) -> tuple[str, ...]:
     fact lives in the package's own metadata; nothing here needs to
     be told a second time.
     """
-    pyproject = package.directory / "pyproject.toml"
-    if not pyproject.is_file():
-        return ()
-    data = tomllib.loads(pyproject.read_text("utf-8"))
-    groups = data.get("project", {}).get("entry-points", {})
-    modules = []
-    for group in ("footman.tasks", "footman.builtin"):
-        for target in (groups.get(group) or {}).values():
-            modules.append(str(target).partition(":")[0])
-    return tuple(modules)
+    return tuple(
+        module
+        for module, programs in plugin_hosts(package).items()
+        if RUNNER_DISTRIBUTION in programs
+    )
 
 
 def _extra_distributions(package: Package) -> frozenset[str]:

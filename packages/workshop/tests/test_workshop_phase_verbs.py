@@ -413,13 +413,7 @@ def test_the_builtin_steps_generate_the_phase_verbs(python_steps: object) -> Non
     assert tree == {
         "build": {"compile", "configure"},
         "format": set(),
-        "layering": {
-            "graph",
-            "runner-terminal",
-            "base-imports-no-extension",
-            "forge-stdlib-only",
-            "sibling-references",
-        },
+        "layering": {"graph", "base-imports-no-extension", "sibling-references"},
         "lint": set(),
         "provenance": {"check"},
         "drift": {"check"},

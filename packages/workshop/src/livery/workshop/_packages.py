@@ -4,15 +4,13 @@ A directory under ``packages/`` is a package exactly when it carries a
 ``workshop.toml``; everything the workshop knows about a package it
 learns there. livery.workshop.verify_workspace is the layering lint:
 contracts present, declared edges agreeing with the native manifests
-in both directions, the graph acyclic, and the one package-specific
-invariant (the forge's stdlib rule) kept.
+in both directions, the graph acyclic, the base importing no
+extension, and each reference to a sibling declared as an edge.
 """
 
 from __future__ import annotations
 
-import ast
 import re
-import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from itertools import takewhile
@@ -499,13 +497,8 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       native dependency is a declared edge (agreement both ways);
     - the dependency graph is acyclic, so dependencies only point
       downward;
-    - ``livery.forge`` imports only the standard library at module
-      import time, plus its one declared lazy extra (PyNaCl), because
-      the whole ecosystem stands on it being dependency-free. The one
-      exception is the dev plugin under ``_dev``, which may also
-      import livery.footman as footman and toolroom: its only loader is footman's
-      ``plugin()``, and only a workshop workspace mounts extensions, so
-      both are present whenever it loads.
+    - the base imports no extension, and each reference a package's
+      sources make to a sibling is a declared edge.
     """
     packages = discover_packages(root)
     problems = graph_problems(root, packages) + import_problems(root, packages)
@@ -983,187 +976,6 @@ def _cycles(packages: tuple[Package, ...]) -> list[str]:
     ]
 
 
-#: The optional extras livery.forge may import lazily; growing this
-#: set is a plan decision, not an edit.
-_FORGE_LAZY_EXTRAS = frozenset({"nacl"})
-
-#: The distribution the stdlib-at-import-time rule is about. The whole
-#: ecosystem stands on it being installable with nothing behind it.
-_FORGE_DIST = "livery-forge"
-
-
-#: The runner's distribution name. It implements the terminal
-#: questions, so its own sources are the one place that may ask one.
-_RUNNER_DIST = "livery-footman"
-
-#: What a module that imports the runner must never call: a terminal
-#: says nothing about ``--no-input`` or ``--dry-run``.
-_TERMINAL_CALLS = (
-    "sys.stdin.isatty",
-    "sys.stdout.isatty",
-    "sys.stderr.isatty",
-    "os.isatty",
-)
-
-
-def _imports_the_runner(tree: ast.Module) -> bool:
-    """Whether the module imports the runner, in any spelling."""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            if any(
-                alias.name == "livery.footman"
-                or alias.name.startswith("livery.footman.")
-                for alias in node.names
-            ):
-                return True
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            if node.module == "livery.footman" or node.module.startswith(
-                "livery.footman."
-            ):
-                return True
-            if node.module == "livery" and any(
-                alias.name == "footman" for alias in node.names
-            ):
-                return True
-    return False
-
-
-def _terminal_calls(tree: ast.Module) -> list[str]:
-    """Every call in the module that asks a terminal directly."""
-    bare = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "sys"
-        for alias in node.names
-        if alias.name in ("stdin", "stdout", "stderr")
-    }
-    found: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        spelling = ast.unparse(node.func)
-        named = spelling.endswith(".isatty") and spelling.split(".")[0] in bare
-        if spelling in _TERMINAL_CALLS or named:
-            found.append(spelling)
-    return found
-
-
-def _terminal_is_asked_through_the_runner(
-    root: Path, packages: tuple[Package, ...], context: RuleContext | None = None
-) -> list[str]:
-    """Violations of the one-answer rule: ask the runner, never the terminal.
-
-    A module that imports the runner has [livery.footman.attended][]
-    in reach, which knows ``--no-input`` and ``--dry-run`` as well as
-    the terminal, where asking the terminal ignores both in silence.
-    The runner's own sources implement that answer and are exempt, and
-    a module that never imports it is the workspace's own business.
-    """
-    from livery.extensions.python._parse import parsed_source
-
-    problems: list[str] = []
-    sources = [root / "tasks.py"]
-    for package in packages:
-        if package.name == _RUNNER_DIST:
-            continue
-        sources.extend(sorted((package.directory / "src").rglob("*.py")))
-    for source in sources:
-        if not source.is_file():
-            continue
-        if context is not None and not context.in_scope(source):
-            continue
-        parsed = parsed_source(source)
-        if parsed is None or not _imports_the_runner(parsed.tree):
-            continue
-        problems.extend(
-            f"{source.relative_to(root)} asks the terminal with {spelling}():"
-            " a module that imports the runner asks"
-            " livery.footman.attended() instead, which knows --no-input"
-            " and --dry-run as well"
-            for spelling in _terminal_calls(parsed.tree)
-        )
-    return problems
-
-
-def _forge_is_stdlib_only(
-    root: Path, packages: tuple[Package, ...], context: RuleContext | None = None
-) -> list[str]:
-    """Violations of the forge's stdlib-at-import-time rule.
-
-    A module the package declares as a footman task entry point is
-    exempt: its only loader is footman's own ``plugin()``, so the
-    runner is present by construction and the mounted extensions with it,
-    and the distribution still declares no dependency on either. The
-    entry point is where that fact already lives, so nothing here
-    repeats the module's path.
-    """
-    stdlib = sys.stdlib_module_names
-    allowed = set(stdlib) | {"livery"} | _FORGE_LAZY_EXTRAS
-    from livery.extensions.python._parse import parsed_source
-    from livery.workshop import _lifecycle
-    from livery.workshop._kinds import kind_names
-
-    forge = next((p for p in packages if p.name == _FORGE_DIST), None)
-    if forge is None or forge.kind not in kind_names():
-        return []
-    # The same reader the kind's own reference check uses, so one
-    # answer about what a package declares serves both.
-    plugins = _lifecycle.plugin_modules(forge)
-    base = forge.directory / "src"
-    problems = []
-    for source in sorted(base.rglob("*.py")):
-        # Under the namespace the top-level name says nothing: the
-        # dotted path is judged, livery.forge everywhere and anything
-        # the runner brings inside a declared plugin module.
-        dotted = ".".join(source.relative_to(base).parts)
-        dotted = dotted.removesuffix(".py").removesuffix(".__init__")
-        if context is not None and not context.in_scope(source):
-            continue
-        livery_ok = {"livery.forge"}
-        if any(
-            dotted == module or dotted.startswith(module + ".") for module in plugins
-        ):
-            livery_ok = {"livery"}
-        parsed = parsed_source(source)
-        if parsed is None:
-            continue
-        for node in ast.walk(parsed.tree):
-            names: list[str] = []
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                if node.module == "livery" or node.module.startswith("livery."):
-                    names = [f"{node.module}.{alias.name}" for alias in node.names]
-                else:
-                    names = [node.module]
-            for name in names:
-                top = name.split(".")[0]
-                if top == "livery":
-                    fine = any(
-                        name == ok or name.startswith(ok + ".") for ok in livery_ok
-                    )
-                else:
-                    fine = top in allowed
-                if not fine:
-                    problems.append(
-                        f"{source.relative_to(root)} imports {name!r}:"
-                        " livery.forge is stdlib-only at import time"
-                    )
-    return problems
-
-
-def _runner_terminal(context: RuleContext) -> list[str]:
-    """The one-answer rule as a registered rule, over the python parse."""
-    return _terminal_is_asked_through_the_runner(
-        context.root, context.packages, context
-    )
-
-
-def _forge_stdlib(context: RuleContext) -> list[str]:
-    """The forge's stdlib rule as a registered rule, over the python parse."""
-    return _forge_is_stdlib_only(context.root, context.packages, context)
-
-
 def _sibling_references(context: RuleContext) -> list[str]:
     """The undeclared sibling references, by what the graph reaches.
 
@@ -1200,17 +1012,11 @@ EXTENSIONS_NAMESPACE = "livery.extensions"
 #: The base modules that import an extension: each module and the
 #: extension it imports, to why. The package kinds' code is the
 #: extensions', and the base takes it as the kinds' backends while the
-#: kinds live in the base; the runner's one-answer rule and the forge's
-#: stdlib rule walk the python extension's parse while the base holds
-#: them. A test keeps the list exact, and it is empty once the package
-#: kinds and those two rules leave the base.
+#: kinds live in the base. A test keeps the list exact, and it is empty
+#: once the package kinds leave the base.
 BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
     ("livery.workshop._kinds", "livery.extensions.python"): (
         "registers the python kind with the extension's code as its backend"
-    ),
-    ("livery.workshop._packages", "livery.extensions.python"): (
-        "the runner's one-answer rule and the forge's stdlib rule walk the"
-        " syntax trees of the python extension's parse"
     ),
     ("livery.workshop._backends._python_nanobind", "livery.extensions.python"): (
         "the nanobind kind builds on the python kind's functions"
@@ -1278,15 +1084,11 @@ def _base_imports_no_extension(context: RuleContext) -> list[str]:
 
 
 #: The base's rules over the sources, each the layering step of its
-#: name, which [livery.workshop._steps][] registers beside the base's
-#: other steps: the runner's one-answer rule and the forge's stdlib
-#: rule over the python extension's parse, and the base importing no
-#: extension and the sibling references over the ``references``
-#: answers. The sibling step's fix writes the edges
-#: ([livery.workshop._packages.write_edges][]).
+#: name, which the base registers beside its other steps: the base
+#: importing no extension and the sibling references, both over the
+#: ``references`` answers. The sibling step's fix writes the edges
+#: (``write_edges``).
 RULES: dict[str, Judge] = {
-    "runner-terminal": _runner_terminal,
     "base-imports-no-extension": _base_imports_no_extension,
-    "forge-stdlib-only": _forge_stdlib,
     "sibling-references": _sibling_references,
 }
