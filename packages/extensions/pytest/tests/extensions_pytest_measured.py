@@ -173,12 +173,12 @@ SOURCES = "packages/core/src/acme/core"
 COVERAGERC = "[run]\nbranch = true\nrelative_files = true\n"
 
 
-def measure(root: Path) -> None:
+def measure(root: Path, contexts: tuple[str, str] = ("run-a", "run-b")) -> None:
     """Write both modules under *root* and measure three runs into ``.coverage``.
 
     ``measured.py`` runs under no context; ``shapes.py`` runs twice, as
-    the contexts ``run-a`` and ``run-b``, taking the other branch of
-    its last ``if`` each time. Each run is a fresh interpreter with
+    the two *contexts*, taking the other branch of its last ``if`` each
+    time. Each run is a fresh interpreter with
     none of the outer gate's meter variables: pytest-cov and
     coverage's subprocess patch would point an inheriting python at the
     live run's data file, and this recording must land in *root*.
@@ -195,8 +195,8 @@ def measure(root: Path) -> None:
     }
     runs: tuple[tuple[list[str], str, list[str]], ...] = (
         ([], "measured.py", []),
-        (["--context=run-a"], "shapes.py", ["a"]),
-        (["--context=run-b"], "shapes.py", ["b"]),
+        ([f"--context={contexts[0]}"], "shapes.py", ["a"]),
+        ([f"--context={contexts[1]}"], "shapes.py", ["b"]),
     )
     for flags, module, arguments in runs:
         subprocess.run(

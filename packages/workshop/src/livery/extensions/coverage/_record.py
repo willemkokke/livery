@@ -16,9 +16,9 @@ rows it carries from the records, judges the floors on that union, and
 writes the union back: a pull request's run onto its branch's record,
 main's run onto main's, each replaced in place, the units that no
 longer exist removed. A row a write replaces at another closure, or
-removes, stays for a day under its closure's name and the moment it
-was kept: a run whose leg skipped a suite on it, while another run
-moved the record on, still unions it. At the merge main's run finds its
+removes, stays for a day under the moment it was kept and its
+closure's name: a run whose leg skipped a suite on it, while another
+run moved the record on, still unions it. At the merge main's run finds its
 tree on the verified record, which names the branch, and copies the
 branch's rows into main's without measuring; a squash of a stale
 branch has another tree, and main pays the full gate. A unit neither
@@ -31,7 +31,17 @@ alone, the files whose identity the key names. A row keeps its parts in
 the line format's stored form: what ran, each file's fixed facts named
 by their own digest. The facts are files of their own beside the rows
 (`FACTS`), each kept once however many rows, legs and writes name it,
-and a write drops the facts no row names any more. Reach for
+and a write drops the facts no row names any more. A python suite's
+row names the tests that reached each line, and its numbering of them
+lives in the row: each write numbers them as the row it replaces did,
+so a test keeps its index from run to run, a new test takes the next,
+and a test that is gone keeps its index, reached by no line (the line
+format's `numbering`). Two rows of a unit a run apart then keep a
+line's set of tests byte for byte wherever the same tests reached it.
+One run's writes append the same tests on every leg (`run_contexts`),
+so a test has one index in its unit's rows on every leg, and the legs'
+rows keep a line's set alike wherever the same tests reached it. Reach
+for
 `recorded` to read a record on a leg, `leave_run` to leave a leg's
 parts for its write, `run_legs` to read them in the gate job, and
 `put_record` to write the record. A read of a record parses its
@@ -43,23 +53,30 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Collection, Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from operator import attrgetter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from livery import git
-from livery.extensions.coverage._format import FORMAT, facts_names, facts_text
+from livery.extensions.coverage._format import (
+    FORMAT,
+    PartError,
+    facts_names,
+    facts_text,
+    numbered,
+    numbering,
+)
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._packages import WORKSPACE_TESTS, Package
 
-#: The rows' shape: 3 holds a unit's parts in the line format's stored
-#: form, so a package is judged on what each of its measurers judges.
-#: A row of another schema is skipped and named, so a row of arcs
-#: written before is a miss and the unit is measured afresh.
-SCHEMA = 3
+#: The rows' shape: 4 holds a unit's parts in the line format's stored
+#: form, a python suite's naming the tests that reached each line. A
+#: row of another schema is skipped and named, so a row written before
+#: the rows held the tests is a miss and the unit is measured afresh.
+SCHEMA = 4
 
 #: The directory of a record's fixed facts, beside its rows: one file
 #: per facts' name, holding the facts as the line format's `facts_text`
@@ -156,8 +173,15 @@ def kept_name(path: str, closure: str, when: datetime) -> str:
 
     The name carries the moment *when* the write kept it, so a reader
     tells a kept row's age from its name and reads no kept row for it.
+    It ends in the unit's own row name (`row_name`), the moment and the
+    closure before it: git chooses which files to store as the
+    difference from another by the last sixteen characters of their
+    names, so a kept row can be stored against its unit's other rows,
+    of every leg and every run, where the stable numbering of the tests
+    keeps that difference small.
     """
-    return f"{git.slug(path)}.{closure}.{when.astimezone(UTC):{KEPT_STAMP}}.json"
+    moment = f"{when.astimezone(UTC):{KEPT_STAMP}}"
+    return f"{moment}.{closure}.{row_name(path)}"
 
 
 def _current_row(name: str) -> bool:
@@ -243,8 +267,8 @@ class Kept:
     """A row a write replaced at another closure, or removed, kept for a day.
 
     Attributes:
-        name: The row's file on the ref: its unit's slug, the closure it
-            was measured at, and the moment the write kept it
+        name: The row's file on the ref: the moment the write kept it,
+            the closure it was measured at, and its unit's slug
             (`kept_name`).
         unit: The measurement, once read. A read of a record names its
             kept rows and reads none; the union reads the one it asks
@@ -261,13 +285,19 @@ class Kept:
         return pieces[1] if len(pieces) > 1 else ""
 
     @property
+    def slug(self) -> str:
+        """The slug of the kept row's unit, from its name; empty for none."""
+        pieces = self.name.removesuffix(".json").split(".")
+        return pieces[2] if len(pieces) == 3 else ""
+
+    @property
     def when(self) -> datetime | None:
         """When the write kept the row, from its name; ``None`` when it names none."""
         pieces = self.name.removesuffix(".json").split(".")
         if len(pieces) != 3:
             return None
         try:
-            return datetime.strptime(pieces[2], KEPT_STAMP).replace(tzinfo=UTC)
+            return datetime.strptime(pieces[0], KEPT_STAMP).replace(tzinfo=UTC)
         except ValueError:
             return None
 
@@ -314,10 +344,12 @@ class Record:
         row = self.units.get(path)
         if row is not None and row.closure == closure:
             return row
-        prefix = f"{git.slug(path)}.{closure}."
-        for kept in sorted(self.kept, key=attrgetter("name"), reverse=True):
-            if not kept.name.startswith(prefix):
-                continue
+        slug = git.slug(path)
+        held = [
+            kept for kept in self.kept if (kept.slug, kept.closure) == (slug, closure)
+        ]
+        # A kept row's name starts with its moment: newest first by name.
+        for kept in sorted(held, key=attrgetter("name"), reverse=True):
             unit = kept.unit
             if unit is None and self.read_kept is not None:
                 unit = self.read_kept(kept.name)
@@ -681,6 +713,87 @@ def _read_facts(
     return ""
 
 
+def run_contexts(
+    writes: Iterable[Mapping[str, Unit]],
+) -> dict[str, dict[str, set[str]]]:
+    """Every context one run's *writes* name, by unit path and measurer name.
+
+    *writes* holds each leg's rows, by unit path. A context that is not
+    text names nothing here; the write that reads its row refuses it.
+    """
+    found: dict[str, dict[str, set[str]]] = {}
+    for rows in writes:
+        for path, unit in rows.items():
+            for raw in unit.parts:
+                named: object = raw.get("contexts")
+                if not isinstance(named, list):
+                    continue
+                held = found.setdefault(path, {}).setdefault(_measurer_of(raw), set())
+                held.update(
+                    item
+                    for item in cast("list[object]", named)
+                    if isinstance(item, str)
+                )
+    return found
+
+
+def _numbered(
+    unit: Unit, like: Unit | None, also: Mapping[str, Collection[str]]
+) -> Unit:
+    """*unit*, each part numbering its contexts as *like*'s part by its measurer does.
+
+    Every context of *like*'s numbering keeps its index, and the
+    contexts it lacks follow, sorted: the ones *also* names for the
+    part's measurer, then the part's own; without *like*, or a part of
+    it by the same measurer, the numbering starts afresh.
+
+    Raises:
+        PartError: when a part is off the line format, naming the unit,
+            the part and the key.
+    """
+    known = _numberings(like) if like is not None else {}
+    parts: list[dict[str, Any]] = []
+    for index, raw in enumerate(unit.parts):
+        measurer = _measurer_of(raw)
+        parts.append(
+            numbered(
+                raw,
+                numbering(known.get(measurer, ()), also.get(measurer, ())),
+                source=f"{unit.path}'s fresh row, part {index}",
+            )
+        )
+    kept = tuple(parts)
+    return unit if kept == unit.parts else replace(unit, parts=kept)
+
+
+def _numberings(unit: Unit) -> dict[str, tuple[str, ...]]:
+    """Each measurer's numbering of contexts in *unit*'s parts, by the measurer's name.
+
+    A part whose contexts are not texts named once each numbers
+    nothing, and the row that replaces it numbers afresh.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for raw in unit.parts:
+        named: object = raw.get("contexts")
+        if not isinstance(named, list):
+            continue
+        items = cast("list[object]", named)
+        texts = [item for item in items if isinstance(item, str)]
+        if len(texts) == len(items) == len(set(texts)):
+            found.setdefault(_measurer_of(raw), tuple(texts))
+    return found
+
+
+def _measurer_of(raw: Mapping[str, Any]) -> str:
+    """The name of the measurer of *raw*, a part as a row holds it; empty for none."""
+    measurer: object = raw.get("measurer")
+    if isinstance(measurer, dict):
+        name: object = cast("dict[str, Any]", measurer).get("name")
+        if isinstance(name, str):
+            return name
+    return ""
+
+
 def _facts_named_by(file: str) -> str:
     """The name of the fixed facts the record's file *file* holds."""
     return file[len(FACTS) :].removesuffix(".json")
@@ -705,6 +818,8 @@ def put_record(
     base: str = MAIN,
     held: Record | None = None,
     now: datetime | None = None,
+    numbered_like: Mapping[str, Unit] | None = None,
+    run_contexts: Mapping[str, Mapping[str, Collection[str]]] | None = None,
 ) -> str:
     """Write the *fresh* units onto *base*'s record on *leg*; ``""`` or the reason.
 
@@ -728,6 +843,18 @@ def put_record(
     facts, and the facts no row of the written record names go. The
     kept rows that stay are read for the facts they name, and a write
     whose rows name facts no unit holds is refused by name.
+
+    Each fresh row numbers the tests that reached its lines as the row
+    it replaces numbers them, part by part of one measurer: every
+    context that row numbers keeps its index, and the new ones follow,
+    sorted: the ones *run_contexts* names for the unit and measurer
+    (`run_contexts`, every test the run's rows of the unit name on any
+    leg) and the part's own. Rows of every leg start alike and extend
+    alike, so a test has one index in a unit's rows on every leg. A
+    unit the record does not hold yet is numbered as its row in
+    *numbered_like*, main's for a branch's first write, and without
+    one its numbering starts afresh. A fresh part off the line format
+    refuses the write, naming the unit and the key.
     """
     if not leg:
         return "refusing: the leg has no label, so the record has no key"
@@ -750,6 +877,17 @@ def put_record(
             f"refusing: {base}'s record on {leg} could not be read"
             f" ({current.reason}), so the rows it keeps are unknown"
         )
+    like = numbered_like or {}
+    appended = run_contexts or {}
+    try:
+        fresh = {
+            path: _numbered(
+                unit, current.units.get(path) or like.get(path), appended.get(path, {})
+            )
+            for path, unit in fresh.items()
+        }
+    except PartError as error:
+        return f"refusing: {error}"
     moment = now or datetime.now(UTC)
     removed = list(remove)
     rows = {row_name(path): unit_fields(unit) for path, unit in sorted(fresh.items())}

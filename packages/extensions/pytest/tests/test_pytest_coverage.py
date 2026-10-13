@@ -225,8 +225,57 @@ def test_each_unit_reduces_to_its_own_part_and_each_source_is_read_once(
     # coverage.py reads no columns: its parts hold no ranges.
     assert one["measurer"]["columns"] is False
     assert not [entry for entry in one["files"].values() if "ranges" in entry]
-    # A leg's part names no test: the contexts stay in the data.
-    assert one["contexts"] == [] and "reached" not in one["files"][module]
+    # Each part names its own suite's tests and no other suite's, for the
+    # statements they reached: the workspace's test reached none.
+    assert one["contexts"] == ["packages/core/tests/test_mod.py::test_it|run"]
+    assert two["contexts"] == []
+
+
+def test_a_leg_part_names_each_line_s_tests_its_suite_s_own_and_the_code_outside(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.coverage._format import decode, unpack_set
+
+    sources = tmp_path / SOURCES
+    sources.mkdir(parents=True)
+    (sources / "mod.py").write_text("a = 1\nif a:\n    b = 2\nc = 3\n")
+    module = f"{SOURCES}/mod.py"
+    tests = "packages/core/tests/test_mod.py::"
+    _leg_data(
+        tmp_path,
+        "host.1",
+        {
+            # Import time: the module's first lines, outside every test.
+            "": {module: [(-1, 1), (1, 2)]},
+            f"{tests}test_b": {module: [(2, 3), (3, 4), (4, -1)]},
+            f"{tests}test_a": {module: [(2, 3), (3, 4)]},
+            # The workspace's own test reached the module too: none of
+            # the member's tests, so none of its part's.
+            "tests/test_all.py::test_it": {module: [(2, 4), (4, -1)]},
+        },
+    )
+    (part,) = _coverage.Arcs().leg(tmp_path, [CORE])
+    # The contexts that reached the part's lines, sorted.
+    assert part["contexts"] == ["", f"{tests}test_a", f"{tests}test_b"]
+    reached = part["files"][module]["reached"]
+    assert {
+        line: unpack_set(reached["sets"][held]) for line, held in reached["lines"]
+    } == {1: {0}, 2: {0, 1, 2}, 3: {1, 2}, 4: {1, 2}}
+    read = decode(part, source="the leg's part")
+    assert {
+        line: sorted(read.contexts[index] for index in held)
+        for line, held in read.files[module].reached.items()
+    } == {
+        1: [""],
+        2: ["", f"{tests}test_a", f"{tests}test_b"],
+        3: [f"{tests}test_a", f"{tests}test_b"],
+        4: [f"{tests}test_a", f"{tests}test_b"],
+    }
+    # A leg whose run named no test names no context.
+    (tmp_path / ".coverage.host.1").unlink()
+    _leg_data(tmp_path, "host.2", {"": {module: [(-1, 1), (1, 2)]}})
+    (bare,) = _coverage.Arcs().leg(tmp_path, [CORE])
+    assert bare["contexts"] == [] and "reached" not in bare["files"][module]
 
 
 def test_both_digests_are_the_blob_git_stores_for_the_text_with_crlf_or_lf() -> None:
@@ -418,27 +467,17 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     # made of the same data and main's record stored. Only the lines that
     # say where the measurement comes from differ: the record's source on
     # the index, and the suite a stored part names on each file's page.
+    # The tests that reached each line are the member's own, so the leg
+    # keeps them, and both pages list them.
     from livery.extensions.coverage import _format, _pages
     from livery.extensions.coverage._record import Unit
     from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path / "ws")
-    measure(root)
+    tests = "packages/core/tests/test_shapes.py::"
+    measure(root, contexts=(f"{tests}test_a", f"{tests}test_b"))
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.chdir(root)
-    # The leg's data is the run's, with no test named: a leg's part names
-    # the tests that reached a line in a later part of the plan.
-    from coverage import CoverageData
-
-    data = CoverageData(basename=str(root / ".coverage"))
-    data.read()
-    plain = CoverageData(basename=str(root / ".coverage"), suffix="leg")
-    for name in data.measured_files():
-        plain.add_arcs({name: set(data.arcs(name) or [])})
-    plain.write()
-    data.close(force=True)
-    (root / ".coverage").unlink()
-    (root / ".coverage.leg").rename(root / ".coverage")
     assert _docs.render_coverage_pages(root) == ["core"]
     tree = root / "packages" / "core" / "htmlcov"
     at_render = {path.relative_to(tree): path.read_bytes() for path in tree.rglob("*")}
@@ -467,6 +506,19 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     for path in stored:
         drawn = stored[path].replace(record, local).replace(suite, b".")
         assert drawn == at_render[path], path
+    # Each line's tests are drawn: shapes.py ran under the member's two,
+    # and measured.py outside every test.
+    index = read_page(tree / "index.html")
+    shapes = read_page(tree / _page_of(index, SHAPES_PY))
+    assert {line.label for line in shapes.lines.values()} == {"", "1 ctx", "2 ctx"}
+    assert shapes.contexts == [f"{tests}test_a", f"{tests}test_b"]
+    measured = read_page(tree / _page_of(index, MEASURED_PY))
+    assert {line.label for line in measured.lines.values()} == {"", "(empty)"}
+
+
+def _page_of(index: Page, name: str) -> str:
+    """The page an index links for the file *name*."""
+    return next(row["href"] for row in index.rows if row["File"] == name)
 
 
 # --- this repository's own sources -------------------------------------------
@@ -528,7 +580,7 @@ def test_the_reduction_counts_this_repository_s_workshop_sources_as_coverage_py_
         "tests": "packages/workshop/tests/",
         "within": ["packages/workshop/"],
     }
-    name, files = _coverage._unit_arcs(data, root, unit, 0)
+    name, files, _reached = _coverage._unit_arcs(data, root, unit, 0)
     assert len(files) > 100
     reduced = CoverageData(no_disk=True)
     reduced.add_arcs(files)

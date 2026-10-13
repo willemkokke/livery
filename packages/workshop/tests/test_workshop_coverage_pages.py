@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +146,33 @@ def test_a_file_at_another_digest_says_it_was_measured_at_other_content(
         "This file was measured at other content: the measurement is of blob"
         f" 000000000000, and the checkout holds blob {checkout[:12]}. Its lines"
         " are not drawn; its numbers are the measurement's."
+    )
+
+
+def test_a_file_changed_since_its_measurement_is_drawn_without_its_tests_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    # The measurement names the tests that reached each line of content
+    # the checkout no longer holds.
+    measured = replace(
+        _entry(root, digest="0" * 40),
+        reached={1: frozenset({0}), 2: frozenset({1}), 3: frozenset({1})},
+    )
+    _left(root, Part(".", COVERAGE_PY, {MODULE: measured}, ("", "t1")))
+    assert _render_pages(root) == ["core"]
+    tree = root / "packages/core/htmlcov"
+    (row, _total) = read_page(tree / "index.html").rows
+    page = read_page(tree / row["href"])
+    # Drawn over other text, the lines and their tests would name the
+    # wrong lines: neither is drawn, and the page says why.
+    assert page.lines == {} and page.contexts == []
+    checkout = fmt.digest(SOURCE.encode())
+    assert page.notice == (
+        "This file was measured at other content: the measurement is of blob"
+        f" 000000000000, and the checkout holds blob {checkout[:12]}. Its lines"
+        " and the tests that reached them are not drawn; its numbers are the"
+        " measurement's."
     )
 
 
@@ -443,6 +471,73 @@ def test_main_s_record_is_drawn_from_the_parts_the_legs_stored(
             r"coverage: main's record on check-a, packages/core, part 0:"
             r' files\["packages/core/src/acme/core/mod\.py"\]\.hits: names lines'
             r" that are no statements: 5-9"
+        ),
+    ):
+        _render_pages(root)
+
+
+def test_each_line_s_tests_are_drawn_from_the_parts_main_s_record_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, '["docs", "coverage"]')
+    tests = "packages/core/tests/test_mod.py::"
+    first, second, gone = (f"{tests}test_{name}" for name in ("a", "b", "gone"))
+    # Each leg's row numbers its contexts its own way, and one's names a
+    # test that is gone, which reached no line.
+    one = replace(
+        _entry(root),
+        reached={
+            1: frozenset({0}),
+            2: frozenset({1}),
+            3: frozenset({1}),
+            4: frozenset({0}),
+        },
+    )
+    two = replace(
+        _entry(root),
+        reached={1: frozenset({0}), 2: frozenset({1}), 3: frozenset({1, 2})},
+    )
+    held = {
+        "check-a": {
+            "packages/core": _unit(
+                "packages/core",
+                Part("packages/core", COVERAGE_PY, {MODULE: one}, ("", first, gone)),
+            )
+        },
+        "check-b": {
+            "packages/core": _unit(
+                "packages/core",
+                Part("packages/core", COVERAGE_PY, {MODULE: two}, ("", second, first)),
+            )
+        },
+    }
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    assert _render_pages(root) == ["core"]
+    tree = root / "packages/core/htmlcov"
+    (row, _total) = read_page(tree / "index.html").rows
+    page = read_page(tree / row["href"])
+    # Each line lists the tests of every leg that reached it, by name.
+    assert {number: line.label for number, line in page.lines.items()} == {
+        1: "(empty)",
+        2: "2 ctx",
+        3: "2 ctx",
+        4: "(empty)",
+        5: "",
+        6: "",
+    }
+    assert page.lines[2].contexts(page.contexts) == [first, second]
+    assert page.lines[3].contexts(page.contexts) == [first, second]
+    assert page.contexts == ["(empty)", first, second]
+    # A stored row whose set names a context its part does not number
+    # stops the pages, naming the row, the file and the set.
+    broken = held["check-a"]["packages/core"]
+    broken.parts[0]["files"][MODULE]["reached"]["sets"][0] = fmt.pack_set({7})
+    with pytest.raises(
+        _FAILURES,
+        match=(
+            r"coverage: main's record on check-a, packages/core, part 0:"
+            r' files\["packages/core/src/acme/core/mod\.py"\]\.reached\.sets\[0\]:'
+            r" names context 7, and the part names 3"
         ),
     ):
         _render_pages(root)

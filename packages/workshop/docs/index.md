@@ -1241,7 +1241,16 @@ identity of the suite's dependency closure
 plus the root's `pyproject.toml` and `uv.lock`). Main has a
 coverage record, and so does every branch with a pull request run:
 per check leg, one row per suite, its parts as the last run judged
-them and the closure each was measured at. A row keeps what ran; each
+them and the closure each was measured at. A row keeps what ran,
+a python suite's with the tests that reached each line: the suite's
+own tests, and the code outside every test. The row numbers those
+tests, and each write numbers them as the row it replaces did, so a
+test keeps its number from run to run, a new test takes the next, and
+a test that is gone keeps its number with no line naming it; one run's
+writes number a new test alike on every leg. Two rows of a suite a run
+apart, or of two legs, then keep a line's set of tests byte for byte
+wherever the same tests reached it, and git can store the second as a
+small difference from the first. Each
 file's fixed facts, what its content and its measurer decide whatever
 ran (its statements, its branches, its functions, its ranges, and the
 sentence of each branch), are a file of their own beside the rows,
@@ -1262,10 +1271,12 @@ record can supply is red by name, never a smaller union. A branch's
 record outlives the branch by a day, because main's run for the
 squash that merged it carries the suites its legs skipped from that
 record, minutes after the merge deleted the branch. A row a write
-replaces at another closure, or removes, stays a day too, under its
-closure's name and the moment it was kept: a leg may skip a suite on main's row minutes before
-main's run for another merge moves that row on, and the run's union
-still finds the row at the closure the leg skipped on. A leg itself
+replaces at another closure, or removes, stays a day too: a leg may
+skip a suite on main's row minutes before main's run for another merge
+moves that row on, and the run's union still finds the row at the
+closure the leg skipped on. A kept row is named by the moment it was
+kept and its closure, and ends in its suite's own row name, so git can
+store it as the difference from its suite's other rows. A leg itself
 skips on current rows alone. At the
 merge main's run finds its tree on the verified record, which names
 the branch, skips the gate, and copies the branch's record into

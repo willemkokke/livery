@@ -728,12 +728,20 @@ class _Pages:
             "</nav>\n" + self.help(keys) + "</header>\n"
         )
         if drawn.text is None:
+            # The lines a measurement names, and the tests that reached
+            # each, are lines of the content measured: drawn over other
+            # text they would name the wrong lines.
             measured = merged.entry.digest[:12] or "content that was not read"
+            undrawn = (
+                "Its lines and the tests that reached them are"
+                if merged.entry.reached
+                else "Its lines are"
+            )
             body = (
                 '<main class="moved">\n<p class="notice">This file was measured at'
                 " other content: the measurement is of blob"
                 f" <code>{_e(measured)}</code>, and the checkout holds blob"
-                f" <code>{_e(drawn.digest[:12])}</code>. Its lines are not drawn;"
+                f" <code>{_e(drawn.digest[:12])}</code>. {undrawn} not drawn;"
                 " its numbers are the measurement's.</p>\n"
                 "</main>\n"
             )

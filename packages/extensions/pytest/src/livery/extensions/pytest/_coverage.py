@@ -12,9 +12,11 @@ into one part of the whole run. A part is in the line format, version
 ``.coveragerc``. It holds the statements and the ones that ran, the
 excluded lines, the statements written over several lines, each
 branch of a line with more than one exit with the sentence that says
-why it would not run, the functions and classes, and, where a
-machine's data names them, the tests that reached each line.
-coverage.py reads no columns, so a part holds no ranges. A branch the
+why it would not run, the functions and classes, and the tests that
+reached each line wherever the data names a test: on a check leg a
+suite's own tests and the code outside every test, on a machine every
+context its run recorded. coverage.py reads no columns, so a part
+holds no ranges. A branch the
 source waives with ``# pragma: no branch`` counts as taken, as
 coverage.py counts it, and is tagged ``waived``.
 
@@ -86,7 +88,11 @@ class Arcs:
         tests reached, each test's context its node id, and that the
         code outside every test reached, import time's: those belong to
         every suite whose closure holds their file. A file the data
-        names with no arc is in no unit's part.
+        names with no arc is in no unit's part. Where the leg recorded
+        any test's context, each part names the contexts that reached
+        each of its lines, the empty one for the code outside every
+        test, numbered in sorted order; the record renumbers them when
+        it stores the part.
 
         Raises:
             ValueError: when the leg left no data, naming the variable
@@ -114,13 +120,21 @@ class Arcs:
                     combined.update(piece)
                 finally:
                     piece.close(force=True)
+            named = bool(set(combined.measured_contexts()) - {""})
             for index, unit in enumerate(units):
-                name, files = _unit_arcs(combined, root, unit, index)
+                name, files, reached = _unit_arcs(
+                    combined, root, unit, index, contexts=named
+                )
                 data = CoverageData(no_disk=True)
                 try:
                     data.add_arcs(files)
                     parts.append(
-                        reducer.part(name, data, {each: each for each in files})
+                        reducer.part(
+                            name,
+                            data,
+                            {each: each for each in files},
+                            reached if named else None,
+                        )
                     )
                 finally:
                     data.close(force=True)
@@ -152,19 +166,33 @@ class Arcs:
                 relative = _relative(measured, root)
                 if relative is not None:
                     names[relative] = measured
-            return [_Reducer(root).part(LEFT_UNIT, data, names, contexts=True)]
+            reached = (
+                {
+                    relative: data.contexts_by_lineno(measured)
+                    for relative, measured in names.items()
+                }
+                if set(data.measured_contexts()) - {""}
+                else None
+            )
+            return [_Reducer(root).part(LEFT_UNIT, data, names, reached)]
         finally:
             data.close(force=True)
 
 
 def _unit_arcs(
-    data: CoverageData, root: Path, unit: Mapping[str, Any], index: int
-) -> tuple[str, dict[str, set[tuple[int, int]]]]:
+    data: CoverageData,
+    root: Path,
+    unit: Mapping[str, Any],
+    index: int,
+    *,
+    contexts: bool = False,
+) -> tuple[str, dict[str, set[tuple[int, int]]], dict[str, dict[int, set[str]]]]:
     """*unit*'s path and the arcs of its closure's files in the leg's *data*.
 
-    The arcs its own tests reached, then the arcs the code outside
-    every test reached; a file is named from *root* with forward
-    slashes, whichever platform's leg measured it.
+    The arcs its own tests reached and the arcs the code outside every
+    test reached, and with *contexts* the contexts of either kind that
+    reached each line of each file; a file is named from *root* with
+    forward slashes, whichever platform's leg measured it.
 
     Raises:
         ValueError: when *unit* names no path, naming its place.
@@ -180,21 +208,26 @@ def _unit_arcs(
         else None
     )
     found: dict[str, set[tuple[int, int]]] = {}
+    reached: dict[str, dict[int, set[str]]] = {}
     try:
-        for query in ([rf"^{re.escape(tests)}"], [r"^$"]):
-            data.set_query_contexts(query)
-            for measured in data.measured_files():
-                relative = _relative(measured, root)
-                if relative is None or (
-                    prefixes is not None and not relative.startswith(prefixes)
-                ):
-                    continue
-                arcs = data.arcs(measured) or []
-                if arcs:
-                    found.setdefault(relative, set()).update(arcs)
+        data.set_query_contexts([rf"^{re.escape(tests)}", r"^$"])
+        for measured in data.measured_files():
+            relative = _relative(measured, root)
+            if relative is None or (
+                prefixes is not None and not relative.startswith(prefixes)
+            ):
+                continue
+            arcs = data.arcs(measured) or []
+            if not arcs:
+                continue
+            found.setdefault(relative, set()).update(arcs)
+            if contexts:
+                lines = reached.setdefault(relative, {})
+                for line, names in data.contexts_by_lineno(measured).items():
+                    lines.setdefault(line, set()).update(names)
     finally:
         data.set_query_contexts(None)
-    return name, found
+    return name, found, reached
 
 
 def _relative(filename: str, root: Path) -> str | None:
@@ -297,30 +330,42 @@ class _Reducer:
         unit: str,
         data: CoverageData,
         names: Mapping[str, str],
-        *,
-        contexts: bool = False,
+        reached: Mapping[str, Mapping[int, Iterable[str]]] | None = None,
     ) -> dict[str, Any]:
         """The part of *unit* from *data*, each file by its name and its key in *data*.
 
-        With *contexts*, the part names the contexts that reached each
-        line, where *data* recorded any beside the empty one.
+        *reached* maps a file's name to the contexts that reached each
+        of its lines; the part numbers the contexts its files' lines
+        name, sorted, and keeps them for the statements and the
+        excluded lines alone, the lines a page draws them for. Without
+        it the part names no context.
         """
         from coverage.results import analysis_from_file_reporter
 
-        recorded = sorted(data.measured_contexts()) if contexts else []
-        if recorded in ([], [""]):
-            recorded = []
+        statics = {name: self.static(name) for name in sorted(names)}
+        by_file = {
+            name: _drawn((reached or {}).get(name, {}), static)
+            for name, static in statics.items()
+            if static is not None
+        }
+        recorded = sorted(
+            {
+                context
+                for lines in by_file.values()
+                for held in lines.values()
+                for context in held
+            }
+        )
         index_of = {context: index for index, context in enumerate(recorded)}
         files: dict[str, Any] = {}
-        for name in sorted(names):
-            static = self.static(name)
+        for name, static in statics.items():
             if static is None:
                 files[name] = {"digest": ""}
                 continue
-            key = names[name]
-            analysis = analysis_from_file_reporter(data, 0, static.reporter, key)
-            reached = data.contexts_by_lineno(key) if recorded else {}
-            files[name] = self.entry(name, analysis, static, reached, index_of)
+            analysis = analysis_from_file_reporter(
+                data, 0, static.reporter, names[name]
+            )
+            files[name] = self.entry(name, analysis, static, by_file[name], index_of)
         return {
             "format": FORMAT,
             "unit": unit,
@@ -404,6 +449,19 @@ class _Reducer:
                 f" {self.version} reads {_counted(theirs)}; a part whose figure"
                 " is not coverage.py's is never handed over"
             )
+
+
+def _drawn(
+    reached: Mapping[int, Iterable[str]], static: _Static
+) -> dict[int, Iterable[str]]:
+    """*reached* for the lines a page lists contexts for: statements and exclusions.
+
+    coverage.py's pages list them there alone, and so do the coverage
+    extension's; an arc's entry into a line that is neither, a
+    module's docstring say, names no line a page draws.
+    """
+    kept = static.reporter.lines() | static.reporter.excluded_lines()
+    return {line: held for line, held in reached.items() if line in kept}
 
 
 def _counted(counts: tuple[int, int, int, int, int]) -> str:
