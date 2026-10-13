@@ -11,6 +11,7 @@ same shells after them.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,13 @@ import pytest
 import yaml
 
 import livery.footman as footman
-from livery.workshop._ci_generate import generate
+from livery.workshop._ci_generate import (
+    _actions_workflow,
+    _facts,
+    _gitlab_document,
+    generate,
+)
+from livery.workshop._points import Input, Job, Point
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
@@ -257,6 +264,118 @@ def test_the_nightly_shell_runs_the_clock_and_a_dispatch_on_every_python(
 
 
 # --- the release --------------------------------------------------------------
+
+
+def _no_label(root: Path) -> Sequence[str]:
+    """A runners job's function that names no runner label for *root*."""
+    del root
+    return ()
+
+
+def _two_labels(root: Path) -> Sequence[str]:
+    """A runners job's function naming one label twice and another once."""
+    del root
+    return ("linux-arm", "linux-arm", "macos")
+
+
+def _shipping(labels: Callable[[Path], Sequence[str]] | None, *inputs: Input) -> Point:
+    """A dispatched point whose runners job builds what its second job uploads."""
+    return Point(
+        "ship",
+        "ship.yml",
+        ("workflow_dispatch",),
+        inputs=inputs,
+        jobs=(
+            Job(
+                "build",
+                matrix="runners",
+                labels=labels,
+                publishes="out",
+                paths=("out/*",),
+            ),
+            Job("upload", needs=("build",), collects="out"),
+        ),
+    )
+
+
+def _rendered(root: Path, kind: str, point: Point) -> dict[str, Any]:
+    """The jobs *point* alone renders as on *kind*, by name."""
+    everything = (point,)
+    facts = _facts(root, everything)
+    prog = footman.prog()
+    if kind == "gitlab":
+        doc = _doc(_gitlab_document(facts, prog, everything=everything))
+        return {k: v for k, v in doc.items() if k not in ("workflow", "stages")}
+    text = _actions_workflow(
+        facts, prog, point.workflow, forge=kind, everything=everything
+    )
+    jobs: dict[str, Any] = _doc(text)["jobs"]
+    return jobs
+
+
+def _job_calls(job: dict[str, Any]) -> list[str]:
+    """Every runner call a rendered job makes, ``fm`` stripped, on any forge."""
+    if "script" not in job:
+        return _calls(job)
+    prog = f"{footman.prog()} "
+    return [line.removeprefix(prog) for line in job["script"] if line.startswith(prog)]
+
+
+@pytest.mark.parametrize("kind", (*KINDS, "gitlab"))
+def test_a_runners_job_whose_function_names_no_label_renders_no_job(
+    tmp_path: Path, kind: str
+) -> None:
+    root = _root(tmp_path, kind)
+    # No function, and a function naming no label: neither renders the
+    # job, and the need on it drops with it.
+    for labels in (None, _no_label):
+        jobs = _rendered(root, kind, _shipping(labels))
+        assert list(jobs) == ["upload"]
+        assert "needs" not in jobs["upload"]
+
+
+@pytest.mark.parametrize("kind", (*KINDS, "gitlab"))
+def test_a_job_of_a_point_without_a_workshop_input_pins_no_driver(
+    tmp_path: Path, kind: str
+) -> None:
+    root = _root(tmp_path, kind)
+    jobs = _rendered(root, kind, _shipping(_two_labels))
+    assert {name: _job_calls(job) for name, job in jobs.items()} == {
+        "build": ["ci.run --point=ship --job=build"],
+        "upload": ["ci.run --point=ship --job=upload"],
+    }
+    # Every job of a point that takes the input pins the driver before
+    # its one call.
+    taken = Input("workshop", "a released livery-workshop version to drive the run")
+    pinned = _rendered(root, kind, _shipping(_two_labels, taken))
+    value = "$workshop" if kind == "gitlab" else "${{ inputs.workshop }}"
+    assert {name: _job_calls(job) for name, job in pinned.items()} == {
+        "build": [
+            f'release.driver --workshop="{value}"',
+            "ci.run --point=ship --job=build",
+        ],
+        "upload": [
+            f'release.driver --workshop="{value}"',
+            "ci.run --point=ship --job=upload",
+        ],
+    }
+
+
+@pytest.mark.parametrize("kind", (*KINDS, "gitlab"))
+def test_a_runners_job_fans_out_to_each_label_its_function_names_once(
+    tmp_path: Path, kind: str
+) -> None:
+    jobs = _rendered(_root(tmp_path, kind), kind, _shipping(_two_labels))
+    assert list(jobs) == ["build", "upload"]
+    assert jobs["upload"]["needs"] == ["build"]
+    if kind == "gitlab":
+        # One executor: the job runs once, its artifact kept for the
+        # job that needs it.
+        assert "strategy" not in jobs["build"]
+        assert jobs["build"]["artifacts"] == {"paths": ["out/*"]}
+    else:
+        assert jobs["build"]["strategy"]["matrix"] == {"os": ["linux-arm", "macos"]}
+        assert jobs["build"]["runs-on"] == "${{ matrix.os }}"
 
 
 @pytest.mark.parametrize("kind", KINDS)

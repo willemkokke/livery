@@ -521,24 +521,14 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
 
 
 def _release_answers(*, with_native: bool) -> dict[str, object]:
-    packages: list[dict[str, str]] = [
-        {"dir": "plain", "name": "acme-plain", "dev": "acme-plain"}
-    ]
-    if with_native:
-        packages.append(
-            {
-                "dir": "ext",
-                "name": "acme-ext",
-                "dev": "acme-ext",
-                "kind": "python-nanobind",
-            }
-        )
     return {
-        "packages": packages,
         "runners": ["ubuntu-latest", "windows"],
-        # The wheels matrix is the union of the platform-wheel members'
-        # declared labels, which the facts carry beside the roster.
-        "wheel_runners": ["ubuntu-latest", "windows"] if with_native else [],
+        # The wheels job's labels are the union of the platform-wheel
+        # members' declared labels, which the facts carry by point and
+        # job; a workspace with no such member has none.
+        "job_runners": {
+            ("release", "wheels"): ("ubuntu-latest", "windows") if with_native else ()
+        },
     }
 
 

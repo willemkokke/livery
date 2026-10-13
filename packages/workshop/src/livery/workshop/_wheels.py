@@ -73,8 +73,10 @@ def declared_wheel_platforms(package: Package) -> list[str]:
 def wheel_runners(root: Path) -> list[str]:
     """The wheels job's matrix: every declared label once, in declaration order.
 
-    Empty when no member publishes platform wheels, which is the
-    shape a pure workspace's release workflow takes: no wheels job.
+    The release point's wheels job names this function as its
+    ``labels`` ([livery.workshop._points.Job][]). Empty when no member
+    publishes platform wheels, which is the shape a pure workspace's
+    release workflow takes: no wheels job.
     """
     labels: list[str] = []
     for package in discover_packages(root):
@@ -82,14 +84,6 @@ def wheel_runners(root: Path) -> list[str]:
             if label not in labels:
                 labels.append(label)
     return labels
-
-
-def member_roster(root: Path) -> list[dict[str, str]]:
-    """Every member as the emitter facts carry it: directory, name, kind."""
-    return [
-        {"dir": package.member, "name": package.name, "kind": package.kind}
-        for package in discover_packages(root)
-    ]
 
 
 def cibw_build_set(pythons: list[str]) -> str:
