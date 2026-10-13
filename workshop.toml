@@ -148,12 +148,6 @@ once = true
 # runner, from a scratch branch of main, publishing nothing; the
 # release itself happens when a consumer outside this repository needs
 # one (ruled 2026-10-10).
-[[ci.schedule]]
-point = "nightly"
-task = "ci.e2e"
-args = ["--scenario=release", "--from-main"]
-once = true
-
 # Temporary, for this branch's rehearsal alone: a project born with ruff
 # alone, which lists no test extension and no coverage, is green.
 [[ci.schedule]]

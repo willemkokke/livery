@@ -1474,7 +1474,6 @@ neither needs nor rules out).
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
-| `_unmetered` and `_write_unit` copied into the coverage extension's `_pages` beside the python extension's | one copy, in the coverage extension, when the union moves there (12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
@@ -2890,7 +2889,9 @@ neither needs nor rules out).
   answers, and the cmake extension owns its gcov, lcov and Cobertura
   readers and writes its parts itself, pinned byte for byte against
   coverage's writer. The loop's interim of 2026-10-11, an extension pass
-  born beside pytest, is gone with it.
+  born beside pytest, is gone with it. The floor line on the pages,
+  which P3's entry left for this part, is P2c's: it needs the
+  measurers' `[for.coverage]` tables P2c brings.
 
 ## Open
 
