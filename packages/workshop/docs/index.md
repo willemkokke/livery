@@ -1061,6 +1061,13 @@ unless `--ref` names another, and follows the run to its verdict;
 `fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
 the newest nightly run by workflow rather than by commit, so a
 failure only the nightly meets reaches a person through `fm`.
+`--only` names the scheduled tasks a dispatched nightly runs,
+comma-separated, and the run skips every other entry, the doctor and
+the check among them, saying so; a name the nightly does not run
+refuses before anything is dispatched. A rehearsal of a branch runs the
+loop alone: `fm ci.dispatch --point=nightly --ref=<branch> --only=ci.e2e`.
+A tool refresh asked to submit observes nothing off the default branch,
+since it submits from the default branch alone.
 A package contributes a point of its own with `[[ci.point]]` in its
 `workshop.toml`: `name` (a workflow file name and a job name at once),
 `task`, and optionally `args`, `every`, `runners` (the root contract's

@@ -352,6 +352,59 @@ def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
     assert len(seen) == 1
 
 
+_TWO_SCHEDULED = (
+    '\n[[ci.schedule]]\npoint = "nightly"\ntask = "acme.first"\n'
+    '\n[[ci.schedule]]\npoint = "nightly"\ntask = "acme.second"\n'
+)
+
+
+def _task_of(argv: list[str]) -> str:
+    return next(word for word in argv[1:] if not word.startswith("--"))
+
+
+def test_a_dispatch_s_only_naming_a_task_the_point_does_not_run_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path, _TWO_SCHEDULED)
+    monkeypatch.setenv("only", "acme.second, acme.bogus")
+    ran: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        ran.append(_task_of(argv))
+        return 0
+
+    with pytest.raises(
+        _FAILURES, match=r"--only names acme\.bogus, which it does not run"
+    ):
+        _points.run_point(root, "nightly", "nightly", spawn=spawn)
+    assert ran == []
+
+
+def test_a_dispatch_s_only_runs_the_tasks_it_names_and_says_what_it_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A rehearsal names the loop alone: the builtin entries and every
+    # other scheduled task are skipped, each said.
+    root = _root(tmp_path, _TWO_SCHEDULED)
+    monkeypatch.setenv("only", "acme.second")
+    ran: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        ran.append(_task_of(argv))
+        return 0
+
+    _points.run_point(root, "nightly", "nightly", spawn=spawn)
+    assert ran == ["acme.second"]
+    out = capsys.readouterr().out
+    for skipped in ("doctor (builtin)", "acme.first (workshop.toml)"):
+        assert (
+            f"nightly/nightly: {skipped} is not among the tasks this dispatch"
+            " asked for; skipped" in out
+        )
+    names = {item.name for item in _points.point_by_name(root)["nightly"].inputs}
+    assert _points.ONLY in names
+
+
 def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

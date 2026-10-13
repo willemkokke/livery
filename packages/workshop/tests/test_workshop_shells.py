@@ -434,6 +434,49 @@ def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
     assert "green: 1 run(s) for the gate point" in capsys.readouterr().out
 
 
+def test_a_dispatch_s_only_refuses_first_then_reaches_the_forge(
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake, _root = rig
+    repo = fake.repository(OWNER, NAME)
+    # The refusals first, before anything is dispatched: a point that
+    # takes no --only, and a task the nightly does not run.
+    with pytest.raises(_FAILURES, match="the gate point takes no --only; nightly does"):
+        _ci_tasks.dispatch_flow(repo, point="gate", ref="main", only="check")
+    with pytest.raises(_FAILURES, match="--only names bogus, which it does not run"):
+        _ci_tasks.dispatch_flow(repo, point="nightly", ref="main", only="bogus")
+    assert repo.checks.runs(event="workflow_dispatch") == ()
+    # Then the names reach the forge as the nightly's input, and the
+    # line says the run takes them alone.
+    sent: list[dict[str, str]] = []
+    original = repo.checks.dispatch
+
+    def recording(
+        workflow: str, *, ref: str, inputs: dict[str, str] | None = None
+    ) -> None:
+        sent.append(dict(inputs or {}))
+        original(workflow, ref=ref, inputs=inputs)
+
+    monkeypatch.setattr(repo.checks, "dispatch", recording)
+    fake.push(OWNER, NAME, "main")
+    _ci_tasks.dispatch_flow(
+        repo,
+        point="nightly",
+        ref="main",
+        only="doctor",
+        follow=False,
+        interval=0.05,
+        register_timeout=5,
+    )
+    assert sent == [{"only": "doctor"}]
+    assert (
+        "dispatched the nightly point on main (nightly.yml), running doctor alone"
+        in capsys.readouterr().out
+    )
+
+
 def test_superseded_runs_are_cancelled_and_a_refusal_is_named(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
