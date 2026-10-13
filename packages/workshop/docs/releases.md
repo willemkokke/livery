@@ -170,13 +170,16 @@ run against it. A floor equal to the version the wave is releasing
 is the package the main build already linked, and the leg says so
 instead of building twice.
 
-A member whose kind builds platform wheels (the nanobind kind) names
-the runner labels that build them under `[ci] wheel-platforms` in its
-own `workshop.toml`. The release workflow runs one wheels leg per
-label before the wave, each building that platform's wheels for the
-workspace's python matrix through cibuildwheel, and the publish job
-ships the collected set. A pure member's one wheel is built by the
-publish job itself, and the key on such a member refuses.
+A member that holds the nanobind extension, as a member of the
+nanobind kind does, names the runner labels that build its platform
+wheels under `[nanobind] wheel-platforms` in its own `workshop.toml`;
+the key refuses in a member that holds no nanobind. The extension
+adds a wheels job to the release workflow: before the wave, one leg
+per label builds that platform's wheels for the workspace's python
+matrix through cibuildwheel, and the publish job waits for the legs
+and ships the collected set. The publish job builds a pure member's
+one wheel itself, and a workspace whose members hold no nanobind has
+no wheels job.
 
 Not covered today: attestation or signing of the built wheels, a
 non-PyPI index for the github kind, and publishing anywhere but the

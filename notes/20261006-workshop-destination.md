@@ -319,7 +319,7 @@ every kind the check judges"). What changes:
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | `[qa] coverage-floor` and `coverage-epsilon`, `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
-| the wheels job: which members build platform wheels and on which runner labels | `_points.DECLARED` declares the release point's wheels job, a `runners` job whose `labels` reference names `_wheels.wheel_runners` | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
+| the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in the nanobind kind's backend | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | `[docs] api` stays the docs extension's key; the handler's search paths are the mkdocstrings generator's `paths` option, set at `[generators.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
 | the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `[checks.<tool>.<role>]` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` resolves names the way that reference does, through griffe |
@@ -534,7 +534,7 @@ a schema fragment with the shape of the file it describes.
 | `[checks.<tool>.<role>]` | a check, at the address the contract configures it by: `scope`, `narrowing`, `transport`, `threshold`, `extensions`, `claims`, `tools`, `options`, `inputs`, `after`, and either its words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or references (`run`, `fix`) | every | the eight, docs |
 | `[generators.<name>]` | a page generator: `extensions`, `claims`, `tools`, `options`, `run` | check | mkdocstrings (phase 11), doxygen (phase 12) |
 | `[fragments."<target>"]` | a dynamic fragment: `render`; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
-| `[ci.jobs.<point>.<name>]` | a CI job for a builtin point, under the contract's `[ci]` table: `entries`, `gates`, `installs`, `deploy`, `inputs`; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10), nanobind's wheels job (phase 11) |
+| `[ci.jobs.<point>.<name>]` | a CI job for a builtin point, under the contract's `[ci]` table: `entries`, `gates`, `installs`, `deploy`, `inputs`, `labels`, `conan-cache`; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10), nanobind's wheels job (phase 11) |
 | `[slots.<name>]`, `[contributions]` | a slot it declares (`compose`, `default`, `values`), and the values it puts into others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
 | `[guidance.<section>]` | a section (`after`), or `[guidance.<section>.<topic>]` a rendered fragment (`render`); files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
 | `release-notes` | a reference to the provider | workspace | changelog (phase 10) |
@@ -1254,8 +1254,9 @@ slices, each mergeable alone:
       per-package fragment renders there, the first check by name
       winning when two carry one file. A package that lists no
       extension holds what its kind stands for (`stands_for`: `python`;
-      `cpp` beside python's for the nanobind kind; `cmake`, `conan` and
-      `cpp` for `cpp-conan`), which also replaces `categories_from` and
+      `cpp`, `conan` and `nanobind` beside python's for the nanobind
+      kind; `cmake`, `conan` and `cpp` for `cpp-conan`), which also
+      replaces `categories_from` and
       `root_files_from`. The native build and test checks name `cmake`
       and claim test and source files whatever their suffix, and
       `cmake` answers `compile-commands`; the base keeps registering
@@ -1482,7 +1483,10 @@ neither needs nor rules out).
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments | nothing: every package lists its extensions (phase 11b, slice 6) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
+| the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
+| the wave's decision that a member's wheels were built before the wave, read from the kind | the package's extensions (phase 11b, slice 6), or conan's per-host artifact (phase 13) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
@@ -2784,6 +2788,22 @@ neither needs nor rules out).
   the sentence of each untaken branch, 12e before 11c through a query
   the docs extension declares, the renderer proved against coverage.py's
   pages before the record switches, 100 as the default floor.
+
+- 2026-10-13, Willem, on the kind bridge for nanobind's wheels job
+  (#1535, part 4): until the package kinds go, the extension mount and
+  the package contract judge take what a package holds through its kind
+  as well as what it lists, so a nanobind package that lists nothing
+  mounts nanobind and gets the wheels job. nanobind then declares the
+  job under `[ci.jobs.release.wheels]`, its runner labels read from
+  `[nanobind] wheel-platforms` in each package, and the base, the CI
+  generator and `[ci] wheel-platforms` stop knowing it. For the
+  transition this breaks the 2026-10-10 rule that a listing alone turns
+  an extension on; #1550 holds the reversal, the temporary table its
+  row, and the bridge reads the kind registry, so it cannot outlive it.
+  Ruled with it, for every part: a generic ruling is a quality of the
+  final product, built as soon as possible, and a part may break one
+  for a while when that speeds the work or makes it easier, recorded as
+  a temporary row and an issue and its reversal checked.
 
 ## Open
 

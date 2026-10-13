@@ -129,6 +129,40 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
     assert nightly.name == composed_points()[2].name
 
 
+def test_a_job_another_job_of_its_point_waits_for_sits_before_it(
+    acme_jobs: None,
+) -> None:
+    from workshop_docs_declared import jobs_restored
+
+    with jobs_restored():
+        # The fallback first: nothing waits for the job and the point has
+        # no verdict, so it lands last.
+        contribute_job(
+            "release",
+            Job("book", publishes="book", paths=("book",)),
+            extension="acme.prose",
+        )
+        assert [job.name for job in point_by_name(None)["release"].jobs] == [
+            "publish",
+            "book",
+        ]
+        # A join of the publish job on its own point adds its needs to the
+        # job's, and the job it waits for moves before it.
+        contribute_job(
+            "release",
+            Job("publish", joins=True, needs=("book",), collects="book"),
+            extension="acme.prose",
+        )
+        release = point_by_name(None)["release"]
+        assert [job.name for job in release.jobs if not job.joins] == [
+            "book",
+            "publish",
+        ]
+        publish = next(job for job in release.jobs if job.name == "publish")
+        assert publish.needs == ("book",)
+    assert "book" not in [job.name for job in point_by_name(None)["release"].jobs]
+
+
 def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses(
     acme_jobs: None,
 ) -> None:

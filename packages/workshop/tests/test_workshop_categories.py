@@ -268,13 +268,15 @@ def test_explain_names_the_schema_a_contract_is_judged_by(
     # The fallback first: a file that is no contract names no schema.
     assert schema("notes/musings.md") == []
     assert schema("packages/x/pyproject.toml") == []
+    # The member lists nothing and holds python through its kind, so
+    # python's keys are judged beside the listed extension's.
     assert schema("workshop.toml") == [
         "    schema: .workshop/schema/workshop.json"
-        " (livery.workshop, livery.toolroom.store, docs)"
+        " (livery.workshop, livery.toolroom.store, python, docs)"
     ]
     assert schema("packages/x/workshop.toml") == [
         "    schema: .workshop/schema/package.json"
-        " (livery.workshop, livery.toolroom.store, docs)"
+        " (livery.workshop, livery.toolroom.store, python, docs)"
     ]
     # An extension's file holds the base's and the store's keys alone, whatever
     # the root lists.
@@ -285,7 +287,7 @@ def test_explain_names_the_schema_a_contract_is_judged_by(
     (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     assert schema("workshop.toml") == [
         "    schema: .workshop/schema/workshop.json"
-        " (livery.workshop, livery.toolroom.store)"
+        " (livery.workshop, livery.toolroom.store, python)"
     ]
 
 

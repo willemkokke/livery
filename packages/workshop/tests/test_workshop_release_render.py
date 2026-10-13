@@ -3,11 +3,13 @@
 A workspace with a nanobind member renders every workflow file on
 GitHub, Gitea and GitLab, and a workspace with none renders its
 release; each file is compared with its golden under ``fixtures/``.
-The render reads the builtin points alone, with the runner named
-``fm``: the jobs an earlier mount in the worker contributed and the
-name a host started the runner under are no part of a golden, so a
-golden is the same bytes on every host. A render that moves fails
-here until its golden moves with it, in the same change.
+The render reads the builtin points, and for the native workspace the
+jobs nanobind's declaration adds, as the mount adds them for a
+workspace whose packages hold nanobind, with the runner named ``fm``:
+the jobs an earlier mount in the worker contributed and the name a
+host started the runner under are no part of a golden, so a golden is
+the same bytes on every host. A render that moves fails here until
+its golden moves with it, in the same change.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ import livery.footman as footman
 from livery.workshop._ci_generate import generate
 from workshop_docs_declared import jobs_restored
 
+# The wheels job is nanobind's, added as the mount adds it.
+from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+
 #: The goldens, one directory per workspace and forge.
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -31,7 +36,7 @@ FORGES = ("github", "gitea", "gitlab")
 #: wheels build on, beside a C++ library that lists cmake and conan.
 NATIVE = {
     "native": (
-        'kind = "python-nanobind"\nname = "acme-native"\n\n[ci]\n'
+        'kind = "python-nanobind"\nname = "acme-native"\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n'
     ),
     "lib": 'kind = "cpp-conan"\nname = "acme-lib"\nextensions = ["cmake", "conan"]\n',
@@ -127,6 +132,8 @@ def _match(rendered: dict[str, str], goldens: Path, scratch: Path) -> None:
 def test_a_pure_workspace_releases_through_the_publish_job_alone(
     tmp_path: Path, forge: str
 ) -> None:
+    # No package holds nanobind, so the mount adds no wheels job and the
+    # publish job collects nothing.
     root = _workspace(tmp_path / "workspace", forge, PURE)
     # GitLab's one document carries the release's jobs beside every other.
     name = ".gitlab-ci.yml" if forge == "gitlab" else "release.yml"
@@ -134,6 +141,7 @@ def test_a_pure_workspace_releases_through_the_publish_job_alone(
     _match(rendered, FIXTURES / "release-pure" / forge, tmp_path / "render")
 
 
+@pytest.mark.usefixtures("nanobind_jobs")
 @pytest.mark.parametrize("forge", FORGES)
 def test_a_native_workspace_renders_every_workflow_as_its_golden(
     tmp_path: Path, forge: str

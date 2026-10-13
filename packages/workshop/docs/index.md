@@ -533,13 +533,16 @@ the gate point's `docs` job, which the verdict waits for, as
 list the extension renders no such job. The job names the function
 that lists the system packages it installs and declares the files the
 site reads, so the CI render and the shell's skip rule work without
-reading the `[docs]` table. A contributed job sits before the point's
-verdict job, or last on a point without one. A table naming a job the
-point already has, declared, inherited or contributed, joins it instead
-of adding one: `[ci.jobs.merge.docs]` keeps the built site as the run's
-artifact on a push, and `[ci.jobs.merge.gate]` collects it into the
-gate job, adds the coverage pages and the publish to the gate job's
-entries after its verdict, and names the function that answers the
+reading the `[docs]` table. A contributed job sits before the first
+job of its point that waits for it, else before the point's verdict
+job, else last. A table naming a job the point already has, declared,
+inherited or contributed, joins it instead of adding one; a join's
+`needs` join the needs of a job the point has of its own, and a join
+of a job the point inherits names none. `[ci.jobs.merge.docs]` keeps
+the built site as the run's artifact on a push, and
+`[ci.jobs.merge.gate]` collects it into the gate job, adds the
+coverage pages and the publish to the gate job's entries after its
+verdict, and names the function that answers the
 publish seam. So the site is built once per run, this run's coverage
 trees are rendered into it from the union the gate judged, and it is
 published from the gate job: through the container and ssh seams

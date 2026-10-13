@@ -1305,12 +1305,12 @@ def test_a_wave_whose_publish_job_never_names_the_member_fails_naming_the_run() 
     # The wheels job fed the wave another member's wheels alone.
     with pytest.raises(_FAILURES, match=r"run 18's publish job did not say"):
         _prove_the_wave(
-            "success", "  prebuilt: the wheels matrix collected wheels for acme-other\n"
+            "success", "  prebuilt: the run collected wheels for acme-other\n"
         )
 
 
 def test_a_wave_whose_publish_job_did_not_end_green_fails_naming_how_it_ended() -> None:
-    line = f"  prebuilt: the wheels matrix collected wheels for {_NATIVE}\n"
+    line = f"  prebuilt: the run collected wheels for {_NATIVE}\n"
     # The line came and the job went red after it: the line proves nothing.
     with pytest.raises(_FAILURES, match=r"run 18's publish job ended failure"):
         _prove_the_wave("failure", line)
@@ -1327,8 +1327,8 @@ def test_a_wave_that_published_the_wheels_jobs_wheels_passes_and_says_so(
         "success",
         "2026-10-12T10:00:00.0000000Z   release/publish: workflow.release.publish"
         " (builtin)\n"
-        "2026-10-12T10:00:01.0000000Z   prebuilt: the wheels matrix collected"
-        f" wheels for {_NATIVE}\n"
+        "2026-10-12T10:00:01.0000000Z   prebuilt: the run collected wheels for"
+        f" {_NATIVE}\n"
         "2026-10-12T10:00:09.0000000Z   wave: 1 member(s) published\n",
     )
     assert (
@@ -1742,7 +1742,7 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
             member.mkdir(parents=True)
             hosted = '["ubuntu-latest", "macos-latest", "windows-latest"]'
             (member / "workshop.toml").write_text(
-                f"wheel-platforms = {hosted}\n", "utf-8"
+                f"[nanobind]\nwheel-platforms = {hosted}\n", "utf-8"
             )
         return 0
 
@@ -1776,7 +1776,7 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     native = (tmp_path / "packages" / "loop-native" / "workshop.toml").read_text(
         "utf-8"
     )
-    assert f'wheel-platforms = ["{_e2e.CURRENT.label}"]' in native
+    assert f'[nanobind]\nwheel-platforms = ["{_e2e.CURRENT.label}"]' in native
     assert 'baseline = "0.1.0"' in native
     out = capsys.readouterr().out
     assert "members loop-native, loop-cpp: landed through the loop's own gate" in out

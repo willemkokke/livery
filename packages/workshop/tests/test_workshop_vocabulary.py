@@ -64,8 +64,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
     ("_registries", "python"): 4,
-    ("_release", BACKEND_IMPORT): 1,
-    ("_release", "conan"): 1,
     ("_release", "python"): 1,
     ("_release_driver", BACKEND_IMPORT): 1,
     ("_release_driver", "conan"): 2,

@@ -572,13 +572,19 @@ class _Reader:
         inherited, contributed, or declared *earlier* in this file,
         joins that job: its entries and plumbing become the job's on
         this point. A join that ``gates`` refuses, since the verdict's
-        needs are the job's own.
+        needs are the job's own. A join's ``needs`` join the needs of a
+        job the point has of its own; on a job the point inherits they
+        refuse, since that job's needs are the point's it inherits
+        from, whose runs never have the joining point's jobs. A job
+        naming ``labels`` fans out to one leg per runner label the
+        function names (a ``runners`` matrix).
         """
         from livery.workshop._points import (
             DECLARED,
             Entry,
             Job,
             JobContribution,
+            contributed_jobs,
             point_has_job,
         )
 
@@ -600,14 +606,37 @@ class _Reader:
                 f"joins the {point} point's {name} job and gates; a join adds"
                 " entries and plumbing, and the verdict's needs stay the job's own",
             )
+        own = {job.name for job in builtin[point].jobs}
+        own |= {item.job.name for item in contributed_jobs(point)}
+        own |= {
+            item.job.name
+            for item in earlier
+            if item.point == point and not item.job.joins
+        }
+        if joins and "needs" in entry and name not in own:
+            parent = builtin[point].inherits
+            raise self.refuse(
+                (*where, "needs"),
+                f"joins the {name} job the {point} point inherits from the"
+                f" {parent} point; that job waits for the {parent} point's jobs"
+                " alone, so a join of it names no needs",
+            )
+        labels = (
+            self.reference(entry["labels"], (*where, "labels"))
+            if "labels" in entry
+            else None
+        )
         job = Job(
             name,
+            matrix="runners" if labels is not None else "",
+            labels=labels,
             needs=tuple(str(need) for need in entry.get("needs", ())),
             fetch=str(entry.get("fetch", "")),
             token=str(entry.get("token", "")),
             installs=self.reference(entry["installs"], (*where, "installs"))
             if "installs" in entry
             else None,
+            conan_cache=bool(entry.get("conan-cache", False)),
             deploy=self.reference(entry["deploy"], (*where, "deploy"))
             if "deploy" in entry
             else None,

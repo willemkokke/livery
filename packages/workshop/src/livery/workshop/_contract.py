@@ -122,6 +122,11 @@ OTHER_SPELLINGS: dict[tuple[str, str], str] = {
         " resolutions a release tests each member at, from floor, latest and"
         ' head; prove = ["latest"] leaves the floor out'
     ),
+    ("ci", "wheel-platforms"): (
+        "[ci] wheel-platforms is not a key: a package that holds nanobind"
+        " names the runner labels that build its platform wheels under"
+        " [nanobind] wheel-platforms"
+    ),
 }
 
 
@@ -186,16 +191,18 @@ def load_contract(path: Path) -> dict[str, Any]:
 
     A contract under ``packages/<name>/`` or ``packages/<group>/<name>/``
     is a package's, judged against the extensions its workspace's root
-    contract lists and its own set of package-level extensions; any
-    other is a root contract, judged against the extensions it lists
-    itself and the package-level ones its packages' sets hold. Every
-    problem is listed in one refusal
-    ([livery.workshop._contract_keys.judge][]).
+    contract lists and the package-level extensions the package holds:
+    its own set, or what its kind stands for when it lists none
+    ([livery.workshop._kinds.kind_stands_for][]); any other is a root
+    contract, judged against the extensions it lists itself and the
+    package-level ones its packages hold. Every problem is listed in
+    one refusal ([livery.workshop._contract_keys.judge][]).
     """
     import copy
 
     from livery.workshop._contract_keys import judge, listed_extensions
     from livery.workshop._extensions import composed_set, package_extensions
+    from livery.workshop._kinds import kind_stands_for
 
     workspace = _package_workspace(path)
     key = _contract_key(path, workspace)
@@ -209,7 +216,9 @@ def load_contract(path: Path) -> dict[str, Any]:
         if root.is_file():
             own = data.get("extensions")
             entries = [str(name) for name in own] if isinstance(own, list) else []
-            listed = listed_extensions(_root_tables(root)) | set(composed_set(entries))
+            kind = str(data.get("kind", ""))
+            holds = composed_set(entries) if entries else kind_stands_for(kind)
+            listed = listed_extensions(_root_tables(root)) | set(holds)
         # The check tables' spelling of a step's options is named
         # before the judge, which would call the table unknown.
         from livery.workshop._packages import removed_option_tables

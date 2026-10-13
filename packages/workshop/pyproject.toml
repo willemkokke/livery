@@ -64,6 +64,8 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 "livery.workshop" = "livery.workshop._mount"
 # The docs extension, an extension inside this wheel with a surface of its own.
 "livery.extensions.docs" = "livery.extensions.docs._tasks"
+# The nanobind extension's verb, the one the release's wheels job runs.
+"livery.extensions.nanobind" = "livery.extensions.nanobind._tasks"
 
 # The workshop extensions this wheel ships, by the name a workspace
 # lists: each maps to the package beside its extension.toml, which the

@@ -701,6 +701,38 @@ def test_a_jobs_functions_resolve_against_the_extensions_sources(
     assert "outside the extension's package acme_declared" in _refusal(
         package, JOB + 'deploy = "elsewhere._seams:pages"\n'
     )
+    where = package / "extension.toml"
+    assert _refusal(package, JOB + 'labels = "acme_declared._runners:labels"\n') == (
+        f"{where}: ci.jobs.gate.prose.labels names acme_declared._runners, which"
+        " acme_declared does not contain"
+    )
+    assert _refusal(package, JOB + 'labels = "acme_declared._steps:lables"\n') == (
+        f"{where}: ci.jobs.gate.prose.labels names lables, which"
+        " acme_declared._steps does not define at its top level"
+    )
+
+
+def test_a_join_of_a_job_the_point_inherits_names_no_needs(package: Path) -> None:
+    where = package / "extension.toml"
+    # The merge point inherits the gate job from the gate point, whose
+    # runs never have the merge point's jobs.
+    assert _refusal(package, '[ci.jobs.merge.gate]\nneeds = ["govern"]\n') == (
+        f"{where}: ci.jobs.merge.gate.needs joins the gate job the merge point"
+        " inherits from the gate point; that job waits for the gate point's jobs"
+        " alone, so a join of it names no needs"
+    )
+    # A join of a job the point has of its own takes needs, a job declared
+    # earlier in the same file among them.
+    found = _declare(
+        package,
+        '[ci.jobs.release.book]\nentries = ["acme.book"]\n'
+        '[ci.jobs.release.publish]\nneeds = ["book"]\n'
+        '[ci.jobs.merge.govern]\nneeds = ["gate"]\n',
+    )
+    jobs = {(item.point, item.job.name): item.job for item in found.additions.jobs}
+    assert jobs[("release", "publish")].joins
+    assert jobs[("release", "publish")].needs == ("book",)
+    assert jobs[("merge", "govern")].needs == ("gate",)
 
 
 def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> None:
@@ -803,6 +835,22 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
     (prose,) = found.targets["other"].jobs
     assert (prose.point, prose.job.name, prose.gates) == ("gate", "prose", True)
     assert (prose.job.installs, prose.job.deploy) == (None, None)
+    # A job without labels runs once, on one runner, and keeps no conan home.
+    assert (book.job.matrix, book.job.labels, book.job.conan_cache) == ("", None, False)
+
+
+def test_a_job_naming_labels_fans_out_over_the_runners_its_function_names(
+    package: Path,
+) -> None:
+    found = _declare(
+        package,
+        '[ci.jobs.release.wheels]\nentries = ["acme.wheels"]\n'
+        'labels = "acme_declared._steps:judge"\nconan-cache = true\n',
+    )
+    (wheels,) = found.additions.jobs
+    assert wheels.job.matrix == "runners"
+    assert wheels.job.labels == Reference("acme_declared._steps", "judge")
+    assert wheels.job.conan_cache is True
 
 
 def test_a_reference_imports_when_it_runs(package: Path) -> None:

@@ -469,6 +469,7 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
             where = shown((*prefix, "ci", "jobs", item.point, item.job.name))
             found += [
                 (f"{where}.installs", item.job.installs),
+                (f"{where}.labels", item.job.labels),
                 (f"{where}.deploy", item.job.deploy),
             ]
     found += [

@@ -74,15 +74,17 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     )
     state = registry.snapshot()
     try:
+        # The member lists nothing and holds what its kind stands for, so
+        # cmake, cpp and conan mount; clang-tidy, which no list names, does not.
         with footman_registry.capture():
-            assert mount_extensions(root) == ()
+            assert mount_extensions(root) == ("cmake", "cpp", "conan")
         assert "lint.clang-tidy" not in steps_by_name()
         assert "clang_tidy" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         assert not (root / "packages" / "native" / ".clang-tidy").exists()
         (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["clang-tidy"]\n')
         with footman_registry.capture():
-            assert mount_extensions(root) == ("clang-tidy",)
+            assert mount_extensions(root) == ("cmake", "cpp", "conan", "clang-tidy")
         record = steps_by_name()["lint.clang-tidy"]
         assert record.extension == "clang-tidy"
         assert record.after == ("build.configure",)

@@ -4,7 +4,9 @@ A child of the python backend: every quality verb is inherited
 whole (the extension is a python distribution and every checker
 applies), and only the wheel build differs. cibuildwheel builds
 and repairs the wheel so even a single leg is
-manylinux-compliant; the sdist still comes from ``uv build``.
+manylinux-compliant; the sdist still comes from ``uv build``. The
+release's build on one host, which the wheels job's legs run, is
+here too ([livery.workshop._backends._python_nanobind.host_build][]).
 """
 
 from __future__ import annotations
@@ -42,6 +44,14 @@ module_roots = _python.module_roots
 public_modules = _python.public_modules
 compile_commands = _python.compile_commands
 referenced_siblings = _python.referenced_siblings
+
+#: The extensions a ``python-nanobind`` package that lists none is taken
+#: to hold beside python's: cpp for its extension module's sources,
+#: conan for the provider that resolves their dependencies, which it
+#: consumes without being a recipe, and nanobind for the release's
+#: wheels job. The sync step applies through it; the lifecycle phases
+#: read the listed extensions alone.
+STANDS_FOR = ("cpp", "conan", "nanobind")
 
 
 def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
@@ -179,6 +189,61 @@ def floor_legs(
         )
         _python.run_isolated_test(package, root, wheels_dir=dist)
         print(f"  {package.name}: floor leg green against {dependency.name} {floor}")
+
+
+def host_build(root: Path) -> None:
+    """Build this host's native artifacts for the release at *root*'s HEAD.
+
+    Each leg of the release's wheels job runs this before the wave, in
+    three steps. Each conan member is created into this leg's cache and
+    saved beside its wheels, one file per host, which is how a forge
+    with no conan registry carries the package. Then cibuildwheel
+    builds every platform-wheel member for the interpreters the
+    caller's ``CIBW_BUILD`` names, resolving each conan member from the
+    cache the first step filled. Then every declared floor on a conan
+    member is proved with its own build. The publish job collects each
+    leg's ``dist/``, and the wave publishes the union. A release with
+    no native member prints so and builds nothing, so the leg stays
+    green on a pure release.
+    """
+    from livery import git
+    from livery.workshop import _lifecycle
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._kinds import kind_for
+    from livery.workshop._publish import discover_release
+
+    resolved_ref = git.head_sha(root)
+    epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    members = discover_release(root, resolved_ref)
+    released = {package.path: version for package, version in members}
+    conan_members = [
+        (package, version)
+        for package, version in members
+        if kind_for(package.kind).artifact == "conan"
+    ]
+    native = [
+        package
+        for package, _version in members
+        if kind_for(package.kind).wheel_identity == "platform"
+    ]
+    if not native and not conan_members:
+        print("  no native members in this release; nothing to build")
+        return
+    # A release leg builds the packages the release ships, so a sibling
+    # resolves to the package this leg created, never to its source
+    # tree: the conan workspace is set aside for every build.
+    with _cpp_conan.workspace_aside(root):
+        for package, version in conan_members:
+            _lifecycle.build(package, root, epoch=epoch)
+            dist = package.directory / "dist"
+            archive = _cpp_conan.save_cache(package, version, dist)
+            print(f"  {package.name}: {archive.name}")
+        for package in native:
+            dist = _lifecycle.build(package, root, epoch=epoch)
+            wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
+            print(f"  {package.name}: {wheels}")
+        for package in native:
+            floor_legs(package, root, released, epoch=epoch)
 
 
 def assert_platform_tagged(package: Package, dist: Path) -> None:
