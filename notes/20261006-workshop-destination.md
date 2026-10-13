@@ -335,7 +335,7 @@ every kind the check judges"). What changes:
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
 | the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
-| the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the base's terminal and forge rules still walk that parse until 11c's PA1 | the `references` query: a language extension answers what a source references; rules register against it |
+| the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the python extension's runner-terminal and declared-imports steps read that parse | the `references` query: a language extension answers what a source references; rules register against it |
 | the registry kinds and their defaults | `_registries._ECOSYSTEM` | ecosystems as registrations (phase 13) |
 
 Everything else the docs extension reaches is generic and becomes
@@ -1184,9 +1184,7 @@ slices, each mergeable alone:
    backend, and the base modules that code serves (the nanobind kind,
    the release driver) import it as they imported the backend. `BASE_EXTENSION_IMPORTS`, the allowance of the
    layering check's `base-imports-no-extension` rule, names each such
-   module; a test keeps it exact. It shrinks, apart from one entry 11c's
-   PA2 adds for the base's terminal and forge rules, which PA1 removes
-   with them.
+   module; a test keeps it exact. It only shrinks.
    1. **The move** (issue #1352): the kind's backend becomes the
       extension's code, and nothing behaves differently.
    2. **The queries** (issue #1353): the extension answers
@@ -1316,14 +1314,18 @@ alone.
   its own parse, replaces the base's python parse in the layering
   checks; a package that lists nothing is answered through its kind
   until the kinds go.
-- PA1: the terminal rule becomes the python extension's layering step,
-  and a general rule of the python extension replaces forge's
-  stdlib-only rule: at import time a source imports only the standard
-  library, its own package and the distributions its `pyproject.toml`
-  declares; an optional extra's distributions only lazily, inside a
-  function; a module footman loads as a plugin what footman brings.
-  Forge's stdlib-only property follows from its declaring no runtime
-  dependency.
+- PA1 (built, #1601): the terminal rule becomes the python extension's
+  layering step, and a general rule of the python extension,
+  `layering.declared-imports`, replaces forge's stdlib-only rule: at
+  import time a source under a package's `src` imports only the
+  standard library, the workspace's members and the distributions its
+  `pyproject.toml` declares in `[project.dependencies]`; an optional
+  extra's distributions only lazily, inside a function; a module a
+  program loads as a plugin also what that program brings (footman's
+  `footman.tasks` and `footman.builtin`, pytest's `pytest11`). Which
+  distribution provides a module comes from the installed metadata of
+  the environment the gate runs in. Forge's stdlib-only property
+  follows from its declaring no runtime dependency.
 - PB (built, #1599): the docs extension declares the docs phase, and
   the task reference (turned on in the root contract), the package
   verbs and coverage's pages become its steps. A second phase,
@@ -1509,7 +1511,6 @@ neither needs nor rules out).
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
-| the base's terminal and forge rules walking the python extension's parse, and their `BASE_EXTENSION_IMPORTS` entry for `livery.workshop._packages` | the python extension's layering step and its declared-imports rule (11c's PA1) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
@@ -3008,6 +3009,21 @@ neither needs nor rules out).
   but for the lines that name what wrote a page, and that a part's own
   source changes reach the site through the API pages and the nav, so
   the same-site line excludes what those changes show.
+
+- 2026-10-13, 11c's PA1 (#1601): the declared-imports rule's plugin
+  clause covers every program that loads a module as a plugin, not
+  footman alone: a module named under pytest's `pytest11` group may
+  import pytest and what pytest requires. Nine modules here (footman's,
+  toolroom-bench's, the pytest extension's and six of the workshop's)
+  import pytest at import time, for decorators, base classes and stash
+  keys, so they cannot import it inside a function; declaring pytest a
+  dependency would break footman's zero-dependency contract and install
+  pytest wherever the workshop runs. Decided while building, under the
+  standing go, and reported to Willem the same day. The rule's one
+  other finding: the pytest extension imported coverage inside
+  functions and declared it nowhere, and now declares it in an optional
+  extra, `coverage`. The extension seed declares livery-footman, which
+  its application module imports.
 
 ## Open
 
