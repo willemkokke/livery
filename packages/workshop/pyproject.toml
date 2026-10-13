@@ -114,7 +114,8 @@ python = "livery.extensions.python"
 # collected as tests when pytest is pointed at them.
 livery-workshop-examples = "livery.workshop._pytest_examples"
 # Every test runs apart from the machine's live runner state, and
-# the global task registry is guarded per test.
+# the global task registry and what an extension mount writes are
+# guarded per test.
 livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # A test declares the CI points it runs at; the point in the job
 # runner's environment selects.

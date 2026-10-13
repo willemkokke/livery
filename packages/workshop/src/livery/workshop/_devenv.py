@@ -4,11 +4,23 @@ An environment is a forge with its runners and its seeded accounts,
 brought up by name, kept until removed, and removed whole by one
 verb. Its state is one directory under the runner's data directory,
 `forge-dev/envs/<name>/`: the forge's data, the runners' registrations
-and working directories, the seed's credentials, the port it took and
-the pid files of its processes. The caches every environment shares,
-the tool store, uv's cache, conan's home and footman's data for the
-jobs, live beside them in `forge-dev/cache/`, so a new environment is
-warm from its first job and removing one removes no cache.
+and working directories, the seed's credentials, the port it took, the
+pid files of its processes, and conan's homes. Conan keeps its remotes
+and logins in its home, and a release writes a remote there that names
+the environment's forge, so the conan homes go with the environment:
+one in each runner's directory for its jobs, and one in the
+environment's directory for a pass of the loop
+([livery.workshop._devenv.Environment][]). The caches every
+environment shares, the tool store, uv's cache and footman's data for
+the jobs, live beside them in `forge-dev/cache/`, and removing an
+environment removes none of them. A new environment is warm from its
+first job, except that its conan homes start empty: its first native
+build fetches its conan packages again.
+
+A removal takes the whole directory or refuses. A part this user may
+not remove, such as a file a build container left owned by root, is
+named with the command that makes it removable, and nothing is stopped
+or removed ([livery.workshop._devenv.remove][]).
 
 Host mode runs Gitea and its runners as processes of this machine,
 from the `gitea` and `gitea_runner` records the store supplies; no
@@ -26,11 +38,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+import contextlib
+import errno
+import getpass
 import os
 import secrets
-import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -64,7 +79,7 @@ ADMIN = "livery-admin"
 ORG = "livery"
 """The seeded organisation the loop's repositories live in."""
 
-CACHES = ("footman", "uv", "conan", "actcache")
+CACHES = ("footman", "uv", "actcache")
 """The rig's shared caches under `forge-dev/cache/`, one directory each."""
 
 HEALTH_TIMEOUT = 60.0
@@ -169,6 +184,28 @@ class Environment:
     def runner_dir(self, number: int) -> Path:
         """Runner *number*'s directory."""
         return self.runners_dir / f"{number:02d}"
+
+    @property
+    def conan_home(self) -> Path:
+        """Conan's home for a pass of the loop on this environment.
+
+        The pass and every process it starts run conan with it. A
+        release writes the ``workshop`` remote into the home conan runs
+        with, naming this environment's forge, so the home is in the
+        environment's directory and goes with it. Each runner's jobs
+        have their own home in the runner's directory
+        ([livery.workshop._devenv.Environment.runner_conan_home][]), so
+        the pass and a job never run conan on one cache at the same
+        time.
+        """
+        return self.directory / "conan"
+
+    def runner_conan_home(self, number: int) -> Path:
+        """Conan's home for runner *number*'s jobs, in the runner's directory.
+
+        It takes the name the pass's home has, one level down.
+        """
+        return self.runner_dir(number) / self.conan_home.name
 
     def values(self) -> dict[str, str]:
         """The env file's pairs; empty when there is none yet."""
@@ -322,10 +359,11 @@ def stop(pid: int, *, timeout: float = 15.0) -> bool:
 
 
 #: The seams a test replaces: how a process is started, whether one
-#: lives, and how one is stopped.
+#: lives, how one is stopped, and how a file is removed.
 SPAWN: Callable[..., int] = spawn_detached
 ALIVE: Callable[[int], bool] = footman.alive
 STOP: Callable[..., bool] = stop
+UNLINK: Callable[[str], None] = os.unlink
 
 
 def _read_pid(path: Path) -> int:
@@ -433,7 +471,14 @@ def app_ini(env: Environment, port: int) -> str:
 
 
 def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
-    """The runner's configuration: the rig's caches in its jobs' environment."""
+    """The runner's configuration: the rig's shared caches and its own conan home.
+
+    All of them go into the jobs' environment. Conan's home is in the
+    runner's directory, never among the shared caches: a release the
+    runner runs writes the ``workshop`` remote into it, naming this
+    environment's forge, and a home shared between environments keeps
+    that remote after its forge is gone.
+    """
     from livery.footman import directory_variable
 
     caches = cache_dir()
@@ -446,7 +491,7 @@ def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
         "  envs:\n"
         f"    {directory_variable('DATA_DIR')}: {caches / 'footman'}\n"
         f"    UV_CACHE_DIR: {caches / 'uv'}\n"
-        f"    CONAN_HOME: {caches / 'conan'}\n"
+        f"    CONAN_HOME: {env.runner_conan_home(number)}\n"
         "  timeout: 3h\n"
         "  fetch_interval: 2s\n"
         "cache:\n"
@@ -517,11 +562,14 @@ def _start_gitea(env: Environment, exe: Path) -> tuple[str, int]:
     pid = _read_pid(pid_file)
     if pid and ALIVE(pid) and HEALTHY(url):
         return url, pid
+    # The env file first: a directory with files and no env file is what
+    # a refused removal leaves, which a bring-up refuses (`up_host`), and
+    # the port it names is the one the configuration below is written for.
+    env.update({"MODE": "host", "GITEA_PORT": str(port), "GITEA_URL": url})
     if not env.app_ini.is_file():
         env.app_ini.parent.mkdir(parents=True, exist_ok=True)
         env.app_ini.write_text(app_ini(env, port), encoding="utf-8")
     (env.gitea_dir / "data").mkdir(parents=True, exist_ok=True)
-    env.update({"MODE": "host", "GITEA_PORT": str(port), "GITEA_URL": url})
     pid = SPAWN(
         [
             str(exe),
@@ -569,7 +617,7 @@ def _seed(env: Environment, exe: Path, url: str) -> dict[str, str]:
             "--username",
             ADMIN,
             "--password",
-            "livery-dev-password",
+            footman.Secret("livery-dev-password"),
             "--email",
             "admin@livery.local",
             "--admin",
@@ -638,7 +686,7 @@ def _start_runner(
                 "--instance",
                 url,
                 "--token",
-                registration,
+                footman.Secret(registration),
                 "--name",
                 label,
                 "--labels",
@@ -687,7 +735,23 @@ def _share(values: dict[str, str]) -> None:
 def up_host(
     env: Environment, runners: tuple[str, ...], *, offline: bool = False
 ) -> None:
-    """Bring *env* up in host mode: Gitea, the seed, then each runner."""
+    """Bring *env* up in host mode: Gitea, the seed, then each runner.
+
+    Raises:
+        Failed: when *env*'s directory holds files and no env file, which
+            is what a refused removal leaves; the message names the
+            removal that finishes it.
+    """
+    if (
+        env.directory.is_dir()
+        and not env.env_file.is_file()
+        and any(env.directory.iterdir())
+    ):
+        fail(
+            f"{env.name}: {env.directory} holds what a refused removal left,"
+            " and no environment; remove it first:"
+            f" `{footman.prog()} devenv.rm --env={env.name}`"
+        )
     gitea = BINARY("gitea", GITEA_VERSION, offline=offline)
     runner = BINARY("gitea_runner", RUNNER_VERSION, offline=offline)
     url, _pid = _start_gitea(env, gitea)
@@ -761,16 +825,139 @@ def down(env: Environment) -> list[str]:
 
 
 def remove(env: Environment) -> list[str]:
-    """Stop *env* and remove its directory whole; the lines to print."""
+    """Stop *env* and remove its directory whole; the lines to print.
+
+    The directory is checked first
+    ([livery.workshop._devenv.removal_blocker][]): a part this user may
+    not remove refuses before anything is stopped or removed, so the
+    environment stays as it was. A delete refused after the check,
+    a file that changed hands or is held open, leaves the processes
+    stopped and every other part removed, the env file with them; a
+    bring-up under the name then refuses until the removal runs again.
+
+    Raises:
+        Failed: when a part of the directory cannot be removed, naming
+            it, the reason, and the command that makes it removable.
+    """
     if not env.directory.is_dir():
         return [f"  {env.name}: no such environment"]
+    blocker = removal_blocker(env.directory)
+    if blocker:
+        fail(
+            f"{env.name}: {blocker}, so nothing was stopped or removed. Make it"
+            f" this user's, then remove it again: {_hand_back(env.directory)}"
+        )
     lines = down(env)
     shared_url = env.url
-    shutil.rmtree(env.directory, ignore_errors=True)
     if shared_url:
         _forget(shared_url)
+    stayed = remove_tree(env.directory)
+    if stayed:
+        fail(
+            f"{env.name}: {env.directory} is not removed whole; {_stayed(stayed)}."
+            " The processes are stopped and everything else is removed. Make"
+            " what stayed this user's, then remove it again:"
+            f" {_hand_back(env.directory)}"
+        )
     lines.append(f"  {env.name}: removed {env.directory}")
     return lines
+
+
+def removal_blocker(path: Path) -> str:
+    """Why this user cannot remove *path* whole; empty when every part of it can go.
+
+    A file goes when its directory may be changed by the user removing
+    it, whoever owns the file, so the answer names the first directory
+    under *path*, or *path*'s own parent, that this user may not change,
+    with its owner, or the first one it may not list. A build container
+    that writes into a mounted directory as root leaves such a
+    directory. Windows decides by other rules: there a removal finds out
+    by trying ([livery.workshop._devenv.remove_tree][]), and the answer
+    is empty.
+    """
+    if sys.platform == "win32":
+        return ""
+    wanted = os.W_OK | os.X_OK
+    if not os.access(path.parent, wanted):
+        return _not_changeable(str(path.parent))
+    unlisted: list[OSError] = []
+    for current, _directories, _files in os.walk(path, onerror=unlisted.append):
+        if not os.access(current, wanted):
+            return _not_changeable(current)
+    if unlisted:
+        return f"{unlisted[0].filename} cannot be listed ({unlisted[0].strerror})"
+    return ""
+
+
+def _not_changeable(directory: str) -> str:
+    """The refusal's words for *directory*, which this user may not change."""
+    return f"{directory} belongs to {_owner(directory)} and this user may not change it"
+
+
+def _owner(path: str) -> str:
+    """The name of the user who owns *path*; its number when the system has none."""
+    uid = os.stat(path).st_uid
+    if sys.platform != "win32":
+        import pwd
+
+        with contextlib.suppress(KeyError):
+            return pwd.getpwuid(uid).pw_name
+    return f"uid {uid}"
+
+
+def remove_tree(path: Path) -> list[str]:
+    """Remove *path* whole, going on past each part that refuses; what stayed.
+
+    Every part this user may remove goes, so what stays is what refused
+    and the directories above it. Each entry is a path and the system's
+    reason, the deepest first. A file marked read-only on Windows is
+    made writable and removed, as git marks its pack files.
+    """
+    stayed: list[str] = []
+
+    def note(error: OSError) -> None:
+        stayed.append(f"{error.filename}: {error.strerror}")
+
+    for current, directories, files in os.walk(path, topdown=False, onerror=note):
+        linked = [name for name in directories if os.path.islink(Path(current, name))]
+        for name in (*files, *linked):
+            try:
+                _unlink(str(Path(current, name)))
+            except OSError as error:
+                note(error)
+        try:
+            os.rmdir(current)
+        except OSError as error:
+            # A directory that holds what stayed is no cause of its own.
+            if error.errno != errno.ENOTEMPTY:
+                note(error)
+    if not stayed and os.path.lexists(path):
+        stayed.append(f"{path}: {os.strerror(errno.ENOTEMPTY)}")
+    return stayed
+
+
+def _unlink(path: str) -> None:
+    """Remove the file or link at *path*; a Windows read-only one is made writable."""
+    try:
+        UNLINK(path)
+    except PermissionError:
+        if sys.platform != "win32":
+            raise
+        os.chmod(path, stat.S_IWRITE)
+        UNLINK(path)
+
+
+def _stayed(stayed: Sequence[str]) -> str:
+    """The first of *stayed*, and how many more there are."""
+    more = len(stayed) - 1
+    return stayed[0] + (f" and {more} more path(s)" if more else "")
+
+
+def _hand_back(directory: Path) -> str:
+    """The command that makes everything under *directory* removable by this user."""
+    if sys.platform == "win32":
+        return f"close each program that holds a file under {directory} open"
+    return f"sudo chown -R {getpass.getuser()} {directory}"
 
 
 def _forget(url: str) -> None:
@@ -792,13 +979,29 @@ def _forget(url: str) -> None:
 
 
 def purge_cache() -> list[str]:
-    """Remove the rig's shared caches, naming each; the lines to print."""
+    """Remove the rig's shared caches, naming each; the lines to print.
+
+    Each cache is checked before it is removed, as an environment is
+    ([livery.workshop._devenv.remove][]).
+
+    Raises:
+        Failed: when a part of a cache cannot be removed, naming it, the
+            reason, and the command that makes it removable; the caches
+            before it are removed.
+    """
     lines: list[str] = []
     for name in CACHES:
         target = cache_dir() / name
-        if target.is_dir():
-            shutil.rmtree(target, ignore_errors=True)
-            lines.append(f"  cache: {name} removed ({target})")
+        if not target.is_dir():
+            continue
+        blocker = removal_blocker(target)
+        stayed = [blocker] if blocker else remove_tree(target)
+        if stayed:
+            fail(
+                f"cache: {name}: {_stayed(stayed)}, so it is not removed. Make it"
+                f" this user's, then purge again: {_hand_back(target)}"
+            )
+        lines.append(f"  cache: {name} removed ({target})")
     if not lines:
         lines.append("  cache: nothing to remove")
     return lines

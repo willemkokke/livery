@@ -172,6 +172,74 @@ def test_the_seed_keeps_the_containers_token_from_their_own_record(
         assert record.stat().st_mode & 0o777 == 0o600
 
 
+#: A tasks file whose one task runs every seed of the imported plugin.
+_SEED_TASKS = """\
+import sys
+
+from livery.footman import task
+from livery.footman._compose import plugin
+
+plugin("footman.profile")
+
+
+@task
+def seed():
+    dev = sys.modules["livery.forge._dev"]
+    dev._seed_gitea()
+    dev._seed_gitlab()
+    dev._register_gitlab_runner()
+"""
+
+#: The stand-in for docker's subcommand: a token for each gitea mint,
+#: and nothing for any other call. A file, so its text is not in the trace.
+_COMPOSE = (
+    "import sys\n"
+    "if 'generate-access-token' in sys.argv:\n"
+    "    print('minted-api-token')\n"
+    "elif 'generate-runner-token' in sys.argv:\n"
+    "    print('minted-runner-token')\n"
+)
+
+
+def test_the_seeds_credentials_reach_a_trace_as_stars(
+    dev: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import json
+
+    import livery.toolroom.tools as tools
+    from livery.footman.testing import Runner
+
+    # The fault first: the seeds pass the admin's password, the GitLab
+    # token inside the script that mints it, and the GitLab runner's
+    # token as arguments. Python stands in for docker and runs the file
+    # named like docker's subcommand; the shown line keeps docker's name.
+    record = tmp_path / ".forge-dev.env"
+    monkeypatch.setattr(dev, "_rig_record_path", lambda: record)
+    monkeypatch.setattr(dev, "_dev_env_path", lambda: tmp_path / ".repo.shared.env")
+    monkeypatch.setattr(dev, "_wait_for_gitea", lambda: None)
+    monkeypatch.setattr(dev, "_gitea_api", lambda path, token, **kwargs: 200)
+    answers = {
+        "/groups/livery": (200, '{"visibility": "public"}'),
+        "/user/runners": (201, '{"token": "glrt-runner-token"}'),
+    }
+    monkeypatch.setattr(dev, "_gitlab_api", lambda path, token, **kw: answers[path])
+    monkeypatch.setattr(tools, "docker", tools.docker.at(sys.executable))
+    (tmp_path / "compose").write_text(_COMPOSE)
+    tasks = tmp_path / "tasks.py"
+    tasks.write_text(_SEED_TASKS)
+    trace = tmp_path / "fm-profile.json"
+    result = Runner().invoke([f"--profile={trace}", "seed"], tasks=tasks, cwd=tmp_path)
+    assert result.ok, result.stdout + result.stderr
+    text = trace.read_text()
+    minted = dict(line.split("=", 1) for line in record.read_text().splitlines())
+    for credential in ("livery-dev-password", minted["GITLAB_TOKEN"], "glrt-runner"):
+        assert credential not in text
+    names = [str(event.get("name", "")) for event in json.loads(text)["traceEvents"]]
+    assert any(" --password *** " in name for name in names)
+    assert any(name.endswith(" gitlab-rails runner ***") for name in names)
+    assert any(" --url http://gitlab:8929/ --token *** " in name for name in names)
+
+
 def test_restart_restarts_each_forges_runner_and_names_it(
     dev: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

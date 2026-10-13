@@ -489,12 +489,15 @@ UNDECLARED: tuple[str, ...] = ()
 STALE: tuple[str, ...] = ()
 
 
-def snapshot() -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
+def snapshot(*, initial: bool = False) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
     """What the mount recorded, for [livery.workshop._extensions.restore][] to put back.
 
     Whether a mount ran, and the listed extensions it found undeclared
-    and stale.
+    and stale. With *initial*, the record a process starts with
+    instead: no mount, and nothing found.
     """
+    if initial:
+        return False, (), ()
     return MOUNTED, UNDECLARED, STALE
 
 

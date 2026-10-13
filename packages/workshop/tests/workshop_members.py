@@ -16,23 +16,19 @@ from pathlib import Path
 import pytest
 
 
-def mounted_now(monkeypatch: pytest.MonkeyPatch, root: Path) -> tuple[str, ...]:
+def mounted_now(root: Path) -> tuple[str, ...]:
     """Mount *root*'s extensions as a process started now would; the names mounted.
 
-    The contributed jobs are cleared first, as a new process starts
-    without them, and the verbs the mount makes land in a throwaway
-    tree. The caller puts the jobs and the steps back
-    (`workshop_docs_declared.jobs_restored`, `_steps.snapshot`); the
-    mount's own records go back after the test.
+    The points' jobs start as a new process has them, with nothing
+    added or joined, and the verbs the mount makes land in a throwaway
+    tree. The isolation plugin puts the steps, the jobs and the mount's
+    records back after the test.
     """
     from livery.footman import _registry as registry
-    from livery.workshop import _extensions, _points
+    from livery.workshop import _points
     from livery.workshop._extensions import mount_extensions
 
-    for name in ("MOUNTED", "UNDECLARED", "STALE"):
-        monkeypatch.setattr(_extensions, name, getattr(_extensions, name))
-    _points._CONTRIBUTED_JOBS.clear()
-    _points._JOINED_JOBS.clear()
+    _points.restore(_points.snapshot(initial=True))
     with registry.capture():
         return mount_extensions(root)
 

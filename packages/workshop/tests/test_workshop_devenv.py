@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+import errno
+import getpass
 import os
+import re
+import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
 from livery.footman import Failed
 from livery.workshop import _devenv
+from workshop_rig import Machine, machine_fixture, modes_bind, rig_fixture  # noqa: F401
 
 
-@pytest.fixture
-def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A rig under a temporary data directory, with the config directory beside it."""
-    data = tmp_path / "data"
-    config = tmp_path / "config"
-    data.mkdir()
-    config.mkdir()
-    monkeypatch.setattr("livery.footman._context.data_dir", lambda: data)
-    monkeypatch.setattr("livery.footman._context.config_dir", lambda: config)
-    return data / "forge-dev"
+def _refusing(held: Path) -> Callable[[str], None]:
+    """Remove files as the system does, refusing *held* as it refuses root's file."""
+
+    def unlink(path: str) -> None:
+        if Path(path) == held:
+            raise PermissionError(errno.EPERM, "Operation not permitted", path)
+        os.unlink(path)
+
+    return unlink
 
 
 # --- the refusals ---------------------------------------------------------------
@@ -65,77 +71,151 @@ def test_down_and_rm_refuse_or_say_nothing_for_an_absent_environment(
     assert "no environments under" in capsys.readouterr().out
 
 
+@modes_bind
+def test_a_part_this_user_may_not_remove_stops_rm_before_anything_stops(
+    rig: Path, machine: Machine
+) -> None:
+    # What a build container that runs as root leaves in a runner's conan
+    # home: a directory whose files this user may not remove.
+    _devenv.devenv_up("dev")
+    env = _devenv.environment("dev")
+    held = env.runner_conan_home(1) / "p" / "fmt80a1ffe0392cb" / "s"
+    held.mkdir(parents=True)
+    (held / "build.gradle").write_text("written by root\n")
+    held.chmod(0o555)
+    try:
+        with pytest.raises(Failed) as refused:
+            _devenv.devenv_rm("dev")
+        said = str(refused.value)
+        assert f"dev: {held} belongs to {getpass.getuser()}" in said
+        assert "nothing was stopped or removed" in said
+        assert f"sudo chown -R {getpass.getuser()} {env.directory}" in said
+        # The environment is as it was: running, and whole.
+        assert machine.stopped == []
+        assert env.env_file.is_file() and env.app_ini.is_file()
+        # A directory this user may not list is named the same way.
+        held.chmod(0o755)
+        unlisted = env.runner_conan_home(1) / "p" / "unlisted"
+        unlisted.mkdir()
+        unlisted.chmod(0o333)
+        with pytest.raises(
+            Failed, match=re.escape(f"dev: {unlisted} cannot be listed")
+        ):
+            _devenv.devenv_rm("dev")
+        unlisted.chmod(0o755)
+    finally:
+        held.chmod(0o755)
+    _devenv.devenv_rm("dev")
+    assert not env.directory.exists()
+
+
+def test_a_removal_refused_part_way_names_what_stayed_and_the_name_holds_nothing(
+    rig: Path, machine: Machine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A delete refused after the check: a file that changed hands, or one
+    # held open. Everything else goes, the env file with it.
+    _devenv.devenv_up("dev")
+    env = _devenv.environment("dev")
+    held = env.runner_conan_home(1) / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
+    held.parent.mkdir(parents=True)
+    held.write_text("held\n")
+    monkeypatch.setattr(_devenv, "UNLINK", _refusing(held))
+    with pytest.raises(Failed) as refused:
+        _devenv.devenv_rm("dev")
+    said = str(refused.value)
+    assert f"dev: {env.directory} is not removed whole; {held}: Operation" in said
+    assert "The processes are stopped and everything else is removed" in said
+    fix = (
+        f"close each program that holds a file under {env.directory} open"
+        if sys.platform == "win32"
+        else f"sudo chown -R {getpass.getuser()} {env.directory}"
+    )
+    assert fix in said
+    assert machine.stopped == [4001, 4002]
+    assert held.is_file() and not env.env_file.exists() and not env.app_ini.exists()
+    assert _devenv.environments() == ()
+    # What stayed is no environment, and a bring-up under the name refuses
+    # until the removal runs again.
+    with pytest.raises(Failed, match=r"holds what a refused removal left"):
+        _devenv.devenv_up("dev")
+    monkeypatch.setattr(_devenv, "UNLINK", os.unlink)
+    _devenv.devenv_rm("dev")
+    assert not env.directory.exists()
+    _devenv.devenv_up("dev")
+    assert _devenv.environment("dev").url == "http://localhost:43210"
+
+
+def test_a_cache_with_a_part_that_refuses_stops_the_purge_naming_it(
+    rig: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    held = rig / "cache" / "uv" / "wheel"
+    held.parent.mkdir(parents=True)
+    held.write_text("held\n")
+    monkeypatch.setattr(_devenv, "UNLINK", _refusing(held))
+    with pytest.raises(Failed) as refused:
+        _devenv.purge_cache()
+    assert f"cache: uv: {held}: Operation not permitted, so it is not removed" in str(
+        refused.value
+    )
+    assert held.is_file()
+
+
+def test_a_file_written_during_a_removal_stops_it_naming_the_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tree = tmp_path / "tree"
+    (tree / "sub").mkdir(parents=True)
+    (tree / "sub" / "a").write_text("a\n")
+    late = tree / "late"
+
+    def unlink(path: str) -> None:
+        os.unlink(path)
+        late.write_text("written while the removal ran\n")
+
+    monkeypatch.setattr(_devenv, "UNLINK", unlink)
+    assert _devenv.remove_tree(tree) == [f"{tree}: {os.strerror(errno.ENOTEMPTY)}"]
+    assert late.is_file() and not (tree / "sub").exists()
+
+
+@modes_bind
+def test_a_tree_in_a_directory_this_user_may_not_change_is_named_by_both(
+    tmp_path: Path,
+) -> None:
+    parent = tmp_path / "parent"
+    child = parent / "child"
+    child.mkdir(parents=True)
+    (child / "file").write_text("x\n")
+    parent.chmod(0o555)
+    try:
+        assert _devenv.removal_blocker(child).startswith(f"{parent} belongs to ")
+        assert _devenv.remove_tree(child) == [f"{child}: {os.strerror(errno.EACCES)}"]
+        assert child.is_dir() and not (child / "file").exists()
+    finally:
+        parent.chmod(0o755)
+
+
+def test_an_owner_the_system_names_no_user_for_is_named_by_number(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if sys.platform == "win32":
+        pytest.skip("Windows names no owner by uid, and no removal asks it")
+    import pwd
+
+    def unknown(uid: int) -> NoReturn:
+        raise KeyError(uid)
+
+    monkeypatch.setattr(pwd, "getpwuid", unknown)
+    path = tmp_path / "file"
+    path.write_text("")
+    owner = _devenv._owner(str(path))  # pyright: ignore[reportPrivateUsage]
+    assert owner == f"uid {path.stat().st_uid}"
+
+
 # --- host mode ------------------------------------------------------------------
 
 
-class _Machine:
-    """The seams: processes started, alive and stopped, the health and the API."""
-
-    def __init__(self) -> None:
-        self.spawned: list[tuple[list[str], Path]] = []
-        self.pids: set[int] = set()
-        self.stopped: list[int] = []
-        self.next_pid = 4000
-
-    def spawn(self, argv: list[str], *, cwd: Path, log: Path) -> int:
-        self.spawned.append((list(argv), cwd))
-        self.next_pid += 1
-        self.pids.add(self.next_pid)
-        log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text("started\n")
-        return self.next_pid
-
-    def alive(self, pid: int) -> bool:
-        return pid in self.pids
-
-    def stop(self, pid: int, **kwargs: object) -> bool:
-        self.stopped.append(pid)
-        self.pids.discard(pid)
-        return True
-
-
-@pytest.fixture
-def machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Machine:
-    fake = _Machine()
-    monkeypatch.setattr(_devenv, "SPAWN", fake.spawn)
-    monkeypatch.setattr(_devenv, "ALIVE", fake.alive)
-    monkeypatch.setattr(_devenv, "STOP", fake.stop)
-    monkeypatch.setattr(_devenv, "HEALTHY", lambda url: True)
-    monkeypatch.setattr(_devenv, "API", lambda url, path, token, **kw: 200)
-    monkeypatch.setattr(_devenv, "this_host", lambda: "macos-arm")
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    for name in ("gitea", "gitea-runner"):
-        (binaries / name).write_text("#!/bin/sh\n")
-    monkeypatch.setattr(
-        _devenv,
-        "BINARY",
-        lambda name, version, **kw: binaries / name.replace("_", "-"),
-    )
-
-    def cli(argv: list[str], **kwargs: object) -> object:
-        class _Result:
-            code = 0
-            stderr = ""
-
-            def __init__(self, out: str) -> None:
-                self.stdout = out
-
-        if "generate-access-token" in argv:
-            return _Result("token-abc\n")
-        if "generate-runner-token" in argv:
-            return _Result("reg-xyz\n")
-        return _Result("")
-
-    import livery.footman as footman
-
-    monkeypatch.setattr(footman, "run", cli)
-    monkeypatch.setattr(_devenv, "free_port", lambda: 43210)
-    return fake
-
-
 def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
-    rig: Path, machine: _Machine, capsys: pytest.CaptureFixture[str]
+    rig: Path, machine: Machine, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _devenv.devenv_up("dev", runners="host*2")
     env = _devenv.environment("dev")
@@ -154,8 +234,15 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
     assert "cache:\n  enabled: true" in config
     assert str(_devenv.cache_dir() / "uv") in config
     assert str(env.runner_dir(1) / "work") in config
-    # The caches every environment shares exist, beside the environments.
+    # Conan's home is each runner's own, inside the environment: a release
+    # writes a remote there that names this environment's forge.
+    assert f"CONAN_HOME: {env.runner_dir(1) / 'conan'}\n" in config
+    second = (env.runner_dir(2) / "config.yaml").read_text()
+    assert f"CONAN_HOME: {env.runner_dir(2) / 'conan'}\n" in second
+    # The caches every environment shares exist, beside the environments,
+    # and conan's home is not one of them.
     assert (rig / "cache" / "footman").is_dir() and (rig / "cache" / "uv").is_dir()
+    assert not (rig / "cache" / "conan").exists()
     # The cascade's current forge is this environment.
     from livery.footman import config_dir
 
@@ -174,7 +261,7 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
 
 
 def test_down_stops_the_processes_and_rm_removes_the_directory_and_the_cascade_keys(
-    rig: Path, machine: _Machine, capsys: pytest.CaptureFixture[str]
+    rig: Path, machine: Machine, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.footman import config_dir
 
@@ -205,7 +292,7 @@ def test_down_stops_the_processes_and_rm_removes_the_directory_and_the_cascade_k
 
 
 def test_gitea_that_never_answers_or_exits_early_fails_naming_its_log(
-    rig: Path, machine: _Machine, monkeypatch: pytest.MonkeyPatch
+    rig: Path, machine: Machine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(_devenv, "HEALTHY", lambda url: False)
     monkeypatch.setattr(_devenv, "HEALTH_TIMEOUT", 0.2)
