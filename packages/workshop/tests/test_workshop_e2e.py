@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.forge import Repository
+from livery.forge import Conclusion, Repository
 from livery.forge.testing import FakeForge
 from livery.workshop import _e2e
 from livery.workshop._ci_context import state_store
@@ -1262,6 +1262,79 @@ def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
         _e2e._require_lines(
             repo, run, logs, "gate", (), forbidden=("concluded success", "absent")
         )
+
+
+# The release act's proof that the wave published the wheels the wheels
+# job built, read from the publish job's log: the refusals first.
+
+_NATIVE = "acme-native"
+
+
+def _prove_the_wave(publish: Conclusion, log: str) -> None:
+    """Run the proof on a wave whose publish job ended *publish* and logged *log*.
+
+    The stand-in forge serves the run's two jobs, a green wheels leg
+    and the publish job.
+    """
+    from types import SimpleNamespace
+
+    from livery.forge import Job, Run
+
+    run = Run(
+        18, "release.yml", "5730fa48b2", "workflow_dispatch", "completed", "success"
+    )
+    jobs = (
+        Job(7, "wheels (ubuntu-latest)", "completed", "success"),
+        Job(8, "publish", "completed", publish),
+    )
+    logs = {7: "", 8: log}
+    repo = SimpleNamespace(
+        checks=SimpleNamespace(
+            jobs=lambda run_id: jobs, job_log=lambda job_id: logs[job_id]
+        ),
+        web_url=lambda: "http://forge/livery/loop",
+    )
+    _e2e._require_prebuilt(repo, run, _NATIVE)  # pyright: ignore[reportArgumentType]
+
+
+def test_a_wave_whose_publish_job_never_names_the_member_fails_naming_the_run() -> None:
+    # The wave built the member's wheels itself: the line never came.
+    with pytest.raises(_FAILURES, match=r"run 18's publish job did not say") as caught:
+        _prove_the_wave("success", "  wave: 1 member(s) published\n")
+    assert "http://forge/livery/loop/actions/runs/18" in str(caught.value)
+    # The wheels job fed the wave another member's wheels alone.
+    with pytest.raises(_FAILURES, match=r"run 18's publish job did not say"):
+        _prove_the_wave(
+            "success", "  prebuilt: the wheels matrix collected wheels for acme-other\n"
+        )
+
+
+def test_a_wave_whose_publish_job_did_not_end_green_fails_naming_how_it_ended() -> None:
+    line = f"  prebuilt: the wheels matrix collected wheels for {_NATIVE}\n"
+    # The line came and the job went red after it: the line proves nothing.
+    with pytest.raises(_FAILURES, match=r"run 18's publish job ended failure"):
+        _prove_the_wave("failure", line)
+    # A red wheels leg leaves the publish job skipped, with no log.
+    with pytest.raises(_FAILURES, match=r"run 18's publish job ended skipped"):
+        _prove_the_wave("skipped", "")
+
+
+def test_a_wave_that_published_the_wheels_jobs_wheels_passes_and_says_so(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A forge's log opens each line with its time.
+    _prove_the_wave(
+        "success",
+        "2026-10-12T10:00:00.0000000Z   release/publish: workflow.release.publish"
+        " (builtin)\n"
+        "2026-10-12T10:00:01.0000000Z   prebuilt: the wheels matrix collected"
+        f" wheels for {_NATIVE}\n"
+        "2026-10-12T10:00:09.0000000Z   wave: 1 member(s) published\n",
+    )
+    assert (
+        "release: the wave published the wheels the wheels job built for"
+        f" {_NATIVE} (run 18)" in capsys.readouterr().out
+    )
 
 
 # --- the scenarios ---------------------------------------------------------------

@@ -112,7 +112,11 @@ def forge(**facts: Any) -> list[Finding]:
 def host(**facts: Any) -> list[Finding]:
     """The host doctor: the kinds' compilers, the host's tools, unlisted extensions."""
     from livery.workshop._env_tasks import missing_host_tools, served_by
-    from livery.workshop._extensions import available_extensions, extension_names
+    from livery.workshop._extensions import (
+        available_extensions,
+        extension_names,
+        levels_of,
+    )
     from livery.workshop._tools import receipts
 
     root = workspace_root()
@@ -140,16 +144,33 @@ def host(**facts: Any) -> list[Finding]:
     if hosted:
         findings.append(Finding(f"tools: served by the host: {', '.join(hosted)}"))
     for module, dist in available_extensions(extension_names(root)):
-        named = f" ({dist})" if dist else ""
         # Information, not a fault: an extension a wheel ships that this
         # workspace has no use for is the common case.
-        findings.append(
-            Finding(
-                f"extensions: {module}{named} is installed and not listed; it does"
-                " nothing until [workspace] extensions names it"
-            )
-        )
+        findings.append(Finding(unlisted(module, dist, levels_of(module))))
     return findings
+
+
+def unlisted(module: str, dist: str, levels: tuple[str, ...]) -> str:
+    """The doctor's line for an installed extension the workspace lists nowhere.
+
+    A workspace-level extension is listed in `[workspace] extensions`
+    and a package-level one in a package's `extensions`; the line names
+    where *levels* let this one be listed, the workspace's list when
+    they name neither.
+    """
+    named = f" ({dist})" if dist else ""
+    places = [
+        place
+        for level, place in (
+            ("workspace", "[workspace] extensions"),
+            ("package", "a package's extensions"),
+        )
+        if level in levels
+    ] or ["[workspace] extensions"]
+    return (
+        f"extensions: {module}{named} is installed and not listed; it does"
+        f" nothing until {' or '.join(places)} names it"
+    )
 
 
 def ssh(**facts: Any) -> list[Finding]:

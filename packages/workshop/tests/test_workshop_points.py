@@ -458,6 +458,24 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     assert _points.entries_for(root, "release", "release") == ()
 
 
+def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    member = root / "packages" / "native"
+    (member / "src").mkdir(parents=True)
+    (member / "workshop.toml").write_text(
+        'kind = "python-nanobind"\nname = "acme-native"\n\n[ci]\n'
+        'wheel-platforms = ["ubuntu-latest"]\n'
+    )
+    (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')
+    assert _points.jobs_of(root, "release") == ("wheels", "publish")
+    # The wheels job builds this platform's wheels at the dispatched ref.
+    assert _points.entries_for(root, "release", "wheels") == (
+        _points.Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
+    )
+
+
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     root = _root(
         tmp_path,

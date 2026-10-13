@@ -577,6 +577,14 @@ def _member_dist(name: str) -> str:
     return f"ci-e2e-loop-{name}"
 
 
+def _contract_name(root: Path, member: str) -> str:
+    """The name the loop member *member*'s contract declares, as the verbs print it."""
+    import tomllib
+
+    contract = root / "packages" / member / "workshop.toml"
+    return str(tomllib.loads(contract.read_text("utf-8"))["name"])
+
+
 def _served_name(root: Path, member: str) -> str:
     """The name a registry serves the loop member *member* under.
 
@@ -586,10 +594,7 @@ def _served_name(root: Path, member: str) -> str:
     """
     if dict(LOOP_MEMBERS).get(member) != "package-cpp-conan":
         return _member_dist(member)
-    import tomllib
-
-    contract = root / "packages" / member / "workshop.toml"
-    return str(tomllib.loads(contract.read_text("utf-8"))["name"])
+    return _contract_name(root, member)
 
 
 def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
@@ -2115,6 +2120,37 @@ def _require_lines(
         )
 
 
+def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
+    """Fail unless the wave *run* published *distribution* from the wheels job's wheels.
+
+    The wave publishes a platform-wheel member either way: from the
+    wheels the wheels job built and handed over, or from a build of its
+    own on the publish job's runner. The served version is the same
+    after both. The publish job's ``prebuilt:`` line tells them apart:
+    the wave prints it only when the collected ``dist/`` held the
+    member's wheels. A publish job that did not end green proves
+    nothing, so it fails here too, naming how it ended.
+    """
+    jobs = repo.checks.jobs(run.id)
+    publish = next((job for job in jobs if job.name.startswith("publish")), None)
+    if publish is not None and publish.conclusion != "success":
+        fail(
+            f"run {run.id}'s publish job ended {publish.conclusion or publish.status};"
+            f" {repo.web_url()}/actions/runs/{run.id}"
+        )
+    _require_lines(
+        repo,
+        run,
+        jobs,
+        "publish",
+        (f"prebuilt: the wheels matrix collected wheels for {distribution}",),
+    )
+    print(
+        f"  release: the wave published the wheels the wheels job built for"
+        f" {distribution} (run {run.id})"
+    )
+
+
 def _prove_verified_skip(root: Path, kind: str) -> None:
     """Prove main's run after the setup squash skips the gate and copies the record.
 
@@ -2767,7 +2803,9 @@ def _release_act(root: Path, kind: str) -> None:
     pull request through the gate, and the merge; the emitted
     release workflow's wave then publishes to the forge's own
     registry and cuts the receipt tag. Done means measured: the
-    served version and the annotated tag, never the exit code alone.
+    served version and the annotated tag, never the exit code alone,
+    and for the native member the publish job's line that the wave
+    published the wheels the wheels job built.
     """
     from livery.workshop._release_driver import release_name
 
@@ -2872,6 +2910,16 @@ def _release_act(root: Path, kind: str) -> None:
         # registry wait that expires on a slow wheels leg.
         print("  main unmoved: the recovery arm dispatched; following its wave")
         _watch_latest(kind, "release.yml")
+    # The served version is the same whether the wheels job built the
+    # native member's wheels or the publish job built its own runner's;
+    # the publish job's log says which. The wave just followed is the
+    # release point's newest run.
+    from livery.workshop._ci_tasks import point_runs
+
+    wave = point_runs(repo, "release", root, limit=1)[0]
+    for name in names:
+        if dict(LOOP_MEMBERS)[name] == "package-python-nanobind":
+            _require_prebuilt(repo, wave, _contract_name(root, name))
     served_versions = _serving_probe(root, kind)
     deadline = time.monotonic() + 300
     for name in names:
