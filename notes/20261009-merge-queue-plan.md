@@ -108,8 +108,8 @@ there, on main, after it landed.
    ordering**, not by a protection flag. A flag a forge cannot
    express reads inert, and the flag where it exists is a guard
    against a merge made outside the queue.
-8. **Windows is in the gate.** What the pull request point runs
-   stays as it is until Willem rules on open item 1.
+8. **Windows is in the gate.** The pull request point runs every
+   runner (decision record, 2026-10-13).
 9. **Fallbacks before happy paths.** A lost update, a lost arm, a
    red head, a conflicting update and an empty queue are tested
    before the green path, through fault modes on the fake and the
@@ -223,14 +223,14 @@ conformance cassettes recorded on the scratch GitHub repository and
 by this repository's first merge-group runs, and what the queue does
 differently gets its rows in `packages/forge/docs/quirks.md`.
 
-### An option, not taken until ruled
+### The pull request point keeps every runner
 
-Run only the ubuntu and macos legs and the docs job at the pull
-request point, and leave windows-latest to the head's run. Pull
-request feedback drops from about 11 minutes to about 5. Windows
-still gates before main. The cost is that a Windows-only failure
-shows at the head, not on the pull request. Contract 8 holds until
-open item 1 is ruled.
+A pull request runs the ubuntu, macos and windows legs. Running fewer
+was tried: with one fresh leg, the coverage union judged the other
+platforms on rows carried from main's records at main's line numbers,
+so a change that moved a file left its platform-only branches
+uncovered. The time it would save is small too, since the macos and
+windows legs run close to each other in time after the git work.
 
 ## Phases
 
@@ -382,12 +382,16 @@ paragraph.
   phase 4 needs the repository under an organization first; open
   item 7 asks which way to go.
 
+- 2026-10-13, Willem, on open item 1: the pull request point keeps
+  every runner. "We did that, and then we had issues with incomplete
+  coverage, not to mention that windows and macos are much closer in
+  speed now we've optimised our git usage, so it wouldn't save that
+  much." Pull requests have run every runner since 2026-10-12 (#1499).
+
 ## Open
 
-1. Willem: may the pull request point run only the ubuntu and macos
-   legs and the docs job, leaving windows-latest to the head's run?
-   Feedback drops from about 11 to about 5 minutes; a Windows-only
-   failure then shows at the head. Contract 8 holds until ruled.
+1. Closed on 2026-10-13: the pull request point keeps every runner
+   (decision record).
 2. Willem: when phase 4 is taken. Proposed trigger: the metrics
    record shows queue latency on days above thirty merges.
 3. Agent, phase 4: whether GitHub's queue needs `block_on_outdated`
