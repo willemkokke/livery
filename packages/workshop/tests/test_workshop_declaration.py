@@ -1037,6 +1037,25 @@ def test_a_for_table_s_fragment_refuses_naming_its_key_and_reads_by_target(
     }
 
 
+def test_a_for_table_s_tools_refuse_off_their_shape_and_read_by_target(
+    package: Path,
+) -> None:
+    refused = _refusal(package, '[for.docs.toolroom]\nrequires = "docker"\n')
+    assert (
+        "for.docs.toolroom.requires is a string ('docker'); it takes a list of strings"
+        in refused
+    )
+    found = _declare(
+        package,
+        '[toolroom]\nrequires = ["git"]\n\n'
+        '[for.docs.toolroom]\nrequires = ["docker>=27@linux"]\n\n'
+        "[for.coverage]\n",
+    )
+    assert found.tools == ("git",)
+    # A target whose table requires nothing is left out.
+    assert found.target_tools == {"docs": ("docker>=27@linux",)}
+
+
 def test_content_for_a_target_with_no_for_table_refuses_naming_both(
     package: Path,
 ) -> None:

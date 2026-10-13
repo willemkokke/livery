@@ -820,8 +820,9 @@ def _dotnet_coverage(package: Package, env: dict[str, str], *args: str) -> Resul
     """One dotnet-coverage invocation through the store's handle.
 
     Raises:
-        Failed: when the tool is not deployed: a workspace measured
-            with MSVC requires it, and the refusal names the line.
+        Failed: when the tool is not deployed: this extension's
+            ``[for.coverage]`` table requires it on Windows, and the
+            refusal names the lock and the sync that supply it.
     """
     try:
         return tools.dotnet_coverage.opts(
@@ -829,10 +830,10 @@ def _dotnet_coverage(package: Package, env: dict[str, str], *args: str) -> Resul
         )(*args)
     except OSError:
         fail(
-            "dotnet-coverage is not on PATH: a cpp-conan package built with MSVC"
-            ' is measured by it, so add "dotnet_coverage" to [toolroom] requires'
-            f" in workshop.toml, run `{footman.prog()} toolroom.lock`, then"
-            f" `{footman.prog()} sync` and the printed env.emit line"
+            "dotnet-coverage is not on PATH: cmake's [for.coverage] table requires"
+            " it on Windows to measure a build made with MSVC; run"
+            f" `{footman.prog()} toolroom.lock`, then `{footman.prog()} sync` and"
+            " the printed env.emit line"
         )
 
 

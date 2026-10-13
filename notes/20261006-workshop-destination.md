@@ -2919,6 +2919,16 @@ neither needs nor rules out).
   the pytest extension and records one context per test, its node id,
   as ruled the same day.
 
+- 2026-10-13, after P2c (#1581): a measuring tool rides its measurer's
+  table. A `[for.<target>]` table takes `[toolroom] requires`, and the
+  workspace requires those tools while the table applies, at the
+  extension's own site. cmake's `[for.coverage]` requires
+  `dotnet_coverage@windows`, which the cpp-conan kind no longer does,
+  so a workspace that does not list coverage locks and installs neither
+  Microsoft's engine nor the .NET SDK. This repository's root contract
+  still requires the engine for its own Windows leg's proof, so its
+  lock is unchanged.
+
 ## Open
 
 Each with its options, what each option does not cover, and a

@@ -127,13 +127,17 @@ spelling. Every key is optional:
   `enabled = false` registers only while the root contract turns it on
   at the step's own address, `[phases.<phase>.<step>] enabled = true`;
 - `[for.<target>]`, the same tables, read only while the target is
-  listed, its `[for.<target>.queries]` answers and its
-  `[for.<target>.fragments]` files among them; a query is declared at
-  the top level alone. The files the extension ships under
-  `content/for/<target>/root/` and `content/for/<target>/package/` are
-  delivered while the table applies, as its `content/root/` and
-  `content/package/` files always are; a directory there for a target
-  the file declares no table for refuses, naming both;
+  listed, its `[for.<target>.queries]` answers, its
+  `[for.<target>.fragments]` files and its
+  `[for.<target>.toolroom] requires` among them: cmake's
+  `[for.coverage]` table requires Microsoft's coverage engine on
+  Windows, so a workspace locks it only while it lists coverage. A
+  query is declared at the top level alone. The files the extension
+  ships under `content/for/<target>/root/` and
+  `content/for/<target>/package/` are delivered while the table
+  applies, as its `content/root/` and `content/package/` files always
+  are; a directory there for a target the file declares no table for
+  refuses, naming both;
 - `[replaces]` and `[deletes]`, an earlier extension's shipped file,
   `"<owner>:<name>"`, that its own file of that name replaces or that it
   deletes, to the reason.
@@ -755,7 +759,8 @@ optional tool its host lacks. The sites: a package kind, in its record,
 for what operates it, uv for the python kind; the steps that judge a
 present package, each naming its tools, which is how ruff, pytest and
 the checkers reach a python workspace; a listed extension, as `[toolroom] requires`
-in its `extension.toml`, for what its own verbs need; a plugin the project mounts
+in its `extension.toml`, for what its own verbs need, and in a `[for.<target>]`
+table, for what it needs while that table applies; a plugin the project mounts
 through its direct dependencies, as a tuple in a data module its
 `workshop.tools` entry point names under the plugin's own name, loaded
 without the plugin's tasks, which is how forge's dev verbs bring
@@ -1188,20 +1193,22 @@ with `-fprofile-instr-generate -fcoverage-mapping`), ctest runs, and
 the measurer beside that compiler reads which lines of each source
 file ran, gcov's JSON or llvm-profdata and llvm-cov's lcov. A run
 built with MSVC is measured by Microsoft's Code Coverage engine,
-`dotnet-coverage`, a tool of the store the workspace requires as
-`dotnet_coverage` beside the .NET SDK it runs on: each test
-executable is instrumented statically for the run, ctest runs under
-the collector, its verdict is read from the report ctest writes, and
-the Cobertura report is read per line. On Windows the gate builds
-with MSVC unless `CXX` names another compiler, entering the newest
-Visual Studio's C++ build tools itself when `cl` is not already on
-PATH. The result is one part per package at the workspace root,
-beside coverage.py's own. A host with the compiler and without its
-measurer refuses on that leg by name. The union across legs is a set union of
-lines per file, so two compilers never merge raw profiles, and a
-native package's floor is line coverage over its `source` category
-while a python package's stays statements and branches. A package
-with a floor that no leg measured refuses by name and never passes.
+`dotnet-coverage`, a tool of the store that cmake's `[for.coverage]`
+table requires as `dotnet_coverage@windows`, with the .NET SDK it runs
+on, so a workspace that does not list coverage locks and installs
+neither: each test executable is instrumented statically for the run,
+ctest runs under the collector, its verdict is read from the report
+ctest writes, and the Cobertura report is read per line. On Windows
+the gate builds with MSVC unless `CXX` names another compiler,
+entering the newest Visual Studio's C++ build tools itself when `cl`
+is not already on PATH. The result is one part per package at the
+workspace root, beside coverage.py's own. A host with the compiler and
+without its measurer refuses on that leg by name. The union across
+legs is a set union of lines per file, so two compilers never merge
+raw profiles, and a native package's floor is line coverage over its
+`source` category while a python package's stays statements and
+branches. A package with a floor that no leg measured refuses by name
+and never passes.
 Coverage stays global
 under the
 affected mode: in a check leg's one measured run every test records

@@ -20,3 +20,9 @@ compile-commands = "livery.extensions.cmake._build:compile_commands"
 # content/for/coverage/ keeps out of git. While it is not, the gate
 # build is not instrumented and ctest runs alone.
 [for.coverage]
+
+# Microsoft's coverage engine measures a build made with MSVC, so the
+# lock pins it on the Windows hosts alone, and only while this table
+# applies; the .NET SDK it runs on rides as its runtime, there too.
+[for.coverage.toolroom]
+requires = ["dotnet_coverage@windows"]
