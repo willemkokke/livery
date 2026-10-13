@@ -4,7 +4,8 @@ Three: the forge doctor, which reaches the forge and says who you are
 there, which server it is, what it grants, whether every declared owner
 exists and which admin token ladder is set; and the host doctor, which
 reads the machine, the compilers the present kinds need, the tools the
-host serves, and the installed extensions the contract does not list;
+host serves, the listed extensions that are dormant, and the installed
+extensions the contract does not list;
 and the ssh doctor, which says whether the git plugin shares one
 connection per host and names a `ControlMaster` entry of the person's
 own. Each returns findings ([livery.footman.Finding][]); every fix here is
@@ -110,10 +111,11 @@ def forge(**facts: Any) -> list[Finding]:
 
 
 def host(**facts: Any) -> list[Finding]:
-    """The host doctor: the kinds' compilers, the host's tools, unlisted extensions."""
+    """The host doctor: compilers, the host's tools, dormant and unlisted extensions."""
     from livery.workshop._env_tasks import missing_host_tools, served_by
     from livery.workshop._extensions import (
         available_extensions,
+        dormancy,
         extension_names,
         levels_of,
     )
@@ -143,6 +145,10 @@ def host(**facts: Any) -> list[Finding]:
     ]
     if hosted:
         findings.append(Finding(f"tools: served by the host: {', '.join(hosted)}"))
+    for name, waits in dormancy(root).items():
+        # Information, not a fault: a listing kept for a contributor
+        # still to come is a statement of intent.
+        findings.append(Finding(f"extensions: {name}: dormant, {waits}"))
     for module, dist in available_extensions(extension_names(root)):
         # Information, not a fault: an extension a wheel ships that this
         # workspace has no use for is the common case.

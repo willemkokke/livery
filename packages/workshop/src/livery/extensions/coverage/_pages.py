@@ -16,7 +16,8 @@ is reduced to parts by the extension that answers this extension's
 for the arcs ([livery.extensions.coverage._pages.Reduction][]). In the
 merge point's gate job the rows are main's coverage record on every
 check leg; anywhere else the pages draw the data the last gate run left
-on this machine.
+on this machine. Each package's index states its floor
+([livery.extensions.coverage._floors.floor_status][]).
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ from livery.footman import fail
 from livery.workshop import Query, answer
 
 if TYPE_CHECKING:
+    from livery.extensions.coverage._marks import Mark
     from livery.extensions.coverage._record import Unit
     from livery.workshop._packages import Package
 
@@ -147,9 +149,12 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
     machine, whose data outlives a moved file until the next gate run,
     the package's index names it and the rest is drawn. A file whose
     content differs from the content measured keeps its numbers, and
-    its page says it was measured at other content. Returns the members
-    drawn.
+    its page says it was measured at other content. Each package's
+    index states its floor: the floor its contract names, the mark it
+    ratchets to, read in the merge point's gate job, or that nothing
+    judges it. Returns the members drawn.
     """
+    from livery.extensions.coverage._floors import floor_status
     from livery.workshop._ci_context import run_context
 
     prefixes = tuple(f"{package.path}/" for package in packages)
@@ -179,6 +184,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
             f" `{footman.prog()} check` measures again"
         )
     head = _head(root)
+    marks = _marks_read(root, packages)
     rendered: list[str] = []
     for package in packages:
         prefix = f"{package.path}/"
@@ -203,6 +209,7 @@ def render_coverage_pages(root: Path, packages: tuple[Package, ...]) -> list[str
                 contexts=combined.contexts,
                 notes=notes,
                 absent=tuple(name for name in gone if name.startswith(prefix)),
+                floor=floor_status(package, marks),
             ),
         )
         rendered.append(package.member)
@@ -245,6 +252,37 @@ def _within(part: Part, prefixes: tuple[str, ...]) -> Part:
     )
 
 
+def _deploying() -> bool:
+    """Whether this is the merge point's gate job, which publishes the site."""
+    from livery.workshop._ci_context import LEG_VARIABLE, POINT_VARIABLE, run_context
+
+    return (
+        run_context() is not None
+        and os.environ.get(POINT_VARIABLE) == "merge"
+        and os.environ.get(LEG_VARIABLE) == "gate"
+    )
+
+
+def _marks_read(root: Path, packages: tuple[Package, ...]) -> Mapping[str, Mark] | None:
+    """The marks on the state store, read where the record is; else None.
+
+    Read in the merge point's gate job, and only for a package under
+    auto-ratchet: anywhere else the pages name the mode without its
+    value, as a machine's preview does. A store that cannot be read is
+    None too.
+    """
+    from livery.extensions.coverage._floors import coverage_policy
+    from livery.extensions.coverage._marks import marks
+
+    ratcheted = any(
+        policy is not None and policy.ratchet
+        for policy in (coverage_policy(package) for package in packages)
+    )
+    if not ratcheted or not _deploying():
+        return None
+    return marks(root)[0]
+
+
 def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]] | None:
     """In the merge point's gate job, main's record on every check leg; else None.
 
@@ -254,19 +292,10 @@ def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]] | None:
     without the legs' data by design, and a machine's build draws the
     local data a gate run left, or states the absence.
     """
-    from livery.workshop._ci_context import (
-        LEG_VARIABLE,
-        POINT_VARIABLE,
-        run_context,
-        state_store,
-    )
+    from livery.workshop._ci_context import state_store
     from livery.workshop._points import check_legs
 
-    deploying = (
-        os.environ.get(POINT_VARIABLE) == "merge"
-        and os.environ.get(LEG_VARIABLE) == "gate"
-    )
-    if run_context() is None or not deploying:
+    if not _deploying():
         return None
     from livery.git import remote_snapshot
 

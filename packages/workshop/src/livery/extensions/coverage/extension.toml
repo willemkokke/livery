@@ -12,6 +12,12 @@ levels = ["workspace"]
 # The footman plugin that carries the leg's entry, the union and the
 # two verbs a person runs.
 plugin = "livery.extensions.coverage"
+# Coverage judges what the test extensions measure for it, each through
+# its [for.coverage] table: pytest the python suites, cmake the native
+# builds. Until a listed extension does, coverage is dormant: it adds
+# no CI entry and no judge, its verbs stay, and fm extensions and fm
+# doctor say "nothing listed measures" and name what would.
+dormant-until = "measures"
 
 # A package's coverage policy: the floor its coverage keeps, how far a
 # run may fall below it, and whether anything judges it. A package with

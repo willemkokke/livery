@@ -1,4 +1,9 @@
-"""The pytest extension: unlisted it does nothing; listed, it runs the suites."""
+"""The pytest extension: unlisted it does nothing; listed, it runs the suites.
+
+Beside coverage it measures them: the configuration, the meter and the
+ignore lines arrive with coverage, and a coverage listing nothing
+measures for is dormant and named.
+"""
 
 from __future__ import annotations
 
@@ -132,15 +137,131 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
         assert settings["cache_dir"] == ".workshop/.cache/pytest"
         # Each option is a word of its own: pytest reads the list as argv.
         assert settings["addopts"][:3] == ["-q", "-n", "auto"]
-        coverage = configparser.ConfigParser()
-        coverage.read_string((root / ".coveragerc").read_text())
-        assert coverage["run"]["source"] == "acme"
-        # A module a test wrote under its tmp_path and ran is never a
-        # source: the directory is gone before the report is written.
-        assert coverage["run"]["omit"] == "*/pytest-of-*/*"
-        assert coverage["paths"]["packages"].split() == ["packages/", "packages\\"]
     finally:
         registry.restore(state)
+
+
+#: The lines the dev group gains while pytest measures for coverage.
+METER = {"pytest-cov>=5", "coverage>=7.13"}
+
+#: The data coverage.py's meter leaves, which pytest's lines ignore.
+METER_DATA = {".coverage", ".coverage.*"}
+
+
+def _listed(root: Path, extensions: str) -> None:
+    """List *extensions*, a TOML list as written, then mount and deliver at *root*."""
+    from livery.footman import _registry as footman_registry
+    from livery.workshop._extensions import mount_extensions
+    from livery.workshop._shipped_files import deliver
+
+    (root / "workshop.toml").write_text(CONTRACT + f"extensions = {extensions}\n")
+    with footman_registry.capture():
+        mount_extensions(root)
+    deliver(root)
+
+
+def test_without_coverage_no_coveragerc_is_written_and_the_dev_group_carries_no_meter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    # Listed alone, the suites run with no meter: nothing configures
+    # one, installs one, or ignores the data one leaves.
+    _listed(root, '["pytest"]')
+    assert (root / "pytest.toml").is_file()
+    assert not (root / ".coveragerc").exists()
+    assert "pytest>=9.0" in _dev_group(root)
+    assert not METER & set(_dev_group(root))
+    assert not METER_DATA & set((root / ".gitignore").read_text().splitlines())
+    # Listed beside coverage with its contribution taken off its entry,
+    # pytest still measures nothing.
+    _listed(root, '[{ name = "pytest", for = [] }, "coverage"]')
+    assert not (root / ".coveragerc").exists()
+    assert not METER & set(_dev_group(root))
+    # Listed beside coverage, it measures for it: the configuration, the
+    # meter in the dev group, and the lines that ignore the meter's data.
+    _listed(root, '["pytest", "coverage"]')
+    assert (root / ".coveragerc").is_file()
+    assert set(_dev_group(root)) >= METER
+    assert set((root / ".gitignore").read_text().splitlines()) >= METER_DATA
+    # Taken off again, the sync withdraws the file it wrote.
+    _listed(root, '["pytest"]')
+    assert not (root / ".coveragerc").exists()
+
+
+def test_the_delivered_coveragerc_names_each_file_from_the_workspace_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The legs' data and the union read a file by its name from the
+    # workspace root, which coverage.py writes only under relative_files;
+    # with absolute names the union finds no package's files.
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    _listed(root, '["pytest", "coverage"]')
+    coverage = configparser.ConfigParser()
+    coverage.read_string((root / ".coveragerc").read_text())
+    assert coverage["run"].getboolean("relative_files")
+    assert coverage["run"]["source"] == "acme"
+    # A module a test wrote under its tmp_path and ran is never a
+    # source: the directory is gone before the report is written.
+    assert coverage["run"]["omit"] == "*/pytest-of-*/*"
+    assert coverage["paths"]["packages"].split() == ["packages/", "packages\\"]
+
+
+def test_a_coverage_listing_with_no_measurer_is_dormant_and_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman import _registry as footman_registry
+    from livery.workshop import _doctor, _extensions, _points
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    monkeypatch.setattr("livery.workshop._doctor.workspace_root", lambda: root)
+    plugged: list[str] = []
+    monkeypatch.setattr("livery.footman.plugin", plugged.append)
+
+    def joined() -> list[tuple[str, tuple[str, ...]]]:
+        """What coverage joined to the gate point's jobs: each job and its tasks."""
+        return [
+            (item.job.name, tuple(entry.task for entry in item.entries))
+            for item in _points.joined_jobs("gate")
+            if item.extension == "coverage"
+        ]
+
+    # Listed with nothing that measures, coverage is dormant: the mount
+    # adds no entry and no judge, its plugin mounts all the same, and
+    # both the extensions' list and the doctor say what would wake it.
+    (root / "workshop.toml").write_text(CONTRACT + 'extensions = ["coverage"]\n')
+    waits = "nothing listed measures; cmake and pytest would"
+    assert _extensions.dormancy(root) == {"coverage": waits}
+    with footman_registry.capture():
+        assert "coverage" in _extensions.mount_extensions(root)
+    assert plugged == ["livery.extensions.coverage"]
+    assert joined() == []
+    assert f"    dormant: {waits}" in _extensions.describe_extensions(root)
+    found = [finding.what for finding in _doctor.host()]
+    assert f"extensions: coverage: dormant, {waits}" in found
+    # pytest listed beside it measures, and coverage wakes: its entry
+    # joins each check leg and its judge the gate job.
+    (root / "workshop.toml").write_text(
+        CONTRACT + 'extensions = ["pytest", "coverage"]\n'
+    )
+    assert _extensions.dormancy(root) == {}
+    with footman_registry.capture():
+        _extensions.mount_extensions(root)
+    assert joined() == [("check", ("coverage.leg",)), ("gate", ("coverage.union",))]
+    assert not [
+        line for line in _extensions.describe_extensions(root) if "dormant" in line
+    ]
 
 
 def test_the_root_tests_directory_is_configured_only_while_it_exists(
@@ -242,7 +363,8 @@ def test_the_test_step_asks_for_the_coverage_that_installs_its_own_hook() -> Non
 
     found = declaration("pytest")
     assert found is not None
-    answered = found.queries["python.dev-group"]
+    # The meter rides the dev group while pytest measures for coverage.
+    answered = found.target_queries["coverage"]["python.dev-group"]
     assert isinstance(answered, DeclaredValue)
     contributed = [str(value) for value in cast("list[object]", answered.value)]
     # 7.13 is the first coverage that installs its own startup hook: an
@@ -269,6 +391,26 @@ def test_with_no_suite_to_run_no_pytest_starts(
 
 # The test step: one call for the suites, the workspace's own tests
 # among them, and a call of its own for a suite that is not worker-safe.
+
+
+def test_the_suites_run_measured_while_pytest_measures_for_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    one = _member(tmp_path, "one")
+    ctx = PhaseContext(root=tmp_path, packages=(one,))
+    # The fallbacks first: coverage unlisted, and listed with pytest's
+    # contribution taken off its entry; then pytest measures for it.
+    for extensions, measured in (
+        ('["pytest"]', False),
+        ('[{ name = "pytest", for = [] }, "coverage"]', False),
+        ('["pytest", "coverage"]', True),
+    ):
+        (tmp_path / "workshop.toml").write_text(
+            CONTRACT + f"extensions = {extensions}\n"
+        )
+        registry.step_for("test.pytest").run(ctx)
+        assert calls[-1][1]["measured"] is measured, extensions
 
 
 def test_a_whole_run_runs_every_suite_in_one_call(

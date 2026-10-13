@@ -2,9 +2,13 @@
 
 The build lands in the package's ``build/gate`` directory, configured
 with the Ninja generator and a compilation database for the tools that
-read one. The tests run through ctest, measured by the compiler family
-CMake detected: gcov for gcc, llvm-cov for clang, Microsoft's engine
-for MSVC. On Windows with no compiler chosen, the build enters the
+read one. The tests run through ctest. While coverage is listed, this
+extension's ``[for.coverage]`` table applies
+([livery.extensions.cmake._build.measures][]): the build is
+instrumented and each run is measured by the compiler family CMake
+detected, gcov for gcc, llvm-cov for clang, Microsoft's engine for
+MSVC; while it is not, the build is not instrumented and ctest runs
+alone. On Windows with no compiler chosen, the build enters the
 newest Visual Studio's C++ environment itself. Nothing here names a
 language: CMake chooses the compilers its project asks for.
 
@@ -43,10 +47,23 @@ if TYPE_CHECKING:
 GATE_BUILD_DIR = "build/gate"
 
 
-#: The include the gate's configure hands CMake, shipped beside this
-#: module: the instrumentation each compiler family takes, so the
-#: measurer beside the compiler can read the run.
+#: The include the gate's configure hands CMake while the build is
+#: measured, shipped beside this module: the instrumentation each
+#: compiler family takes, so the measurer beside the compiler can read
+#: the run.
 COVERAGE_CMAKE = Path(__file__).with_name("coverage.cmake")
+
+#: The name a package lists this extension by.
+NAME = "cmake"
+
+#: The extension the gate build is measured for, while this one's
+#: ``[for.coverage]`` table applies.
+MEASURED_FOR = "coverage"
+
+#: The cache variable that names the include, which an unmeasured
+#: configure removes: CMake keeps a ``-D`` value in its cache, so a
+#: build configured measured before would stay instrumented.
+PROJECT_INCLUDE = "CMAKE_PROJECT_INCLUDE"
 
 
 #: Where an instrumented test run leaves its profiles and reports,
@@ -66,6 +83,18 @@ FAMILIES = {
 def measurer_for(compiler_id: str) -> str:
     """The measurer for *compiler_id* as CMake spells it; empty without one."""
     return FAMILIES.get(compiler_id, "")
+
+
+def measures(package: Package) -> bool:
+    """Whether *package*'s gate build is measured: cmake contributes to coverage.
+
+    True while the workspace *package* belongs to lists coverage and
+    this extension's ``[for.coverage]`` table applies
+    ([livery.workshop.contributions_for][]).
+    """
+    from livery.workshop import contributions_for
+
+    return NAME in contributions_for(MEASURED_FOR, package.directory)
 
 
 #: The shell that reads the batch file MSVC's environment comes from:
@@ -222,11 +251,18 @@ def configure(package: Package, arguments: tuple[str, ...] = ()) -> None:
 
     CMake configures against the host's toolchain with the Ninja
     generator, in the environment ``toolchain_env`` enters, and
-    exports the compile commands clang-tidy reads. A dependency the
-    project's ``CMakeLists.txt`` cannot find fails the configure with
-    cmake's own message.
+    exports the compile commands clang-tidy reads. A measured build
+    ([livery.extensions.cmake._build.measures][]) includes
+    ``coverage.cmake``, and an unmeasured one removes the include from
+    the cache. A dependency the project's ``CMakeLists.txt`` cannot find
+    fails the configure with cmake's own message.
     """
     build_dir = package.directory / GATE_BUILD_DIR
+    include = (
+        f"-D{PROJECT_INCLUDE}={COVERAGE_CMAKE}"
+        if measures(package)
+        else f"-U{PROJECT_INCLUDE}"
+    )
     tools.cmake.opts(cwd=package.directory, env=toolchain_env())(
         "-S",
         ".",
@@ -235,7 +271,7 @@ def configure(package: Package, arguments: tuple[str, ...] = ()) -> None:
         "-G",
         "Ninja",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-        f"-DCMAKE_PROJECT_INCLUDE={COVERAGE_CMAKE}",
+        include,
         *arguments,
     )
 
@@ -267,33 +303,35 @@ def test(
     selection: tuple[str, ...] = (),
     arguments: tuple[str, ...] = (),
 ) -> None:
-    """Run ctest over the gate build, measured: every test, or *selection*'s alone.
+    """Run ctest over the gate build: every test, or *selection*'s alone.
 
     *arguments* go to ctest after the workshop's own.
 
     A selected test file maps to the ctest named after its stem
     (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
     template registers tests; a selection no ctest answers to is a
-    refusal naming the rule. The run is measured by the family of
-    the compiler CMake configured the gate build with: gcov and
-    llvm-cov read the counters a green run left, and Microsoft's
+    refusal naming the rule. A measured run
+    ([livery.extensions.cmake._build.measures][]) is measured by the
+    family of the compiler CMake configured the gate build with: gcov
+    and llvm-cov read the counters a green run left, and Microsoft's
     engine collects around the run itself. The lines reached land as
     the package's part at the workspace *root*; a red run leaves
     none, and a family without a measurer refuses by name, since a
-    suite that ran unmeasured never passes as measured.
+    suite that ran unmeasured never passes as measured. A run that is
+    not measured runs ctest alone and leaves no part.
     """
     build_dir = package.directory / GATE_BUILD_DIR
-    env = {
-        **toolchain_env(),
-        "CTEST_OUTPUT_ON_FAILURE": "1",
-        **_fresh_profiles(package),
-    }
     names = [Path(path).stem for path in selection]
     argv = ["--test-dir", str(build_dir), "--output-on-failure"]
     if names:
         pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
         argv += ["-R", pattern]
     argv += arguments
+    env = {**toolchain_env(), "CTEST_OUTPUT_ON_FAILURE": "1"}
+    if not measures(package):
+        _run_ctest(package, argv, env, names)
+        return
+    env.update(_fresh_profiles(package))
     compiler_id, compiler = compiler_of(package)
     family = measurer_for(compiler_id)
     if family == "msvc":

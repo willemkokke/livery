@@ -360,6 +360,107 @@ def test_a_package_no_measurement_reaches_states_the_absence(
     assert not stale.exists()
 
 
+# --- the floor each index states ---------------------------------------------
+
+
+#: What the index says of a fixed floor, after the floor itself.
+_JUDGED = "; the gate job judges the union of every leg against it."
+
+
+def _core(root: Path, coverage: str = "") -> Path:
+    """Rewrite core's contract with *coverage* as its ``[coverage]`` body; its path.
+
+    The contracts this process read are dropped too: a rewrite of the
+    same size within the clock's tick keeps the file's stamp.
+    """
+    from livery.workshop._contract import forget_contracts
+
+    core = root / "packages" / "core"
+    table = f"\n[coverage]\n{coverage}" if coverage else ""
+    (core / "workshop.toml").write_text(
+        f'kind = "python"\nname = "acme-core"\n{table}\n[docs]\n'
+        'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    forget_contracts()
+    return core
+
+
+def test_each_index_states_the_package_s_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.coverage._floors import floor_status
+    from livery.extensions.coverage._marks import Mark
+    from livery.workshop._packages import discover_packages
+
+    root = _workspace(tmp_path, monkeypatch)
+    _left(root, Part(".", COVERAGE_PY, {MODULE: _entry(root)}))
+
+    def stated(coverage: str = "", marks: dict[str, Mark] | None = None) -> str:
+        _core(root, coverage)
+        (core,) = discover_packages(root)
+        return floor_status(core, marks)
+
+    # The packages nothing judges first: on purpose, and for want of tests.
+    assert stated("required = false\n") == (
+        "Not judged: its [coverage] table sets required = false."
+    )
+    assert stated() == "Not judged: the package has no tests and names no floor."
+    (root / "packages/core/tests").mkdir()
+    assert stated() == f"Floor: 100.0% by default, with an epsilon of 0.5%{_JUDGED}"
+    assert stated("floor = 90\nepsilon = 1\n") == (
+        f"Floor: 90.0%, with an epsilon of 1.0%{_JUDGED}"
+    )
+    # Under auto-ratchet: the mode alone where the marks were not read,
+    # then the mark the store holds, or none yet.
+    ratchet = 'floor = "auto-ratchet"\n'
+    assert stated(ratchet) == (
+        "Floor: the mark on the state store, with an epsilon of 0.5%."
+    )
+    assert stated(ratchet, {}) == (
+        "Floor: the mark on the state store, which the next CI run records."
+    )
+    mark = Mark("packages/core", 88.25, "ratchet", "run 7", "", "")
+    assert stated(ratchet, {"packages/core": mark}) == (
+        "Floor: the mark on the state store, 88.2% (ratchet by run 7), with an"
+        " epsilon of 0.5%."
+    )
+    # The index draws the line under its heading.
+    _core(root, "floor = 90\n")
+    assert _render_pages(root) == ["core"]
+    index = read_page(root / "packages/core/htmlcov/index.html")
+    assert index.floor == f"Floor: 90.0%, with an epsilon of 0.5%{_JUDGED}"
+
+
+def test_the_marks_are_read_for_a_ratcheted_package_in_the_merge_gate_job_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.coverage import _marks
+    from livery.workshop._packages import discover_packages
+
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "packages/core/tests").mkdir()
+    read: list[Path] = []
+
+    def _read(at: Path) -> tuple[dict[str, _marks.Mark] | None, str]:
+        read.append(at)
+        return {}, ""
+
+    monkeypatch.setattr(_marks, "marks", _read)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
+    monkeypatch.setenv("WORKSHOP_POINT", "merge")
+    monkeypatch.setenv("WORKSHOP_LEG", "gate")
+    # A fixed floor reads nothing, nor does a ratchet outside that job.
+    _core(root, "floor = 90\n")
+    assert _pages._marks_read(root, discover_packages(root)) is None
+    _core(root, 'floor = "auto-ratchet"\n')
+    monkeypatch.setenv("WORKSHOP_LEG", "docs")
+    assert _pages._marks_read(root, discover_packages(root)) is None
+    assert read == []
+    monkeypatch.setenv("WORKSHOP_LEG", "gate")
+    assert _pages._marks_read(root, discover_packages(root)) == {}
+    assert read == [root]
+
+
 # --- main's record, in the merge point's gate job ------------------------------
 
 

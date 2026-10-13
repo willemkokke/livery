@@ -12,3 +12,11 @@ levels = ["package"]
 # build writes its compilation database, which clang-tidy reads.
 [queries]
 compile-commands = "livery.extensions.cmake._build:compile_commands"
+
+# While coverage is listed, this extension measures every native suite
+# for it: the gate build includes coverage.cmake, each ctest run is read
+# by the compiler family's own measurer, and its lines land as the
+# package's part at the root, which the ignore line under
+# content/for/coverage/ keeps out of git. While it is not, the gate
+# build is not instrumented and ctest runs alone.
+[for.coverage]

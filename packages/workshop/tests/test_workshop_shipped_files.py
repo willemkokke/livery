@@ -271,6 +271,9 @@ def test_the_header_lint_leaves_the_engines_templates_alone(tmp_path: Path) -> N
     content = tmp_path / "packages/thing/src/livery/thing/content"
     (content / "root").mkdir(parents=True)
     (content / "root/.gitignore").write_text("dist/\n")
+    # The same for the files it adds to another extension.
+    (content / "for/docs/package").mkdir(parents=True)
+    (content / "for/docs/package/.gitignore").write_text("site/\n")
     (content / "fragments").mkdir()
     (content / "fragments/voice.md").write_text("# Voice\n")
     assert content_lint(tmp_path) == [
@@ -297,6 +300,61 @@ def test_a_toml_region_and_its_comment_come_after_every_extensions_tables(
         "# -- workshop: region tables, yours to edit; the render keeps it --\n"
         "# -- workshop: end tables --\n"
     )
+
+
+#: An extension's files for a python extension, while it applies: one its
+#: code writes, and an ignore line it ships under content/for/.
+_HOUSE = """\
+[for."acme.python".fragments."HOUSE.md"]
+render = "{package}._steps:house"
+"""
+
+_HOUSE_STEPS = """\
+def noop(ctx):
+    del ctx
+
+
+def house(root):
+    del root
+    return "# The house\\n"
+"""
+
+
+def test_a_for_table_s_files_arrive_while_it_applies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._shipped_files import outputs
+    from workshop_extension_fakes import fake_extensions, fake_steps, root_contract
+
+    fake_extensions(tmp_path, monkeypatch, house=_HOUSE, python="")
+    fake_steps(tmp_path, "house", _HOUSE_STEPS)
+    shipped = tmp_path / "site/acme/house/content/for/acme.python/root"
+    shipped.mkdir(parents=True)
+    (shipped / ".gitignore").write_text("house-data/\n")
+    root = tmp_path / "ws"
+    root.mkdir()
+
+    def written() -> dict[str, engine.Output]:
+        return {output.path: output for output in outputs(root)}
+
+    # The fallbacks first: the target unlisted, and listed with the
+    # contribution taken off the entry. Neither file arrives.
+    for listed in (
+        '["acme.house"]',
+        '["acme.python", { name = "acme.house", for = [] }]',
+    ):
+        root_contract(root, listed)
+        found = written()
+        assert "HOUSE.md" not in found, listed
+        assert "house-data/" not in found[".gitignore"].body.decode().splitlines()
+    # Both listed: the render's file, and the ignore line among the
+    # extension's own fragments, named for the target.
+    root_contract(root, '["acme.python", "acme.house"]')
+    found = written()
+    assert found["HOUSE.md"].body == b"# The house\n"
+    assert found["HOUSE.md"].owners == ("acme.house:HOUSE.md",)
+    assert "house-data/" in found[".gitignore"].body.decode().splitlines()
+    assert "acme.house:for/acme.python/.gitignore" in found[".gitignore"].owners
 
 
 # A file an extension's code writes: the refusal first.

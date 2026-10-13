@@ -622,12 +622,17 @@ def content_lint(
     Only the workspace's own packages are linted: an installed
     extension's content is its home repository's to keep. Files without
     a comment syntax are exempt, and so are the fragment engine's
-    templates under `content/root/` and `content/package/`, whose
-    composed files carry headers of their own, and the seeds under
+    templates under `content/root/` and `content/package/`, and under
+    `content/for/<target>/root/` and `content/for/<target>/package/`,
+    whose composed files carry headers of their own, and the seeds under
     `content/seeds/`, which become the workspace's own files.
     """
     from livery.workshop._seeds import SEEDS
-    from livery.workshop._shipped_files import PACKAGE_CONTENT, ROOT_CONTENT
+    from livery.workshop._shipped_files import (
+        FOR_CONTENT,
+        PACKAGE_CONTENT,
+        ROOT_CONTENT,
+    )
 
     problems = []
     for extension, content in _content_trees(root):
@@ -638,10 +643,13 @@ def content_lint(
                 continue
             # A template the fragment engine composes into a workspace file
             # carries that file's own header; this one would land in it.
-            if path.relative_to(content).parts[0] in (
-                ROOT_CONTENT,
-                PACKAGE_CONTENT,
-                SEEDS,
+            parts = path.relative_to(content).parts
+            if parts[0] in (ROOT_CONTENT, PACKAGE_CONTENT, SEEDS):
+                continue
+            if (
+                parts[0] == FOR_CONTENT
+                and len(parts) > 3
+                and parts[2] in (ROOT_CONTENT, PACKAGE_CONTENT)
             ):
                 continue
             style = comment_style(path)

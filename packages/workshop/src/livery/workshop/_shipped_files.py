@@ -4,7 +4,10 @@ An extension ships a workspace file as a template in its wheel, under
 `content/root/<path>` for a file at the workspace root and
 `content/package/<path>` for that file in every package listing the
 extension; a `.jinja` suffix on the source is dropped for the
-target. `fm sync` composes them with
+target. Under `content/for/<target>/root/` and
+`content/for/<target>/package/` it ships the files it adds to another
+extension, delivered while its `[for.<target>]` table applies
+([livery.workshop._extensions.contributing][]). `fm sync` composes them with
 [livery.workshop._fragment_engine.plan][] and writes them with
 [livery.workshop._fragment_engine.apply][]; the gate's ``drift.check``
 judges them with [livery.workshop._fragment_engine.drift][].
@@ -19,7 +22,8 @@ An extension also writes files from its own code: each
 `[fragments."<target>"]` table in its `extension.toml` names a render
 the engine calls with the workspace root, for one file or, with a
 target ending in `/`, a directory of them
-([livery.workshop._shipped_files.computed_outputs][]). A package-level
+([livery.workshop._shipped_files.computed_outputs][]), and a
+`[for.<target>.fragments]` table does the same while it applies. A package-level
 extension's files are written while a package's set holds the
 extension and withdrawn with the last package that did
 ([livery.workshop._shipped_files.delivery_order][]).
@@ -37,6 +41,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.workshop._extensions import (
     SELF,
+    contributing,
     declaration,
     extension_content,
     stack_names,
@@ -55,6 +60,10 @@ ROOT_CONTENT = "root"
 
 PACKAGE_CONTENT = "package"
 """The `content/` subdirectory whose files land in each package."""
+
+FOR_CONTENT = "for"
+"""The `content/` subdirectory holding, per target, the files an extension
+adds to another: `for/<target>/root/` and `for/<target>/package/`."""
 
 TEMPLATE = ".jinja"
 """The suffix a shipped template may carry, dropped for its target: a
@@ -96,25 +105,41 @@ def shipped(root: Path) -> tuple[list[Fragment], list[str]]:
     """Every listed extension's shipped files as fragments, and the order they apply.
 
     The order is the delivery's
-    ([livery.workshop._shipped_files.delivery_order][]).
+    ([livery.workshop._shipped_files.delivery_order][]). A file under
+    `content/for/<target>/` comes while the extension's `[for.<target>]`
+    table applies, named `for/<target>/<path>` among the extension's
+    fragments, after its own.
     """
     order = delivery_order(root)
+    contributes = contributing(root)
     fragments: list[Fragment] = []
     for extension in order:
         content = extension_content(extension)
         if content is None:
             continue
-        for kind, prefix in ((ROOT_CONTENT, ""), (PACKAGE_CONTENT, PACKAGE_PREFIX)):
-            base = content / kind
-            if not base.is_dir():
-                continue
-            for source in sorted(base.rglob("*")):
-                if not source.is_file() or "__pycache__" in source.parts:
+        trees = [(content, "")] + [
+            (content / FOR_CONTENT / target, f"{FOR_CONTENT}/{target}/")
+            for target in contributes.get(extension, ())
+        ]
+        for tree, named in trees:
+            for kind, prefix in ((ROOT_CONTENT, ""), (PACKAGE_CONTENT, PACKAGE_PREFIX)):
+                base = tree / kind
+                if not base.is_dir():
                     continue
-                relative = source.relative_to(base).as_posix().removesuffix(TEMPLATE)
-                fragments.append(
-                    Fragment(extension, relative, f"{prefix}{relative}", source=source)
-                )
+                for source in sorted(base.rglob("*")):
+                    if not source.is_file() or "__pycache__" in source.parts:
+                        continue
+                    relative = (
+                        source.relative_to(base).as_posix().removesuffix(TEMPLATE)
+                    )
+                    fragments.append(
+                        Fragment(
+                            extension,
+                            f"{named}{relative}",
+                            f"{prefix}{relative}",
+                            source=source,
+                        )
+                    )
     fragments = declared(fragments, order)
     fragments += _editor_contributions(order, root)
     from livery.workshop._identity import is_born
@@ -534,12 +559,13 @@ def computed_outputs(
     package-level extension's files are written while a package's set
     holds the extension and withdrawn with the last package that did.
     Each ``[fragments."<target>"]`` table names a render the engine
-    calls with *root*. For a file target the render answers the text,
-    or nothing for no file; for a target ending in ``/`` it answers each
-    file's path under the target, to its text or to the shipped file or
-    directory the file links to. Every file is owned
-    ``<extension>:<target>``, and a ``local`` table's files belong to
-    this checkout alone.
+    calls with *root*, and so does each ``[for.<target>.fragments]``
+    table while its ``[for.<target>]`` table applies. For a file target
+    the render answers the text, or nothing for no file; for a target
+    ending in ``/`` it answers each file's path under the target, to its
+    text or to the shipped file or directory the file links to. Every
+    file is owned ``<extension>:<target>``, and a ``local`` table's files
+    belong to this checkout alone.
 
     Raises:
         Failed: for a path two writers claim: another extension's
@@ -547,9 +573,15 @@ def computed_outputs(
     """
     held = dict(taken or {})
     outputs: list[Output] = []
+    contributes = contributing(root)
     for extension in order:
         found = None if extension == SELF else declaration(extension)
-        for fragment in found.fragments if found is not None else ():
+        if found is None:
+            continue
+        renders = [*found.fragments]
+        for target in contributes.get(extension, ()):
+            renders += found.target_fragments.get(target, ())
+        for fragment in renders:
             owner = f"{extension}:{fragment.target}"
             answer = fragment.render(root)
             written: list[tuple[str, object]]

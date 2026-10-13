@@ -553,7 +553,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     while they are listed. A plugin a branded App already mounts as a
     builtin is not mounted again, since claiming its tasks again puts
     the same task in one rung twice; what its declaration adds
-    registers as any other extension's does.
+    registers as any other extension's does. A dormant extension
+    ([livery.workshop._extensions.dormancy][]) registers no step and no
+    job, at its top level or in its ``[for.<target>]`` tables, and its
+    plugin mounts all the same, so its verbs stay.
     """
     # footman does not expose the brand's builtin set publicly; this
     # private read is one of the reaches issue #1204 closes with a seam.
@@ -571,6 +574,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     declared = declared_targets(start)
     active = resolved_targets(start)
     enabled = enabled_steps(start)
+    asleep = frozenset(_dormant(tuple(active), _contributing(active)))
     for entry in _listed(start):
         if why := _bracketed(_spelling(entry)):
             _note(f"{why}; the mount reads the name alone")
@@ -578,7 +582,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     # its mount ran.
     present = [SELF]
     grafted: set[tuple[str, str]] = set()
-    _graft_contributions(present, declared, active, grafted, enabled)
+    _graft_contributions(present, declared, active, grafted, enabled, asleep)
     packaged = package_extensions(start)
     for extension, dist in extension_entries(start):
         level = PACKAGE if extension in packaged else WORKSPACE
@@ -590,12 +594,13 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             if found is not None:
                 check_api_version(extension, found)
                 check_phase_declarers(extension, found, present)
-                if register_declared(
-                    extension, found.additions, enabled=enabled
+                if (
+                    extension not in asleep
+                    and register_declared(extension, found.additions, enabled=enabled)
                 ) or _answers_queries(found):
                     mounted.append(extension)
             present.append(extension)
-            _graft_contributions(present, declared, active, grafted, enabled)
+            _graft_contributions(present, declared, active, grafted, enabled, asleep)
             continue
         package = extension_package(extension)
         if extension in _declared() and declaration_file(package) is None:
@@ -631,8 +636,9 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             )
             continue
         check_phase_declarers(extension, found, present)
-        if register_declared(
-            extension, found.additions, enabled=enabled
+        if (
+            extension not in asleep
+            and register_declared(extension, found.additions, enabled=enabled)
         ) or _answers_queries(found):
             mounted.append(extension)
         name = found.plugin
@@ -649,7 +655,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 if extension not in mounted:
                     mounted.append(extension)
         present.append(extension)
-        _graft_contributions(present, declared, active, grafted, enabled)
+        _graft_contributions(present, declared, active, grafted, enabled, asleep)
     # An extension's steps registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
     from livery.workshop._steps import generate_verbs
@@ -746,6 +752,7 @@ def _graft_contributions(
     active: dict[str, tuple[str, ...]],
     grafted: set[tuple[str, str]],
     enabled: frozenset[str] = frozenset(),
+    asleep: frozenset[str] = frozenset(),
 ) -> None:
     """Register every ``[for.<target>]`` table whose owner and target are both present.
 
@@ -755,8 +762,12 @@ def _graft_contributions(
     that entry, and it can only run inside a mount that went on. A step
     in the table declared off registers under the steps the root
     contract turns on, *enabled*, as one at the file's top level does.
+    An owner among *asleep*, the dormant extensions, registers none of
+    its tables.
     """
     for owner in present:
+        if owner in asleep:
+            continue
         for target in active.get(owner, ()):
             if target not in present or (owner, target) in grafted:
                 continue
@@ -928,7 +939,7 @@ def contributions_for(
     names = extension_names(start)
     if target not in names:
         return {}
-    active = resolved_targets(start)
+    contributes = contributing(start)
     found: dict[str, dict[str, Any]] = {}
     for owner in names:
         declared = _readable(owner)
@@ -936,9 +947,103 @@ def contributions_for(
             continue
         if target in declared.requires:
             found[owner] = dict(declared.tables)
-        elif target in active.get(owner, ()) and target in declared.target_tables:
+        elif target in contributes.get(owner, ()):
             found[owner] = dict(declared.target_tables[target])
     return found
+
+
+def contributing(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each listed extension to the listed targets its ``[for]`` tables apply to now.
+
+    A target is listed, the owner declares a ``[for.<target>]`` table for
+    it, and the owner's listing contributes to it: its ``for`` list, or
+    every listed target it declares a table for when it has none. An
+    extension that contributes to nothing is left out. The rule the
+    mount grafts by, which [livery.workshop.contributions_for][], the
+    delivery of a table's files and dormancy read through.
+    """
+    return _contributing(resolved_targets(start))
+
+
+def _contributing(active: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """What `contributing` answers, from *active*: each listed extension's targets.
+
+    *active* is [livery.workshop._extensions.resolved_targets][]'s
+    answer, which holds every listed extension, in list order, so a
+    caller that already has it reads no contract again.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for owner, resolved in active.items():
+        declared = _readable(owner)
+        if declared is None:
+            continue
+        targets = tuple(
+            target
+            for target in resolved
+            if target != owner and target in active and target in declared.target_tables
+        )
+        if targets:
+            found[owner] = targets
+    return found
+
+
+def dormancy(start: Path | None = None) -> dict[str, str]:
+    """Each listed extension that is dormant now, to what it waits for.
+
+    An extension whose ``[extension] dormant-until`` names what another
+    does for it, ``measures`` for coverage, is dormant while no listed
+    extension contributes a ``[for.<it>]`` table to it
+    ([livery.workshop._extensions.contributing][]): it registers no step
+    and no job, and its plugin still mounts. The text says what it waits
+    for and names the installed extensions whose declarations carry such
+    a table, which would wake it: ``nothing listed measures; cmake and
+    pytest would``. A listing kept for a contributor still to come is a
+    statement of intent, so dormancy is named, never refused.
+    """
+    active = resolved_targets(start)
+    return _dormant(tuple(active), _contributing(active))
+
+
+def _dormant(
+    names: tuple[str, ...], contributes: dict[str, tuple[str, ...]]
+) -> dict[str, str]:
+    """`dormancy` over the listed *names*, given what each contributes to."""
+    woken = {target for targets in contributes.values() for target in targets}
+    found: dict[str, str] = {}
+    for name in names:
+        declared = _readable(name)
+        if declared is None or not declared.dormant_until or name in woken:
+            continue
+        wakers = _wakers(name)
+        would = f"{_spoken(wakers)} would" if wakers else "no installed extension would"
+        found[name] = f"nothing listed {declared.dormant_until}; {would}"
+    return found
+
+
+def _wakers(target: str) -> list[str]:
+    """The installed extensions whose declarations carry a ``[for.<target>]`` table.
+
+    Sorted. An installed declaration that cannot be read is left out:
+    an extension the workspace does not list is not its to judge.
+    """
+    found: list[str] = []
+    for name in installed_extensions():
+        if name == target:
+            continue
+        try:
+            declared = _readable(name)
+        except DeclarationError:
+            continue
+        if declared is not None and target in declared.target_tables:
+            found.append(name)
+    return found
+
+
+def _spoken(names: list[str]) -> str:
+    """*names* as a sentence lists them: ``a``, ``a and b``, ``a, b and c``."""
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def describe_extensions(start: Path | None = None) -> list[str]:
@@ -946,8 +1051,8 @@ def describe_extensions(start: Path | None = None) -> list[str]:
 
     The base, then each extension in mount order: the package-level
     ones with the packages whose sets hold them, then the workspace
-    list; under each, the steps it declares off, each with whether it
-    is on.
+    list; under each, whether it is dormant and what would wake it, and
+    the steps it declares off, each with whether it is on.
     """
     names = extension_names(start)
     who = requirers(start)
@@ -955,6 +1060,7 @@ def describe_extensions(start: Path | None = None) -> list[str]:
     targets = resolved_targets(start)
     enabled = enabled_steps(start)
     holders = _holders(start)
+    asleep = dormancy(start)
     lines: list[str] = [f"  {SELF} (the base)"]
     for name in names:
         needed = who.get(name, ())
@@ -966,6 +1072,8 @@ def describe_extensions(start: Path | None = None) -> list[str]:
             lines.append(f"    tools: {', '.join(tools[name])}")
         if targets.get(name):
             lines.append(f"    for: {', '.join(targets[name])}")
+        if name in asleep:
+            lines.append(f"    dormant: {asleep[name]}")
         for step in _declared_off(name):
             state = "on" if step in enabled else "off"
             phase, _, name_in_phase = step.partition(".")

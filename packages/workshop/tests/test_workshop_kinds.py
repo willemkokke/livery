@@ -190,11 +190,19 @@ def test_a_kind_without_a_suite_runner_refuses_and_a_child_takes_its_parents(
     register_kind(
         KindRecord(name="acme-child", backend=_FakeBackend(), parent="acme-parent")
     )
-    run_suites("acme-child", "-x", packages=(), root=tmp_path, point="merge")
+    run_suites(
+        "acme-child", "-x", packages=(), root=tmp_path, point="merge", measured=True
+    )
     assert seen == [
         (
             ("-x",),
-            {"packages": (), "root": tmp_path, "selection": None, "point": "merge"},
+            {
+                "packages": (),
+                "root": tmp_path,
+                "selection": None,
+                "point": "merge",
+                "measured": True,
+            },
         )
     ]
 

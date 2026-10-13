@@ -109,6 +109,11 @@ def _package(directory: Path, name: str, kind_name: str) -> Package:
     )
 
 
+def _listing_coverage(root: Path) -> None:
+    """Write *root*'s contract listing coverage, which cmake measures for."""
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+
+
 def _render_cpp(tmp_path: Path) -> Package:
     """A cpp-conan package, straight from its seeds."""
     destination = tmp_path / "packages" / "native"
@@ -309,6 +314,56 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
     package.directory.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="ctest is not on PATH"):
         _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+
+
+def test_a_native_build_without_coverage_is_not_instrumented(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import livery.toolroom.tools as tools
+    from livery.extensions.coverage import _lines as lines_
+
+    member = tmp_path / "packages" / "native"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    package = _package(member, "acme-native", "cpp-conan")
+    configured: list[tuple[str, ...]] = []
+    ran: list[dict[str, str]] = []
+
+    def _cmake_opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> None:
+            configured.append(args)
+
+        return _run
+
+    def _ctest_opts(**kwargs: object) -> object:
+        env = kwargs.get("env")
+        ran.append(dict(env) if isinstance(env, dict) else {})
+
+        def _run(*args: str) -> object:
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "cmake", SimpleNamespace(opts=_cmake_opts))
+    monkeypatch.setattr(tools, "ctest", SimpleNamespace(opts=_ctest_opts))
+    monkeypatch.setattr(_cmake, "toolchain_env", lambda: {})
+    # Coverage unlisted: the configure takes no instrumentation and
+    # removes the include an earlier measured configure left in CMake's
+    # cache, and ctest runs alone, measured by nothing and leaving no part.
+    _cpp_conan.configure(package)
+    assert "-UCMAKE_PROJECT_INCLUDE" in configured[-1]
+    assert not [arg for arg in configured[-1] if str(_cmake.COVERAGE_CMAKE) in arg]
+    _cpp_conan.test(package, tmp_path)
+    assert "LLVM_PROFILE_FILE" not in ran[-1]
+    assert not (member / _cpp_conan.GATE_BUILD_DIR / _cpp_conan.PROFILE_DIR).exists()
+    assert lines_.read_parts(tmp_path) == {}
+    assert "coverage" not in capsys.readouterr().out
+    # Listed, cmake measures for coverage: the configure instruments.
+    _listing_coverage(tmp_path)
+    _cpp_conan.configure(package)
+    assert f"-DCMAKE_PROJECT_INCLUDE={_cmake.COVERAGE_CMAKE}" in configured[-1]
+    assert "-UCMAKE_PROJECT_INCLUDE" not in configured[-1]
 
 
 def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
@@ -796,6 +851,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
+    _listing_coverage(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)
     compiler_id, compiler = _cpp_conan.compiler_of(package)
     assert _cmake.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
@@ -1107,6 +1163,7 @@ def _msvc_gate(
     import livery.toolroom.tools as tools
 
     package = _render_cpp(tmp_path)
+    _listing_coverage(tmp_path)
     build_dir = package.directory / _cpp_conan.GATE_BUILD_DIR
     compiler = build_dir / "CMakeFiles" / "4.4.2" / "CMakeCXXCompiler.cmake"
     compiler.parent.mkdir(parents=True)
@@ -1299,6 +1356,7 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
+    _listing_coverage(tmp_path)
     _cpp_conan.gate_build(package, tmp_path)
     compiler_id, compiler = _cpp_conan.compiler_of(package)
     assert compiler_id == "MSVC", (compiler_id, compiler)

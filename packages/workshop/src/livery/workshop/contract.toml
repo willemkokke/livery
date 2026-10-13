@@ -571,7 +571,7 @@ doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this o
 
 [contract.extension.extension]
 types = ["table"]
-doc = "the extension's identity: its workshop API version, its levels, its plugin, and the extensions it requires"
+doc = "the extension's identity: its workshop API version, its levels, its plugin, the extensions it requires, and what it waits for while dormant"
 
 [contract.extension.extension.api-version]
 types = ["int"]
@@ -594,13 +594,17 @@ doc = "the footman plugin that carries the extension's verbs; when absent, the e
 types = ["strs"]
 doc = "the extensions this one cannot work without, each listed before it; none when absent"
 
+[contract.extension.extension.dormant-until]
+types = ["str"]
+doc = "what another extension does for this one by declaring a [for.<this>] table, as a verb such as measures: until a listed extension contributes such a table, this one is dormant, registers no step and no job, and fm extensions and fm doctor name the installed extensions that would wake it; never dormant when absent"
+
 [contract.extension.for]
 types = ["table"]
 doc = "what the extension adds to other listed extensions, by target"
 
 [contract.extension.for."*"]
 types = ["table"]
-doc = "a target extension, by its listed name, to what this one adds while both are listed: every table the top level takes but [extension], [for] and [contract]"
+doc = "a target extension, by its listed name, to what this one adds while both are listed: every table the top level takes but [extension], [for] and [contract]; the files it ships under content/for/<target>/ are delivered then too"
 
 [contract.extension.fragments]
 types = ["table"]

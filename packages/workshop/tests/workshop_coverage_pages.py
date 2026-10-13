@@ -67,6 +67,7 @@ class Page(HTMLParser):
         self.notes: list[str] = []
         self.absent: list[str] = []
         self.notice = ""
+        self.floor = ""
         self.body: dict[str, str] = {}
         self._line: Line | None = None
         self._number = 0
@@ -131,6 +132,8 @@ class Page(HTMLParser):
             kind = "contexts"
         elif tag == "p" and "notice" in classes:
             kind = "notice"
+        elif tag == "p" and "floor" in classes:
+            kind = "floor"
         elif (tag == "li" and self._section == "about") or (
             tag == "p" and "about" in classes
         ):
@@ -187,6 +190,8 @@ class Page(HTMLParser):
                 self.contexts = json.loads("".join(self._text))
             elif kind == "notice":
                 self.notice = text
+            elif kind == "floor":
+                self.floor = text
             elif kind == "note":
                 self.notes.append(text)
             else:

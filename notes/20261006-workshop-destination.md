@@ -269,6 +269,14 @@ targets" has no spelling and no known case; if one appears it is a
 `requires` entry spelled as alternatives, a grammar change to rule on
 then.
 
+An extension can also wait for others to contribute to it. Its
+`[extension] dormant-until = "<verb>"` names what a contribution does
+for it (coverage: `measures`). While no listed extension declares a
+`[for.<it>]` table, it registers no step and no job, keeps its plugin,
+its answers and its shipped files, and `fm extensions` and `fm doctor`
+name it dormant with the installed extensions whose declarations would
+wake it.
+
 `compatible` is a third declaration on another axis: composition, not
 contribution. It says two package-level extensions may sit on one
 package, and the validity rule reads it: a package's list is valid when
@@ -546,6 +554,7 @@ a schema fragment with the shape of the file it describes.
 | `[queries]` | query name to reference | package | phase 11 |
 | `[root-files."<path>"]` | a file written at the root while a package of it exists: `render` | package | cmake and conan (phase 11), from `KindRecord.root_files` |
 | `[for.<target>]` | the same keys, read only while both are listed; dormant when no target is, and named so | every | pytest for coverage, coverage for docs (phase 11c) |
+| `[extension] dormant-until` | what a `[for.<it>]` contribution does for the extension; without one listed, it registers nothing and is named dormant | every | coverage, `measures` (12e) |
 | `[replaces]`, `[deletes]` | `"<owner>:<name>"` to reason | every | the descendant chain's brand |
 
 A `[for.<target>]` table carries the same keys as the top level. The
@@ -2893,6 +2902,22 @@ neither needs nor rules out).
   born beside pytest, is gone with it. The floor line on the pages,
   which P3's entry left for this part, is P2c's: it needs the
   measurers' `[for.coverage]` tables P2c brings.
+
+- 2026-10-13, 12e's P2c (#1577): the measurers declare what they do for
+  coverage. pytest's `[for.coverage]` brings `pytest-cov`, coverage.py,
+  the `.coveragerc` (still `relative_files = true`) and its ignore lines;
+  cmake's brings its instrumented build. A workspace that does not list
+  coverage runs its tests unmetered, writes no `.coveragerc`, carries no
+  meter in its dev group, prints no preview, and builds native code
+  uninstrumented. Coverage declares `[extension] dormant-until =
+  "measures"`: while no listed extension contributes a `[for.coverage]`
+  table, it registers no step and no job, keeps its plugin and its
+  answers, and `fm extensions` and the doctor name it dormant with the
+  installed extensions that would wake it. The coverage pages state each
+  package's floor, which needs only coverage's own floors module, not
+  the measurers' tables P2b's entry named. The contexts plugin moved to
+  the pytest extension and records one context per test, its node id,
+  as ruled the same day.
 
 ## Open
 

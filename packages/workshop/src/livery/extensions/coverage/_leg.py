@@ -58,7 +58,7 @@ def suite_arcs_by_context(
     """The arcs *package*'s suite recorded in the leg's data, for its closure's files.
 
     Two sources make the suite's arcs: the contexts of its own tests
-    (the node ids under ``<package>/tests/``, as the workshop's pytest
+    (the node ids under ``<package>/tests/``, as the pytest extension's
     plugin names them), and the arcs recorded under no context at all,
     which run at import time before any test and belong to whichever
     suites' closures hold their files. Files outside the closure are
