@@ -129,3 +129,106 @@ def test_a_test_that_leaks_into_the_global_registry_fails_by_name(
     result = _run(pytester)
     result.assert_outcomes(passed=2, errors=1)
     result.stdout.fnmatch_lines(["*left tasks in the global registry: leaked*"])
+
+
+def test_a_session_that_never_loads_the_mount_takes_nothing_from_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # The fallback first, in a process of its own: a suite that never
+    # loads the workshop's extension module gets neither it nor the
+    # registries it reads loaded by the guard.
+    pytester.makepyfile(
+        """
+        import sys
+
+        def test_plain():
+            pass
+
+        def test_after():
+            loaded = [
+                name
+                for name in (
+                    "livery.workshop._extensions",
+                    "livery.workshop._steps",
+                    "livery.workshop._points",
+                )
+                if name in sys.modules
+            ]
+            assert loaded == []
+        """
+    )
+    base = pytester.path / "basetemp"
+    result = pytester.runpytest_subprocess(
+        "-p", "no:cacheprovider", f"--basetemp={base}"
+    )
+    result.assert_outcomes(passed=2)
+
+
+def test_what_a_mount_registered_is_gone_before_the_next_test(
+    pytester: pytest.Pytester,
+) -> None:
+    # A test that mounts the docs extension registers its steps, its CI
+    # jobs and the mount's record in the process. A docs step reads git
+    # for the changes it is shown, so a later test that judges changes
+    # outside a repository failed on it. The next test finds the
+    # registries as the first test found them.
+    pytester.makepyfile(
+        """
+        from livery.footman import _registry as registry
+        from livery.workshop import _extensions, _points, _steps
+
+        BEFORE = {}
+
+        def _now():
+            return _steps.snapshot(), _points.snapshot(), _extensions.snapshot()
+
+        def test_mounts(tmp_path):
+            BEFORE["state"] = _now()
+            (tmp_path / "workshop.toml").write_text(
+                '[workspace]\\nextensions = ["docs", "acme.missing"]\\n'
+            )
+            with registry.capture():
+                assert _extensions.mount_extensions(tmp_path) == ("docs",)
+            assert "lint.doclinks" in _steps.steps_by_name()
+            assert _now() != BEFORE["state"]
+
+        def test_after():
+            assert _now() == BEFORE["state"]
+        """
+    )
+    result = _run(pytester)
+    result.assert_outcomes(passed=2)
+
+
+def test_registries_a_test_loaded_itself_go_back_as_a_process_starts(
+    pytester: pytest.Pytester,
+) -> None:
+    # In a process of its own, the first test loads the mount and mounts
+    # the docs extension; the next finds each registry as a process
+    # starts with it: the builtin steps alone, no job, and no mount.
+    pytester.makepyfile(
+        """
+        def test_mounts(tmp_path):
+            from livery.footman import _registry as registry
+            from livery.workshop import _extensions, _steps
+
+            (tmp_path / "workshop.toml").write_text(
+                '[workspace]\\nextensions = ["docs"]\\n'
+            )
+            with registry.capture():
+                assert _extensions.mount_extensions(tmp_path) == ("docs",)
+            assert "lint.doclinks" in _steps.steps_by_name()
+
+        def test_after():
+            from livery.workshop import _extensions, _points, _steps
+
+            assert _steps.snapshot() == _steps.snapshot(initial=True)
+            assert _points.snapshot() == _points.snapshot(initial=True)
+            assert _extensions.snapshot() == _extensions.snapshot(initial=True)
+        """
+    )
+    base = pytester.path / "basetemp"
+    result = pytester.runpytest_subprocess(
+        "-p", "no:cacheprovider", f"--basetemp={base}"
+    )
+    result.assert_outcomes(passed=2)

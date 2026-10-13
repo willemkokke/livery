@@ -516,8 +516,15 @@ def step_names() -> tuple[str, ...]:
     return tuple(_STEPS)
 
 
-def snapshot() -> tuple[dict[str, StepRecord], dict[str, str]]:
-    """The registry's state, for [livery.workshop._steps.restore][] to put back."""
+def snapshot(*, initial: bool = False) -> tuple[dict[str, StepRecord], dict[str, str]]:
+    """The registry's state, for [livery.workshop._steps.restore][] to put back.
+
+    With *initial*, the state importing this module leaves instead: the
+    builtin steps alone, as a process starts with them.
+    """
+    if initial:
+        records, withdrawn = _BUILTIN_STATE
+        return dict(records), dict(withdrawn)
     return dict(_STEPS), dict(_WITHDRAWN)
 
 
@@ -1696,3 +1703,6 @@ def _register_builtin() -> None:
 
 
 _register_builtin()
+
+#: The registry as the import leaves it, for `snapshot(initial=True)`.
+_BUILTIN_STATE = snapshot()

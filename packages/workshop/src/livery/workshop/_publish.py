@@ -224,9 +224,11 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
         )
     command = ["publish", "--publish-url", index_url]
     if token:
-        # recorded=False keeps the credential-carrying argv out of
-        # receipts, --json, and recordings alike.
-        command += ["--token", token]
+        # A Secret, so a profile trace and every other place the
+        # command line is shown carry *** in its place and uv alone
+        # receives the value; recorded=False keeps the call out of
+        # receipts, --json, and recordings as well.
+        command += ["--token", footman.Secret(token)]
     command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
     # CI renders UV_PUBLISH_TOKEN from a secret that may be absent, and
     # an absent secret arrives as an empty string. uv treats a set but

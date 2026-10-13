@@ -556,8 +556,7 @@ def test_a_workspace_without_coverage_runs_no_coverage_leg(
 
     with jobs_restored():
         # The mount registers the jobs of what the workspace lists: ruff alone.
-        _points._CONTRIBUTED_JOBS.clear()
-        _points._JOINED_JOBS.clear()
+        _points.restore(_points.snapshot(initial=True))
         found = declaration("ruff")
         assert found is not None
         register_jobs("ruff", found.additions.jobs)

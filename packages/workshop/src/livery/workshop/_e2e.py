@@ -1245,12 +1245,14 @@ def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     Birth writes a credential-free remote by design and a human's
     pushes ride their credential helper; the loop is automation on a
     scratch workspace, so the token rides the remote URL instead.
-    Unrecorded, so the credential never reaches a receipt. Gitea
-    validates the token and ignores the username (measured), and
-    ``oauth2`` is the conventional stand-in.
+    The URL is a [livery.footman.Secret][]: a profile trace and every
+    other place a command line is shown carry ``***`` in its place,
+    and git alone receives the value. Gitea validates the token and
+    ignores the username (measured), and ``oauth2`` is the
+    conventional stand-in.
     """
     bare = _lane(kind).alias.removeprefix("http://")
-    url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
+    url = footman.Secret(f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git")
     try:
         git.set_remote_url(root, "origin", url)
     except git.GitError as error:
