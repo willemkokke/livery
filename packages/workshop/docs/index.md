@@ -930,9 +930,10 @@ absence.
   Each workspace step runs when a file it reads changed, and judges
   those files: `lint.doclinks` the changed pages, and every page when
   a file is deleted or moved or a heading is removed; `lint.docrefs`
-  the cross-references in the changed sources' docstrings, resolved as
-  the API site resolves them, and every source's when a changed one
-  lost a name; `layering.graph`
+  the cross-references in every docstring the site renders, against
+  the anchors the site renders, when a source, an authored page, a
+  contract, an extension's declaration or a manifest changed;
+  `layering.graph`
   only when a contract or a manifest changed; the layering phase's
   rule steps the changed sources, and every one when the graph
   changed; `drift.check` a tracked composed or

@@ -76,12 +76,14 @@ type = { types = ["str"], doc = "the script element's type" }
 defer = { types = ["bool"], doc = "whether the script runs after the page parses" }
 async = { types = ["bool"], doc = "whether the script runs as soon as it loads" }
 
-# The cross-references in the sources' docstrings resolve. A removed
-# public name runs the step over every source, since an unchanged
-# docstring may name what went away.
+# The cross-references in the docstrings the site renders name anchors
+# the site renders. Which docstrings render and which anchors exist
+# follow from every source, the authored pages' directives, the
+# contracts, the extensions' declarations and the members' manifests,
+# so a change to any of them runs the step over every source.
 [phases.lint.docrefs]
 main = "livery.extensions.docs._steps:docrefs_run"
-inputs = { reads = ["packages/**/src/**/*.py"], widen = "livery.extensions.docs._steps:names_removed" }
+inputs = { reads = ["packages/**/src/**/*.py"], per-file = false, widens = ["docs/**/*.md", "packages/**/docs/**/*.md", "workshop.toml", "packages/**/workshop.toml", "packages/**/src/**/extension.toml", "packages/**/pyproject.toml"] }
 
 # The links in the authored markdown resolve. A removed heading or a
 # deleted or moved page runs the step over every page.

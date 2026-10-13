@@ -41,6 +41,26 @@ NAV_BLOCK = "tasks"
 #: named by its dash-joined address.
 ALIASES = "tasks"
 
+#: The directory of a providing package's section that its task pages
+#: publish under, one directory per group.
+PAGES = "tasks"
+
+#: The verb that writes the task reference. A providing package
+#: declares it among its docs generators, and one declaration renders
+#: the tasks of every providing package.
+GENERATOR = "docs.task-reference"
+
+
+def task_page(owner: str, address: str) -> str:
+    """The page the task at *address* publishes on, relative to the site's root.
+
+    A task's page sits in the section of *owner*, the member that
+    advertises its provider, one directory per group of its address:
+    the workshop's ``coverage.leg`` is
+    ``packages/workshop/tasks/coverage/leg.md``.
+    """
+    return f"packages/{owner}/{PAGES}/{'/'.join(address.split('.'))}.md"
+
 
 def task_links(site_url: str) -> str:
     """The URL template that links a task's name to its page under *site_url*.
@@ -236,7 +256,7 @@ def generate_task_reference(root: Path) -> list[str]:
     rendered: list[str] = []
     for package, trees in providing:
         owner = package.member
-        out = package.directory / "docs" / "_generated" / "tasks"
+        out = package.directory / "docs" / "_generated" / PAGES
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         index = ["# Task reference", ""]
@@ -269,8 +289,8 @@ def generate_task_reference(root: Path) -> list[str]:
             )
         write_nav_block(out.parent, NAV_BLOCK, task_nav_block(trees, prog))
         for address in sorted(addresses):
-            section = "/".join(address.split("."))
-            destination = f"../../packages/{owner}/tasks/{section}/"
+            published = task_page(owner, address).removesuffix(".md")
+            destination = f"../../{published}/"
             (aliases / f"{address.replace('.', '-')}.md").write_text(
                 _alias_page(destination, address), encoding="utf-8"
             )
