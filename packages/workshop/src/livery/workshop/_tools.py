@@ -1,19 +1,22 @@
-"""The tools a workspace requires: four declaration sites, one lock, receipts.
+"""The tools a workspace requires: six declaration sites, one lock, receipts.
 
 A tool requirement is a name with a floor, `git` or `git>=2.40`, and
-four sites declare them: a package kind, in its record, for the tools
-its steps run; a listed extension, as `WORKSHOP_TOOLS` on its plugin
-module, for what its own verbs need; a package instance, in its
-`workshop.toml` under `[toolroom] requires`, for what its kind cannot
-know; and the project, in the root contract's `[toolroom] requires`,
-for what belongs to the repository. The sites' requirements union, and
-`toolroom.lock` at the root holds one version per tool for the whole
-repository, the newest the catalogue lists that satisfies every floor
-and resolves on every supported host. The root contract's
-`[workspace] hosts` names those hosts, every host key when it is
-absent, and `[toolroom] index` names where the catalogue is read from:
-the published index by URL, a directory holding one, or the records
-that build one.
+six sites declare them: a package kind, in its record, for what
+operates it; the steps that judge a present package, each naming its
+tools; a listed extension, under `[toolroom] requires` in its
+`extension.toml`, for what its own verbs need, and in a
+`[for.<target>]` table, for what it needs while that table applies; a
+plugin the project mounts, through its `workshop.tools` entry point; a
+package instance, in its `workshop.toml` under `[toolroom] requires`,
+for what its kind cannot know; and the project, in the root contract's
+`[toolroom] requires`, for what belongs to the repository. The sites'
+requirements union, and `toolroom.lock` at the root holds one version
+per tool for the whole repository, the newest the catalogue lists that
+satisfies every floor and resolves on every supported host. The root
+contract's `[workspace] hosts` names those hosts, every host key when
+it is absent, and `[toolroom] index` names where the catalogue is read
+from: the published index by URL, a directory holding one, or the
+records that build one.
 
 Entering the environment materialises the bundle the sites require, on
 `fm sync` and on `fm toolroom.add`: each locked tool is supplied through
@@ -131,8 +134,11 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     steps of that kind judge them. A kind's steps bring the tools
     they run, each requirement naming `step <name>` as its site. An
     extension's site is `extension <name>`, read from its
-    ``extension.toml``'s ``[toolroom] requires``; an unlisted extension declares nothing
-    here, since listing is the only activation channel. A plugin the
+    ``extension.toml``'s ``[toolroom] requires`` and from each of its
+    ``[for.<target>]`` tables that applies now, so a measurer's tool is
+    required while the workspace lists what it measures for; an
+    unlisted extension declares nothing here, since listing is the only
+    activation channel. A plugin the
     project mounts through its direct dependencies is `plugin <name>`,
     read from its entry module
     ([livery.workshop._tools.plugin_tools][]).

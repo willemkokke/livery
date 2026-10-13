@@ -108,17 +108,16 @@ def base_keys() -> tuple[Declared, ...]:
         BASE_FILE,
         contracts=("root", "package", "extension"),
     )
-    mirrored = tuple(
-        replace(item, path=f"for.*.{item.path}")
-        for item in found
-        if item.contract == "extension" and item.path.split(".")[0] not in _UNMIRRORED
-    )
-    return found + mirrored
+    return found + _mirrored(found)
 
 
 @functools.cache
 def toolroom_keys() -> tuple[Declared, ...]:
     """The ``[toolroom]`` keys the tool store's fragment declares, in every contract.
+
+    ``extension.toml`` takes them under ``for.*`` again, as it takes
+    the base's: a ``[for.<target>]`` table's ``[toolroom] requires``
+    names the tools required while that table applies.
 
     Raises:
         DeclarationError: when the fragment declares a key off the shape
@@ -129,10 +128,25 @@ def toolroom_keys() -> tuple[Declared, ...]:
     from livery.toolroom.store import SCHEMA_FRAGMENT
     from livery.workshop._declaration import contract_keys_of
 
-    return contract_keys_of(
+    found = contract_keys_of(
         tomllib.loads(SCHEMA_FRAGMENT.read_text("utf-8")),
         SCHEMA_FRAGMENT,
         contracts=("root", "package", "extension"),
+    )
+    return found + _mirrored(found)
+
+
+def _mirrored(found: tuple[Declared, ...]) -> tuple[Declared, ...]:
+    """*found*'s ``extension.toml`` keys again under ``for.*``, their docs unchanged.
+
+    Every key of the file's top-level tables but those of
+    ``[extension]``, ``[for]`` and ``[contract]``, which no target
+    changes.
+    """
+    return tuple(
+        replace(item, path=f"for.*.{item.path}")
+        for item in found
+        if item.contract == "extension" and item.path.split(".")[0] not in _UNMIRRORED
     )
 
 

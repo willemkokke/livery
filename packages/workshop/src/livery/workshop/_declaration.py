@@ -30,7 +30,9 @@ answers in the same grammar, asked while the target is listed, and
 declares no query. A ``[for.<target>.fragments]`` table writes its files
 while the target is listed, and so are the files the extension ships
 under ``content/for/<target>/``; a directory there for a target the file
-declares no ``[for.<target>]`` table for refuses, naming both.
+declares no ``[for.<target>]`` table for refuses, naming both. A
+``[for.<target>.toolroom]`` table's ``requires`` names the tools the
+workspace requires while the table applies.
 
 ``[extension] dormant-until`` names, as a verb, what another extension
 does for this one by declaring a ``[for.<this>]`` table: until a listed
@@ -221,6 +223,9 @@ class Declaration:
         target_fragments: The files each ``[for.<target>]`` table's code
             writes, by target; a target whose table writes none is left
             out.
+        target_tools: The tools each ``[for.<target>]`` table requires
+            under ``[toolroom] requires``, by target, as requirement
+            strings; a target whose table requires none is left out.
         phase_specs: The phases it declares, by name.
         phases: The steps its top-level ``[phases.<phase>.<step>]``
             tables add, by phase, each the one step record whatever
@@ -258,6 +263,9 @@ class Declaration:
     fragments: tuple[DeclaredOutput, ...] = ()
     target_fragments: dict[str, tuple[DeclaredOutput, ...]] = field(
         default_factory=dict[str, tuple[DeclaredOutput, ...]]
+    )
+    target_tools: dict[str, tuple[str, ...]] = field(
+        default_factory=dict[str, tuple[str, ...]]
     )
     phase_specs: dict[str, PhaseSpec] = field(default_factory=dict[str, "PhaseSpec"])
     phases: dict[str, tuple[StepRecord, ...]] = field(
@@ -485,6 +493,11 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             )
             for target, held in data.get("for", {}).items()
             if held.get("fragments")
+        },
+        target_tools={
+            str(target): tuple(str(text) for text in held["toolroom"]["requires"])
+            for target, held in data.get("for", {}).items()
+            if held.get("toolroom", {}).get("requires")
         },
         phase_specs=own,
         phases=phases,

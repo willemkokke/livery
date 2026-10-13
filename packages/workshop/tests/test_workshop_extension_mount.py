@@ -501,6 +501,39 @@ def test_an_unlisted_extensions_tools_never_enter_the_profile(
     assert "    tools: docker>=27" in _extensions.describe_extensions(tmp_path)
 
 
+#: A house whose [for] table requires a tool: required while it applies.
+_TOOLED_HOUSE = """\
+[for."acme.python".toolroom]
+requires = ["docker>=27"]
+"""
+
+
+def test_a_for_table_s_tools_are_required_only_while_the_table_applies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._tools import requirements, tool_names
+
+    fake_extensions(tmp_path, monkeypatch, house=_TOOLED_HOUSE, python="", cpp="")
+    # The absences first: the target unlisted, then listed while the
+    # house's own entry points it at another target.
+    root_contract(tmp_path, '["acme.house"]')
+    assert _extensions.extension_tools(tmp_path) == {"acme.house": ()}
+    assert "docker" not in tool_names(tmp_path)
+    root_contract(
+        tmp_path,
+        '["acme.python", "acme.cpp", { name = "acme.house", for = ["acme.cpp"] }]',
+    )
+    assert _extensions.extension_tools(tmp_path)["acme.house"] == ()
+    assert "docker" not in tool_names(tmp_path)
+    # Both listed, the table applies: its tools are the house's, at the
+    # house's own site, and fm extensions names them.
+    root_contract(tmp_path, '["acme.python", "acme.house"]')
+    found = [r for r in requirements(tmp_path) if r.site == "extension acme.house"]
+    assert [(r.name, r.floor) for r in found] == [("docker", "27")]
+    assert "docker" in tool_names(tmp_path)
+    assert "    tools: docker>=27" in _extensions.describe_extensions(tmp_path)
+
+
 def test_a_extension_declaring_contributions_off_the_shape_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

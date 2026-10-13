@@ -847,6 +847,52 @@ def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
     assert _tools.write_lock(root).tools["dotnet"].on == ()
 
 
+def test_a_native_member_requires_the_msvc_measurer_only_while_coverage_is_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    native = root / "packages" / "native"
+    native.mkdir()
+    (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    _records(
+        root,
+        *(
+            Record(name, kind="pypi", deltas=_read("1.0.0"))
+            for name in ("cmake", "conan", "ninja")
+        ),
+        Record(
+            "dotnet_coverage",
+            kind="dotnet",
+            package="dotnet-coverage",
+            runtime="dotnet",
+            deltas=_read("18.11.2"),
+        ),
+        _dotnet("10.0.401"),
+    )
+    # The absence first: without coverage the native build is not
+    # measured, so no Windows host requires Microsoft's engine, and the
+    # lock holds neither it nor the SDK it runs on.
+    for host in ("windows-x64", "windows-arm"):
+        assert "dotnet_coverage" not in _tools.tool_names(root, host)
+    assert not {"dotnet_coverage", "dotnet"} & set(_tools.write_lock(root).tools)
+    # Listed, cmake measures for coverage: its [for.coverage] table
+    # requires the engine on the Windows hosts alone, at cmake's site,
+    # and the lock pins it there with its SDK.
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["coverage"]\n\n[toolroom]\nindex = "records"\n'
+    )
+    for host in ("windows-x64", "windows-arm"):
+        assert "dotnet_coverage" in _tools.tool_names(root, host)
+    for host in ("linux-x64", "macos-arm"):
+        assert "dotnet_coverage" not in _tools.tool_names(root, host)
+    (found,) = [r for r in _tools.requirements(root) if r.name == "dotnet_coverage"]
+    assert (found.site, found.hosts) == ("extension cmake", ("windows",))
+    lock = _tools.write_lock(root)
+    windows = tuple(host for host in HOSTS if host.startswith("windows-"))
+    assert lock.tools["dotnet_coverage"].on == windows
+    assert lock.tools["dotnet"].on == windows
+
+
 def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

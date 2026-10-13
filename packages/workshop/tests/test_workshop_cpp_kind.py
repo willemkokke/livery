@@ -745,13 +745,10 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-extension") is None
     # The build tools are the kind's; a native tool an extension brings
-    # rides its step record, which is where the profile reads it.
-    assert kind_for("cpp-conan").tools == (
-        "cmake",
-        "conan",
-        "ninja",
-        "dotnet_coverage@windows",
-    )
+    # rides its step record, which is where the profile reads it, and
+    # the measurer of a build made with MSVC rides cmake's [for.coverage]
+    # table.
+    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._steps import tools_for
 
@@ -1193,7 +1190,7 @@ def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="dotnet-coverage is not on PATH") as caught:
         _cpp_conan.test(package, tmp_path)
-    assert '"dotnet_coverage" to [toolroom] requires' in str(caught.value)
+    assert "cmake's [for.coverage] table requires it on Windows" in str(caught.value)
     assert "toolroom.lock" in str(caught.value)
     assert exe.read_bytes() == b"MZ original"
     assert lines_.read_parts(tmp_path) == {}

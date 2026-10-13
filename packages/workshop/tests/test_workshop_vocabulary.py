@@ -220,7 +220,11 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 
 
 def _extension_tools() -> set[str]:
-    """The tools the installed extensions' steps name and their tables require."""
+    """The tools the installed extensions' steps name and their tables require.
+
+    The tables are the top level's ``[toolroom]`` and each ``[for.<target>]``
+    table's.
+    """
     from importlib.metadata import entry_points
 
     from livery.toolroom.store import Requirement
@@ -233,9 +237,10 @@ def _extension_tools() -> set[str]:
             continue
         for record in found.additions.steps:
             tools.update((record.step, *record.tools))
-        tools.update(
-            Requirement.parse(text, site=entry.name).name for text in found.tools
-        )
+        declared = [*found.tools]
+        for required in found.target_tools.values():
+            declared += required
+        tools.update(Requirement.parse(text, site=entry.name).name for text in declared)
     return tools
 
 
@@ -276,8 +281,10 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
         # to say which tools it brings.
         pytest.skip("the scan reads the extensions this checkout installs")
     tools = _extension_tools()
-    # The scan has something to look for, a step's tool and a table's.
-    assert {"ruff", "git_cliff"} <= tools
+    # The scan has something to look for: a step's tool, a table's, and
+    # a [for] table's, the measurer cmake requires while coverage is
+    # listed.
+    assert {"ruff", "git_cliff", "dotnet_coverage"} <= tools
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
     assert dict(found) == allowed

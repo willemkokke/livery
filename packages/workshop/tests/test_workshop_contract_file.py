@@ -110,14 +110,10 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
 
 def test_for_a_target_takes_every_table_again() -> None:
     keys = {item.path: item for item in extension_keys()}
-    # The base's own tables, but the identity, the targets and the
-    # contract keys; the tool store's [toolroom] is its own file's.
-    tables = {
-        path.split(".")[0]
-        for path in keys
-        if not path.startswith("for.") and path.split(".")[0] != "toolroom"
-    }
-    assert {"phases", "ci", "queries", "fragments"} <= tables
+    # Every table of the top level, the tool store's [toolroom] among
+    # them, but the identity, the targets and the contract keys.
+    tables = {path.split(".")[0] for path in keys if not path.startswith("for.")}
+    assert {"phases", "ci", "queries", "fragments", "toolroom"} <= tables
     mirrored = [
         path
         for path in keys

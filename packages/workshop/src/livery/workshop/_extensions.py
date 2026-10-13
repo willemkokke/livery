@@ -866,14 +866,29 @@ def extension_dependencies(start: Path | None = None) -> dict[str, tuple[str, ..
 def extension_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each listed extension's ``[toolroom] requires``, name to requirement strings.
 
-    The tools the extension's own verbs need, such as ``docker>=27``.
-    The base and an extension no installed distribution declares
-    declare none here.
+    The tools the extension's own verbs need, such as ``docker>=27``,
+    then the tools each of its ``[for.<target>]`` tables requires while
+    the table applies, as [livery.workshop.contributions_for][] decides
+    it: a measurer's tool is required while the workspace lists what it
+    measures for, and never otherwise. The base and an extension no
+    installed distribution declares declare none here.
     """
+    active = resolved_targets(start)
+    applies = _contributing(active)
     found: dict[str, tuple[str, ...]] = {}
-    for extension in extension_names(start):
+    for extension in active:
         declared = _readable(extension)
-        found[extension] = declared.tools if declared is not None else ()
+        if declared is None:
+            found[extension] = ()
+            continue
+        found[extension] = (
+            *declared.tools,
+            *(
+                text
+                for target in applies.get(extension, ())
+                for text in declared.target_tools.get(target, ())
+            ),
+        )
     return found
 
 
