@@ -1384,7 +1384,8 @@ first: `test_a_curated_package_with_an_unplaced_export_refuses_naming_it`,
 renders footman's reference with every exported name present;
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
 
-**12e, coverage** (issue #1538, before 11c). The coverage extension,
+**12e, coverage** (issue #1538, before 11c; built through P5 on
+2026-10-13, P6 moving with step 8). The coverage extension,
 `livery.extensions.coverage`, starts in the workshop wheel the way docs
 did and later ships as `livery-extensions-coverage`. It takes what the
 base holds today: the floors (a percentage or `auto-ratchet`), the
