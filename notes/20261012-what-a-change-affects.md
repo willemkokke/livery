@@ -76,8 +76,14 @@ Each is a consumer of the one engine with its own influence rule.
   meters every child, `patch = subprocess` follows the `fm` children a
   test spawns, the ctrace core keeps every context complete, and the
   contexts plugin (`livery.workshop._pytest_contexts`) names each
-  test's phases by node id. The footprint is a second reading of data
-  the full run already collects.
+  test's phases by node id; 12e's P2c makes it one context per test,
+  the node id (ruled 2026-10-13). The footprint is a second reading of
+  data the full run already collects.
+- The nightly point and a dispatch pay the whole gate
+  (`ci_affected_base` in `livery.workshop._quality`). A push to main
+  narrows from the nearest tree CI's record proves (`ci_push_base`), so
+  a merge runs no full suite, and a merged tree a pull request already
+  proved runs nothing.
 - The local gate record (`livery.workshop._gate_record`) chains the
   trees green local gates proved, narrowed gates proving what a delta
   can influence; CI's verified series (`livery.workshop._verified`) is
@@ -123,9 +129,11 @@ Each is a consumer of the one engine with its own influence rule.
    in shadow first: everything runs, and the would-be selection is
    recorded. The switch to on is a person's act; the auditor keeps
    running after it.
-8. **An undeclared read and an escape each fail the merge point** with
-   a row a person can read: the unit, the file, the declaration that
-   would add the edge. Never a boolean, never silent.
+8. **An undeclared read and an escape each fail the nightly point**
+   with a row a person can read: the unit, the file, the declaration
+   that would add the edge, and for an escape the merge that brought
+   it. Never a boolean, never silent. The nightly's full run is the
+   proof's only full run; a merge narrows as every push does.
 9. **The coverage floors judge the same union as today.** An
    unselected test file carries its recorded arcs from the base at its
    closure identity; a selected one is measured. The floors, the
@@ -136,7 +144,7 @@ Each is a consumer of the one engine with its own influence rule.
 11. **A package-level extension supplies its file graph**, as an answer
     to a query. Python's is the import rule. A package whose extensions
     answer none stays at package grain.
-12. **No logic in YAML.** The merge point's full run, the closure check
+12. **No logic in YAML.** The nightly's full run, the closure check
     and the auditor are verbs the emitted shell calls.
 13. **A selector a person cannot read is not trusted.** Every selected
     unit prints the edge that selected it.
@@ -202,7 +210,7 @@ build.
 
 ### The proof: the footprint and the closure check
 
-On a full run in CI, what each unit actually read is recorded: for a
+On the nightly's full run, what each unit actually read is recorded: for a
 test file, the workspace files its tests executed lines of, plus the
 files they opened; for a step that runs as code in the gate's process,
 the files it opened while it ran. Opens come from an audit hook beside
@@ -211,13 +219,14 @@ against the running context, in-process and in every metered child
 (the `.pth` that starts the meter starts the hook). One CI-only
 `footprint` series, keyed by tree, one row per unit, windowed.
 
-The merge point compares each unit's footprint with what its
+The nightly point compares each unit's footprint with what its
 declaration says it reads. A file in the footprint and outside the
 declaration is an undeclared read: the point fails, naming the unit,
 the file, and the declaration that would add it (a `reads` entry, an
 import the parser missed, an invalidate-all entry). This finds the
-missing edge on the run where the unit touched the file, before the
-file changes.
+missing edge on the first nightly after the unit started reading the
+file. A change to that file before that nightly can escape the
+selection, and the auditor finds the escape on the same nightly.
 
 Observation, not refusal: pytest runs many test files in one session,
 so a module an earlier test imported is in `sys.modules` and a finder
@@ -225,7 +234,7 @@ cannot refuse it for a later test. Refusing opens works and the hook
 does it under a flag for a local run that wants an early failure.
 Full prevention is one process per unit with an environment of its
 closure, which is Pants' cost; observation gives the same information
-one merge later.
+one nightly later.
 
 A step that runs a native tool (ruff, a type checker, a compiler) is
 outside the hook: its reads are the files the engine hands it plus the
@@ -238,7 +247,10 @@ not build.
 **The unit** is the test file. A test's node id churns with
 parametrisation, and pytest's cost is per session, not per test, so
 the file is the smallest unit worth selecting. The suite is today's
-grain.
+grain. Measured on 2026-10-13 (decision record): selecting from what
+the tests reached, the test grain reruns 19.1% of the suite per commit
+against the file grain's 26.5% and the package grain's 61.2%, and it
+needs a selector read from a recorded run, which contract 2 rules out.
 
 **The closure of a test file** is the union of six sources, from the
 tree alone:
@@ -278,23 +290,31 @@ that selected it. Both reflexes select: `fm check` on a machine from
 the gate record's nearest proved tree, the CI check leg from the base
 `ci_affected_base` picks today.
 
-**The outcome auditor** covers inputs no hook sees. On the full run at
-tree T1 from proved tree T0, the merge point recomputes the selection
-for T0 to T1 and takes failed minus selected. Each candidate is re-run
-alone at T1; a pass is a flaky row. A second failure is run at T0,
-checked out in a worktree of its own; pass then fail is a confirmed
-escape. Its footprint intersected with the diff names the missing
-edge. The point goes red, the escape series gets its row, and
-`fm issue.create` files it from the row. One leg audits, since the
-selection is platform-independent; the nightly matrix covers what is
-platform-specific.
+**The outcome auditor** covers inputs no hook sees. On the nightly's
+full run at tree T1, with T0 the tree of the previous audited nightly,
+each failing test is re-run alone at T1; a pass is a flaky row. A
+second failure is bisected across the merges between T0 and T1, each
+run alone in a worktree of its own, to the first merge M at which it
+fails; a test that fails at T0 already belongs to no merge of this
+window. The selection for M is recomputed (contract 4), and a failing
+test outside it is a confirmed escape. Its footprint intersected with
+M's diff names the missing edge. The point goes red, the escape series
+gets its row naming M, and `fm issue.create` files it from the row.
+The bisect runs one test per tree, so its cost is the test's time
+times the logarithm of the window's merges. One nightly job audits,
+since the selection is platform-independent.
 
 **Coverage by test file** is the heaviest consequence. The coverage
 record's unit becomes the test file: the arcs its contexts reached,
 keyed by its closure identity. The union the gate job judges is then
 by test file, unselected files carrying their recorded arcs from the
 base. The contexts and the ctrace core already make the split
-complete; the store's keying and union change, the floors do not.
+complete; the store's keying and union change, the floors do not. The
+legs stay on ctrace until a coverage.py release fixes the sysmon
+core's false positives under branch measurement (#1547). The per-test
+contexts are needed on every leg that narrows, since the union drops a
+selected file's old arcs only when the record knows which arcs were
+that file's.
 Since 12e, the coverage record and the floors are the coverage
 extension's (`notes/20261006-workshop-destination.md`, 12e).
 
@@ -309,13 +329,18 @@ extension's (`notes/20261006-workshop-destination.md`, 12e).
 - The clock, the network, the environment: the invalidate-all list and
   the proof's age limit, as today.
 - A test that should fail at T1 and passes: no selector concern.
+- The hours between a merge and the next nightly: an undeclared read a
+  merge adds, and a change to that file before the nightly, can escape
+  the selection on main until the nightly's auditor finds it and names
+  the merge.
 
 ### The measures
 
 Four rows under `fm store.show`: selectivity per gate (selected over
-the suite's size); undeclared reads per full run, steps and test files
-apart, expected zero; escapes per merge, required zero. The first says
-what the work saves, the others whether it may be trusted.
+the suite's size); undeclared reads per nightly, steps and test files
+apart, expected zero; escapes per nightly, each naming its merge,
+required zero. The first says what the work saves, the others whether
+it may be trusted.
 
 ## Phases
 
@@ -386,14 +411,14 @@ Deliverables:
 - The audit hook beside the context switch, recording opens under the
   workspace root per context: a test's in the contexts plugin, a code
   step's in the walk, started by the `.pth` in every metered child.
-- The fold by unit; the CI-only `footprint` series written by the merge
-  point's full run; `fm store.show footprint`.
+- The fold by unit; the CI-only `footprint` series written by the
+  nightly's full run; `fm store.show footprint`.
 
 Acceptance:
 
 - A test that spawns `fm` and reads a template: the footprint row of
   its file lists the template and the child's module
-  (`fm store.show footprint` on the loop's forge after one merge).
+  (`fm store.show footprint` on the loop's forge after one nightly).
 - A code step that reads a rendered file: its row lists the file.
 - The hook records nothing outside a metered run (a test asserting the
   gate's own driver writes no row).
@@ -404,16 +429,16 @@ Acceptance:
 
 Deliverables:
 
-- At the merge point: each code step's footprint against its declared
-  reads; a failure names the step, the file and the `reads` entry to
-  add.
+- At the nightly point: each code step's footprint against its
+  declared reads; a failure names the step, the file and the `reads`
+  entry to add.
 - The `undeclared` measure row for steps.
 
 Acceptance, the fallback first:
 
 - A scratch workspace whose code step reads a file its `reads` leaves
-  out: the merge point fails naming the step, the file and `reads`
-  (a loop scenario).
+  out: the nightly fails naming the step, the file and `reads` (a loop
+  scenario).
 - With the entry declared, the point is green and `fm store.show` shows
   zero undeclared reads.
 - `fm check` green; the loop green.
@@ -487,15 +512,15 @@ Acceptance:
 
 Deliverables:
 
-- At the merge point: footprint against closure per test file; a
+- At the nightly point: footprint against closure per test file; a
   failure names the test file, the file and the declaration to add.
 - The `undeclared` measure row for test files.
 
 Acceptance, the fallback first:
 
 - A scratch workspace with a data edge removed from `[tests] reads`:
-  the merge point fails naming the test file, the file and
-  `[tests] reads` (a loop scenario).
+  the nightly fails naming the test file, the file and `[tests] reads`
+  (a loop scenario).
 - With the edge declared, the point is green and `fm store.show` shows
   zero undeclared reads.
 - `fm check` green; the loop green.
@@ -504,17 +529,22 @@ Acceptance, the fallback first:
 
 Deliverables:
 
-- At the merge point: the recomputed selection, failed minus selected,
-  the re-run at T1, the run at T0 in a worktree of its own, the escape
-  and flaky series, the issue filed from the row, the red point.
+- At the nightly point: each failing test re-run alone at T1, the
+  bisect across the window's merges to the first failing merge, that
+  merge's recomputed selection, the escape and flaky series, the issue
+  filed from the row, the red point.
 - The `escapes` measure row.
 
 Acceptance, the fallback first:
 
 - A scratch workspace whose test reads a file through a child with a
-  scrubbed environment: a merge changing that file makes the merge
-  point red with one escape row naming the test file and the file, and
-  one issue whose body is the row (a loop scenario, `fm issue.list`).
+  scrubbed environment: a merge changing that file makes the next
+  nightly red with one escape row naming the merge, the test file and
+  the file, and one issue whose body is the row (a loop scenario,
+  `fm issue.list`).
+- Two merges in one window, the first the escape and the second
+  innocent: the row names the first.
+- A test that already failed at T0 writes no escape for this window.
 - A flaky test (fails once, passes alone) writes a flaky row and no
   escape.
 - `fm check` green; the loop green.
@@ -588,6 +618,33 @@ Acceptance:
   replaces the earlier `[qa] test-selection`, since 12e moves `[qa]`'s
   coverage keys to `[coverage]` and the key belongs beside
   `[tests] reads`.
+- 2026-10-13, Willem: the proofs run on the nightly's full run, not on
+  a full run per merge: contract 8, phases 3, 4, 8 and 9, and the
+  auditor's bisect to the merge that brought an escape. A merge narrows
+  as every push does. What this gives up: an undeclared read or an
+  escape is found within a day of its merge instead of minutes after
+  it, and naming the merge takes a bisect. A full run per merge costs
+  the merges times the suite, which at monorepo scale gives back on
+  main what selection saves on pull requests; the nightly costs one
+  full run a day whatever the merge rate.
+- 2026-10-13, measured by the agent, on Willem's question whether the
+  test is a better unit than the file: no. From one full ctrace run's
+  per-test contexts (6,447 tests, 1,936 s of summed test time) and the
+  60 commits among the last 200 on main that changed Python files
+  alone (99 touched another file, 41 only notes), selecting from what
+  the tests reached reruns per commit 61.2% of the suite at package
+  grain, 26.5% at test-file grain and 19.1% at test grain. The test
+  grain saves a further 142 s of summed test time per commit (median
+  135 s, at most 481 s), about 35 s of wall at most on a 4-core runner,
+  and less after the module fixtures a file pays once. It needs a
+  selector read from a recorded run, which contract 2 rules out, and
+  context passed into every child, whose lines land today in the empty
+  context. Five workshop test files hold 56% of the gap between the two
+  grains: `test_workshop_release_driver.py` 21%,
+  `test_workshop_submit.py` 12%, `test_workshop_currency.py` 12%,
+  `test_workshop_workflow.py` 6%, `test_workshop_shells.py` 6%.
+  Splitting them by feature takes about half of it inside the file
+  grain, once phase 11's selectivity row shows which files dominate.
 
 ## Open
 
@@ -598,9 +655,10 @@ Acceptance:
    nothing, so they could follow phase 16 at once, or wait with the
    selection phases. Willem.
 3. The e2e suite declares `**` and is always selected. Acceptable, or
-   do those files move to the merge point. Willem.
-4. The window under `shadow` before `on`: proposal, 30 audited merges
-   or 14 days, whichever is later. Willem.
+   do those files move to the merge point or the nightly. Willem.
+4. The window under `shadow` before `on`, counted in nights since the
+   auditor runs on the nightly: proposal, 14 audited nightlies holding
+   at least 30 merges, whichever is later. Willem.
 5. The merge queue: if its note is written, do batches select through
    this engine from the start. Willem.
 6. How much of `[tests] reads` the extensions derive from the
