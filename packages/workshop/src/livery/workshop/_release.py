@@ -1,4 +1,4 @@
-"""The release train's verbs: prepare, the tag check, wheels, the driver, and verify.
+"""The release train's verbs: prepare, the tag check, the driver, and verify.
 
 ``fm release.check-tag`` checks a release tag against the tree: the
 tag, the ``pyproject`` version, the ``__version__``, and the changelog
@@ -20,7 +20,7 @@ from typing import Annotated
 
 import livery.toolroom.tools as tools
 from livery import git
-from livery.footman import Context, doc, fail, group
+from livery.footman import doc, fail, group
 from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages, release_tag
@@ -283,76 +283,6 @@ def release_verify(
         extras=extras,
         repo=repo,
     )
-
-
-@release.task(name="wheels", hidden=True)
-def release_wheels(
-    ctx: Context,
-    ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
-) -> None:
-    """Build this platform's native artifacts for the squash's members.
-
-    One per-platform matrix job runs this before the wave, in three
-    steps. Each conan member is created into this leg's cache and
-    saved beside its wheels, one file per host, which is how a forge
-    with no conan registry carries the package. Then cibuildwheel
-    builds every interpreter of the workspace's python matrix for
-    this platform (CIBW_BUILD widened past the local
-    one-interpreter narrowing, both linux libc flavours kept),
-    resolving each conan member from the cache the first step
-    filled. Then every declared floor on a conan member is proved
-    with its own build. The artifact upload collects each
-    ``dist/``, and the wave publishes the union with ``--prebuilt``.
-    A squash with no native member prints so and builds nothing, so
-    the matrix job stays green on a pure release.
-    """
-    from livery.workshop._backends import _cpp_conan, _python_nanobind
-    from livery.workshop._kinds import kind_for
-    from livery.workshop._publish import discover_release
-    from livery.workshop._pythons import python_matrix
-    from livery.workshop._wheels import cibw_build_set
-
-    root = _root()
-    resolved_ref = ref or git.head_sha(root)
-    epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
-    members = discover_release(root, resolved_ref)
-    released = {package.path: version for package, version in members}
-    conan_members = [
-        (package, version)
-        for package, version in members
-        if kind_for(package.kind).artifact == "conan"
-    ]
-    native = [
-        package
-        for package, _version in members
-        if kind_for(package.kind).wheel_identity == "platform"
-    ]
-    if not native and not conan_members:
-        print("  no native members in this release; nothing to build")
-        return
-    # The full set for this platform: the python matrix's interpreters,
-    # and both libc flavours kept (an empty CIBW_SKIP reads as no skip,
-    # and its presence stops the local narrowing's setdefault). Set on
-    # the task's own environment, which every build child inherits; a
-    # write to os.environ here would be scoped the same way and is
-    # refused as an environment write meant to travel sideways.
-    ctx.env.setdefault("CIBW_BUILD", cibw_build_set(python_matrix(root)))
-    ctx.env.setdefault("CIBW_SKIP", "")
-    # A release leg builds the packages the release ships, so a sibling
-    # resolves to the package this leg created, never to its source
-    # tree: the conan workspace is set aside for every build.
-    with _cpp_conan.workspace_aside(root):
-        for package, version in conan_members:
-            _lifecycle.build(package, root, epoch=epoch)
-            dist = package.directory / "dist"
-            archive = _cpp_conan.save_cache(package, version, dist)
-            print(f"  {package.name}: {archive.name}")
-        for package in native:
-            dist = _lifecycle.build(package, root, epoch=epoch)
-            wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
-            print(f"  {package.name}: {wheels}")
-        for package in native:
-            _python_nanobind.floor_legs(package, root, released, epoch=epoch)
 
 
 @release.task(name="driver", hidden=True)

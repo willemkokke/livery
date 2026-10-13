@@ -297,24 +297,27 @@ def installed_declaration(name: str) -> Declaration | None:
 
 
 def package_extensions(start: Path | None = None) -> tuple[str, ...]:
-    """The package-level extensions every package's set holds, in composition order.
+    """The package-level extensions every package holds, in composition order.
 
     Each package's set is its own list and the package-level extensions
-    the list requires; this is their union, ordered as
+    the list requires; a package that lists none holds what its kind
+    stands for ([livery.workshop._kinds.kind_stands_for][]), until the
+    kinds go. This is the union of what the packages hold, the
+    installed package-level extensions among it, ordered as
     [livery.workshop._composition.order][] orders it. A declared order
     with no start falls back to alphabetical here, so a sync still
     runs, and ``layering.graph`` names the cycle. Empty outside a
     workspace.
     """
+    from livery.workshop._kinds import kind_stands_for
+
     root = workspace_root(start)
     if root is None:
         return ()
-    listed = [
-        listing(name).name
-        for _contract, names in _package_lists(root)
-        for name in names
-    ]
-    members = package_set(listed, installed_declaration)
+    held: list[str] = []
+    for _contract, kind, names in _package_lists(root):
+        held += [listing(name).name for name in names] or kind_stands_for(kind)
+    members = package_set(held, installed_declaration)
     try:
         return order(members, installed_declaration)
     except OrderCycle:
@@ -991,7 +994,7 @@ def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
     if root is None:
         return {}
     found: dict[str, list[str]] = {}
-    for contract, listed in _package_lists(root):
+    for contract, _kind, listed in _package_lists(root):
         where = contract.parent.relative_to(root).as_posix()
         names = [listing(entry).name for entry in listed]
         for name in package_set(names, installed_declaration):
@@ -1107,7 +1110,7 @@ def composition_problems(root: Path) -> list[str]:
 
     workspace = set(workspace_names(root))
     problems: list[str] = []
-    for contract, listed in _package_lists(root):
+    for contract, _kind, listed in _package_lists(root):
         if not _composable(listed):
             continue
         where = contract.parent.relative_to(root).as_posix()
@@ -1189,41 +1192,43 @@ def listing_problems(root: Path) -> list[str]:
     return problems
 
 
-_LISTS: dict[tuple[Path, str], tuple[str, ...]] = {}
+_LISTS: dict[tuple[Path, str], tuple[str, tuple[str, ...]]] = {}
 
 
-def _package_lists(root: Path) -> list[tuple[Path, tuple[str, ...]]]:
-    """Each package contract under *root* with the extensions it lists, read raw.
+def _package_lists(root: Path) -> list[tuple[Path, str, tuple[str, ...]]]:
+    """Each package contract under *root* with its kind and the extensions it lists.
 
     Read raw, as the root's list is, since the mount reads it before any
     verb judges a contract. A contract that is not TOML, or whose
-    ``extensions`` is no list, lists nothing here: the judge names it
-    when the package is read, and every command, ``fm sync`` among
-    them, still mounts. Each contract is
-    parsed once per content: every command's mount asks, and a
-    package's list changes only when its text does.
+    ``extensions`` is no list, lists nothing and names no kind here:
+    the judge names it when the package is read, and every command,
+    ``fm sync`` among them, still mounts. Each contract is parsed once
+    per content: every command's mount asks, and a package's list
+    changes only when its text does.
     """
     from livery.workshop._packages import package_directories
 
-    found: list[tuple[Path, tuple[str, ...]]] = []
+    found: list[tuple[Path, str, tuple[str, ...]]] = []
     for directory in package_directories(root):
         contract = directory / "workshop.toml"
         if not contract.is_file():
             continue
         text = contract.read_text("utf-8")
-        listed = _LISTS.get((contract, text))
-        if listed is None:
+        held = _LISTS.get((contract, text))
+        if held is None:
             try:
-                entries = tomllib.loads(text).get("extensions")
+                table = tomllib.loads(text)
             except tomllib.TOMLDecodeError:
-                entries = None
-            listed = (
-                tuple(str(name) for name in entries)
+                table = {}
+            entries = table.get("extensions", [])
+            held = (
+                (str(table.get("kind", "")), tuple(str(name) for name in entries))
                 if isinstance(entries, list)
-                else ()
+                else ("", ())
             )
-            _LISTS[(contract, text)] = listed
-        found.append((contract, listed))
+            _LISTS[(contract, text)] = held
+        kind, listed = held
+        found.append((contract, kind, listed))
     return found
 
 
@@ -1246,7 +1251,7 @@ def level_problems(root: Path) -> list[str]:
                 f"[workspace] extensions lists {name}, which is listed in a"
                 " package's `extensions` alone; move it there"
             )
-    for contract, listed in _package_lists(root):
+    for contract, _kind, listed in _package_lists(root):
         where = contract.parent.relative_to(root).as_posix()
         for name in listed:
             if listing(name).name != name:
@@ -1318,7 +1323,7 @@ def write_extensions(root: Path) -> list[str]:
                 f"  layering: [workspace] extensions gains {needed} before {extension},"
                 " which requires it"
             )
-    for package_contract, listed in _package_lists(root):
+    for package_contract, _kind, listed in _package_lists(root):
         if not _composable(listed):
             continue
         where = package_contract.parent.relative_to(root).as_posix()

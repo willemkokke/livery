@@ -304,7 +304,7 @@ doc = "a category, by its name, to the paths it takes, as patterns relative to t
 
 [contract.package.ci]
 types = ["table"]
-doc = "the package's own CI: the points it adds and the runners that build its wheels"
+doc = "the package's own CI: the points it adds"
 
 # A point a package contributes. It declares no grant, secret or
 # environment: a scheduled workflow with one on a public repository is
@@ -342,10 +342,6 @@ doc = "the runner labels the job runs on, one leg each; the root's [ci] runners 
 [contract.package.ci."point[]".task]
 types = ["str"]
 doc = "the task the job runs, by its dotted name"
-
-[contract.package.ci.wheel-platforms]
-types = ["strs"]
-doc = "the runner labels that build the package's platform wheels, one leg each"
 
 [contract.package.depends]
 types = ["list"]
@@ -487,6 +483,10 @@ doc = "a job the extension adds to the point, by name; a name the point already 
 types = ["str"]
 doc = "the artifact the job downloads before it enters, by the name a job of the point publishes it under, into the directory that job's paths start in; none when absent"
 
+[contract.extension.ci.jobs."*"."*".conan-cache]
+types = ["bool"]
+doc = "whether the job builds native packages, so conan's home is restored before it enters and saved after; false when absent"
+
 [contract.extension.ci.jobs."*"."*".deploy]
 types = ["str"]
 doc = "the function naming the seam the job publishes a site through, module:function given the workspace's root; none when absent"
@@ -532,9 +532,13 @@ doc = "files the entries do not read whose change runs the job all the same; non
 types = ["str"]
 doc = "the function naming the system packages the job installs before it enters, module:function given the workspace's root; none when absent"
 
+[contract.extension.ci.jobs."*"."*".labels]
+types = ["str"]
+doc = "the function naming the runner labels the job fans out to, one leg each, module:function given the workspace's root; a workspace it names no label for renders no such job, and a need on it drops; one job on one runner when absent"
+
 [contract.extension.ci.jobs."*"."*".needs]
 types = ["strs"]
-doc = "the jobs of the point this one waits for; none when absent"
+doc = "the jobs of the point this one waits for; on a join, the jobs the joined job waits for besides its own, where the point has that job of its own, and a join of a job the point inherits names none; none when absent"
 
 [contract.extension.ci.jobs."*"."*".paths]
 types = ["strs"]

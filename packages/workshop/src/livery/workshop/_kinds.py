@@ -303,6 +303,11 @@ class KindRecord:
             that lists none is taken to hold: their categories, root
             files and steps are its own. A child kind adds to its
             parent's.
+        host_build: How the kind builds, on one host, the native
+            artifacts a release ships, before the wave publishes them,
+            given the workspace root; it reads the release at the
+            root's HEAD. None for a kind whose packages the wave builds
+            itself.
     """
 
     name: str
@@ -323,6 +328,7 @@ class KindRecord:
     coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
+    host_build: Callable[[Path], None] | None = None
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -657,13 +663,16 @@ def _register_builtin() -> None:
             tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
             wheel_identity="platform",
-            # Beside python's, the extension module's C++ sources and
-            # the provider that resolves their dependencies: a nanobind
-            # package consumes conan and is never a recipe, so conan's
-            # sync step applies to it through the bridge, while the
-            # lifecycle phases read the listed extensions alone and this
-            # kind's backend builds it.
-            stands_for=_cpp_conan.CONSUMER_STANDS_FOR,
+            # Beside python's, the extension module's C++ sources, the
+            # provider that resolves their dependencies, and nanobind's
+            # wheels job: a nanobind package consumes conan and is never
+            # a recipe, so conan's sync step applies to it through the
+            # bridge, while the lifecycle phases read the listed
+            # extensions alone and this kind's backend builds it.
+            stands_for=_python_nanobind.STANDS_FOR,
+            # What each leg of nanobind's wheels job builds: the release's
+            # conan packages and every platform-wheel package.
+            host_build=_python_nanobind.host_build,
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the

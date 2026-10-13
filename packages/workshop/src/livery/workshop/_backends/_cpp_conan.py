@@ -145,9 +145,3 @@ from livery.extensions.cpp._language import (
 #: hold: the three a new one lists, ``cmake`` and ``conan`` and the
 #: ``cpp`` conan requires.
 STANDS_FOR = ("cmake", "conan", "cpp")
-
-#: The extensions a package that consumes conan's packages without being
-#: a recipe stands for: cpp for its sources, conan for the provider that
-#: resolves their dependencies. The sync step applies through it; the
-#: lifecycle phases read the listed extensions alone.
-CONSUMER_STANDS_FOR = ("cpp", "conan")

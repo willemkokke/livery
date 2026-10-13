@@ -87,8 +87,10 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     )
     state = registry.snapshot()
     try:
+        # The member lists nothing and holds what its kind stands for, so
+        # cmake, cpp and conan mount; clang-format, which no list names, does not.
         with footman_registry.capture():
-            assert mount_extensions(root) == ()
+            assert mount_extensions(root) == ("cmake", "cpp", "conan")
         assert "format.clang-format" not in steps_by_name()
         assert "clang_format" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
@@ -100,7 +102,7 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
             CONTRACT + 'extensions = ["clang-format"]\n'
         )
         with footman_registry.capture():
-            assert mount_extensions(root) == ("clang-format",)
+            assert mount_extensions(root) == ("cmake", "cpp", "conan", "clang-format")
         assert steps_by_name()["format.clang-format"].extension == "clang-format"
         assert "clang_format" in {t for t, _ in tools_for(("python", "cpp"))}
         deliver(root)

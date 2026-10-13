@@ -1540,7 +1540,7 @@ def workflow_release_check_fresh(
 def workflow_release_publish(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
     prebuilt: Annotated[
-        bool, doc("trust the collected dist/ for the members the matrix builds")
+        bool, doc("trust the dist/ a job of the run collected for each native member")
     ] = False,
 ) -> None:
     """Publish the squash at --ref: the wave, receipts cut per member.
@@ -1551,14 +1551,14 @@ def workflow_release_publish(
     squash before a recovery runs. Each member probes and publishes
     through its kind's artifact target: python members through the
     resolved index, conan members through the resolved conan target.
-    ``--prebuilt`` is the wheels matrix handing over: a
-    platform-wheel member's dist/ was collected by the per-OS jobs,
-    and the wave publishes it instead of rebuilding one platform's.
-    A conan member's saved caches arrive the same way, one per host,
-    and the wave attaches them instead of creating the package
-    again.
+    ``--prebuilt`` says a job of the run already built the native
+    members: a platform-wheel member's dist/ holds the wheels
+    collected from every platform, and the wave publishes them
+    instead of rebuilding one platform's. A conan member's saved
+    caches arrive the same way, one per host, and the wave attaches
+    them instead of creating the package again.
     Inside CI the wave decides that for itself: a platform-wheel
-    member whose dist/ already holds wheels was fed by the matrix,
+    member whose dist/ already holds wheels was fed by the run,
     since a runner's checkout starts with none.
     """
     import os
@@ -1624,10 +1624,10 @@ def workflow_release_publish(
 
 
 def collected_wheels(root: Path, ref: str) -> bool:
-    """Whether the wheels matrix fed this wave, judged inside CI alone.
+    """Whether a job of the run collected wheels for this wave, judged inside CI alone.
 
     A runner's checkout starts with an empty dist/, so wheels there
-    were collected from the matrix's artifacts; outside CI a dist/
+    were collected from another job's artifacts; outside CI a dist/
     may hold a stale local build, and the wave builds as asked.
     """
     from livery.workshop._ci_context import run_context
@@ -1643,5 +1643,5 @@ def collected_wheels(root: Path, ref: str) -> bool:
         and any((package.directory / "dist").glob("*.whl"))
     ]
     if fed:
-        print(f"  prebuilt: the wheels matrix collected wheels for {', '.join(fed)}")
+        print(f"  prebuilt: the run collected wheels for {', '.join(fed)}")
     return bool(fed)

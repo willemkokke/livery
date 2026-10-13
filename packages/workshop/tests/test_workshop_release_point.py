@@ -86,13 +86,13 @@ def test_the_wave_builds_unless_ci_collected_wheels(
     assert collected_wheels(root, sha) is False
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_RUN_ID", "1")
-    # Inside CI, an empty dist/ means no matrix fed the wave.
+    # Inside CI, an empty dist/ means no job of the run fed the wave.
     (dist / "acme_native-1.0.0-cp314-cp314-linux_x86_64.whl").unlink()
     assert collected_wheels(root, sha) is False
     # Inside CI, wheels in a platform member's dist/ were collected.
     (dist / "acme_native-1.0.0-cp314-cp314-linux_x86_64.whl").write_bytes(b"")
     assert collected_wheels(root, sha) is True
-    assert "prebuilt: the wheels matrix collected wheels for acme-native" in (
+    assert "prebuilt: the run collected wheels for acme-native" in (
         capsys.readouterr().out
     )
     # A wave without a platform member has nothing to collect.

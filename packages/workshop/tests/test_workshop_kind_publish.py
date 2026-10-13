@@ -17,6 +17,9 @@ from livery.workshop._packages import Package
 from livery.workshop._publish import assert_wheel_identity, publish_release
 from livery.workshop._registries import RegistryTarget
 
+# The wheels job is nanobind's, added as the mount adds it.
+from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+
 _FAILURES = (SystemExit, Failed)
 
 
@@ -465,7 +468,7 @@ def test_prebuilt_refuses_an_empty_collection(
         return conan_registry if package.kind == "cpp-conan" else registry
 
     # The library's own collection is there, so the wave reaches the
-    # extension, whose wheels the matrix never handed over.
+    # extension, whose wheels no job of the run handed over.
     saved = root / "packages" / "geometry" / "dist"
     saved.mkdir(parents=True, exist_ok=True)
     (saved / _cpp_conan.cache_name("acme-geometry", "0.3.0")).write_bytes(b"cache")
@@ -479,7 +482,7 @@ def test_prebuilt_refuses_an_empty_collection(
             prebuilt=True,
         )
     assert "no collected wheels" in str(caught.value)
-    assert "wheels matrix" in str(caught.value)
+    assert "no job of the run fed this wave" in str(caught.value)
 
 
 def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
@@ -487,10 +490,10 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
 ) -> None:
     """Creating the package again on the wave runner is not the answer.
 
-    The matrix creates each conan member once per host and saves the
-    cache beside the wheels. With --prebuilt and nothing collected,
-    the wave stops instead of building a package only this runner's
-    host could use.
+    Each leg of the run creates each conan member once per host and
+    saves the cache beside the wheels. With --prebuilt and nothing
+    collected, the wave stops instead of building a package only this
+    runner's host could use.
     """
     root = cross_train
     registry = _Ledger()
@@ -514,24 +517,26 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
             prebuilt=True,
         )
     assert "no saved conan cache" in str(caught.value)
-    assert "wheels matrix" in str(caught.value)
+    assert "no job of the run fed this wave" in str(caught.value)
 
 
-# The emitted matrix.
+# The emitted matrix: nanobind's wheels job, added as the mount adds it
+# for a workspace whose packages hold nanobind.
 
 
 def _release_answers(*, with_native: bool) -> dict[str, object]:
     return {
         "runners": ["ubuntu-latest", "windows"],
-        # The wheels job's labels are the union of the platform-wheel
-        # members' declared labels, which the facts carry by point and
-        # job; a workspace with no such member has none.
+        # The wheels job's labels are the union of the labels the
+        # packages that hold nanobind declare, which the facts carry by
+        # point and job; a workspace whose packages name none has none.
         "job_runners": {
             ("release", "wheels"): ("ubuntu-latest", "windows") if with_native else ()
         },
     }
 
 
+@pytest.mark.usefixtures("nanobind_jobs")
 def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None:
     from livery.workshop._ci_generate import _actions_workflow
 
@@ -567,6 +572,7 @@ def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None
     )
 
 
+@pytest.mark.usefixtures("nanobind_jobs")
 def test_the_gitea_release_matrix_rides_the_declared_wheel_platforms() -> None:
     from livery.workshop._ci_generate import _actions_workflow
 

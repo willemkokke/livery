@@ -52,7 +52,6 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._declaration import Reference
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -365,31 +364,12 @@ DECLARED: tuple[Point, ...] = (
         ),
         jobs=(
             Job(
-                "wheels",
-                matrix="runners",
-                # The members' contracts name the labels: the reference
-                # imports their reader when a render asks for the
-                # labels, never when this module loads.
-                labels=Reference("livery.workshop._wheels", "wheel_runners"),
-                fetch="full",
-                publishes="wheels",
-                paths=("packages/*/dist/*", "packages/*/*/dist/*"),
-                conan_cache=True,
-                note=(
-                    "Every platform's wheels, built before the wave: the"
-                    " matrix feeds the publish job through artifacts, so one"
-                    " release ships the complete set."
-                ),
-            ),
-            Job(
                 "publish",
-                needs=("wheels",),
                 fetch="full",
                 token="repository",
                 writes=True,
                 pushes=True,
                 publishes_index=True,
-                collects="wheels",
                 environment="pypi",
                 step="Publish the wave",
                 note=(
@@ -701,16 +681,18 @@ def contribute_job(
 ) -> None:
     """Add *job* to the builtin *point* on behalf of *extension*, or join one.
 
-    The job sits before the point's verdict job when the point has
-    one, else last, so a contributed job renders where a declared one
-    would; a gating job joins the verdict's needs. A *job* that
-    ``joins`` names a job the point already has (`point_has_job`):
-    its entries follow that job's own, before any the job runs last,
-    and its plumbing renders on that job. Refuses a point that is not
-    builtin, a job name the point already has when the job does not
-    join, a join of a job the point does not have, a join that gates,
-    a name another extension contributed, and an entry naming another
-    point or job.
+    The job sits before the first job of the point that needs it, else
+    before the point's verdict job, else last (`composed_points`), so a
+    contributed job renders before the jobs that wait for it and where
+    a declared one would; a gating job joins the verdict's needs. A
+    *job* that ``joins`` names a job the point already has
+    (`point_has_job`): its entries follow that job's own, before any
+    the job runs last, its plumbing renders on that job, and its needs
+    join the needs of a job the point has of its own. Refuses a point
+    that is not builtin, a job name the point already has when the job
+    does not join, a join of a job the point does not have, a join that
+    gates, a name another extension contributed, and an entry naming
+    another point or job.
     """
     by_name = {declared.name: declared for declared in DECLARED}
     if point not in by_name:
@@ -792,9 +774,17 @@ def verdict_needs(point: str) -> tuple[str, ...]:
 
 
 def composed_points() -> tuple[Point, ...]:
-    """The builtin points with the extensions' contributed jobs in place."""
-    from dataclasses import replace
+    """The builtin points with the extensions' contributed jobs in place.
 
+    A contributed job sits before the first job of its point that needs
+    it, else before the point's verdict job, else last: a job renders
+    before the jobs that wait for it, and where a declared one would.
+    The verdict waits for what `verdict_needs` names. A join's needs
+    join the needs of the job it joins when the point has that job of
+    its own, declared or contributed; the read of a declaration refuses
+    needs on a join of a job the point inherits, whose needs are the
+    point's it inherits from.
+    """
     composed: list[Point] = []
     for point in DECLARED:
         added = [item.job for item in contributed_jobs(point.name)]
@@ -802,20 +792,30 @@ def composed_points() -> tuple[Point, ...]:
         if not added and not joined:
             composed.append(point)
             continue
-        jobs = list(point.jobs)
-        verdict = next((i for i, job in enumerate(jobs) if job.always), None)
-        if verdict is None:
-            jobs.extend(added)
-        else:
-            jobs[verdict:verdict] = added
-            jobs[verdict + len(added)] = replace(
-                jobs[verdict + len(added)], needs=verdict_needs(point.name)
+        jobs = [
+            _waiting(
+                replace(job, needs=verdict_needs(point.name)) if job.always else job,
+                joined,
             )
+            for job in point.jobs
+        ]
+        for job in added:
+            needing = [i for i, other in enumerate(jobs) if job.name in other.needs]
+            verdict = [i for i, other in enumerate(jobs) if other.always]
+            jobs.insert((needing or verdict or [len(jobs)])[0], _waiting(job, joined))
         # A join renders as no job: it rides the point's jobs so every
         # reader of what a job installs, deploys and publishes sees it.
         jobs.extend(joined)
         composed.append(replace(point, jobs=tuple(jobs)))
     return tuple(composed)
+
+
+def _waiting(job: Job, joins: Sequence[Job]) -> Job:
+    """*job* with the needs of each of *joins* that joins it added to its own."""
+    extra = [need for join in joins if join.name == job.name for need in join.needs]
+    if not extra:
+        return job
+    return replace(job, needs=tuple(dict.fromkeys((*job.needs, *extra))))
 
 
 def points(root: Path | None) -> tuple[Point, ...]:
@@ -1236,11 +1236,9 @@ BUILTIN: tuple[Entry, ...] = (
     # python of the matrix.
     Entry("nightly", "nightly", "doctor"),
     Entry("nightly", "nightly", "check"),
-    # The wave, at the squash the dispatch names: each platform's
-    # wheels, then the publish that cuts the receipts. Each verb decides
-    # for itself what the ref holds: no wheels to build, nothing to
-    # publish.
-    Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
+    # The wave, at the squash the dispatch names: the publish that cuts
+    # the receipts. The verb decides for itself what the ref holds, and
+    # whether a job of the run already built its wheels.
     Entry("release", "publish", "workflow.release.publish", ("--ref={ref}",)),
 )
 

@@ -358,10 +358,10 @@ def publish_release(
     failure stops only its dependents. Every read is *ref*-scoped.
     Each member builds through its kind's backend and publishes to
     its kind's artifact target; the wheel identity guard runs both
-    ways before anything uploads. *prebuilt* trusts a ``dist/``
-    already collected (the per-OS wheels matrix) for members whose
-    kind builds platform wheels, and refuses an empty one naming
-    the collection.
+    ways before anything uploads. *prebuilt* trusts a ``dist/`` a
+    job of the run already filled, for members whose kind builds
+    platform wheels and for conan members' saved caches, and refuses
+    an empty one naming the collection.
     """
     from livery.workshop._release import verify_release
 
@@ -410,30 +410,30 @@ def publish_release(
     refused_new: list[str] = []
 
     def _build_member(package: Package, version: str) -> None:
-        """Build the member's artifact, or trust the matrix's collection."""
+        """Build the member's artifact, or trust what a job of the run collected."""
         from livery.workshop._kinds import kind_for
 
         record = kind_for(package.kind)
         if prebuilt and record.wheel_identity == "platform":
-            # The matrix already built and collected this member's
-            # wheels; a rebuild here would clobber them with one
-            # platform's.
+            # A job of the run already built and collected this
+            # member's wheels; a rebuild here would clobber them with
+            # one platform's.
             if not list((package.directory / "dist").glob("*.whl")):
                 fail(
                     f"{package.name}: --prebuilt, and dist/ holds"
-                    " no collected wheels; the wheels matrix did"
-                    " not feed this wave"
+                    " no collected wheels; no job of the run fed"
+                    " this wave"
                 )
         elif prebuilt and record.artifact == "conan":
-            # The matrix created this member once per host and saved
-            # each cache; building again here would cost minutes and
-            # publish nothing the collection lacks.
+            # A job of the run created this member once per host and
+            # saved each cache; building again here would cost minutes
+            # and publish nothing the collection lacks.
             saved = (package.directory / "dist").glob(f"{package.name}-{version}-*.tgz")
             if not list(saved):
                 fail(
                     f"{package.name}: --prebuilt, and dist/ holds no"
-                    " saved conan cache; the wheels matrix did not"
-                    " feed this wave"
+                    " saved conan cache; no job of the run fed this"
+                    " wave"
                 )
         else:
             _lifecycle.build(package, root, epoch=epoch)

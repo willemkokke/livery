@@ -156,6 +156,30 @@ def test_prove_floors_refuses_naming_the_prove_list(tmp_path: Path) -> None:
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
 
 
+def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> None:
+    refusal = (
+        "  [ci] wheel-platforms is not a key: a package that holds nanobind"
+        " names the runner labels that build its platform wheels under"
+        " [nanobind] wheel-platforms"
+    )
+    member = _workspace(
+        tmp_path,
+        "",
+        'kind = "python-nanobind"\nname = "m"\n\n[ci]\n'
+        'wheel-platforms = ["ubuntu-latest"]\n',
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+    # The key in nanobind's table loads: the package holds nanobind
+    # through its kind, listing nothing.
+    member.write_text(
+        'kind = "python-nanobind"\nname = "m"\n\n[nanobind]\n'
+        'wheel-platforms = ["ubuntu-latest", "windows-latest"]\n'
+    )
+    assert _contract.load_contract(member)["nanobind"] == {
+        "wheel-platforms": ["ubuntu-latest", "windows-latest"]
+    }
+
+
 def test_a_key_of_a_user_named_table_is_judged_by_its_value(tmp_path: Path) -> None:
     path = _workspace(tmp_path, '\n[toolroom.modes]\nruff = "link"\nmypy = "copy"\n')
     assert "toolroom.modes.mypy is 'copy'; it takes one of link, path, none" in (

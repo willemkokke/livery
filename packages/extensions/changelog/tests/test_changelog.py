@@ -99,8 +99,10 @@ def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
     )
     state = registry.snapshot()
     try:
+        # The member lists nothing and holds python through its kind, so
+        # python mounts; changelog, which no list names, does not.
         with footman_registry.capture():
-            assert mount_extensions(root) == ()
+            assert mount_extensions(root) == ("python",)
         assert release_notes(root) is None
         deliver(root)
         assert not (root / "packages" / "thing" / "cliff.toml").exists()
@@ -109,7 +111,7 @@ def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
         # the gate then keeps.
         _workspace(root, '["changelog"]')
         with footman_registry.capture():
-            assert mount_extensions(root) == ("changelog",)
+            assert mount_extensions(root) == ("python", "changelog")
         assert release_notes(root) is _cliff.NOTES
         assert "packages/thing/cliff.toml: missing; `fm sync` writes it" in (
             shipped_drift(root)

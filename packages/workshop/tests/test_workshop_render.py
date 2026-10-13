@@ -30,6 +30,9 @@ from livery.workshop._points import Input, Job, Point
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
 
+# The wheels job is nanobind's, added as the mount adds it.
+from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+
 KINDS = ("github", "gitea")
 
 
@@ -391,7 +394,7 @@ def test_the_release_shell_is_dispatched_with_a_ref_and_publishes_it(
     assert inputs["workshop"]["required"] is False
     assert inputs["workshop"]["default"] == ""
     # A pure workspace that is not a home: the publish job alone, no
-    # wheels matrix, no templates job.
+    # wheels job, no templates job.
     jobs = doc["jobs"]
     assert list(jobs) == ["publish"]
     publish = jobs["publish"]
@@ -420,21 +423,22 @@ def test_the_release_shell_is_dispatched_with_a_ref_and_publishes_it(
         assert checkout["token"] == "${{ secrets.FORGE_TOKEN }}"
         assert "permissions" not in publish and "environment" not in publish
         assert _secrets(publish) == {"FORGE_TOKEN", "UV_PUBLISH_TOKEN", "GITHUB_TOKEN"}
-    # The wheels are collected before the wave, whether or not a leg
-    # built any: the wave decides prebuilt from what it finds.
+    # No package holds nanobind, so no job of the run builds wheels for
+    # the wave and the publish job collects nothing.
     uses = [str(step.get("uses", "")) for step in publish["steps"]]
-    assert any("download-artifact" in u for u in uses)
+    assert not any("download-artifact" in u for u in uses)
     assert not any("upload-artifact" in u for u in uses)
 
 
-def test_wheel_platforms_render_the_wheels_matrix_before_the_wave(
+@pytest.mark.usefixtures("nanobind_jobs")
+def test_wheel_platforms_render_the_wheels_job_before_the_wave(
     tmp_path: Path,
 ) -> None:
     root = _root(tmp_path, "github")
     member = root / "packages" / "native"
     (member / "src").mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-native"\n\n[ci]\n'
+        'kind = "python-nanobind"\nname = "acme-native"\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n'
     )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')
@@ -456,7 +460,19 @@ def test_wheel_platforms_render_the_wheels_matrix_before_the_wave(
     # A forge glob stops at a slash: a package in a group directory is
     # one level deeper.
     assert upload["path"] == "packages/*/dist/*\npackages/*/*/dist/*\n"
+    # The publish job waits for every leg and collects each one's artifact
+    # into the packages' directories before the wave.
     assert jobs["publish"]["needs"] == ["wheels"]
+    download = next(
+        step["with"]
+        for step in jobs["publish"]["steps"]
+        if "download-artifact" in str(step.get("uses", ""))
+    )
+    assert download == {
+        "pattern": "wheels*",
+        "path": "packages",
+        "merge-multiple": True,
+    }
     # The wave spells no --prebuilt: it decides from the collected dist.
     assert "--prebuilt" not in text
 

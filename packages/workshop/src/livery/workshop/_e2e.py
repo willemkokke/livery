@@ -1936,7 +1936,7 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
 
     ``new.package`` renders and wires each missing member, a `[release]
     baseline` seeds the first release's number, the nanobind member's
-    contract names the loop's one runner as its wheel platform, and the
+    ``[nanobind] wheel-platforms`` names the loop's one runner, and the
     loop's own ``fm submit --armed`` lands them together: one branch,
     one pull request, one gate on the runner over every kind at once
     (it compiles the native member's editable install), and one merge,
@@ -1966,9 +1966,10 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
         _loop_fm(root, "new.package", name, f"--kind={kind}")
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
-        # A native seed names the hosted runners as its wheel platforms;
-        # the loop's fleet is its one runner, and the leg must be
-        # schedulable. Another seed names none, and nothing changes.
+        # A native seed names the hosted runners under [nanobind]
+        # wheel-platforms; the loop's fleet is its one runner, and the
+        # leg must be schedulable. Another seed names none, and nothing
+        # changes.
         body = body.replace(
             'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
             f'wheel-platforms = ["{CURRENT.label}"]',
@@ -2143,7 +2144,7 @@ def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
         run,
         jobs,
         "publish",
-        (f"prebuilt: the wheels matrix collected wheels for {distribution}",),
+        (f"prebuilt: the run collected wheels for {distribution}",),
     )
     print(
         f"  release: the wave published the wheels the wheels job built for"

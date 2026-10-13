@@ -187,16 +187,40 @@ def test_the_kind_chains_from_python(python_steps: object) -> None:
     assert record.host_tools == ("cc", "c++")
 
 
-def test_a_package_of_the_kind_that_lists_nothing_holds_python_cpp_and_conan() -> None:
-    """Python's extension through the chain, then cpp and conan.
+def test_the_kind_holds_python_cpp_conan_and_nanobind_while_it_lists_nothing() -> None:
+    """Python's extension through the chain, then cpp, conan and nanobind.
 
     A nanobind package is a python distribution whose extension module
-    is C++ (cpp), and it consumes conan's packages without being a
-    recipe (conan, for the provider that resolves them).
+    is C++ (cpp), it consumes conan's packages without being a recipe
+    (conan, for the provider that resolves them), and its wheels build
+    on the release's wheels job (nanobind). The kind's backend builds
+    what each leg of that job builds.
     """
     from livery.workshop._kinds import kind_stands_for
 
-    assert kind_stands_for("python-nanobind") == ("python", "cpp", "conan")
+    assert kind_stands_for("python-nanobind") == ("python", "cpp", "conan", "nanobind")
+    assert kind_for("python-nanobind").host_build is _python_nanobind.host_build
+    # No other kind builds on a host before the wave.
+    assert kind_for("python").host_build is None
+    assert kind_for("cpp-conan").host_build is None
+
+
+def test_the_one_wheel_skip_follows_the_hosts_libc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = "livery.workshop._backends._python_nanobind"
+    monkeypatch.setattr(f"{module}._musl_loader_present", lambda: False)
+    monkeypatch.setattr(
+        "sysconfig.get_config_var", lambda name: "aarch64-unknown-linux-musl"
+    )
+    assert _python_nanobind.host_is_musl()
+    monkeypatch.setattr(
+        "sysconfig.get_config_var", lambda name: "aarch64-unknown-linux-gnu"
+    )
+    assert not _python_nanobind.host_is_musl()
+    # The loader is the second signal, for a musl-built python elsewhere.
+    monkeypatch.setattr(f"{module}._musl_loader_present", lambda: True)
+    assert _python_nanobind.host_is_musl()
 
 
 # The chain's seeds: the parent's first, the leaf's over them.

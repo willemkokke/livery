@@ -1,10 +1,45 @@
 # nanobind: a python package whose extension module is C++, bound to
-# python through nanobind and built into one wheel per platform. It
-# declares nothing: a package of the python-nanobind kind lists no
-# extension and holds python, cpp and conan through its kind, whose
-# backend builds, tests and releases it until the package kinds go.
+# python through nanobind and built into one wheel per platform. A
+# package of the python-nanobind kind lists no extension and holds
+# nanobind, python, cpp and conan through its kind, whose backend
+# builds, tests and releases it until the package kinds go. What
+# nanobind adds is the release's wheels job and the key that names
+# the runners its legs run on.
 
 [extension]
 api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
+# The footman plugin that carries the verb the wheels job runs.
+plugin = "livery.extensions.nanobind"
+
+# Where a package's platform wheels build.
+[contract.package.nanobind]
+types = ["table"]
+doc = "how the package's platform wheels build"
+
+[contract.package.nanobind.wheel-platforms]
+types = ["strs"]
+doc = "the runner labels that build the package's platform wheels, one leg of the release's wheels job each; required in a package that holds nanobind"
+
+# Every platform's wheels, built before the wave on each runner label
+# the packages that hold nanobind name, and handed to the publish job
+# as one artifact per leg. The leg also creates each conan package of
+# the release and saves its cache beside the wheels. A workspace whose
+# packages name no label renders no wheels job.
+[ci.jobs.release.wheels]
+entries = ["nanobind.wheels"]
+labels = "livery.extensions.nanobind._ci:wheel_runners"
+fetch = "full"
+publishes = "wheels"
+paths = ["packages/*/dist/*", "packages/*/*/dist/*"]
+conan-cache = true
+note = """\
+Every platform's wheels, built before the wave: the matrix feeds the \
+publish job through artifacts, so one release ships the complete set."""
+
+# The wave publishes what the legs built: the publish job waits for the
+# wheels job and collects its artifact before it enters.
+[ci.jobs.release.publish]
+collects = "wheels"
+needs = ["wheels"]

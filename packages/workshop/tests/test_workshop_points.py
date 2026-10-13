@@ -13,6 +13,9 @@ from livery.workshop import _points
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
 
+# The wheels job is nanobind's, added as the mount adds it.
+from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+
 _FAILURES = (BaseException,)
 
 
@@ -515,11 +518,10 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
         _points.Entry("nightly", "nightly", "doctor"),
         _points.Entry("nightly", "nightly", "check"),
     )
-    # The release's jobs are declared, with nothing scheduled on them
-    # until the wave's verbs become entries; a point's own name is a
-    # job of it too, green and empty until the contract attaches a
-    # task.
-    assert _points.jobs_of(root, "release") == ("wheels", "publish")
+    # The release's job is declared; a point's own name is a job of it
+    # too, green and empty until the contract attaches a task. A
+    # workspace whose packages hold no nanobind has no wheels job.
+    assert _points.jobs_of(root, "release") == ("publish",)
     # The wave's verbs are the release's entries, at the dispatched ref.
     assert [e.task for e in _points.entries_for(root, "release", "publish")] == [
         "workflow.release.publish"
@@ -528,6 +530,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     assert _points.entries_for(root, "release", "release") == ()
 
 
+@pytest.mark.usefixtures("nanobind_jobs")
 def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
     tmp_path: Path,
 ) -> None:
@@ -535,15 +538,23 @@ def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
     member = root / "packages" / "native"
     (member / "src").mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-native"\n\n[ci]\n'
+        'kind = "python-nanobind"\nname = "acme-native"\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest"]\n'
     )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')
     assert _points.jobs_of(root, "release") == ("wheels", "publish")
-    # The wheels job builds this platform's wheels at the dispatched ref.
+    # The wheels job builds this platform's wheels with nanobind's verb,
+    # at the release squash its checkout is.
     assert _points.entries_for(root, "release", "wheels") == (
-        _points.Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
+        _points.Entry("release", "wheels", "nanobind.wheels", source="nanobind"),
     )
+    # The publish job waits for the wheels job and collects its artifact.
+    publish = next(
+        job
+        for job in _points.point_by_name(root)["release"].jobs
+        if job.name == "publish" and not job.joins
+    )
+    assert publish.needs == ("wheels",)
 
 
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
@@ -769,12 +780,12 @@ def test_a_dispatched_points_inputs_reach_its_entries(
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"inputs": {"ref": "abc123", "workshop": ""}}))
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
-    _points.run_point(root, "release", "wheels", spawn=green)
+    _points.run_point(root, "release", "publish", spawn=green)
     assert seen == [
         [
             "hse",
-            "--profile=fm-profile-release-wheels.json",
-            "release.wheels",
+            "--profile=fm-profile-workflow-release-publish.json",
+            "workflow.release.publish",
             "--ref=abc123",
         ]
     ]
@@ -790,6 +801,30 @@ def test_a_dispatched_points_inputs_reach_its_entries(
             "workflow.release.publish",
             "--ref=def456",
         ]
+    ]
+
+
+@pytest.mark.usefixtures("nanobind_jobs")
+def test_the_wheels_job_runs_nanobinds_verb_at_the_checkout_with_no_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import livery.footman as footman
+
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
+    root = _root(tmp_path)
+    seen: list[list[str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        return 0
+
+    # The dispatch names the squash; the job's checkout already is it.
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"inputs": {"ref": "abc123", "workshop": ""}}))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    _points.run_point(root, "release", "wheels", spawn=green)
+    assert seen == [
+        ["hse", "--profile=fm-profile-nanobind-wheels.json", "nanobind.wheels"]
     ]
 
 
