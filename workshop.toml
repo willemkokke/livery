@@ -154,14 +154,6 @@ task = "ci.e2e"
 args = ["--scenario=release", "--from-main"]
 once = true
 
-# Temporary, for this branch's rehearsal alone: a fresh pass after
-# another in one job builds against its own forge.
-[[ci.schedule]]
-point = "nightly"
-task = "ci.e2e"
-args = ["--extension=ruff", "--fresh"]
-once = true
-
 # The reaches into another distribution's private names the python
 # extension's private-reaches rule allows, each with the public seam
 # that will replace it. An entry no source uses any more refuses.
