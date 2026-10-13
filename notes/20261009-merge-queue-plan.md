@@ -58,9 +58,11 @@ Read in the code and the records on 2026-10-09.
 - The loop, `fm ci.e2e --scenario=<name>`, runs on the local Gitea
   with the sets `develop`, `release`, `points`, `extension` and
   `all`.
-- The repository is public on GitHub, so GitHub's merge queue is
-  available on the current plan. Gitea has no queue. gitlab-ce has
-  no merge trains.
+- The repository is public on GitHub and owned by a personal
+  account (`willemkokke`, type `User`). GitHub offers its merge queue
+  only to repositories owned by an organization, public ones on any
+  plan, so this repository cannot enable it where it lives (read on
+  2026-10-13). Gitea has no queue. gitlab-ce has no merge trains.
 
 Measured from `refs/workshop-origin/metrics`, 300 runs between
 2026-10-03 and 2026-10-09, and from `origin/main`:
@@ -374,6 +376,12 @@ paragraph.
   set and not `develop`, which stays the fast default; it is also
   runnable by name.
 
+- 2026-10-13, Willem: "if enabling the github merge queue would make
+  this faster then yes, I'm all for it." Read the same day: GitHub
+  does not give a personal account's repository a merge queue, so
+  phase 4 needs the repository under an organization first; open
+  item 7 asks which way to go.
+
 ## Open
 
 1. Willem: may the pull request point run only the ubuntu and macos
@@ -394,3 +402,9 @@ paragraph.
    (`pull-requests: write` on the generated workflow), and the Gitea
    runner token's rights. The step names the permission it lacks.
 6. Willem: the names `fm queue.advance` and `queued`.
+7. Willem: move the repository to an organization, which makes
+   phase 4 possible and costs the move (the repository's owner in
+   PyPI's trusted publishers, the release workflows, tokens scoped to
+   the old owner, the e2e accounts); or build the serial queue of
+   phases 1 to 3, which works where the repository is, without
+   batching.
