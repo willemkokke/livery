@@ -1290,7 +1290,8 @@ slices, each mergeable alone:
    combinations listing goes with #1377.
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
-   on 2026-10-09.
+   on 2026-10-09. What the extension reads from the base becomes the
+   base's public API in the same move (decision record, 2026-10-13).
 
 **11c, the docs phase.** Ruled 2026-10-10: the generators below are
 steps of the docs phase the docs extension declares, and
@@ -2857,6 +2858,18 @@ neither needs nor rules out).
   with `coverage html`, so their temporary row is gone. Measured on a
   desk: main's record, 57 rows on three legs, read in 19.2 s, and the
   workshop's 130 files reduced, merged and drawn in 8.0 s.
+
+- 2026-10-13, Willem: what an extension needs from the workshop is
+  public API, made public as each extension leaves the workshop wheel
+  (step 8), not in a pass of its own before. Until then the in-wheel
+  extensions ship in the workshop's distribution, so
+  `layering.private-reaches` lets them import the base's underscore
+  modules, and the count is not held; on 2026-10-13 they imported 26 of
+  them (python 20, docs 7, conan 5, nanobind 5, coverage 4, cmake 2,
+  cpp 1). Why: the move turns each such import into a reach into
+  another distribution's privates, which the rule refuses, so the
+  refactor cannot be skipped, and the public names are then made from
+  the code as it stands at the move.
 
 ## Open
 
