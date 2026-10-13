@@ -301,9 +301,9 @@ def package_extensions(start: Path | None = None) -> tuple[str, ...]:
 
     Each package's set is its own list and the package-level extensions
     the list requires; a package that lists none holds what its kind
-    stands for ([livery.workshop._kinds.kind_stands_for][]), until the
-    kinds go. This is the union of what the packages hold, the
-    installed package-level extensions among it, ordered as
+    stands for ([livery.workshop._kinds.kind_stands_for][]). This is
+    the union of what the packages hold, the installed package-level
+    extensions among it, ordered as
     [livery.workshop._composition.order][] orders it. A declared order
     with no start falls back to alphabetical here, so a sync still
     runs, and ``layering.graph`` names the cycle. Empty outside a

@@ -2,9 +2,8 @@
 # python through nanobind and built into one wheel per platform. A
 # package of the python-nanobind kind lists no extension and holds
 # nanobind, python, cpp and conan through its kind, whose backend
-# builds, tests and releases it until the package kinds go. What
-# nanobind adds is the release's wheels job and the key that names
-# the runners its legs run on.
+# builds, tests and releases it. What nanobind adds is the release's
+# wheels job and the key that names the runners its legs run on.
 
 [extension]
 api-version = 1
