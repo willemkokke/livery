@@ -21,6 +21,7 @@ spawns its tool by name, so a machine that never deployed one raises
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import os
 import platform
@@ -315,10 +316,12 @@ def test(
     family of the compiler CMake configured the gate build with: gcov
     and llvm-cov read the counters a green run left, and Microsoft's
     engine collects around the run itself. The lines reached land as
-    the package's part at the workspace *root*; a red run leaves
-    none, and a family without a measurer refuses by name, since a
-    suite that ran unmeasured never passes as measured. A run that is
-    not measured runs ctest alone and leaves no part.
+    the package's part in the line format at the workspace *root*
+    (`write_part`), and the package's part of an earlier run goes
+    first, so a red run leaves none; a family without a measurer
+    refuses by name, since a suite that ran unmeasured never passes as
+    measured. A run that is not measured runs ctest alone and leaves no
+    part.
     """
     build_dir = package.directory / GATE_BUILD_DIR
     names = [Path(path).stem for path in selection]
@@ -331,6 +334,7 @@ def test(
     if not measures(package):
         _run_ctest(package, argv, env, names)
         return
+    remove_parts(root, package.path)
     env.update(_fresh_profiles(package))
     compiler_id, compiler = compiler_of(package)
     family = measurer_for(compiler_id)
@@ -350,7 +354,7 @@ def test(
             else _measure_llvm(package, compiler)
         )
     kept = within(relativise(measured, root), package)
-    write_part(root, package.path, kept)
+    write_part(root, package.path, kept, family)
     print(f"  {package.name}: coverage: {len(kept)} file(s) measured by {family}")
 
 
@@ -495,28 +499,101 @@ def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
     return merged
 
 
-#: The parts a test run leaves at the workspace root, one per package,
-#: beside coverage.py's own ``.coverage.*`` parts, in the shape the
-#: coverage extension reads
-#: ([livery.extensions.coverage._lines.read_parts][]).
-PART_PREFIX = ".coverage-lines."
+#: Where a measured test run leaves each package's part, under a
+#: directory named after its measurer, in the line format the coverage
+#: extension reads: inside the workspace's ``.workshop`` directory,
+#: which the base keeps out of git.
+PARTS = ".workshop/coverage/parts"
+
+#: The line format's version the parts are written in.
+FORMAT = 1
+
+#: The measurer a part names, by the compiler family that read it.
+MEASURER_NAMES = {"gcov": "gcov", "llvm": "llvm-cov", "msvc": "dotnet-coverage"}
 
 
-def write_part(root: Path, package_path: str, lines: dict[str, dict[int, int]]) -> Path:
-    """Write *lines* as *package_path*'s part under *root*; the path written.
+def write_part(
+    root: Path, package_path: str, lines: dict[str, dict[int, int]], family: str
+) -> Path:
+    """Write *lines* as *package_path*'s part in the line format under *root*; the path.
 
-    One JSON object: the package's path, and per file its ``(line,
-    hits)`` pairs in line order.
+    The part names its measurer by the compiler *family* that read it,
+    counts how many times each line ran, and judges lines alone: per
+    file the instrumentable lines as its statements, the ones that ran
+    with their counts, and the git blob id of the file's text with each
+    CRLF read as LF, so a Windows checkout and a Linux one give one
+    digest. A line number below 1 is no line and is left out.
     """
     from livery import git
 
-    path = root / f"{PART_PREFIX}{git.slug(package_path)}.json"
-    files = {name: sorted(counts.items()) for name, counts in sorted(lines.items())}
-    path.write_text(
-        json.dumps({"package": package_path, "files": files}, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    measurer = MEASURER_NAMES.get(family, family)
+    files: dict[str, dict[str, Any]] = {}
+    for name, counts in sorted(lines.items()):
+        held = {line: runs for line, runs in counts.items() if line >= 1}
+        source = root / name
+        entry: dict[str, Any] = {
+            "digest": _digest(source.read_bytes()) if source.is_file() else ""
+        }
+        if held:
+            entry["statements"] = _ranges(held)
+        ran = [[line, runs] for line, runs in sorted(held.items()) if runs > 0]
+        if ran:
+            entry["counts"] = ran
+        files[name] = entry
+    part = {
+        "format": FORMAT,
+        "unit": package_path,
+        "measurer": {
+            "name": measurer,
+            "version": "",
+            "runtime": "",
+            "counts": "counts",
+            "branches": "none",
+            "regions": [],
+            "judges": ["lines"],
+        },
+        "contexts": [],
+        "files": files,
+    }
+    path = root / PARTS / measurer / f"{git.slug(package_path)}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(part, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def remove_parts(root: Path, package_path: str) -> None:
+    """Delete *package_path*'s parts of an earlier run under *root*, any measurer's."""
+    from livery import git
+
+    for stale in (root / PARTS).glob(f"*/{git.slug(package_path)}.json"):
+        stale.unlink()
+
+
+def _ranges(lines: dict[int, int]) -> str:
+    """The line numbers of *lines* as the line format's range string: ``1-12,15``."""
+    ordered = sorted(lines)
+    found: list[str] = []
+    index = 0
+    while index < len(ordered):
+        start = end = ordered[index]
+        while index + 1 < len(ordered) and ordered[index + 1] == end + 1:
+            index += 1
+            end = ordered[index]
+        found.append(str(start) if start == end else f"{start}-{end}")
+        index += 1
+    return ",".join(found)
+
+
+def _digest(content: bytes) -> str:
+    """The git blob id of *content* as text, the line format's ``digest``.
+
+    Each CRLF counts as LF: Git for Windows checks text out with CRLF,
+    and a file measured there has the digest of the same file measured
+    on Linux.
+    """
+    text = content.replace(b"\r\n", b"\n")
+    header = f"blob {len(text)}\0".encode("ascii")
+    return hashlib.sha1(header + text, usedforsecurity=False).hexdigest()
 
 
 def relativise(

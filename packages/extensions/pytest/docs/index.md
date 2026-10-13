@@ -29,12 +29,15 @@ through its `[for.coverage]` table, and coverage judges what it measures.
 A workspace that lists coverage with nothing that measures has coverage
 dormant, and `fm extensions` names pytest among what would wake it.
 
-This extension also reduces coverage.py's measurements for the coverage
-pages: each stored row of a suite's arcs, and the data a gate run left at
-the root, becomes a part in the coverage extension's line format, per file
-coverage.py's own analysis of it. Each file's numbers are checked against
-coverage.py's before the part is handed over, and a file whose numbers
-differ stops the pages, named.
+This extension also reduces coverage.py's measurements to parts in the
+coverage extension's line format, per file coverage.py's own analysis of
+it. On each check leg the coverage extension asks it once for every suite
+the leg ran: the suite's part holds the files of its closure, as the
+suite's own tests and the code outside every test reached them, and that
+part is what the leg stores. On a machine the data the last run left at
+the root becomes one part, which the coverage pages and the preview read.
+Each file's numbers are checked against coverage.py's before a part is
+handed over, and a file whose numbers differ stops the reduction, named.
 
 `fm test.pytest -- -k name` hands pytest the words after `--`, and
 `fm examples.pytest` takes them the same way.

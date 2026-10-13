@@ -316,11 +316,24 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
         _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
 
 
+def _native_lines(root: Path) -> dict[str, dict[str, dict[int, int]]]:
+    """The parts measured runs left at *root*: each file's lines by unit, unrun at 0."""
+    from livery.extensions.coverage._parts import part_files, read_part
+
+    found: dict[str, dict[str, dict[int, int]]] = {}
+    for path in part_files(root):
+        part = read_part(path, root)
+        found[part.unit] = {
+            name: {line: entry.counts.get(line, 0) for line in sorted(entry.statements)}
+            for name, entry in part.files.items()
+        }
+    return found
+
+
 def test_a_native_build_without_coverage_is_not_instrumented(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import livery.toolroom.tools as tools
-    from livery.extensions.coverage import _lines as lines_
 
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
@@ -357,7 +370,7 @@ def test_a_native_build_without_coverage_is_not_instrumented(
     _cpp_conan.test(package, tmp_path)
     assert "LLVM_PROFILE_FILE" not in ran[-1]
     assert not (member / _cpp_conan.GATE_BUILD_DIR / _cpp_conan.PROFILE_DIR).exists()
-    assert lines_.read_parts(tmp_path) == {}
+    assert _native_lines(tmp_path) == {}
     assert "coverage" not in capsys.readouterr().out
     # Listed, cmake measures for coverage: the configure instruments.
     _listing_coverage(tmp_path)
@@ -845,7 +858,6 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     counts, and the local preview reads a number from it.
     """
     from livery.extensions.coverage import _floors as coverage_floors
-    from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
     _listing_coverage(tmp_path)
@@ -854,7 +866,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     assert _cmake.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
     assert compiler
     _cpp_conan.test(package, tmp_path)
-    parts = lines_.read_parts(tmp_path)
+    parts = _native_lines(tmp_path)
     assert list(parts) == ["packages/native"]
     sources = [
         name
@@ -871,7 +883,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     # The selected arm measures its run too, afresh: the counters of
     # the full run do not leak into it.
     _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
-    assert list(lines_.read_parts(tmp_path)) == ["packages/native"]
+    assert list(_native_lines(tmp_path)) == ["packages/native"]
 
 
 # The toolchain environment: refusals first, then the entered one.
@@ -1184,7 +1196,6 @@ def _leftovers(exe: Path) -> list[str]:
 def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN, deployed=False)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1193,7 +1204,7 @@ def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     assert "cmake's [for.coverage] table requires it on Windows" in str(caught.value)
     assert "toolroom.lock" in str(caught.value)
     assert exe.read_bytes() == b"MZ original"
-    assert lines_.read_parts(tmp_path) == {}
+    assert _native_lines(tmp_path) == {}
 
 
 def test_the_msvc_measurer_refuses_a_build_naming_no_test_executable(
@@ -1210,7 +1221,6 @@ def test_the_msvc_measurer_refuses_a_build_naming_no_test_executable(
 def test_the_msvc_measurer_refuses_an_instrumentation_that_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN, instrument_code=1)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
@@ -1222,15 +1232,13 @@ def test_the_msvc_measurer_refuses_an_instrumentation_that_failed(
     assert [call[0] for call in engine.calls] == ["instrument"]
     assert exe.read_bytes() == b"MZ original"
     assert _leftovers(exe) == []
-    assert lines_.read_parts(tmp_path) == {}
+    assert _native_lines(tmp_path) == {}
 
 
 def test_a_red_ctest_under_the_engine_is_read_from_ctest_s_own_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The collector's exit code is its own: the verdict is ctest's JUnit report."""
-    from livery.extensions.coverage import _lines as lines_
-
     engine = _FakeEngine(junit=_RED, collect_code=0)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     engine.report = _cobertura(package)
@@ -1242,7 +1250,7 @@ def test_a_red_ctest_under_the_engine_is_read_from_ctest_s_own_report(
     assert engine.ran == b"MZ instrumented"
     assert exe.read_bytes() == b"MZ original"
     assert _leftovers(exe) == []
-    assert lines_.read_parts(tmp_path) == {}
+    assert _native_lines(tmp_path) == {}
 
 
 def test_the_msvc_measurer_refuses_a_run_that_left_no_report(
@@ -1291,13 +1299,12 @@ def test_the_msvc_measurer_refuses_a_green_run_without_a_report(
 def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.coverage import _lines as lines_
 
     engine = _FakeEngine(junit=_GREEN)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     engine.report = _cobertura(package)
     _cpp_conan.test(package, tmp_path)
-    assert lines_.read_parts(tmp_path) == {
+    assert _native_lines(tmp_path) == {
         "packages/native": {"packages/native/src/native.cpp": {5: 1, 6: 0}}
     }
     instrument, collect = engine.calls
@@ -1350,7 +1357,6 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
 ) -> None:
     """The Windows leg: enter MSVC, build, instrument, collect, read; then a red run."""
     from livery.extensions.coverage import _floors as coverage_floors
-    from livery.extensions.coverage import _lines as lines_
 
     package = _render_cpp(tmp_path)
     _listing_coverage(tmp_path)
@@ -1358,7 +1364,7 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     compiler_id, compiler = _cpp_conan.compiler_of(package)
     assert compiler_id == "MSVC", (compiler_id, compiler)
     _cpp_conan.test(package, tmp_path)
-    parts = lines_.read_parts(tmp_path)
+    parts = _native_lines(tmp_path)
     assert list(parts) == ["packages/native"]
     sources = [
         name

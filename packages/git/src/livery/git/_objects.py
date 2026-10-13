@@ -12,7 +12,8 @@ branch, a tag, ``origin/<branch>``, a full ref, ``<rev>~<n>``,
 from __future__ import annotations
 
 import re
-from collections.abc import Generator
+import stat
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -302,20 +303,33 @@ def merge_base(repo: Repo, one: bytes, other: bytes) -> bytes | None:
     return bases[0] if bases else None
 
 
-def tree_files(repo: Repo, sha: bytes) -> dict[str, bytes]:
-    """Every blob of the tree *sha* names (a commit's tree, or a tree), by path."""
+def tree_files(
+    repo: Repo, sha: bytes, wanted: Callable[[str], bool] | None = None
+) -> tuple[dict[str, bytes], tuple[str, ...]]:
+    """The blobs of the tree *sha* names (a commit's tree, or a tree), and every path.
+
+    Returns the blobs by path, and the path of every blob the tree
+    holds, sorted. With *wanted*, a blob whose path it refuses is
+    named among the paths and never read: a caller that needs a few
+    of many large blobs decompresses those alone.
+    """
     files: dict[str, bytes] = {}
+    paths: list[str] = []
     stack: list[tuple[str, Tree]] = [("", tree_at(repo, sha))]
     while stack:
         prefix, tree = stack.pop()
-        for name, _mode, child in tree.iteritems():
+        for name, mode, child in tree.iteritems():
             path = f"{prefix}{name.decode('utf-8', 'replace')}"
+            if stat.S_ISDIR(mode):
+                stack.append((path + "/", tree_at(repo, child)))
+                continue
+            paths.append(path)
+            if wanted is not None and not wanted(path):
+                continue
             obj = repo[child]
-            if isinstance(obj, Tree):
-                stack.append((path + "/", obj))
-            elif isinstance(obj, Blob):
+            if isinstance(obj, Blob):
                 files[path] = obj.data
-    return files
+    return files, tuple(sorted(paths))
 
 
 def root_commit(

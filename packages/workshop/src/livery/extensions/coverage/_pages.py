@@ -3,21 +3,16 @@
 The docs extension asks its ``docs.coverage-pages`` query for the
 function that draws the coverage pages. This extension answers in its
 ``[for.docs]`` table, so the answer is asked only while docs is listed:
-[livery.extensions.coverage._pages.renderer][] answers with
-[livery.extensions.coverage._pages.render_coverage_pages][].
+`renderer` answers with `render_coverage_pages`.
 
-The pages are drawn from parts in the line format
-([livery.extensions.coverage._format][]) by
-[livery.extensions.coverage._render.render][]. A stored row of the
-``lines`` measurer, a native suite's lines with how many times each
-ran, is read here. A row of any other measurer, coverage.py's arcs say,
-is reduced to parts by the extension that answers this extension's
-``coverage.measurers`` query for that measurer, the pytest extension
-for the arcs ([livery.extensions.coverage._pages.Reduction][]). In the
-merge point's gate job the rows are main's coverage record on every
-check leg; anywhere else the pages draw the data the last gate run left
-on this machine. Each package's index states its floor
-([livery.extensions.coverage._floors.floor_status][]).
+The pages are drawn from parts in the line format (`_format`) by
+`_render`. In the merge point's gate job the parts are main's coverage
+record on every check leg, stored as the legs made them. Anywhere else
+they are the data the last gate run left on this machine: the parts a
+native suite's measurer left in the workspace, and the parts each
+listed extension's reduction makes of its measurer's data, the pytest
+extension's of coverage.py's (`_parts`). Each package's index states
+its floor (`_floors.floor_status`).
 """
 
 from __future__ import annotations
@@ -25,18 +20,14 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery import git
 from livery.extensions.coverage._format import (
-    COUNTS,
-    LINES,
-    Entry,
-    Measurer,
     Merged,
     OtherVersion,
     Part,
@@ -47,81 +38,15 @@ from livery.extensions.coverage._format import (
 )
 from livery.extensions.coverage._render import Drawn, Report, render
 from livery.footman import fail
-from livery.workshop import Query, answer
+from livery.workshop import answer
 
 if TYPE_CHECKING:
     from livery.extensions.coverage._marks import Mark
     from livery.extensions.coverage._record import Unit
     from livery.workshop._packages import Package
 
-
-class Reduction(Protocol):
-    """How an extension reduces one measurer's measurements to parts.
-
-    An extension answers ``coverage.measurers`` with a reduction for
-    each measurer it reduces, by the name a stored row carries. Both
-    methods return parts as JSON holds them, in the line format; a part
-    off the format refuses the pages, naming the reduction and the key.
-    A reduction that cannot reduce what it is handed raises
-    ``ValueError`` naming the file, and the pages stop on it.
-    """
-
-    def rows(
-        self, root: Path, rows: Sequence[Mapping[str, Any]]
-    ) -> list[dict[str, Any]]:
-        """One part per stored row, in the rows' order.
-
-        Each row is ``{"unit": <the unit's path>, "files": {<file>:
-        <the measurer's pairs>}}``, a file's path relative to *root*.
-        """
-        ...
-
-    def left(self, root: Path) -> list[dict[str, Any]]:
-        """The parts of the data the measurer's last run left at *root*."""
-        ...
-
-
-#: Who reduces the stored rows of a measurer this extension does not
-#: read itself: each listed extension answers with its reductions, by
-#: the measurer's name.
-MEASURERS: Query[Mapping[str, Reduction]] = Query("coverage.measurers")
-
-#: The measurer this extension reads itself: a native suite's lines,
-#: each with how many times it ran.
-LINES_MEASURER = Measurer("lines", counts=COUNTS, judges=(LINES,))
-
 #: The tree each package's pages are drawn into, beside its contract.
 TREE = "htmlcov"
-
-
-def measurers_by_name(
-    answers: Mapping[str, Any], lookup: object
-) -> dict[str, Reduction]:
-    """``coverage.measurers``' rule: each answering extension's reductions, by measurer.
-
-    Raises:
-        ValueError: when two extensions reduce one measurer, or one
-            answers for the lines measurer, which this extension reads
-            itself; the message names the extensions.
-    """
-    del lookup
-    found: dict[str, Reduction] = {}
-    by: dict[str, str] = {}
-    for extension, reductions in answers.items():
-        for name, reduction in dict(reductions).items():
-            if name == LINES_MEASURER.name:
-                raise ValueError(
-                    f"{extension} reduces the {name} measurer, whose rows the"
-                    " coverage extension reads itself; answer for another measurer"
-                )
-            if name in found:
-                raise ValueError(
-                    f"{by[name]} and {extension} both reduce the {name} measurer;"
-                    " one extension reduces each"
-                )
-            found[str(name)] = reduction
-            by[str(name)] = extension
-    return found
 
 
 def renderer(root: Path) -> Callable[[Path, tuple[Package, ...]], list[str]]:
@@ -227,13 +152,8 @@ class _Measured:
 
 def _measured(root: Path, prefixes: tuple[str, ...]) -> _Measured:
     """The parts of the files under *prefixes*: main's record, or this machine's."""
-    reductions = answer(root, MEASURERS)
     stored = _stored(root)
-    found = (
-        _local(root, reductions)
-        if stored is None
-        else _from_record(root, reductions, *stored, prefixes=prefixes)
-    )
+    found = _local(root) if stored is None else _from_record(*stored, prefixes=prefixes)
     found.parts = [_within(part, prefixes) for part in found.parts]
     return found
 
@@ -331,67 +251,37 @@ def stored_rows(
 
 
 def _from_record(
-    root: Path,
-    reductions: Mapping[str, Reduction],
     held: dict[str, dict[str, Unit]],
     misses: list[str],
     *,
     prefixes: tuple[str, ...],
 ) -> _Measured:
-    """The parts of main's record: lines rows read here, the rest reduced.
+    """The parts of main's record, as the legs made them.
 
-    Each row is narrowed to the files under *prefixes* first, the files
-    the pages draw, so a reduction reads no other file.
+    Each part is narrowed to the files under *prefixes* first, the files
+    the pages draw, so no other file is read. A part off the format
+    stops the pages, naming the row and the key.
     """
     found = _Measured(misses=list(misses))
-    pending: dict[str, list[tuple[str, Unit]]] = {}
     runs: set[str] = set()
     for label, units in held.items():
         for unit in units.values():
             runs.add(unit.run)
-            # A part names a file with forward slashes, whichever
-            # platform's leg measured it.
-            files: dict[str, list[tuple[int, int]]] = {}
-            for name, pairs in unit.files.items():
-                posix = name.replace("\\", "/")
-                if posix.startswith(prefixes):
-                    files[posix] = pairs
-            if not files:
-                continue
-            if unit.measurer == LINES_MEASURER.name:
-                found.parts.append(_lines_part(root, unit.path, files))
-            else:
-                narrowed = replace(unit, files=files)
-                pending.setdefault(unit.measurer, []).append((label, narrowed))
-    for name, rows in sorted(pending.items()):
-        reduction = reductions.get(name)
-        if reduction is None:
-            found.misses.extend(
-                f"{unit.path} on {label}: no listed extension reduces the {name}"
-                " measurer's rows; the pages draw without it"
-                for label, unit in rows
-            )
-            continue
-        handed = [
-            {
-                "unit": unit.path,
-                "files": {
-                    file: [list(pair) for pair in pairs]
-                    for file, pairs in unit.files.items()
-                },
-            }
-            for _label, unit in rows
-        ]
-        raw = _reduced(partial(reduction.rows, root, handed), f"the {name} reduction")
-        if len(raw) != len(rows):
-            fail(
-                f"coverage: the {name} reduction returned {len(raw)} part(s) for"
-                f" {len(rows)} row(s); it returns one part per row"
-            )
-        sources = [
-            f"the {name} reduction of {unit.path} on {label}" for label, unit in rows
-        ]
-        found.parts.extend(_decoded(raw, sources, found.misses))
+            for index, raw in enumerate(unit.parts):
+                files = raw.get("files")
+                if not isinstance(files, dict):
+                    files = {}
+                narrowed = {
+                    name: entry
+                    for name, entry in files.items()
+                    if str(name).startswith(prefixes)
+                }
+                if not narrowed:
+                    continue
+                source = f"main's record on {label}, {unit.path}, part {index}"
+                found.parts.extend(
+                    _decoded([{**raw, "files": narrowed}], [source], found.misses)
+                )
     legs = ", ".join(held) or "no leg"
     found.notes = (
         f"Measured on {legs}, from main's coverage record:"
@@ -401,31 +291,35 @@ def _from_record(
     return found
 
 
-def _local(root: Path, reductions: Mapping[str, Reduction]) -> _Measured:
-    """The parts of the data the last gate run left at *root*."""
-    from livery.extensions.coverage._lines import read_parts
+def _local(root: Path) -> _Measured:
+    """The parts of the data the last gate run left at *root*.
+
+    The parts each listed extension's reduction makes of its measurer's
+    data, then the parts a native suite's measurer left in the
+    workspace.
+    """
+    from livery.extensions.coverage._parts import (
+        MEASURERS,
+        part_files,
+        read_part,
+        reduced,
+    )
 
     found = _Measured(
         notes=("Measured on this machine, from the data its last gate run left.",)
     )
-    for name, reduction in sorted(reductions.items()):
+    for name, reduction in sorted(answer(root, MEASURERS).items()):
         source = f"the {name} measurer's data on this machine"
-        raw = _reduced(partial(reduction.left, root), source)
+        raw = reduced(partial(reduction.left, root), source)
         found.parts.extend(_decoded(raw, [source] * len(raw), found.misses))
-    for unit, lines in sorted(read_parts(root).items()):
-        files = {name: sorted(runs.items()) for name, runs in lines.items()}
-        found.parts.append(_lines_part(root, unit, files))
+    for path in part_files(root):
+        try:
+            found.parts.append(read_part(path, root))
+        except OtherVersion as error:
+            found.misses.append(f"{error}; the pages draw without it")
+        except PartError as error:
+            fail(f"coverage: {error}")
     return found
-
-
-def _reduced(
-    call: Callable[[], list[dict[str, Any]]], source: str
-) -> list[dict[str, Any]]:
-    """What *call* returns; a reduction that refuses stops the pages, named."""
-    try:
-        return call()
-    except ValueError as error:
-        fail(f"coverage: {source} refuses: {error}")
 
 
 def _decoded(
@@ -445,29 +339,6 @@ def _decoded(
         except PartError as error:
             fail(f"coverage: {error}")
     return parts
-
-
-def _lines_part(
-    root: Path, unit: str, files: Mapping[str, Sequence[tuple[int, int]]]
-) -> Part:
-    """A part of the lines measurer: each file's lines and how many times each ran.
-
-    The measurement names no content, so each file's digest is the
-    checkout's.
-    """
-    entries: dict[str, Entry] = {}
-    for named, pairs in files.items():
-        # A part names a file with forward slashes, whichever platform
-        # measured it.
-        name = named.replace("\\", "/")
-        path = root / name
-        counted = dict(pairs)
-        entries[name] = Entry(
-            digest=digest(path.read_bytes()) if path.is_file() else "",
-            statements=frozenset(counted),
-            counts={line: runs for line, runs in counted.items() if runs > 0},
-        )
-    return Part(unit, LINES_MEASURER, entries)
 
 
 def _drawn(root: Path, name: str, merged: Merged, checkout: str) -> Drawn:

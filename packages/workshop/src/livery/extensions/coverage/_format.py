@@ -1005,8 +1005,8 @@ def merge(parts: Iterable[Part], current: Mapping[str, str] | None = None) -> Co
         chosen, others = _chosen(readings[name], (current or {}).get(name))
         kept = _reading(*chosen[0])
         left_out.extend(
-            f"{name}: left out the reading of {_reading(part, entry)}; the pages"
-            f" draw the one of {kept}"
+            f"{name}: left out the reading of {_reading(part, entry)}; the union"
+            f" keeps the one of {kept}"
             for part, entry in others
         )
         files[name] = Merged(

@@ -361,13 +361,21 @@ def test_the_janitor_says_what_it_could_not_read_trim_or_tell(
     monkeypatch.setattr(
         store_module,
         "read",
-        lambda s, ref: git.Read(None, None, failed=True, reason="down"),
+        lambda s, ref, **_: git.Read(None, None, failed=True, reason="down"),
     )
     lines = store_module._sweep_series(
         store, fresh, dry_run=False, now=datetime.now(UTC)
     )
     assert lines == [
         f"  {fresh.ref}: the many series could not be read: down; nothing swept"
+    ]
+    # A series without bounds is counted by name, and its read fails alike.
+    unbounded = git.Series("open", ci_only=False, local=True)
+    lines = store_module._sweep_series(
+        store, unbounded, dry_run=False, now=datetime.now(UTC)
+    )
+    assert lines == [
+        f"  {unbounded.ref}: the open series could not be read: down; nothing swept"
     ]
 
 

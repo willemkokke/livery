@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -33,11 +36,25 @@ def _workspace(root: Path, listed: str = '["docs", "pytest", "coverage"]') -> Pa
     return root
 
 
-def _row(unit: str, files: dict[str, list[tuple[int, int]]]) -> dict[str, Any]:
-    return {
-        "unit": unit,
-        "files": {name: [list(arc) for arc in arcs] for name, arcs in files.items()},
-    }
+def _leg_data(
+    root: Path, suffix: str, recorded: dict[str, dict[str, list[tuple[int, int]]]]
+) -> None:
+    """One metered process's data file at *root*: its arcs by context, "" for none."""
+    from coverage import CoverageData
+
+    data = CoverageData(basename=str(root / ".coverage"), suffix=suffix)
+    for context, files in recorded.items():
+        data.set_context(context)
+        data.add_arcs({name: set(arcs) for name, arcs in files.items()})
+    data.write()
+
+
+#: What a leg asks of the reduction for the member ``core``'s suite.
+CORE = {
+    "unit": "packages/core",
+    "tests": "packages/core/tests/",
+    "within": ["packages/core/"],
+}
 
 
 # --- refusals ----------------------------------------------------------------
@@ -75,21 +92,29 @@ def test_a_reduction_that_disagrees_with_coverage_py_refuses_naming_the_file(
         _coverage.Arcs().left(root)
 
 
-def test_a_row_that_holds_no_unit_s_arcs_refuses_naming_it(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match=r"^row 1 is no unit's arcs"):
-        _coverage.Arcs().rows(tmp_path, [_row("packages/core", {}), {"files": {}}])
+def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"^the leg left no coverage\.py data .* arms COVERAGE_PROCESS_START",
+    ):
+        _coverage.Arcs().leg(tmp_path, [CORE])
+
+
+def test_a_unit_that_names_no_path_refuses_naming_its_place(tmp_path: Path) -> None:
+    _leg_data(tmp_path, "host.1", {"": {}})
+    with pytest.raises(ValueError, match=r"^unit 1 names no path"):
+        _coverage.Arcs().leg(tmp_path, [CORE, {"tests": "tests/"}])
 
 
 def test_a_file_coverage_py_cannot_parse_refuses_naming_it(tmp_path: Path) -> None:
     bad = tmp_path / SOURCES / "bad.py"
     bad.parent.mkdir(parents=True)
     bad.write_text("def broken(:\n")
+    _leg_data(tmp_path, "host.1", {"": {f"{SOURCES}/bad.py": [(-1, 1)]}})
     with pytest.raises(
         ValueError, match=rf"^{SOURCES}/bad\.py: coverage\.py cannot read it"
     ):
-        _coverage.Arcs().rows(
-            tmp_path, [_row("packages/core", {f"{SOURCES}/bad.py": [(-1, 1)]})]
-        )
+        _coverage.Arcs().leg(tmp_path, [CORE])
 
 
 def test_a_file_the_checkout_lacks_is_named_without_content_and_one_outside_left_out(
@@ -129,7 +154,7 @@ def test_a_run_that_left_no_data_reduces_to_no_part(tmp_path: Path) -> None:
 # --- the reduction -----------------------------------------------------------
 
 
-def test_each_row_reduces_to_its_own_part_and_each_source_is_read_once(
+def test_each_unit_reduces_to_its_own_part_and_each_source_is_read_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from coverage import python
@@ -148,16 +173,29 @@ def test_each_row_reduces_to_its_own_part_and_each_source_is_read_once(
     monkeypatch.setattr(python, "PythonFileReporter", counted)
     module = f"{SOURCES}/mod.py"
     init = f"{SOURCES}/__init__.py"
-    one, two = _coverage.Arcs().rows(
+    # The member's own test ran the module; the workspace's own test ran
+    # lines that are no statements, and they count none, and an empty
+    # module holds no statement at all. A file outside the member is
+    # none of its part.
+    _leg_data(
         tmp_path,
-        [
-            _row("packages/core", {module: [(-1, 1), (1, 2), (2, 3), (3, -1)]}),
-            # Lines that are no statements count none, and an empty
-            # module holds no statement at all.
-            _row("tests", {module: [(-1, 99), (99, -1)], init: [(-1, 1)]}),
-        ],
+        "host.1",
+        {
+            "packages/core/tests/test_mod.py::test_it|run": {
+                module: [(-1, 1), (1, 2), (2, 3), (3, -1)],
+                "packages/other/x.py": [(-1, 1)],
+            },
+            "tests/test_all.py::test_it|run": {
+                module: [(-1, 99), (99, -1)],
+                init: [(-1, 1)],
+            },
+        },
+    )
+    one, two = _coverage.Arcs().leg(
+        tmp_path, [CORE, {"unit": "tests", "tests": "tests/"}]
     )
     assert [one["unit"], two["unit"]] == ["packages/core", "tests"]
+    assert sorted(one["files"]) == [module]
     assert one["files"][module]["hits"] == "1-3"
     assert one["files"][module]["branches"] == [
         [
@@ -175,6 +213,8 @@ def test_each_row_reduces_to_its_own_part_and_each_source_is_read_once(
     assert sorted(built) == sorted(str(tmp_path / name) for name in (module, init))
     assert one["measurer"]["name"] == "coverage.py"
     assert one["measurer"]["judges"] == ["lines", "branches"]
+    # A leg's part names no test: the contexts stay in the data.
+    assert one["contexts"] == [] and "reached" not in one["files"][module]
 
 
 def test_both_digests_are_the_blob_git_stores_for_the_text_with_crlf_or_lf() -> None:
@@ -200,11 +240,10 @@ def test_a_crlf_source_and_a_backslashed_name_reduce_as_their_lf_and_slashed_for
         (root / module).write_bytes(
             "a = 1\nif a:\n    b = 2\n".replace("\n", ending).encode()
         )
-        # A Windows leg's row names the file with backslashes.
+        # A Windows leg's data names the file with backslashes.
         arcs = [(-1, 1), (1, 2), (2, 3), (3, -1)]
-        (part,) = _coverage.Arcs().rows(
-            root, [_row("packages/core", {module.replace("/", "\\"): arcs})]
-        )
+        _leg_data(root, "host.1", {"": {module.replace("/", "\\"): arcs}})
+        (part,) = _coverage.Arcs().leg(root, [CORE])
         reduced[ending] = part
     assert reduced["\r\n"] == reduced["\n"]
     assert list(reduced["\n"]["files"]) == [module]
@@ -359,35 +398,127 @@ def test_the_pages_show_what_coverage_py_shows(
     assert {"(empty)", "1 ctx", "2 ctx"} <= labels
 
 
-# --- this repository's own suite ------------------------------------------
+def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One tree, one measurement: drawn on a machine from the data at
+    # render time, and in the merge point's gate job from the part a leg
+    # made of the same data and main's record stored. Only the lines that
+    # say where the measurement comes from differ: the record's source on
+    # the index, and the suite a stored part names on each file's page.
+    from livery.extensions.coverage import _pages
+    from livery.extensions.coverage._record import Unit
+    from livery.extensions.docs import _site as _docs
+
+    root = _workspace(tmp_path / "ws")
+    measure(root)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.chdir(root)
+    # The leg's data is the run's, with no test named: a leg's part names
+    # the tests that reached a line in a later part of the plan.
+    from coverage import CoverageData
+
+    data = CoverageData(basename=str(root / ".coverage"))
+    data.read()
+    plain = CoverageData(basename=str(root / ".coverage"), suffix="leg")
+    for name in data.measured_files():
+        plain.add_arcs({name: set(data.arcs(name) or [])})
+    plain.write()
+    data.close(force=True)
+    (root / ".coverage").unlink()
+    (root / ".coverage.leg").rename(root / ".coverage")
+    assert _docs.render_coverage_pages(root) == ["core"]
+    tree = root / "packages" / "core" / "htmlcov"
+    at_render = {path.relative_to(tree): path.read_bytes() for path in tree.rglob("*")}
+    (root / ".coverage").rename(root / ".coverage.host.1")
+    (made,) = _coverage.Arcs().leg(root, [CORE])
+    (root / ".coverage.host.1").unlink()
+    held = {
+        "check-a": {
+            "packages/core": Unit("packages/core", "k" * 64, "7", "a" * 40, (made,))
+        }
+    }
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    assert _docs.render_coverage_pages(root) == ["core"]
+    stored = {path.relative_to(tree): path.read_bytes() for path in tree.rglob("*")}
+    assert sorted(stored) == sorted(at_render)
+    local = b"Measured on this machine, from the data its last gate run left."
+    record = (
+        b"Measured on check-a, from main&#x27;s coverage record: 1 unit(s) from"
+        b" 1 run(s)."
+    )
+    suite = b" while the suites of packages/core ran."
+    for path in stored:
+        drawn = stored[path].replace(record, local).replace(suite, b".")
+        assert drawn == at_render[path], path
+
+
+# --- this repository's own sources -------------------------------------------
 
 
 @pytest.mark.only_at("nightly")
-def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_does(
+def test_the_reduction_counts_this_repository_s_workshop_sources_as_coverage_py_does(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from coverage import Coverage, CoverageData
 
     from livery.extensions.coverage._format import decode, numbers
-    from livery.extensions.coverage._pages import stored_rows
-    from livery.git import remote_snapshot
-    from livery.workshop._ci_context import state_store
-    from livery.workshop._points import check_legs
 
     root = Path(__file__).resolve().parents[4]
-    leg = check_legs(root)[0]
-    with remote_snapshot(state_store(root), fetch=("coverage/main/",)):
-        held, misses = stored_rows(root, [leg])
-    assert leg in held, misses
-    unit = held[leg]["packages/workshop"]
-    files = {name: arcs for name, arcs in unit.files.items() if (root / name).is_file()}
-    assert len(files) > 200
-    (raw,) = _coverage.Arcs().rows(root, [_row(unit.path, files)])
-    part = decode(raw, source=f"the workshop suite's row on {leg}")
-    mine = {name: numbers(entry, part.measurer) for name, entry in part.files.items()}
+    sources = root / "packages" / "workshop" / "src"
+    # Every module of the workshop's wheel imported under the branch
+    # meter, in a fresh interpreter with none of the outer run's meter
+    # variables, its data kept apart from the run's own.
+    config = tmp_path / "coveragerc"
+    # The core the check legs measure with.
+    config.write_text("[run]\nbranch = true\nrelative_files = true\ncore = ctrace\n")
+    script = tmp_path / "imports.py"
+    script.write_text(
+        "import importlib, pkgutil\n"
+        "import livery.extensions, livery.workshop\n"
+        "for root in (livery.workshop, livery.extensions):\n"
+        "    for found in pkgutil.walk_packages(root.__path__, root.__name__ + '.'):\n"
+        "        try:\n"
+        "            importlib.import_module(found.name)\n"
+        "        except Exception:\n"
+        "            pass\n"
+    )
+    unmetered = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "run",
+            f"--rcfile={config}",
+            f"--data-file={tmp_path / '.coverage'}",
+            f"--source={sources}",
+            str(script),
+        ],
+        cwd=root,
+        capture_output=True,
+        check=True,
+        env=unmetered,
+        timeout=600,
+    )
     data = CoverageData(basename=str(tmp_path / ".coverage"))
-    data.add_arcs({name: set(arcs) for name, arcs in files.items()})
-    data.write()
+    data.read()
+    unit = {
+        "unit": "packages/workshop",
+        "tests": "packages/workshop/tests/",
+        "within": ["packages/workshop/"],
+    }
+    name, files = _coverage._unit_arcs(data, root, unit, 0)
+    assert len(files) > 100
+    reduced = CoverageData(no_disk=True)
+    reduced.add_arcs(files)
+    raw = _coverage._Reducer(root).part(name, reduced, {each: each for each in files})
+    part = decode(raw, source="the workshop's sources")
+    mine = {each: numbers(entry, part.measurer) for each, entry in part.files.items()}
     monkeypatch.chdir(root)
     cov = Coverage(
         data_file=str(tmp_path / ".coverage"), config_file=str(root / ".coveragerc")
@@ -396,7 +527,7 @@ def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_do
     cov.json_report(outfile=str(tmp_path / "report.json"))
     report = json.loads((tmp_path / "report.json").read_text())
     theirs = {
-        name: (
+        each: (
             summary["num_statements"],
             summary["covered_lines"],
             summary["excluded_lines"],
@@ -404,11 +535,12 @@ def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_do
             summary["covered_branches"],
             summary["num_partial_branches"],
         )
-        for name, measured in _keyed_posix(report["files"]).items()
+        for each, measured in _keyed_posix(report["files"]).items()
         for summary in (measured["summary"],)
+        if each in mine
     }
     assert {
-        name: (
+        each: (
             counted.statements,
             counted.executed,
             counted.excluded,
@@ -416,7 +548,7 @@ def test_the_reduction_counts_this_repository_s_workshop_suite_as_coverage_py_do
             counted.taken,
             counted.partial,
         )
-        for name, counted in mine.items()
+        for each, counted in mine.items()
     } == theirs
 
 

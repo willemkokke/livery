@@ -430,7 +430,7 @@ def test_readings_at_two_digests_merge_the_current_and_name_the_other() -> None:
     assert (merged.units, merged.entry.executed) == (("packages/x",), frozenset({1}))
     assert combined.left_out == (
         "packages/x/a.py: left out the reading of tests by coverage.py 7.16.2 on"
-        " CPython 3.14 at content bbbbbbbbbbbb; the pages draw the one of"
+        " CPython 3.14 at content bbbbbbbbbbbb; the union keeps the one of"
         " packages/x by coverage.py 7.16.2 on CPython 3.14 at content"
         " aaaaaaaaaaaa",
     )

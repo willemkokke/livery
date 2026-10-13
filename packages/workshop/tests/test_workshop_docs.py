@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
@@ -1407,7 +1408,7 @@ _DRAWN = 'extensions = ["docs", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.coverage._lines import write_part
+    from livery.extensions.cmake._build import write_part
     from livery.extensions.docs import _site as _docs
 
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
@@ -1419,7 +1420,9 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     # below: a native measurer's lines.
     source = root / "packages" / "core" / "src" / "acme" / "core" / "mod.py"
     source.write_text("a = 1\n")
-    write_part(root, "packages/core", {"packages/core/src/acme/core/mod.py": {1: 1}})
+    write_part(
+        root, "packages/core", {"packages/core/src/acme/core/mod.py": {1: 1}}, "gcov"
+    )
     report = root / "packages" / "core" / "htmlcov"
     # Docs alone, and docs beside coverage whose `for` list leaves docs
     # out, so its [for.docs] answer is never asked: no listed extension
@@ -1442,7 +1445,8 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.coverage._record import LINES, Unit
+    from livery.extensions.cmake._build import write_part
+    from livery.extensions.coverage._record import Unit
     from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path, docs_table=_DRAWN)
@@ -1455,15 +1459,15 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     # Outside CI nothing is pulled: no data, nothing rendered.
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     assert _docs.render_coverage_pages(root) == []
-    # Inside CI the store's units stand in for the legs' data.
-    stored = Unit(
-        "packages/core",
-        "k" * 64,
-        "7",
-        "a" * 40,
-        {"packages/core/src/core/mod.c": [(1, 1), (2, 0)]},
-        measurer=LINES,
+    # Inside CI the store's units stand in for the legs' data: the parts
+    # a leg made, as main's record keeps them.
+    written = write_part(
+        root, "packages/core", {"packages/core/src/core/mod.c": {1: 1, 2: 0}}, "gcov"
     )
+    stored = Unit(
+        "packages/core", "k" * 64, "7", "a" * 40, (json.loads(written.read_text()),)
+    )
+    written.unlink()
     monkeypatch.setattr(
         "livery.extensions.coverage._pages._stored",
         lambda root: (

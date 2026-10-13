@@ -84,9 +84,13 @@ A write is a compare-and-swap on the sha the read returned. Only the
 wire is a git process: a remote read is one fetch, a remote write one
 fetch and one push, a local read or write none, whatever the series
 holds, since every tree is read and every commit written in the
-checkout's own object store. A `remote_snapshot` block makes every read
-inside one listing and one fetch. `sweep` is the janitor. Every failure
-is a printed reason, never a boolean.
+checkout's own object store. A read that names the files it wants,
+`rows(store, only=...)` or `read(store, ref, only=...)`, reads those
+alone and names the rest, so a ref of large rows costs a reader of a few
+of them those few; `row` and `file` read the one file they name. A
+`remote_snapshot` block makes every read inside one listing and one
+fetch. `sweep` is the janitor. Every failure is a printed reason, never
+a boolean.
 
 ## What is not here
 

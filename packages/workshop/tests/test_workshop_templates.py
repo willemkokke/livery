@@ -536,19 +536,17 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
     # the base names none of them.
     import subprocess
 
-    from livery.extensions.coverage._lines import PART_PREFIX
+    from livery.extensions.coverage._parts import PARTS, UNION
 
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     metered = (".coverage", ".coverage.host.1.2")
-    data = (
-        *metered,
-        f"{PART_PREFIX}packages-geometry.json",
-        "coverage-data/check-a/fresh.coverage",
-        "packages/geometry/htmlcov/index.html",
-    )
-    for name in (*data, ".coveragerc"):
+    data = (*metered, "packages/geometry/htmlcov/index.html")
+    # The parts a measurer leaves and the union the gate job writes live
+    # under .workshop/, which the base ignores in every workspace.
+    held = (f"{PARTS}/gcov/packages-geometry.json", UNION)
+    for name in (*data, *held, ".coveragerc"):
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text("x\n")
 
@@ -558,38 +556,37 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
 
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
     assert [name for name in data if ignored(name)] == []
+    assert [name for name in held if not ignored(name)] == []
     # Listed alone, pytest runs no meter and leaves no data to ignore.
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", ("pytest",)))
     assert [name for name in data if ignored(name)] == []
     listed = ("pytest", "coverage")
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", listed))
-    assert [name for name in data if not ignored(name)] == []
+    assert [name for name in (*data, *held) if not ignored(name)] == []
     assert not ignored(".coveragerc")
 
 
-def test_a_native_package_s_lines_part_is_ignored_while_coverage_is_listed(
+def test_a_native_package_s_part_lands_where_every_workspace_ignores_it(
     tmp_path: Path,
 ) -> None:
-    # The cmake extension's test leaves a lines part at the root while
-    # it measures for coverage, so it ships the part's ignore line in
-    # its [for.coverage] content, delivered while a package's kind holds
-    # cmake and coverage is listed. The fallback first: unlisted, the
-    # test leaves no part and the line is not there.
-    from livery.extensions.coverage._lines import PART_PREFIX
+    # The cmake extension's test leaves its part under .workshop/ while
+    # it measures for coverage, a directory the base ignores, so cmake
+    # ships no ignore line of its own, listed or not.
+    from livery.extensions.cmake._build import PARTS
     from livery.workshop._shipped_files import outputs
 
+    assert PARTS.startswith(".workshop/")
     workspace = tmp_path / "native"
     member = workspace / "packages" / "lib"
     member.mkdir(parents=True)
-    (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-lib"\n')
-    (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
-    assert f"{PART_PREFIX}*" not in ignored.body.decode().splitlines()
-    assert "cmake:for/coverage/.gitignore" not in ignored.owners
-    (workspace / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
-    (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
-    assert f"{PART_PREFIX}*" in ignored.body.decode().splitlines()
-    assert "cmake:for/coverage/.gitignore" in ignored.owners
+    for listed in ("[]", '["coverage"]'):
+        (workspace / "workshop.toml").write_text(
+            f"[workspace]\nextensions = {listed}\n"
+        )
+        (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
+        assert ".workshop/" in ignored.body.decode().splitlines()
+        assert not [owner for owner in ignored.owners if owner.startswith("cmake:")]
 
 
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:

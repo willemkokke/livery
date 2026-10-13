@@ -206,12 +206,15 @@ class Rows:
             exists, or reach the remote at all. An absent ref reads as
             no rows and no failure.
         reason: Why it could not answer, in the store's one wording.
+        unread: The files a read that named the ones it wants passed
+            over, by name, never read.
     """
 
     rows: tuple[Row, ...]
     skipped: tuple[Skipped, ...] = ()
     failed: bool = False
     reason: str = ""
+    unread: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -272,15 +275,21 @@ class Series:
             self.name
         )
 
-    def rows(self, store: StateStore) -> Rows:
+    def rows(
+        self, store: StateStore, *, only: Callable[[str], bool] | None = None
+    ) -> Rows:
         """Every row of the series, newest first, with what was skipped and why.
 
         An absent ref is no rows and no failure. A ref the transport
         could not read is a failure with its reason, so every caller
         falls open the same way. A file that does not parse or is of
-        another schema is skipped and named, and the rest stand.
+        another schema is skipped and named, and the rest stand. With
+        *only*, the files whose names it accepts are read and parsed,
+        and every other file is named in ``unread``, never read: a
+        series of large rows answers a reader of a few of them at the
+        cost of those few.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=only)
         if found.files is None:
             return Rows((), failed=found.failed, reason=self._unreadable(found))
         rows: list[Row] = []
@@ -292,16 +301,17 @@ class Series:
             else:
                 rows.append(Row(name, data))
         rows.sort(key=_newest, reverse=True)
-        return Rows(tuple(rows), tuple(skipped))
+        unread = tuple(name for name in found.names if name not in found.files)
+        return Rows(tuple(rows), tuple(skipped), unread=unread)
 
     def row(self, store: StateStore, name: str) -> tuple[Row | None, str]:
         """The row in the file *name*.
 
         ``(None, "")`` when the ref or the file is absent, and
         ``(None, reason)`` when the ref could not be read or the file
-        is not a row of the schema.
+        is not a row of the schema. The ref's other files are not read.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=name.__eq__)
         if found.files is None:
             return None, self._unreadable(found)
         text = found.files.get(name)
@@ -317,9 +327,9 @@ class Series:
 
         For a series whose files are not rows: a leg's trace, kept as
         its writer wrote it. ``(None, "")`` is absence, of the ref or
-        of the file.
+        of the file. The ref's other files are not read.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=name.__eq__)
         if found.files is None:
             return None, self._unreadable(found)
         return found.files.get(name), ""
@@ -523,7 +533,8 @@ class Read:
 
     Attributes:
         files: The tree's files by name, or ``None`` when there is
-            nothing to read.
+            nothing to read; a read that named the files it wants holds
+            those alone.
         sha: The commit the ref points at on the remote, the lease a
             write carries; ``None`` when the ref does not exist.
         failed: Whether ``None`` means the transport could not answer
@@ -531,12 +542,15 @@ class Read:
             rather than a ref that has never been written. A reader
             may fall open on either; a writer refuses on a failure.
         reason: The transport's words when it could not answer.
+        names: The name of every file the tree holds, read or not,
+            sorted; empty when there is nothing to read.
     """
 
     files: dict[str, str] | None
     sha: str | None
     failed: bool
     reason: str = ""
+    names: tuple[str, ...] = ()
 
 
 @dataclass
@@ -949,7 +963,9 @@ def _ref_exists(store: StateStore, ref: str) -> tuple[bool | None, str]:
     return bool(probe.stdout.strip()), ""
 
 
-def read(store: StateStore, ref: str) -> Read:
+def read(
+    store: StateStore, ref: str, *, only: Callable[[str], bool] | None = None
+) -> Read:
     """Read *ref*'s files, saying whether a miss is absence or failure.
 
     A remote ref is fetched from origin: the fetch lands in
@@ -962,7 +978,8 @@ def read(store: StateStore, ref: str) -> Read:
     A local ref, or one of the mirror under `FETCHED_NAMESPACE`, is
     read from the checkout's own git directory: a missing ref is
     absence, and anything else git refuses is a failure with git's
-    words.
+    words. With *only*, the files whose names it accepts are read and
+    the rest are named in ``names`` alone, never read.
     """
     if ref.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE)):
         try:
@@ -972,7 +989,7 @@ def read(store: StateStore, ref: str) -> Read:
             return Read(None, None, failed=True, reason=_no_repository(store))
         if held is None:
             return Read(None, None, failed=False)
-        return _tree_files(store, held.decode())
+        return _tree_files(store, held.decode(), only)
     snapshot = _snapshot(store)
     if snapshot is not None:
         if snapshot.refs is None:
@@ -990,14 +1007,14 @@ def read(store: StateStore, ref: str) -> Read:
             return Read(None, listed, failed=True, reason=why)
         if sha is None:
             return Read(None, None, failed=False)
-        return _tree_files(store, sha)
+        return _tree_files(store, sha, only)
     fetched = _git(store.root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
         exists, why = _ref_exists(store, ref)
         if exists is False:
             return Read(None, None, failed=False)
         return Read(None, None, failed=True, reason=why or _words(fetched))
-    return _tree_files(store, _fetch_head(store))
+    return _tree_files(store, _fetch_head(store), only)
 
 
 def _fetch_head(store: StateStore) -> str:
@@ -1007,17 +1024,20 @@ def _fetch_head(store: StateStore) -> str:
     return text.split()[0] if text.strip() else ""
 
 
-def _tree_files(store: StateStore, sha: str) -> Read:
+def _tree_files(
+    store: StateStore, sha: str, only: Callable[[str], bool] | None = None
+) -> Read:
     """The files of the root commit *sha*, read in-process as the bytes git holds.
 
     No process and no checkout conversion: each blob comes back as it
     was written on any platform, and a row a Windows checkout once
     wrote with carriage returns reads back with them, which the
-    row's parser takes as whitespace.
+    row's parser takes as whitespace. With *only*, the files it
+    refuses are named and never read.
     """
     try:
         with _objects.opened(store.root) as repo:
-            blobs = _objects.tree_files(repo, sha.encode())
+            blobs, names = _objects.tree_files(repo, sha.encode(), only)
     except _objects.NotGitRepository:
         return Read(None, sha, failed=True, reason=_no_repository(store))
     except (KeyError, _objects.Unresolved):
@@ -1027,7 +1047,7 @@ def _tree_files(store: StateStore, sha: str) -> Read:
         files = {name: data.decode("utf-8") for name, data in blobs.items()}
     except UnicodeDecodeError as error:
         return Read(None, sha, failed=True, reason=f"the tree's files: {error}")
-    return Read(files, sha, failed=False)
+    return Read(files, sha, failed=False, names=names)
 
 
 def list_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
@@ -1357,7 +1377,17 @@ def sweep(
 def _sweep_series(
     store: StateStore, series: Series, *, dry_run: bool, now: datetime
 ) -> list[str]:
-    """Trim *series* to its window and drop its aged rows; the lines."""
+    """Trim *series* to its window and drop its aged rows; the lines.
+
+    A series with neither a window nor an age has nothing to trim, so
+    its files are counted by name and none is read: a ref of large
+    rows costs its listing alone.
+    """
+    if series.window is None and series.age is None:
+        named = series.rows(store, only=lambda _name: False)
+        if named.failed:
+            return [f"  {series.ref}: {named.reason}; nothing swept"]
+        return [f"  {series.ref}: {len(named.unread)} row(s), within its bounds"]
     found = series.rows(store)
     if found.failed:
         return [f"  {series.ref}: {found.reason}; nothing swept"]

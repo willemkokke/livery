@@ -33,10 +33,8 @@ packages/**/_generated/
 # The data coverage.py's meter leaves where a test run is metered.
 .coverage
 .coverage.*
-# The data a measured run leaves, the native suites' lines parts, the
-# union's scratch, and the coverage pages drawn from them.
-.coverage-lines.*
-coverage-data/
+# The coverage pages drawn from the measured data; the parts and the
+# union live under .workshop/, which the base ignores.
 packages/**/htmlcov/
 # -- workshop: region rules, yours to edit; the render keeps it --
 # -- workshop: end rules --

@@ -1,41 +1,41 @@
-"""The check leg's half of coverage: what each suite reached, left for the leg's write.
+"""The check leg's half of coverage: each suite's parts, left for the leg's write.
 
-A check leg's tests run metered, one data file per process. At the
-leg's end the coverage extension's entry, ``coverage.leg``, first runs
-the suites no record can supply at their current closure, when the
-gate ran narrowed or skipped
-([livery.extensions.coverage._leg.top_up][]); then it splits the
-leg's data per unit, a package's suite or the workspace's own tests,
-each unit's arcs within its closure, and leaves them with the scope
-the leg measured for the leg's one write
-([livery.extensions.coverage._leg.combine_leg][]), which puts them on
-the leg's per-run ref beside its timing row. The data then combines
-into the leg's ``.coverage``.
+A check leg's tests run measured. At the leg's end the coverage
+extension's entry, ``coverage.leg``, first runs the suites no record
+can supply at their current closure, when the gate ran narrowed or
+skipped (`top_up`). Then it gathers the parts of every suite the leg
+ran (`gather_leg`): the parts a native suite's measurer left in the
+workspace, and the parts the listed reductions make of the data the
+run left, once for each suite, each holding the files of the suite's
+closure. It leaves them, with the scope the leg measured, for the
+leg's one write, which puts them on the leg's per-run ref beside its
+timing row, and it prints each suite's parts' size as stored, raw and
+gzipped.
 """
 
 from __future__ import annotations
 
+import gzip
+import json
+from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import livery.toolroom.tools as tools
 from livery import git
-from livery.extensions.coverage._lines import measures_lines, pairs, read_parts
+from livery.extensions.coverage._format import Part, PartError, decode, encode
 from livery.footman import fail
 from livery.workshop._packages import WORKSPACE_TESTS, workspace_suite
 
 if TYPE_CHECKING:
+    from livery.extensions.coverage._record import Unit
     from livery.workshop._ci_context import RunContext
     from livery.workshop._packages import Package
-
-#: coverage.py's reading, the measurer of every python suite and the
-#: workspace's own tests.
-ARCS_MEASURER = "arcs"
 
 
 #: The scope a leg's file names when the gate proved the tree or
 #: judged nothing, and the leg then ran the named suites for their
-#: lines alone: no record held them at their current closure.
+#: parts alone: no record held them at their current closure.
 MEASURED = "measured"
 
 
@@ -50,48 +50,6 @@ def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
     """The recorded units: every package's suite, then the workspace's own tests."""
     unit = workspace_suite(root)
     return suites_of(packages) + ((unit,) if unit is not None else ())
-
-
-def suite_arcs_by_context(
-    data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
-) -> dict[str, list[tuple[int, int]]]:
-    """The arcs *package*'s suite recorded in the leg's data, for its closure's files.
-
-    Two sources make the suite's arcs: the contexts of its own tests
-    (the node ids under ``<package>/tests/``, as the pytest extension's
-    plugin names them), and the arcs recorded under no context at all,
-    which run at import time before any test and belong to whichever
-    suites' closures hold their files. Files outside the closure are
-    not the suite's to store. The names are workspace-relative,
-    whichever way the meter stored them. An arc is a pair of line
-    numbers, so the row carries statements and branches alike.
-    """
-    import re
-
-    from coverage import CoverageData
-
-    from livery.extensions.coverage._record import in_closure
-
-    measured = CoverageData(basename=str(data))
-    measured.read()
-    files: dict[str, list[tuple[int, int]]] = {}
-    own = (
-        rf"^{re.escape(package.path)}/"
-        if package.path == WORKSPACE_TESTS
-        else rf"^{re.escape(package.path)}/tests/"
-    )
-    for query in ([own], [r"^$"]):
-        measured.set_query_contexts(query)
-        for filename in measured.measured_files():
-            name = workspace_name(filename, root)
-            if name is None or not in_closure(packages, package, name):
-                continue
-            arcs = measured.arcs(filename) or []
-            if arcs:
-                found = {(a, b) for a, b in arcs}
-                files[name] = sorted(set(files.get(name, [])) | found)
-    measured.set_query_contexts(None)
-    return files
 
 
 def suites_that_ran(
@@ -121,30 +79,50 @@ def suites_that_ran(
     return ran + ((unit,) if unit is not None else ())
 
 
-def workspace_name(filename: str, root: Path) -> str | None:
-    """*filename* relative to *root*, with slashes; None outside *root*."""
-    name = filename.replace("\\", "/")
-    if Path(name).is_absolute():
-        try:
-            return Path(name).relative_to(root).as_posix()
-        except ValueError:
-            return None
-    return name
+def request(packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
+    """What a reduction is asked for *unit*: its tests' contexts and its closure.
+
+    A package's own tests are the node ids under its ``tests/``
+    directory, as the pytest extension's plugin names each test's
+    context; the workspace's own tests are every node id under
+    ``tests/``, and their closure is every file.
+    """
+    from livery.extensions.coverage._record import closure
+
+    if unit.path == WORKSPACE_TESTS:
+        return {"unit": unit.path, "tests": f"{unit.path}/"}
+    return {
+        "unit": unit.path,
+        "tests": f"{unit.path}/tests/",
+        "within": [f"{member.path}/" for member in closure(packages, unit)],
+    }
 
 
-#: The leg's own combined data, read for the split and never uploaded:
-#: named outside the ``.coverage.*`` glob the leg's combine consumes.
-SUITES_DATA = "coverage-suites.db"
+def sizes(unit: Unit) -> tuple[int, int]:
+    """*unit*'s parts as a row stores them: their bytes, raw and gzipped.
+
+    Gzipped at zlib's default level, the level git stores an object at.
+    """
+    raw = json.dumps(list(unit.parts), sort_keys=True).encode("utf-8")
+    return len(raw), len(gzip.compress(raw, compresslevel=6, mtime=0))
 
 
-def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> None:
+def shown_size(count: int) -> str:
+    """*count* bytes as a line shows them: ``1.3 MB``, ``412.0 KB``."""
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.1f} MB"
+    return f"{count / 1_000:.1f} KB"
+
+
+def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> None:
     """Leave the leg's scope and *units* for its one write; red when it cannot.
 
     Outside CI nothing is left and the line says so. Inside CI a leg
-    that cannot leave its lines is red: the union would otherwise lack
+    that cannot leave its parts is red: the union would otherwise lack
     a suite, and a smaller union never passes. The leg's last entry,
     ``ci.leg``, puts the file on its per-run ref beside its timing row
-    ([livery.workshop._metrics.put_leg][]).
+    ([livery.workshop._metrics.put_leg][]). The lines name the parts'
+    size as stored, raw and gzipped: the leg's whole, then each unit's.
     """
     from livery.extensions.coverage._record import leave_run
     from livery.workshop._ci_context import run_context
@@ -167,160 +145,190 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> Non
     )
     if why:
         fail(
-            f"the leg's lines could not be left for its per-run ref ({why}): a"
-            " leg that measured a suite and cannot store its lines is red, never"
+            f"the leg's parts could not be left for its per-run ref ({why}): a"
+            " leg that measured a suite and cannot store its parts is red, never"
             " a smaller union"
         )
+    measured = {path: sizes(unit) for path, unit in units.items()}
+    raw = sum(size for size, _packed in measured.values())
+    gzipped = sum(packed for _size, packed in measured.values())
     print(
         f"  coverage store: {len(units)} unit(s) for the run's ref of"
-        f" {leg or 'an unlabelled leg'} ({marker['scope']})"
+        f" {leg or 'an unlabelled leg'} ({marker['scope']}), {shown_size(raw)} raw,"
+        f" {shown_size(gzipped)} gzipped"
     )
-
-
-def store_suites(
-    root: Path, packages: tuple[Package, ...], *, marker: dict[str, Any]
-) -> None:
-    """Split the leg's data per unit and leave every unit for the leg's per-run ref.
-
-    The leg's parts combine into `SUITES_DATA` first (kept apart from
-    the leg's own combine); each unit the marker says ran is split out
-    and its lines within its closure ride the per-run ref under the
-    unit's closure identity, with the scope the leg measured. Only a
-    CI run leaves them; a leg that cannot is red.
-    """
-    from coverage import CoverageData
-
-    from livery.extensions.coverage._record import LINES, Unit, closure_id
-    from livery.workshop._ci_context import run_context
-
-    leg = marker["leg"]
-    parts = sorted(root.glob(".coverage.*"))
-    lines_parts = read_parts(root)
-    if not parts and not lines_parts:
-        return
-    if parts:
-        combined = CoverageData(basename=str(root / SUITES_DATA))
-        for part in parts:
-            piece = CoverageData(basename=str(part))
-            piece.read()
-            combined.update(piece)
-        combined.write()
-    run = run_context()
-    measured: dict[str, Unit] = {}
-    for package in suites_that_ran(marker, root, packages):
-        measurer = LINES if measures_lines(package) else ARCS_MEASURER
-        if measurer == LINES:
-            lines = lines_parts.get(package.path)
-            if lines is None:
-                print(
-                    f"  coverage store: {package.path} ran without a measurement;"
-                    " nothing to store for it"
-                )
-                continue
-            files = pairs(lines)
-        elif parts:
-            files = suite_arcs_by_context(
-                root / SUITES_DATA, packages, package, root=root
-            )
-        else:
-            continue
-        if run is None:
-            print(
-                f"  coverage store: {package.path} measured ({len(files)} files);"
-                " outside CI nothing is stored"
-            )
-            continue
-        key = closure_id(root, packages, package)
-        measured[package.path] = Unit(
-            package.path, key, run.run_id, git.head_sha(root), files, measurer=measurer
-        )
-    (root / SUITES_DATA).unlink(missing_ok=True)
-    if run is None:
-        return
-    _leave_leg(root, marker, measured)
-    for unit in measured.values():
+    for path, unit in units.items():
+        size, packed = measured[path]
         print(
-            f"  coverage store: {unit.path} stored for closure {unit.closure[:12]}"
-            f" on {leg} ({len(unit.files)} files)"
+            f"  coverage store: {path} stored for closure {unit.closure[:12]} on"
+            f" {leg} ({len(unit.files)} files, {shown_size(size)} raw,"
+            f" {shown_size(packed)} gzipped)"
         )
 
 
-def combine_leg(
+def _left_parts(root: Path) -> list[Part]:
+    """The parts the measurers left in the workspace; one off the format is red.
+
+    A part a measurer wrote is the leg's measurement of a suite: one
+    that does not read is red, naming its file and the key at fault,
+    since leaving it out would store a suite without its lines.
+    """
+    from livery.extensions.coverage._parts import part_files, read_part
+
+    found: list[Part] = []
+    for path in part_files(root):
+        try:
+            found.append(read_part(path, root))
+        except PartError as error:
+            fail(f"coverage: {error}")
+    return found
+
+
+def _reduced_parts(
+    root: Path, packages: tuple[Package, ...], units: Sequence[Package]
+) -> list[Part]:
+    """The parts the listed reductions make of the leg's data, for *units*.
+
+    Each reduction is asked once, for every unit at once, and answers
+    one part per unit, in the order asked; a reduction that refuses,
+    that answers another number of parts or another unit's part, or
+    whose part is off the format, is red by name.
+    """
+    from livery.extensions.coverage._parts import MEASURERS, reduced
+    from livery.workshop import answer
+
+    if not units:
+        return []
+    asked = [request(packages, unit) for unit in units]
+    found: list[Part] = []
+    for name, reduction in sorted(answer(root, MEASURERS).items()):
+        source = f"the {name} reduction of this leg's data"
+        raw = reduced(partial(reduction.leg, root, asked), source)
+        if len(raw) != len(asked):
+            fail(
+                f"coverage: {source} returned {len(raw)} part(s) for {len(asked)}"
+                " suite(s); it returns one part per suite"
+            )
+        for unit, item in zip(units, raw, strict=True):
+            try:
+                part = decode(item, source=f"the {name} reduction of {unit.path}")
+            except PartError as error:
+                fail(f"coverage: {error}")
+            if part.unit != unit.path:
+                fail(
+                    f"coverage: {source} answered a part of {part.unit} for"
+                    f" {unit.path}; it answers one part per suite, in the order"
+                    " asked"
+                )
+            found.append(part)
+    return found
+
+
+def _within(part: Part, packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
+    """*part* with the files of *unit*'s closure alone, as a row holds it."""
+    from livery.extensions.coverage._record import in_closure
+
+    files = {
+        name: entry
+        for name, entry in part.files.items()
+        if in_closure(packages, unit, name)
+    }
+    return encode(Part(part.unit, part.measurer, files, part.contexts))
+
+
+def gather_leg(
     root: Path,
     packages: tuple[Package, ...],
     *,
     marker: dict[str, Any] | None = None,
 ) -> None:
-    """Combine the leg's data into ``.coverage``, each suite's lines left first.
+    """Gather the parts of every suite the leg ran and leave them for its write.
 
-    Every suite the leg ran is combined apart and left for the leg's
-    per-run ref under the leg's label (the marker's), so the gate
-    job's union reads it there; then every data file combines into
-    the leg's ``.coverage``. *marker* is the scope the leg measured,
-    the gate's own marker when absent. Refuses when a leg that ran its
-    gate left no data, naming the variable that arms the meter; a leg
+    The parts are the ones a native suite's measurer left in the
+    workspace and the ones the listed reductions make of the data the
+    run left, asked for every other suite the leg ran; each suite's
+    parts hold the files of its closure, and they ride the leg's
+    per-run ref under the suite's closure identity, with the scope the
+    leg measured, its size printed raw and gzipped. *marker* is the
+    scope the leg measured, the gate's own marker when absent. A leg
     whose gate skipped (a tree already proved, or nothing affected)
-    legitimately measured nothing, says so, and leaves its scope
-    alone, so the union knows the leg skipped rather than died. A
-    workspace with no packages (a project just born) runs its own
-    tests unmetered, and they reach no package source; that leg leaves
-    its units with no lines, so the union finds what the leg ran.
+    ran no suite, says so, and leaves its scope alone, so the union
+    knows the leg skipped rather than died. A workspace with no
+    packages (a project just born) runs its own tests unmetered, and
+    they reach no package source; that leg leaves its units with no
+    parts, so the union finds what the leg ran. A suite that ran and
+    has no part is named and left out, and the union names it again;
+    a leg whose suites ran and has no part of any is red, since nothing
+    was measured. Only a CI run leaves the parts.
     """
-    from livery.extensions.coverage._union import _unmetered
-    from livery.workshop._verified import NOTHING, VERIFIED, read_marker
+    from livery.extensions.coverage._parts import native
+    from livery.extensions.coverage._record import Unit, closure_id
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._verified import read_marker
 
-    parts = sorted(root.glob(".coverage.*"))
     marker = read_marker(root) if marker is None else marker
     scope = marker["scope"]
-    if not parts and not read_parts(root) and not (root / ".coverage").is_file():
-        if scope in (VERIFIED, NOTHING):
-            # A skipped leg measured nothing and names no unit, so the
-            # union carries every unit from the records.
-            print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
-            _leave_leg(root, marker, {})
-            return
-        if not packages:
-            # The workspace's own tests ran, unmetered, and reached no
-            # package source: each unit the leg ran is left with no
-            # lines, so the union finds what ran and judges nothing.
-            from livery.extensions.coverage._record import Unit, closure_id
-            from livery.workshop._ci_context import run_context
-
-            print(
-                "  coverage: the workspace has no packages to measure; its own"
-                " tests ran unmetered"
-            )
-            run = run_context()
-            empty: dict[str, Unit] = {}
-            if run is not None:
-                for unit in units_of(root, ()):
-                    empty[unit.path] = Unit(
-                        unit.path,
-                        closure_id(root, (), unit),
-                        run.run_id,
-                        git.head_sha(root),
-                        {},
-                    )
-            _leave_leg(root, marker, empty)
-            return
-        fail(
-            "this leg left no coverage data: nothing was metered. Inside CI"
-            " the test runner arms COVERAGE_PROCESS_START in pytest's"
-            " environment, so the tests and every process they start are"
-            " metered; a leg that ran its gate and left no data ran no"
-            " metered pytest, and there is nothing to union."
+    ran = suites_that_ran(marker, root, packages)
+    run = run_context()
+    if not ran:
+        print(f"  coverage: the gate ran {scope!r}; no suite ran, nothing to gather")
+        _leave_leg(root, marker, {})
+        return
+    if not packages:
+        # The workspace's own tests ran, unmetered, and reached no
+        # package source: each unit the leg ran is left with no parts,
+        # so the union finds what ran and judges nothing.
+        print(
+            "  coverage: the workspace has no packages to measure; its own"
+            " tests ran unmetered"
         )
-    store_suites(root, packages, marker=marker)
-    if parts:
-        result = tools.coverage.opts(
-            cwd=root, env=_unmetered(), nofail=True, recorded=False
-        )("combine")
-        if result.code != 0:
-            fail(
-                f"coverage combine exited {result.code}:\n"
-                f"{result.stdout}{result.stderr}"
+        empty: dict[str, Unit] = {}
+        if run is not None:
+            for unit in ran:
+                empty[unit.path] = Unit(
+                    unit.path,
+                    closure_id(root, (), unit),
+                    run.run_id,
+                    git.head_sha(root),
+                )
+        _leave_leg(root, marker, empty)
+        return
+    by_unit: dict[str, list[Part]] = {}
+    left = _left_parts(root)
+    reduced = _reduced_parts(root, packages, [unit for unit in ran if not native(unit)])
+    for part in (*left, *reduced):
+        by_unit.setdefault(part.unit, []).append(part)
+    if not any(by_unit.get(unit.path) for unit in ran):
+        fail(
+            f"this leg ran {scope!r} and no measurer left a part of any suite it"
+            " ran: nothing was measured. A measurer leaves its parts while"
+            " coverage is listed and it measures for coverage, so a leg that ran"
+            " its suites and left none ran no measured suite, and there is"
+            " nothing to union."
+        )
+    measured: dict[str, Unit] = {}
+    for unit in ran:
+        parts = by_unit.get(unit.path)
+        if not parts:
+            print(
+                f"  coverage store: {unit.path} ran without a measurement; nothing"
+                " to store for it"
             )
-    print(f"  coverage: {len(parts)} data file(s) combined into .coverage")
+            continue
+        held = tuple(_within(part, packages, unit) for part in parts)
+        if run is None:
+            found = Unit(unit.path, "", "", "", held)
+            size, packed = sizes(found)
+            print(
+                f"  coverage store: {unit.path} measured ({len(found.files)} files,"
+                f" {shown_size(size)} raw, {shown_size(packed)} gzipped); outside"
+                " CI nothing is stored"
+            )
+            continue
+        key = closure_id(root, packages, unit)
+        measured[unit.path] = Unit(unit.path, key, run.run_id, git.head_sha(root), held)
+    if run is not None:
+        _leave_leg(root, marker, measured)
 
 
 def unrecorded(
@@ -396,7 +404,7 @@ def with_unstored_suites(
     """*subset* plus every suite no record can supply for this leg.
 
     A leg skips a suite only when its branch's record or main's holds
-    the suite's lines at its current closure on this leg; the rest run
+    the suite's parts at its current closure on this leg; the rest run
     fresh, and the line says why.
     """
     from livery.extensions.coverage._record import record_bases
@@ -426,7 +434,7 @@ def top_up(
     machine's run has no record to read. A narrowed gate
     (``affected``) ran the suites its marker names, and every other
     suite is asked of the branch's record and main's
-    ([livery.extensions.coverage._leg.with_unstored_suites][]); a gate
+    (`with_unstored_suites`); a gate
     that judged nothing (``nothing``) asks the same of every suite; a
     gate that skipped a proved tree (``verified``) asks it of every
     unit a listed test step runs, the workspace's own tests among

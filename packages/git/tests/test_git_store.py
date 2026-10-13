@@ -253,6 +253,70 @@ def test_a_file_that_is_not_a_row_is_skipped_and_named(
     assert ROWS.row(_store(work), "d") == (git.Row("d", {"schema": 2, "x": 1}), "")
 
 
+def _object_reads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every object the store reads in-process from here on, by its id."""
+    from dulwich.repo import Repo
+
+    asked: list[str] = []
+    original = Repo.__getitem__
+
+    def counted(self: Repo, name: bytes) -> Any:
+        asked.append(bytes(name).decode())
+        return original(self, name)
+
+    monkeypatch.setattr(Repo, "__getitem__", counted)
+    return asked
+
+
+def _blob_ids(work: Path) -> dict[str, str]:
+    """The blob id of each file the last commit the store built holds."""
+    listed = _git(work, "ls-tree", "-r", store_module.IMPORT_REF)
+    return {line.split()[3]: line.split()[2] for line in listed.splitlines()}
+
+
+def test_a_read_that_names_its_files_reads_those_alone_and_names_the_rest(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A series of large rows answers a reader of a few at the cost of
+    # those few: a file the read passes over is named, never read.
+    _, work = repos
+    files = {name: json.dumps({"schema": 2, "x": name}) for name in ("a", "b", "c")}
+    assert git.put(_store(work), ROWS.ref, files, message="three") == ""
+    blobs = _blob_ids(work)
+    asked = _object_reads(monkeypatch)
+    found = ROWS.rows(_store(work), only="b".__eq__)
+    assert [row.name for row in found.rows] == ["b"]
+    assert found.unread == ("a", "c") and found.skipped == ()
+    assert blobs["b"] in asked
+    assert blobs["a"] not in asked and blobs["c"] not in asked
+    named = git.read(_store(work), ROWS.ref, only=lambda _name: False)
+    assert named.files == {} and named.names == ("a", "b", "c")
+    # One row or one file by name reads that file alone.
+    asked.clear()
+    assert ROWS.row(_store(work), "c") == (git.Row("c", json.loads(files["c"])), "")
+    assert ROWS.file(_store(work), "a") == (files["a"], "")
+    assert blobs["b"] not in asked
+    # A whole read reads every file and names them all.
+    whole = git.read(_store(work), ROWS.ref)
+    assert whole.files == files and whole.names == ("a", "b", "c")
+
+
+def test_the_janitor_counts_a_series_without_bounds_by_name_alone(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A series with neither a window nor an age has nothing to trim, so
+    # the janitor reads none of its rows to say so.
+    _, work = repos
+    unbounded = git.Series("open", ci_only=False, local=True)
+    rows = {name: {"x": name} for name in ("a", "b")}
+    assert unbounded.put(_store(work), rows, message="two") == ""
+    asked = _object_reads(monkeypatch)
+    lines = git.sweep(_store(work), (unbounded,), remote=False)
+    assert lines == [f"  {unbounded.ref}: 2 row(s), within its bounds"]
+    blobs = _blob_ids(work)
+    assert not set(blobs.values()) & set(asked)
+
+
 def test_a_tree_the_checkout_lacks_fails_naming_it(
     repos: tuple[Path, Path],
 ) -> None:
