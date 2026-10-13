@@ -566,6 +566,9 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         provider
     )
     assert env["CONAN_HOME"] == str(tmp_path / "conan-home")
+    # Made before anything mounts it: a container's mount of a missing
+    # directory creates it owned by root.
+    assert (tmp_path / "conan-home").is_dir()
     if sys.platform.startswith("linux"):
         assert f"-v {tmp_path}:{tmp_path}" in env["CIBW_CONTAINER_ENGINE"]
         # The store lives inside the workspace here, so the workspace's
@@ -862,7 +865,65 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     line = _python_nanobind.container_conan_install("2.32.0")
     assert line.startswith("python -m venv /opt/workshop-conan && ")
     assert "pip install --quiet conan==2.32.0" in line
-    assert line.endswith("ln -sf /opt/workshop-conan/bin/conan /usr/local/bin/conan")
+    # Every build runs the script in front of that install as its conan.
+    assert line.endswith(
+        _python_nanobind.write_script(
+            "/usr/local/bin/conan", _python_nanobind.container_conan_wrapper()
+        )
+    )
+    assert '/opt/workshop-conan/bin/conan "$@"' in (
+        _python_nanobind.container_conan_wrapper()
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the script runs in a Linux build container"
+)
+def test_the_container_s_conan_gives_the_home_back_and_keeps_conan_s_exit_code(
+    tmp_path: Path,
+) -> None:
+    import subprocess
+
+    # Stand-ins: conan says it ran and fails, stat names the home's owner as
+    # the container sees it, and chown says what it was asked to do.
+    stand_ins = tmp_path / "bin"
+    stand_ins.mkdir()
+    said = tmp_path / "said"
+    for name, body in (
+        ("conan", f'echo "conan $*" >> "{said}"\nexit 3'),
+        ("stat", "echo 1001:118"),
+        ("chown", f'echo "chown $*" >> "{said}"'),
+    ):
+        (stand_ins / name).write_text(f"#!/bin/sh\n{body}\n")
+        (stand_ins / name).chmod(0o755)
+    wrapper = _python_nanobind.container_conan_wrapper(str(stand_ins / "conan"))
+    script = tmp_path / "conan"
+    # The line the container runs writes the script exactly, executable.
+    subprocess.run(
+        ["sh", "-c", _python_nanobind.write_script(str(script), wrapper)], check=True
+    )
+    assert script.read_text() == wrapper
+    assert os.access(script, os.X_OK)
+    path = os.pathsep.join((str(stand_ins), "/usr/bin", "/bin"))
+    # The refusal first: with no home there is nothing to give back, and
+    # conan's own exit code stands.
+    ran = subprocess.run([str(script), "install", "."], env={"PATH": path}, check=False)
+    assert ran.returncode == 3
+    assert said.read_text().splitlines() == ["conan install ."]
+    # With a home, every call ends by giving all of it to the home's owner.
+    home = tmp_path / "conan-home"
+    home.mkdir()
+    said.unlink()
+    ran = subprocess.run(
+        [str(script), "install", "."],
+        env={"PATH": path, "CONAN_HOME": str(home)},
+        check=False,
+    )
+    assert ran.returncode == 3
+    assert said.read_text().splitlines() == [
+        "conan install .",
+        f"chown -R 1001:118 {home}",
+    ]
 
 
 def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
