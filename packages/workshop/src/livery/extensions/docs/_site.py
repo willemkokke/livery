@@ -1718,36 +1718,39 @@ def _publish_ssh(root: Path) -> None:
     print(f"  deployed to {destination}:{target}")
 
 
+#: Who draws the coverage pages: a listed extension answers with the
+#: function that draws them, given the workspace root and the packages
+#: that declare an ``htmlcov`` report, which returns the members it drew.
+#: One answer, the nearest; None while no listed extension answers.
+COVERAGE_PAGES: Query[Callable[[Path, tuple[Package, ...]], list[str]] | None] = Query(
+    "docs.coverage-pages"
+)
+
+
 def render_coverage_pages(root: Path) -> list[str]:
-    """Hand each package's declared coverage report to its kind's renderer.
+    """Draw the coverage pages of the packages that declare an ``htmlcov`` report.
 
-    A package that declares an ``htmlcov`` report and whose kind names
-    a coverage page renderer is rendered by it; the packages sharing a
-    renderer go to it together, since it reads the measured data once.
-    Returns the names of the packages rendered.
+    The function that draws them is the answer to ``docs.coverage-pages``,
+    called once for all of them, since it reads the measured data once.
+    With no listed extension answering, each such package's page states
+    the absence. Returns the names of the packages rendered.
     """
-    from livery.workshop._kinds import kind_coverage_pages
-
-    by_renderer: dict[
-        Callable[[Path, tuple[Package, ...]], list[str]], list[Package]
-    ] = {}
-    for package in discover_packages(root):
-        if not any(
-            path == "htmlcov" for _label_, path in package_coverage_reports(package)
-        ):
-            continue
-        renderer = kind_coverage_pages(package.kind)
-        if renderer is None:
+    declaring = tuple(
+        package
+        for package in discover_packages(root)
+        if any(path == "htmlcov" for _label, path in package_coverage_reports(package))
+    )
+    if not declaring:
+        return []
+    draw = answer(root, COVERAGE_PAGES)
+    if draw is None:
+        for package in declaring:
             print(
-                f"  coverage: {package.member}: the {package.kind} kind"
-                " renders no coverage pages; its page states the absence"
+                f"  coverage: {package.member}: no listed extension draws coverage"
+                " pages; its page states the absence"
             )
-            continue
-        by_renderer.setdefault(renderer, []).append(package)
-    rendered: list[str] = []
-    for renderer, members in by_renderer.items():
-        rendered += renderer(root, tuple(members))
-    return rendered
+        return []
+    return draw(root, declaring)
 
 
 docs_group = group("docs", help="The workspace's documentation site")
@@ -1985,19 +1988,20 @@ def docs_publish() -> None:
 def docs_coverage_pages() -> None:
     """Render the coverage report pages the packages declare.
 
-    The generator verb a package declares beside a coverage report
-    its kind renders, such as a python package's ``htmlcov``. Each
-    package whose kind names a renderer is handed to it. A built site
-    at ``site/`` gets its copy of every tree refreshed as well, so a
-    tree rendered after the build is what the site publishes.
-    Idempotent: re-rendering from the same data rewrites the same tree.
+    The generator verb a package declares beside an ``htmlcov`` report.
+    The packages that declare one are handed to the listed extension
+    that answers ``docs.coverage-pages``, the coverage extension; with
+    none listed, each such page states the absence. A built site at
+    ``site/`` gets its copy of every tree refreshed as well, so a tree
+    rendered after the build is what the site publishes. Idempotent:
+    re-rendering from the same data rewrites the same tree.
     """
     root = _root()
     rendered = render_coverage_pages(root)
     if rendered:
         print(f"  coverage pages for {', '.join(rendered)}")
     else:
-        print("  no measured data: declared reports will state the absence")
+        print("  no coverage pages rendered: declared reports will state the absence")
     refreshed = refresh_site_coverage(root)
     if refreshed:
         print(f"  site refreshed for {', '.join(refreshed)}")

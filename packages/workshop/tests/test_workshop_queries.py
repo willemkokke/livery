@@ -290,6 +290,15 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
             'queries."docs.members" is a table without value; an answer is'
             " 'module:function', or a table with value alone",
         ),
+        (
+            WORKSPACE + '[for.docs.queries."acme.none"]\nvalue = ["x"]\n',
+            'for.docs.queries."acme.none" names no query; the queries are {queries}',
+        ),
+        (
+            WORKSPACE + '[for.docs.queries."acme.wide"]\nlevel = "workspace"\n',
+            'for.docs.queries."acme.wide" declares a query, and a [for] table only'
+            ' answers one; declare it at the top level, [queries."acme.wide"]',
+        ),
     ],
     ids=[
         "unknown-query",
@@ -297,6 +306,8 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
         "package-level",
         "no-function",
         "no-value",
+        "for-unknown-query",
+        "for-declares",
     ],
 )
 def test_an_answer_the_file_alone_shows_wrong_refuses(
@@ -430,6 +441,29 @@ def test_an_answer_off_the_declared_values_refuses_naming_them(
     assert answer(tmp_path, DEPTH) == "deep"
 
 
+def test_a_for_table_s_answer_off_the_declared_values_refuses_naming_its_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fakes(
+        tmp_path,
+        monkeypatch,
+        site=(DECLARES_DEPTH, ""),
+        c=(
+            WORKSPACE
+            + '\n[for."acme.site".queries]\n"acme.depth" = "{package}._steps:depth"\n',
+            "def depth(root):\n    return 'wide'\n",
+        ),
+    )
+    root_contract(tmp_path, '["acme.site", "acme.c"]')
+    with pytest.raises(QueryError) as refused:
+        answer(tmp_path, DEPTH)
+    assert str(refused.value) == (
+        "acme.c answers acme.depth with 'wide' at"
+        ' for."acme.site".queries."acme.depth", whose values are'
+        " 'shallow', 'deep'"
+    )
+
+
 def test_a_union_answered_with_a_string_refuses_naming_the_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -445,6 +479,79 @@ def test_a_union_answered_with_a_string_refuses_naming_the_extension(
         "editor-extensions: acme.a answers 'acme.editor', and a union combines"
         " lists; answer a list"
     )
+
+
+def test_a_for_table_s_answer_is_never_asked_while_its_target_is_unlisted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The answer marks the workspace when it is asked, so a call shows.
+    _fakes(
+        tmp_path,
+        monkeypatch,
+        site=(DECLARES_STYLE, ""),
+        a=(
+            WORKSPACE
+            + '\n[for."acme.site".queries]\n"acme.style" = "{package}._steps:style"\n',
+            "def style(root):\n    (root / 'asked').write_text('')\n"
+            "    return ['a-for']\n",
+        ),
+    )
+    asked = tmp_path / "asked"
+    # The target unlisted, then listed with the owner's `for` list leaving
+    # it out: the owner's listing contributes nothing, and nothing asks.
+    root_contract(tmp_path, '["acme.a"]')
+    assert answer(tmp_path, STYLE) == ()
+    root_contract(tmp_path, '["acme.site", { name = "acme.a", for = [] }]')
+    assert answer(tmp_path, STYLE) == ()
+    assert not asked.exists()
+    # Listed, and the owner's listing contributes to it: asked.
+    root_contract(tmp_path, '["acme.site", "acme.a"]')
+    assert answer(tmp_path, STYLE) == ("a-for",)
+    assert asked.exists()
+
+
+def test_an_answer_at_the_top_level_and_in_a_for_table_unions_or_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        site=DECLARES_STYLE,
+        deep=DECLARES_DEPTH,
+        a=WORKSPACE
+        + _literal("acme.style", '["top", "shared"]')
+        + _literal("acme.depth", '"deep"')
+        + '\n[for."acme.site".queries."acme.style"]\nvalue = ["shared", "for"]\n'
+        + '\n[for."acme.site".queries."acme.depth"]\nvalue = "shallow"\n',
+        b=WORKSPACE
+        + _literal("acme.style", '["b"]')
+        + '\n[for."acme.site".queries."acme.style"]\nvalue = "for"\n',
+    )
+    # A union refuses an answer from either place that is no list.
+    root_contract(tmp_path, '["acme.site", "acme.b"]')
+    with pytest.raises(QueryError) as unlisted:
+        answer(tmp_path, STYLE)
+    assert str(unlisted.value) == (
+        "acme.b answers acme.style with 'for' at"
+        ' for."acme.site".queries."acme.style", and a union combines lists;'
+        " answer a list"
+    )
+    # Both places asked: a query that takes one answer refuses, naming both.
+    root_contract(tmp_path, '["acme.site", "acme.deep", "acme.a"]')
+    with pytest.raises(QueryError) as raised:
+        answer(tmp_path, DEPTH)
+    assert str(raised.value) == (
+        'acme.a answers acme.depth at queries."acme.depth" and at'
+        ' for."acme.site".queries."acme.depth"; only a union query takes two'
+        " answers from one extension, so answer it in one place"
+    )
+    # A union takes every item of both, once each, in the order first met.
+    assert answers(tmp_path, STYLE) == {"acme.a": ("top", "shared", "for")}
+    assert answer(tmp_path, STYLE) == ("top", "shared", "for")
+    # The target unlisted, the top level answers alone.
+    root_contract(tmp_path, '["acme.deep", "acme.a"]')
+    assert answer(tmp_path, DEPTH) == "deep"
+    assert answer(tmp_path, STYLE) == ("top", "shared")
 
 
 # The rules.

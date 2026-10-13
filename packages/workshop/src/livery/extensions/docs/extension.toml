@@ -154,3 +154,11 @@ values = ["public", "all"]
 [queries."docs.theme"]
 level = "workspace"
 combine = "livery.extensions.docs._theme:merge_theme"
+
+# Who draws the coverage pages, a query a listed extension answers with
+# the function that draws them, given the workspace root and the
+# packages that declare an htmlcov report: one answer, the nearest.
+# With no answer, each such report's page states the absence.
+[queries."docs.coverage-pages"]
+level = "workspace"
+combine = "nearest"

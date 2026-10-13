@@ -25,7 +25,9 @@ A ``[queries.<name>]`` table declares the query when it carries
 contract file declares its queries in; a table carrying ``value`` is a
 literal answer, and ``<name> = "module:function"`` under ``[queries]``
 answers by a function. An answer to a query no declaration names
-refuses naming the declared ones.
+refuses naming the declared ones. A ``[for.<target>.queries]`` table
+answers in the same grammar, asked while the target is listed, and
+declares no query.
 
 A step is declared at ``[phases.<phase>.<step>]`` and reads into one
 record whatever its phase's level
@@ -215,6 +217,9 @@ class Declaration:
         query_specs: The queries it declares, by name.
         queries: The queries it answers, each query's name to the
             function that answers it or to its literal answer.
+        target_queries: The queries each ``[for.<target>]`` table
+            answers, by target, in the shape of ``queries``; a target
+            whose table answers none is left out.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
     """
@@ -243,6 +248,9 @@ class Declaration:
     query_specs: dict[str, QuerySpec] = field(default_factory=dict[str, "QuerySpec"])
     queries: dict[str, Reference | DeclaredValue] = field(
         default_factory=dict[str, "Reference | DeclaredValue"]
+    )
+    target_queries: dict[str, dict[str, Reference | DeclaredValue]] = field(
+        default_factory=dict[str, "dict[str, Reference | DeclaredValue]"]
     )
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
@@ -305,6 +313,7 @@ _NAMED = (
     ("for", "*", "deletes"),
     ("queries", "*", "default"),
     ("queries", "*", "value"),
+    ("for", "*", "queries", "*", "value"),
     ("fragments",),
     ("for", "*", "fragments"),
 )
@@ -415,10 +424,10 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         for target, table in data.get("for", {}).items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
-    queries = {
-        str(name): reader.query(str(name), value, identity)
-        for name, value in data.get("queries", {}).items()
-        if not _declares_query(value)
+    queries = reader.answers(data, (), identity)
+    answered = {
+        str(target): reader.answers(table, ("for", str(target)), identity)
+        for target, table in data.get("for", {}).items()
     }
     if "executables" in queries and not phases.get("run"):
         raise reader.refuse(
@@ -453,6 +462,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         phases=phases,
         query_specs=own_queries,
         queries=queries,
+        target_queries={target: found for target, found in answered.items() if found},
         categories=tuple(
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
@@ -1156,8 +1166,35 @@ class _Reader:
             )
         return provides, reads
 
+    def answers(
+        self, data: dict[str, Any], prefix: tuple[str, ...], identity: dict[str, Any]
+    ) -> dict[str, Reference | DeclaredValue]:
+        """The queries *data*'s ``[queries]`` table answers, each to its answer.
+
+        Under a ``[for.<target>]`` table, *prefix*, a table that declares
+        a query refuses: a declaration holds whatever is listed, so it
+        belongs to the file's top level.
+        """
+        from livery.workshop._contract_keys import shown
+
+        found: dict[str, Reference | DeclaredValue] = {}
+        for name, value in data.get("queries", {}).items():
+            if not _declares_query(value):
+                found[str(name)] = self.query(str(name), value, identity, prefix)
+            elif prefix:
+                raise self.refuse(
+                    (*prefix, "queries", str(name)),
+                    "declares a query, and a [for] table only answers one; declare"
+                    f" it at the top level, [{shown(('queries', str(name)))}]",
+                )
+        return found
+
     def query(
-        self, name: str, value: object, identity: dict[str, Any]
+        self,
+        name: str,
+        value: object,
+        identity: dict[str, Any],
+        prefix: tuple[str, ...] = (),
     ) -> Reference | DeclaredValue:
         """The answer to the query *name*: a function, resolved, or a literal.
 
@@ -1165,11 +1202,12 @@ class _Reader:
         the query's: a package-level query is answered by an extension
         a package may list, a workspace-level one by an extension the
         workspace may list. A literal answer is one of the query's
-        values when it declares them.
+        values when it declares them. *prefix* is the ``[for.<target>]``
+        table the answer is under, empty for the top level.
         """
         from livery.workshop._queries import PACKAGE_LEVEL
 
-        where = ("queries", name)
+        where = (*prefix, "queries", name)
         spec = self.query_specs.get(name)
         if spec is None:
             near = difflib.get_close_matches(name, list(self.query_specs), n=1)

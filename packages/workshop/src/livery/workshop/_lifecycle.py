@@ -379,19 +379,21 @@ def _extensions_answer(package: Package, query: Query[T]) -> T | None:
     """*package*'s extensions' answer to *query*; None when none of them answers.
 
     The bridge while package kinds remain: a package whose extensions
-    answer a query takes their answer, and any other takes its kind
-    backend's. Only the declarations are read to decide, so no answer
-    is computed twice.
+    answer a query in a place asked now, at the top level or in a
+    ``[for.<target>]`` table whose target is listed, takes their
+    answer, and any other takes its kind backend's. The places are the
+    ones the query asks ([livery.workshop._queries.answered_at][]),
+    read from the declarations alone, so no answer is computed twice.
     """
     if not package.extensions:
         return None
     from livery.workshop._composition import package_set
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._queries import answer
+    from livery.workshop._queries import answer, answered_at
 
     for name in package_set(package.extensions, installed_declaration):
         declared = installed_declaration(name)
-        if declared is not None and query.name in declared.queries:
+        if declared is not None and answered_at(package, name, declared, query.name):
             return answer(package, query)
     return None
 

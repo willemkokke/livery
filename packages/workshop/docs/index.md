@@ -119,7 +119,8 @@ spelling. Every key is optional:
   `enabled = false` registers only while the root contract turns it on
   at the step's own address, `[phases.<phase>.<step>] enabled = true`;
 - `[for.<target>]`, the same tables, read only while the target is
-  listed;
+  listed, its `[for.<target>.queries]` answers among them; a query is
+  declared at the top level alone;
 - `[replaces]` and `[deletes]`, an earlier extension's shipped file,
   `"<owner>:<name>"`, that its own file of that name replaces or that it
   deletes, to the reason.
@@ -349,6 +350,14 @@ A name no extension declares refuses with the nearest one; an answer
 refuses when the extension's levels lack the query's, and when it is
 off the query's `values`.
 
+An extension also answers under `[for.<target>.queries]`, in the same
+grammar. That answer is asked only while the target is listed and the
+extension's listing contributes to it, by the rule that registers a
+`[for.<target>]` table's steps, so an answer for an unlisted target
+never runs. An extension that answers one query at its top level and in
+a `[for]` table, both asked, answers a union query with every item of
+both, once each; a query of any other rule refuses, naming both places.
+
 `fm run <package>[:<executable>] -- <arguments>` starts one of the
 executables a package's extensions answer under `executables`, and
 exits with its exit code. A package with one executable needs no name,
@@ -419,13 +428,21 @@ extensions, they answer through workspace-level queries: the `dev`
 dependency group's tool lines and pytest's `addopts` are the union of
 the answers in list order, and a rendered template reads any
 workspace-level query by its name, `queries['python.dev-group']`. The
-docs extension declares two more. The site's private-members policy,
+docs extension declares three more. The site's private-members policy,
 `docs.members`: `public` keeps each extractor's default filter, `all`
 documents every member, the nearest answer wins, and any other value
 refuses naming both. The theme block, `docs.theme`: a table of the
 block's values (`language`, `font.text`, `font.code`, `features`,
 `palette`) a theme extension answers in part, merged key by key in
-list order over the base's block, an unknown key refusing. An
+list order over the base's block, an unknown key refusing. The
+coverage pages, `docs.coverage-pages`: the function that draws the
+pages of the packages that declare an `htmlcov` report, one answer,
+the nearest; with none, each such report's page states the absence.
+The coverage extension, `livery.extensions.coverage`, ships in the
+workshop wheel, listed as `coverage`, and answers it in its
+`[for.docs]` table: coverage.py's own HTML report of each such
+package, drawn from main's coverage record in the merge point's gate
+job and from the local `.coverage` a gate run left anywhere else. An
 extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before

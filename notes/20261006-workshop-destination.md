@@ -315,7 +315,7 @@ every kind the check judges"). What changes:
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages on a kind | `KindRecord.coverage_pages` | a `[generators.<name>]` entry of the coverage extension's `[for.docs]` table, one renderer for every kind, reading the line format |
+| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; coverage.py draws the pages | coverage's step of the docs phase, one renderer for every language, reading the line format |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | `[qa] coverage-floor` and `coverage-epsilon`, `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
@@ -1472,7 +1472,8 @@ neither needs nor rules out).
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
-| `KindRecord.extractor`, `coverage_pages`, `[docs] generators` as three mechanisms | `Generator` (phase 11c) |
+| `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
+| `_unmetered` and `_write_unit` copied into the coverage extension's `_pages` beside the python extension's | one copy, in the coverage extension, when the union moves there (12e, P2b) |
 | `[qa] coverage-floor`, `coverage-epsilon` and the coverage machinery in the base | the coverage extension (phase 12e) |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
@@ -2804,6 +2805,20 @@ neither needs nor rules out).
   final product, built as soon as possible, and a part may break one
   for a while when that speeds the work or makes it easier, recorded as
   a temporary row and an issue and its reversal checked.
+
+- 2026-10-13, 12e's P1 (#1552): the coverage extension starts in the
+  workshop wheel and draws the coverage pages as its answer to
+  `docs.coverage-pages`, a workspace query with one answer that the
+  docs extension declares; coverage.py still draws them, and the pages
+  are the same as before. `KindRecord.coverage_pages` is gone. A
+  `[for.<target>.queries]` table answers while its target is listed and
+  the owner's listing contributes to it, the rule `[for]` steps and jobs
+  already follow; the mount, the query reader and the package lifecycle
+  decide by one function where an extension answers. One extension
+  answering one query at its top level and in a `[for]` table combines
+  both for a union query and refuses for any other. Why: the pages
+  leave the kinds before the renderer changes, so the renderer of P3 is
+  compared against the same pages.
 
 ## Open
 

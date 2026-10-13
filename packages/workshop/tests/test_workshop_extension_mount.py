@@ -716,6 +716,26 @@ def test_the_fix_records_for_once_and_a_deleted_name_stays_deleted(
     )
 
 
+def test_the_fix_writes_for_on_the_entry_s_own_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The comment on the line after the entry is the next entry's, and
+    # stays on its own line.
+    _house(tmp_path, monkeypatch)
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = [\n    "acme.python",\n    "acme.house",\n'
+        '    # The next entry.\n    "acme.next",\n]\n'
+    )
+    assert _extensions.write_extensions(tmp_path) == [
+        "  layering: [workspace] extensions records acme.house for acme.python"
+    ]
+    assert (tmp_path / "workshop.toml").read_text() == (
+        '[workspace]\nextensions = [\n    "acme.python",\n'
+        '    { name = "acme.house", for = ["acme.python"] },\n'
+        '    # The next entry.\n    "acme.next",\n]\n'
+    )
+
+
 def test_a_root_without_a_contract_lists_no_extensions_and_declares_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
