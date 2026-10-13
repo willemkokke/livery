@@ -133,6 +133,12 @@ OTHER_SPELLINGS: dict[tuple[str, ...], str] = {
         " table, where coverage-floor is floor and coverage-epsilon is epsilon,"
         " read while [workspace] extensions lists coverage"
     ),
+    ("docs", "python-paths"): (
+        "[docs] python-paths is not a key: the directories the API reference"
+        " also reads modules from are the paths option of the step that writes"
+        " it, [phases.docs.mkdocstrings] paths, read while [workspace]"
+        " extensions lists mkdocstrings"
+    ),
 }
 
 

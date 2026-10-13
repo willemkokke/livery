@@ -447,13 +447,19 @@ extensions, they answer through workspace-level queries: the `dev`
 dependency group's tool lines and pytest's `addopts` are the union of
 the answers in list order, and a rendered template reads any
 workspace-level query by its name, `queries['python.dev-group']`. The
-docs extension declares two more. The site's private-members policy,
-`docs.members`: `public` keeps each extractor's default filter, `all`
-documents every member, the nearest answer wins, and any other value
-refuses naming both. The theme block, `docs.theme`: a table of the
-block's values (`language`, `font.text`, `font.code`, `features`,
-`palette`) a theme extension answers in part, merged key by key in
-list order over the base's block, an unknown key refusing.
+docs extension declares three more. The site's config, `docs.config`:
+an extension that adds tables to it answers with the function that
+writes them for the packages a config covers, every package for the
+site and one for a package's preview; the docs extension joins each
+answer's tables after its own, in list order, a table two answers write
+refuses naming both, and the joined config must parse. The site's
+private-members policy, `docs.members`: `public` keeps the API
+reference's default filter, `all` documents every member, the nearest
+answer wins, and any other value refuses naming both. The theme block,
+`docs.theme`: a table of the block's values (`language`, `font.text`,
+`font.code`, `features`, `palette`) a theme extension answers in part,
+merged key by key in list order over the base's block, an unknown key
+refusing.
 
 The docs extension also declares two phases of its own, both at the
 workspace level, outside the gate and with no verb; their steps run
@@ -466,8 +472,40 @@ writes the task reference of every package that advertises
 turns it on with `[phases.docs.task-reference] enabled = true`.
 `fm docs.publish` runs the `deploy` phase on the built site just before
 it publishes it, then puts each declared coverage report's tree into
-the site. A listed extension adds its steps to either phase in its
-`[for.docs]` table, while docs is listed.
+the site. A listed extension that requires docs adds its steps to
+either phase at its top level, and any other in its `[for.docs]`
+table, while docs is listed.
+
+The python API reference is an extension inside the workshop wheel,
+`livery.extensions.mkdocstrings`, listed as `mkdocstrings` after docs,
+which it requires. Its `mkdocstrings` step of the docs phase runs once
+for each package whose set holds python and writes the package's
+reference into its generated tree: a page per module of each of its
+roots under `api/`, public modules before private ones at every level,
+each page one directive the handler renders with the module's members,
+and the `api` nav block that lists them. The site places that block
+after the section's other entries, unless the package's `nav.toml`
+places it with a marker pair. A package that declines with
+`[docs] api = false` gets neither. The step's `paths` option names
+further directories, relative to the package, the python handler reads
+modules from after the package's sources, such as stubs a generator
+renders:
+
+```toml
+[phases.docs.mkdocstrings]
+paths = ["docs/_generated/stubs"]
+```
+
+The extension answers `docs.config` with the python handler's tables:
+the search paths of the packages the config covers, the inventories,
+with the published site's own for a preview, and the handler's
+options, with an empty filter list when `docs.members` answers `all`.
+A workspace that does not list it renders no API reference and no
+handler table. It also holds the two lint steps that judge the
+docstrings the reference publishes: `lint.docrefs`, every
+cross-reference in a docstring the site renders names an anchor the
+site renders, and `lint.docstrings`, every name a python package
+exports has a docstring.
 
 The coverage extension, `livery.extensions.coverage`, ships in the
 workshop wheel, listed as `coverage`, and adds a step to each of those
@@ -575,10 +613,10 @@ steps pass the same clauses in its test suite.
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
 table naming `livery-workshop` as its distribution. It owns the site's
-assembly, the `docs` verbs, the `docs.members` and `docs.theme` queries,
-the `docs` and `deploy` phases, the staged extension css, the generators
-a package declares and the seam the site publishes through, and it
-arrives through its own task entry point. The base keeps what it reads
+assembly, the `docs` verbs, the `docs.config`, `docs.members` and
+`docs.theme` queries, the `docs` and `deploy` phases, the staged
+extension css, the generators a package declares and the seam the site
+publishes through, and it arrives through its own task entry point. The base keeps what it reads
 of a package's docs for its own reasons (a package's `[docs] api` and
 the layout of the `docs/` tree) and the nav blocks generators write;
 it imports no extension,
@@ -623,9 +661,7 @@ forge's own pages deploy, a job with no checkout and no entry. The
 extension
 renders the site's development section from the prose fragments
 the mounted extensions ship for a human reader, one page per section
-under `development/`, and renders each kind's API extractor from its
-data: the handler's name, a package's pages and search paths, the
-inventories, and the handler's options as a table.
+under `development/`.
 
 The formatter and the linter are an extension with a distribution of
 its own, `livery-extensions-ruff`, listed as `ruff`. Listed, it

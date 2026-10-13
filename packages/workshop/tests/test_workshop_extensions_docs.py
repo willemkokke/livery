@@ -5,9 +5,11 @@ from __future__ import annotations
 import ast
 import importlib.metadata
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -224,4 +226,143 @@ def test_the_docs_extension_reads_the_workspace_through_public_names() -> None:
                 and node.module.split(".")[2] in _REPLACED
             ):
                 found.append(f"{path.name}:{node.lineno} {node.module}")
+    assert found == []
+
+
+def _language_words() -> set[str]:
+    """The words of a language the docs extension never names outside prose.
+
+    The language the API reference renders and the tools that read it,
+    and each part of every concrete kind's name.
+    """
+    from livery.workshop._kinds import all_kinds
+
+    words = {"python", "griffe", "mkdocstrings"}
+    for record in all_kinds():
+        if not record.abstract:
+            words.update(record.name.split("-"))
+    return words
+
+
+def _words(text: str) -> list[str]:
+    """The words of *text*, lower case: a name split at its underscores and dots."""
+    return [word for word in re.split(r"[^a-z0-9]+", text.lower()) if word]
+
+
+def _code_words(source: str) -> list[tuple[int, str]]:
+    """Each word of *source*'s code with its line: its names and strings.
+
+    Docstrings are prose and left out, and so are comments, which
+    never reach the syntax tree.
+    """
+    tree = ast.parse(source)
+    prose: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            first = node.body[0] if node.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                prose.add(id(first.value))
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        texts: list[str] = []
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if id(node) not in prose:
+                texts.append(node.value)
+        elif isinstance(node, ast.Name):
+            texts.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            texts.append(node.attr)
+        elif isinstance(node, ast.arg):
+            texts.append(node.arg)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            texts.append(node.name)
+        elif isinstance(node, ast.alias):
+            texts += [node.name, node.asname or ""]
+        elif isinstance(node, ast.ImportFrom):
+            texts.append(node.module or "")
+        line = int(getattr(node, "lineno", 0))
+        found += [(line, word) for text in texts for word in _words(text)]
+    return found
+
+
+def _declared_words(data: object, path: str = "") -> list[tuple[str, str]]:
+    """Each word of a declaration's keys and values, by key path; prose left out.
+
+    A key's ``doc`` and a job's ``note`` are prose, and so are the
+    file's comments, which the parse drops.
+    """
+    found: list[tuple[str, str]] = []
+    if isinstance(data, dict):
+        for key, value in cast("dict[str, object]", data).items():
+            where = f"{path}.{key}" if path else key
+            found += [(where, word) for word in _words(key)]
+            if key not in ("doc", "note"):
+                found += _declared_words(value, where)
+    elif isinstance(data, list):
+        for item in cast("list[object]", data):
+            found += _declared_words(item, path)
+    elif isinstance(data, str):
+        found += [(path, word) for word in _words(data)]
+    return found
+
+
+def test_a_language_word_in_a_source_s_code_is_found_and_its_prose_is_not() -> None:
+    source = (
+        '"""A module docstring naming python is prose."""\n'
+        "# A comment naming griffe is prose.\n"
+        "HANDLER = 'python'\n"
+        "from livery.extensions.mkdocstrings import _pages\n"
+    )
+    languages = {"python", "griffe", "mkdocstrings"}
+    found = sorted(
+        (line, word) for line, word in _code_words(source) if word in languages
+    )
+    assert found == [(3, "python"), (4, "mkdocstrings")]
+    declared = {
+        "phases": {"lint": {"refs": {"doc": "the python names", "main": "griffe"}}}
+    }
+    assert _declared_words(declared)[-1] == ("phases.lint.refs.main", "griffe")
+    assert ("phases.lint.refs.doc", "python") not in _declared_words(declared)
+
+
+def test_the_docs_extension_names_no_language() -> None:
+    """Docs' sources and declaration name no language outside their prose.
+
+    No python, griffe or mkdocstrings word and no part of a kind's name
+    in a name, a string or a declared key or value, and no import of
+    the kind registry: what renders a language's API reference is an
+    extension of its own, which answers the docs extension's queries
+    and adds its steps.
+    """
+    import tomllib
+
+    docs = ROOT / "packages/workshop/src/livery/extensions/docs"
+    words = _language_words()
+    assert {"python", "cpp", "conan", "nanobind"} <= words
+    found: list[str] = []
+    for path in sorted(docs.glob("*.py")):
+        source = path.read_text("utf-8")
+        found += [
+            f"{path.name}:{line} {word}"
+            for line, word in _code_words(source)
+            if word in words
+        ]
+        found += [
+            f"{path.name}:{node.lineno} imports {node.module}"
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            and (node.module or "").startswith("livery.workshop._kinds")
+        ]
+    declaration = tomllib.loads((docs / "extension.toml").read_text("utf-8"))
+    found += [
+        f"extension.toml {where} {word}"
+        for where, word in _declared_words(declaration)
+        if word in words
+    ]
     assert found == []

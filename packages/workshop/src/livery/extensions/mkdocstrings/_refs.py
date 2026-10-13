@@ -5,12 +5,12 @@ site build links the name to the anchor of the object's heading. A
 name with no anchor stops the strict build, whether or not the object
 exists. An anchor exists for each object a ``:::`` directive renders,
 and for each member the python handler renders with it. The API
-reference has a page of one directive per module of each member that
-keeps its reference, and an authored page may carry directives of its
-own. The handler's options and the ``docs.members`` policy decide
-which members render: under the ``public`` policy an underscore
-function has no anchor, and a module no page renders, such as one of
-an extension that ships inside another member's wheel, has none.
+reference has a page of one directive per module of each package it
+documents, and an authored page may carry directives of its own. The
+handler's options and the ``docs.members`` policy decide which members
+render: under the ``public`` policy an underscore function has no
+anchor, and a module no page renders, such as one of an extension that
+ships inside another member's wheel, has none.
 
 `lint.docrefs` reads every docstring the site renders. On the API
 pages and the authored pages, those are the docstrings of what they
@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
+    from livery.workshop import PhaseContext
     from livery.workshop._packages import Package
 
 #: A cross-reference: a dotted path of at least two names, in the
@@ -60,10 +61,6 @@ _CODE = re.compile(r"```.*?```|``.*?``|`[^`\n]*`", re.S)
 #: A ``:::`` line of a page, as mkdocstrings reads one: the object it
 #: documents, after an optional heading mark.
 DIRECTIVE = re.compile(r"^(?:#{1,6} *)?::: ?(?P<name>\S+) *$", re.M)
-
-#: The handler the API reference's pages and the ``:::`` lines of the
-#: authored pages are rendered with.
-PYTHON_HANDLER = "python"
 
 #: The python handler's member filter when its options set none: every
 #: name but one that starts with a single underscore. The ``public``
@@ -180,36 +177,31 @@ def site_request(root: Path) -> dict[str, Any]:
 
     The members' sources; every ``:::`` directive the python handler
     renders, with the page it publishes on, the API reference's one
-    per module and then the authored pages'; the handler's options
-    with the members policy applied, as the site's config writes them;
-    the task providers each member advertises, with the member, while
-    the root contract turns the task reference's step on; and the
-    sources of the members that decline their reference.
+    per module of each package it documents and then the authored
+    pages'; the handler's options with the members policy applied, as
+    the site's config writes them; the task providers each member
+    advertises, with the member, while the root contract turns the
+    task reference's step on; and the sources of the members that
+    decline their reference.
     """
-    from livery.extensions.docs._site import API_DIR, members_policy
     from livery.extensions.docs._taskref import STEP, advertised_providers
+    from livery.extensions.mkdocstrings._config import options as handler_options
+    from livery.extensions.mkdocstrings._pages import API_DIR, documented, pages
     from livery.workshop._docs_contract import declines_api
     from livery.workshop._extensions import enabled_steps
-    from livery.workshop._kinds import ALL_MEMBERS, kind_extractor
     from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root)
     directives: list[tuple[str, str]] = []
-    options: dict[str, object] = {}
-    for package in packages:
-        extractor = kind_extractor(package.kind)
-        if extractor is None or extractor.name != PYTHON_HANDLER:
-            continue
-        options = dict(extractor.options)
+    reached = [package for package in packages if documented(package)]
+    for package in reached:
         directives += [
             (f"packages/{package.member}/{API_DIR}/{page}", dotted)
-            for page, dotted in extractor.pages(package)
+            for page, dotted in pages(package)
         ]
     for page, path in _authored_pages(root, packages):
         text = _without_code(path.read_text("utf-8"))
         directives += [(page, match["name"]) for match in DIRECTIVE.finditer(text)]
-    if members_policy(root) == ALL_MEMBERS:
-        options["filters"] = []
     with_sources = [
         package for package in packages if (package.directory / "src").is_dir()
     ]
@@ -219,7 +211,7 @@ def site_request(root: Path) -> dict[str, Any]:
             str((package.directory / "src").resolve()) for package in with_sources
         ],
         "pages": directives,
-        "options": options,
+        "options": handler_options(root) if reached else {},
         "providers": [
             (identity, package.member)
             for package in (packages if referenced else ())
@@ -291,6 +283,19 @@ def reference_problems(root: Path) -> list[str]:
     return problems
 
 
+def docrefs_run(ctx: PhaseContext) -> None:
+    """Refuse every cross-reference the site cannot link: the lint phase's step.
+
+    The lines of `reference_problems` over the workspace, under one
+    heading.
+    """
+    from livery.footman import fail
+
+    problems = reference_problems(ctx.root)
+    if problems:
+        fail("cross-references the site cannot link:\n  " + "\n  ".join(problems))
+
+
 def _probe(root: Path, request: dict[str, Any]) -> dict[str, Any]:
     """The site *request* describes, computed in a child process.
 
@@ -303,7 +308,7 @@ def _probe(root: Path, request: dict[str, Any]) -> dict[str, Any]:
     import livery.footman as footman
 
     result = footman.run(
-        [sys.executable, "-m", "livery.extensions.docs._refs"],
+        [sys.executable, "-m", "livery.extensions.mkdocstrings._refs"],
         cwd=root,
         input=json.dumps(request),
         nofail=True,

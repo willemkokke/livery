@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.docs._refs import (
+from livery.extensions.mkdocstrings._refs import (
     Reference,
+    docrefs_run,
     docstring_references,
     reference_problems,
 )
-from livery.extensions.docs._steps import docrefs_run
 from livery.footman import Failed
 from livery.workshop._phases import PhaseContext
 from workshop_extension_fakes import fake_extensions
@@ -81,7 +81,7 @@ def _helper() -> None:
 TASK_LINE = 12
 
 
-def _workspace(tmp_path: Path, *, extensions: str = '["docs"]') -> Path:
+def _workspace(tmp_path: Path, *, extensions: str = '["docs", "mkdocstrings"]') -> Path:
     """A workspace whose member ``thing`` ships ``acme.thing`` and an extension.
 
     ``acme.thing`` is a regular package, so the API reference has a page
@@ -384,7 +384,7 @@ def test_the_all_members_policy_renders_underscore_members(
         base='[extension]\nlevels = ["workspace"]\n'
         '[queries."docs.members"]\nvalue = "all"\n',
     )
-    root = _workspace(tmp_path, extensions='["docs", "acme.base"]')
+    root = _workspace(tmp_path, extensions='["docs", "mkdocstrings", "acme.base"]')
     assert _problems(root, "See [acme.thing._impl._spin][].") == []
 
 
@@ -418,7 +418,7 @@ def test_a_member_whose_source_is_one_module_has_no_page_to_link(
     )
     (tool / "workshop.toml").write_text('kind = "python"\nname = "tool"\n')
     (tool / "pyproject.toml").write_text('[project]\nname = "tool"\n')
-    # A member whose kind extracts nothing renders no page either.
+    # A member the reference does not document renders no page either.
     native = root / "packages" / "native"
     (native / "src").mkdir(parents=True)
     (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "native"\n')
@@ -469,12 +469,12 @@ def test_a_reference_is_placed_on_its_own_line_and_by_its_docstring(
 
 
 def test_the_handler_options_choose_members_only_as_the_walk_reads_them() -> None:
-    from livery.extensions.python._backend import PYTHON_HANDLER_OPTIONS
+    from livery.extensions.mkdocstrings._pages import OPTIONS
 
     # The walk reads the filters, show_if_no_docstring and
     # merge_init_into_class, and takes the handler's defaults for the
     # other options that choose members: setting one of those needs the
     # walk to read it first.
     unread = {"members", "inherited_members", "show_submodules"}
-    assert not unread & set(PYTHON_HANDLER_OPTIONS)
-    assert isinstance(PYTHON_HANDLER_OPTIONS.get("filters", []), list)
+    assert not unread & set(OPTIONS)
+    assert isinstance(OPTIONS.get("filters", []), list)

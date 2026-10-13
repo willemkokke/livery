@@ -16,6 +16,7 @@ from livery.extensions.cmake._readings import Reading, write_part
 from livery.extensions.docs import _site as _docs
 from livery.footman import Failed, fail
 from livery.workshop import PhaseContext
+from livery.workshop._packages import discover_packages
 from livery.workshop._phases import run_phase
 from livery.workshop._steps import StepRecord, register_step, steps_by_name
 from workshop_coverage_meter import install_meter, stored_unit
@@ -114,6 +115,8 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.coverage import _pages
+    from livery.extensions.mkdocstrings import _pages as _reference
+    from livery.workshop._packages import Package
 
     install_meter(tmp_path, monkeypatch)
     asked: list[str] = []
@@ -123,7 +126,12 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         asked.append("deploy" if merged else "docs")
         return []
 
+    def written(package: Package) -> list[str]:
+        asked.append(f"mkdocstrings {package.path}")
+        return []
+
     monkeypatch.setattr(_pages, "draw", drawn)
+    monkeypatch.setattr(_reference, "write_reference", written)
 
     def note(ctx: PhaseContext) -> None:
         asked.append(f"{ctx.step} {ctx.member.path}")
@@ -133,13 +141,16 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         _docs.run_site_phase(root, _docs.DEPLOY_PHASE)
 
     # Coverage listed with a `for` list that leaves docs out: its
-    # [for.docs] table adds no step to either phase. A package step
-    # naming an extension no package holds runs over no package.
+    # [for.docs] table adds no step to either phase. The API reference
+    # unlisted adds none either. A package step naming an extension no
+    # package holds runs over no package.
     root = _workspace(
         tmp_path, '["docs", "acme.meter", { name = "coverage", for = [] }]'
     )
     _mount(root)
-    assert not {"docs.coverage", "deploy.coverage"} & set(steps_by_name())
+    assert not {"docs.coverage", "deploy.coverage", "docs.mkdocstrings"} & set(
+        steps_by_name()
+    )
     register_step(
         StepRecord(
             "held",
@@ -153,9 +164,10 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
     both_phases(root)
     assert asked == []
     # Listed for docs, coverage is asked in each phase, and a package
-    # step naming the member's extension runs over the member.
+    # step naming the member's extension runs over the member, the API
+    # reference's among them.
     (root / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["docs", "acme.meter", "coverage"]\n'
+        '[workspace]\nextensions = ["docs", "mkdocstrings", "acme.meter", "coverage"]\n'
     )
     _mount(root)
     register_step(
@@ -169,7 +181,12 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         )
     )
     both_phases(root)
-    assert sorted(asked) == ["deploy", "docs", "docs.held packages/core"]
+    assert sorted(asked) == [
+        "deploy",
+        "docs",
+        "docs.held packages/core",
+        "mkdocstrings packages/core",
+    ]
 
 
 def test_a_dormant_coverage_draws_nothing_and_the_page_states_the_absence(
@@ -236,7 +253,9 @@ def test_the_docs_steps_write_apart(
     monkeypatch.setattr(footman, "run", generate)
 
     def workspace(name: str) -> Path:
-        root = _workspace(tmp_path / name, '["docs", "acme.meter", "coverage"]')
+        root = _workspace(
+            tmp_path / name, '["docs", "mkdocstrings", "acme.meter", "coverage"]'
+        )
         (root / "workshop.toml").write_text(
             (root / "workshop.toml").read_text()
             + "\n[phases.docs.task-reference]\nenabled = true\n"
@@ -257,12 +276,14 @@ def test_the_docs_steps_write_apart(
     assert [record.name for record in steps] == [
         "docs.task-reference",
         "docs.generators",
+        "docs.mkdocstrings",
         "docs.coverage",
     ]
+    members = discover_packages(alone)
     written: dict[str, set[str]] = {}
     for record in steps:
         before = _tree(alone)
-        run_phase(PhaseContext(root=alone, packages=(), phase="docs"), (record,))
+        run_phase(PhaseContext(root=alone, packages=members, phase="docs"), (record,))
         after = _tree(alone)
         written[record.name] = {
             path for path, held in after.items() if before.get(path) != held

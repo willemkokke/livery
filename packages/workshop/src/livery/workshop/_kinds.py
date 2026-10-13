@@ -25,7 +25,7 @@ vocabulary a contract may use is the concrete kinds.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from livery.footman import fail
@@ -190,48 +190,6 @@ class Backend(Protocol):
         ...
 
 
-#: The private-members policies an extractor applies: ``public``
-#: documents what its handler's default filter keeps, ``all`` every
-#: member. The docs assembly composes the policy from the extensions.
-PUBLIC_MEMBERS = "public"
-ALL_MEMBERS = "all"
-MEMBERS_POLICIES = (PUBLIC_MEMBERS, ALL_MEMBERS)
-
-
-@dataclass(frozen=True)
-class Extractor:
-    """How a kind's API reference is extracted for the site.
-
-    Extraction belongs to the kind: the docs assembly asks a
-    package's kind for its extractor and knows nothing of the
-    language behind it. A kind without one gets a section naming the
-    absence.
-
-    Attributes:
-        name: The mkdocstrings handler's name, `python`; one config
-            block is written per name, over every package that
-            extracts through it.
-        pages: The reference pages of a package, `(page path, dotted
-            name)` per page, in the order the section lists them;
-            empty when the package declines or has nothing to
-            extract.
-        sources: The handler's search paths for a package, relative
-            to the workspace root.
-        options: The handler's options, by name, which the site's
-            assembly renders as the handler's options table; the
-            members policy, one of `MEMBERS_POLICIES`, is applied
-            beside them by the assembly.
-        inventories: The inventories cross-references resolve
-            against.
-    """
-
-    name: str
-    pages: Callable[[Package], list[tuple[str, str]]]
-    sources: Callable[[Package], list[str]]
-    options: dict[str, object] = field(default_factory=dict)
-    inventories: tuple[str, ...] = ()
-
-
 @dataclass(frozen=True)
 class KindRecord:
     """One package kind, completely.
@@ -265,9 +223,6 @@ class KindRecord:
         tests_need_build: Whether the kind's tests run on a build
             rather than on source, so a test step is preceded by the
             backend's ``gate_build``.
-        extractor: How the kind's API reference is extracted for the
-            site; None for a kind with no reference, which the site
-            says by name. A child kind takes the nearest ancestor's.
         examples: How the kind runs a package's documentation
             examples, the files under ``docs/examples/``, given the
             package, the workspace root, the named example files (empty
@@ -304,7 +259,6 @@ class KindRecord:
     artifact: str = "python"
     wheel_identity: str = "pure"
     tests_need_build: bool = False
-    extractor: Extractor | None = None
     examples: (
         Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
     ) = None
@@ -440,14 +394,6 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
         for record in kind_chain(kind_name):
             tools.update(record.host_tools)
     return tuple(sorted(tools))
-
-
-def kind_extractor(kind_name: str) -> Extractor | None:
-    """The extractor *kind_name* uses: its own, else its nearest ancestor's."""
-    for record in reversed(kind_chain(kind_name)):
-        if record.extractor is not None:
-            return record.extractor
-    return None
 
 
 def kind_examples(
@@ -615,7 +561,6 @@ def _register_builtin() -> None:
             # uv operates the workspace; the checkers, the formatter and
             # the test runner ride their step records.
             tools=("uv",),
-            extractor=_python.extractor(),
             examples=_python.run_examples,
             suites=_python.run_test,
             # A package that lists no extension is taken to hold the

@@ -323,15 +323,15 @@ every kind the check judges"). What changes:
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `[setup.<name>]`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
-| the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
+| the API extractor on a kind | the mkdocstrings extension's step of the docs phase, `[phases.docs.mkdocstrings]`, which writes each python package's API pages, and its answer to the docs extension's `docs.config` query, which writes the handler's tables into `zensical.toml` | as today; doxygen adds a step of its own |
 | coverage pages | coverage's two steps in its `[for.docs]` table: one in the docs phase, which frames the pages in the site build, and one in the `deploy` phase, which `docs.publish` runs and which draws them from main's record; its own renderer draws every language's pages from the parts the record stores, each check leg having reduced its suites through `coverage.measurers`, which pytest answers in `[for.coverage]`, and cmake writing its own parts | as today |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | the coverage extension's `[coverage]` table and pages; the base's `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in the nanobind kind's backend | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
-| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | `[docs] api` stays the docs extension's key; the handler's search paths are the mkdocstrings generator's `paths` option, set at `[generators.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
-| the python-only checks `lint.docrefs`, `lint.docstrings` in the docs extension, filtering by kind chain | `docs/_checks.py` | `[checks.<tool>.<role>]` of the mkdocstrings extension: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
+| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | `[docs] api` stays the docs extension's key; the handler's search paths are the `paths` option of mkdocstrings' step, set at `[phases.docs.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
+| the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
 | the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
@@ -878,7 +878,7 @@ later reader must re-justify.
 | `_git_ops` | `GitOps`, `GitError` | replaced by `ci_changes` |
 | `_influence` | `Changes` | public |
 | | `Inputs` | the `inputs` table of a check |
-| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | move into the docs extension as `[generators.<name>]` and its policy; the coverage pages generator is the coverage extension's |
+| `_kinds` | `Extractor`, the members policy, `kind_extractor`, `kind_coverage_pages` | gone: mkdocstrings' step of the docs phase replaced the extractor and the docs extension holds the policy (11c's PC1); the coverage pages are the coverage extension's (12e) |
 | | `kind_chain`, `kind_names` | go with the python checks moving to python's contribution |
 | `_navblocks` | all | moves into the docs extension |
 | `_packages` | `Package`, `discover_packages` | public already |
@@ -982,7 +982,7 @@ names first, the same way.
 | --- | --- |
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
 | `livery-extensions-python`, `-cmake`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | 11b |
-| `livery-extensions-mkdocstrings` | 11c |
+| `livery-extensions-mkdocstrings` | phase 11's step 8, when the extensions leave the workshop wheel |
 | `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
 | `livery-lodge` | 15 |
 
@@ -1289,9 +1289,10 @@ slices, each mergeable alone:
    phase declarations of slices 2 to 4 are re-spelled here, a rename
    of tables and nothing else.
 6. **11c, the docs phase**, before the registry goes, since the docs
-   extension reads the extractor from the kinds until then (12e moved
-   the coverage pages to the coverage extension): the generators become
-   steps of the docs phase the docs extension declares.
+   extension read the extractor from the kinds (11c's PC1 removed it;
+   12e moved the coverage pages to the coverage extension): the
+   generators become steps of the docs phase the docs extension
+   declares.
 7. **The kinds go**: the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
    the python extension; `fm new.package` takes a combination,
@@ -1333,11 +1334,14 @@ alone.
   publishes, takes coverage's redraw from main's merged record through
   coverage's `[for.docs]` table. The verbs `docs.coverage-pages` and
   `docs.task-reference` are gone with the query.
-- PC1: an mkdocstrings extension, inside the workshop wheel until step
-  8, takes the API pages, the handler tables (through the docs-declared
-  query `docs.config`), `lint.docrefs` and `lint.docstrings`; the
-  kind's `Extractor` goes; this repository and `fm new.project`'s stock
-  list name `mkdocstrings` after `docs`.
+- PC1 (built, #1603): an mkdocstrings extension, inside the workshop
+  wheel until step 8, takes the API pages (its step of the docs phase,
+  whose `paths` option replaces `[docs] python-paths`), the handler
+  tables (its answer to the docs-declared query `docs.config`),
+  `lint.docrefs` and `lint.docstrings`; the kind's `Extractor` goes;
+  this repository and `fm new.project`'s stock list name `mkdocstrings`
+  after `docs`, and the loop's plain pass leaves out docs and every
+  entry whose declaration requires it.
 - PC2: the base's docs contract module leaves: `[docs]` and its `api`
   key are the docs extension's, the docs a python wheel embeds the
   python extension's.
@@ -1360,7 +1364,10 @@ Acceptance, refusals first:
   changes show: their API pages, their coverage pages, the search
   index, `llms-full.txt` and `objects.inv`, and the nav of every page
   when a part adds or removes a module;
-- 11c adds no entry to the vocabulary test's allowance.
+- 11c adds no entry to the vocabulary test's `ALLOWANCE`; its
+  `TOOL_ALLOWANCE` names mkdocstrings where the base must: the stock
+  list in `_new_project` and the refusal of `[docs] python-paths` in
+  `_contract`.
 
 ### Phase 12: docs and housekeeping ship apart
 
@@ -1507,7 +1514,6 @@ neither needs nor rules out).
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
-| `KindRecord.extractor` | mkdocstrings' step of the docs phase (11c's PC1) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
@@ -3024,6 +3030,22 @@ neither needs nor rules out).
   functions and declared it nowhere, and now declares it in an optional
   extra, `coverage`. The extension seed declares livery-footman, which
   its application module imports.
+
+- 2026-10-14, 11c's PC1 (#1603): mkdocstrings' step of the docs phase
+  takes a list option, `paths`, so step options gain the type `strs`.
+  The docs extension's `docs.config` query takes, from each answer, a
+  function of the scope (the root, the packages, the anchor and the
+  published site) that returns TOML text; the docs extension adds each
+  answer's tables after its own in list order, and a table two answers
+  write refuses, naming both. `[docs] python-paths` refuses, naming
+  `[phases.docs.mkdocstrings] paths`, from the base's list of other
+  spellings, so the vocabulary test's `TOOL_ALLOWANCE` gains that
+  entry beside the stock list's. Found while building: a workspace
+  that stops listing mkdocstrings keeps its last build's API pages and
+  their nav block under `docs/_generated/` until something removes
+  them, as the task reference's block does; PC2, which gives the docs
+  extension that directory's layout, removes what no listed step
+  writes.
 
 ## Open
 

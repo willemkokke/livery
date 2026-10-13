@@ -27,8 +27,7 @@ def test_the_python_extension_imported_before_the_base_registers_the_kind() -> N
             "from livery.extensions.python import _backend\n"
             "from livery.workshop._kinds import kind_for\n"
             "assert kind_for('python').backend is _backend\n"
-            "extractor = kind_for('python').extractor\n"
-            "print(extractor.name if extractor else '')",
+            "print(kind_for('python').name)",
         ],
         capture_output=True,
         text=True,

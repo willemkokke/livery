@@ -76,30 +76,17 @@ type = { types = ["str"], doc = "the script element's type" }
 defer = { types = ["bool"], doc = "whether the script runs after the page parses" }
 async = { types = ["bool"], doc = "whether the script runs as soon as it loads" }
 
-# The cross-references in the docstrings the site renders name anchors
-# the site renders. Which docstrings render and which anchors exist
-# follow from every source, the authored pages' directives, the
-# contracts, the extensions' declarations and the members' manifests,
-# so a change to any of them runs the step over every source.
-[phases.lint.docrefs]
-main = "livery.extensions.docs._steps:docrefs_run"
-inputs = { reads = ["packages/**/src/**/*.py"], per-file = false, widens = ["docs/**/*.md", "packages/**/docs/**/*.md", "workshop.toml", "packages/**/workshop.toml", "packages/**/src/**/extension.toml", "packages/**/pyproject.toml"] }
-
 # The links in the authored markdown resolve. A removed heading or a
 # deleted or moved page runs the step over every page.
 [phases.lint.doclinks]
 main = "livery.extensions.docs._steps:doclinks_run"
 inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = true, widen = "livery.extensions.docs._steps:headings_removed" }
 
-# Every name a python member exports has a docstring, judged over the
-# python members a run reaches.
-[phases.lint.docstrings]
-main = "livery.extensions.docs._steps:docstrings_run"
-
 # The docs phase: what writes the site's generated pages, run by every
 # docs verb before it assembles the config, its steps side by side. A
-# listed extension adds a step here in its [for.docs] table. The gate
-# never runs it, and it has no verb of its own.
+# listed extension that requires docs adds a step here at its top level,
+# and any other in its [for.docs] table. The gate never runs it, and it
+# has no verb of its own.
 [phases.docs]
 level = "workspace"
 gated = false
@@ -172,6 +159,15 @@ paths = ["site"]
 entries = ["docs.publish"]
 collects = "site"
 deploy = "livery.extensions.docs._contract:publish_seam"
+
+# The site's config beyond the docs extension's own tables, a query a
+# listed extension answers with the function that writes its tables for
+# one config, given the packages the config covers: each answer's tables
+# after the docs extension's, in list order. A table two answers write
+# refuses naming both, and the joined config must parse.
+[queries."docs.config"]
+level = "workspace"
+combine = "livery.extensions.docs._config:writers"
 
 # The private-members policy the API reference renders, a query the
 # listed extensions answer: the nearest answer, the one of the

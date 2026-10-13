@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import takewhile
 from pathlib import Path
 from typing import Any
@@ -82,7 +82,12 @@ class Package:
     depends: tuple[Edge, ...]
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
-    step_options: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
+    # Left out of the hash, so a package stays a set member and a key:
+    # an option's value may be a list, a strs option's, or anything a
+    # contract holds before the registry judges it.
+    step_options: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = field(
+        default=(), hash=False
+    )
     extensions: tuple[str, ...] = ()
 
     @property

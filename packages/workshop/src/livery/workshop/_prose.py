@@ -594,8 +594,10 @@ def render_kinds(root: Path, audience: str | None) -> str:
     """The kinds the present packages are, what each derives from, its gate phases."""
     from livery.workshop._kinds import extension_set, kind_chain, kind_names
     from livery.workshop._packages import discover_packages
+    from livery.workshop._phases import declared_phases
     from livery.workshop._steps import judges_extensions, steps_by_name
 
+    gated = {name for name, spec in declared_phases().items() if spec.gated}
     names = set(kind_names())
     members: dict[str, list[str]] = {}
     held: dict[str, set[str]] = {}
@@ -625,15 +627,18 @@ def render_kinds(root: Path, audience: str | None) -> str:
             or "nothing"
         )
         paths = ", ".join(sorted(members[kind]))
-        # A kind's phases are those of the steps that judge its members,
-        # by the extensions they hold; a step naming no extensions
-        # judges the workspace, never one kind.
+        # A kind's phases are those of the gate's steps that judge its
+        # members, by the extensions they hold; a step naming no
+        # extensions judges the workspace, never one kind, and a step of
+        # a phase the gate never runs, the docs phase's, is no gate's.
         phases = ", ".join(
             sorted(
                 {
                     r.phase
                     for r in steps_by_name().values()
-                    if r.extensions and judges_extensions(r, held[kind])
+                    if r.phase in gated
+                    and r.extensions
+                    and judges_extensions(r, held[kind])
                 }
             )
         )
