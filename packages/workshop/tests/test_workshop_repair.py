@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -31,6 +33,17 @@ def _no_rerun(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         _reconcile, "_reexec", lambda root, cause: pytest.fail("re-ran the command")
     )
+
+
+@pytest.fixture(autouse=True)
+def _outside_the_hooks_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test outside the hook's sync, whatever launched the suite.
+
+    The hook reads the marker from the process environment too, and a
+    developer's shell can carry it: with it set, the hook runs no sync,
+    and these tests would judge a sync that never ran.
+    """
+    monkeypatch.delenv("WORKSHOP_SYNCING", raising=False)
 
 
 # The failures first: a sync that cannot complete never stops a command.
@@ -70,7 +83,6 @@ def test_a_process_the_hooks_sync_starts_syncs_nothing(
 
     monkeypatch.setattr(_sync, "sync", sync)
     _no_rerun(monkeypatch)
-    monkeypatch.delenv("WORKSHOP_SYNCING", raising=False)
     assert _reconcile.apply(tmp_path, "check", env) is True
     assert children == [False]
     # The command that follows runs in the environment it started with,
@@ -151,6 +163,51 @@ def test_a_sync_that_changed_installed_code_re_runs_the_command(
     )
     assert _reconcile.apply(tmp_path, "check", {}) is True
     assert ran == [(tmp_path, _reconcile.SYNCED)]
+
+
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_a_command_the_hooks_sync_re_runs_starts_without_the_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
+) -> None:
+    # The sync installs a newly listed extension and hands the command
+    # to a fresh process. That process runs the command again; it is not
+    # a child of the sync, so its own hook syncs and its children start
+    # without the marker. The exec arm's stand-in ends the process as an
+    # exec does; the Windows arm waits and exits with the code.
+    synced(tmp_path, "something-1.0.0")
+    monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/uv")
+    monkeypatch.setattr(sys, "platform", platform)
+    marked: list[str | None] = []
+    handed_on: list[dict[str, str]] = []
+
+    def execed(path: str, argv: list[str], env: dict[str, str]) -> None:
+        handed_on.append(dict(env))
+        raise SystemExit(0)
+
+    def waited(
+        cmd: list[str], *, check: bool, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        handed_on.append(dict(env))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    def sync(**kwargs: object) -> bool:
+        marked.append(os.environ.get("WORKSHOP_SYNCING"))
+        _reconcile._reexec(tmp_path, _reconcile.INSTALLED)
+        return True
+
+    monkeypatch.setattr(os, "execve", execed)
+    monkeypatch.setattr(subprocess, "run", waited)
+    monkeypatch.setattr(_sync, "sync", sync)
+    # Inside a task, os.environ reads the task's own environment: the
+    # process environment stands for the task's here.
+    with pytest.raises(SystemExit):
+        _reconcile.apply(tmp_path, "check", os.environ)
+    assert marked == ["1"]
+    (env,) = handed_on
+    assert env["WORKSHOP_RECONCILE_REEXEC"] == _reconcile.INSTALLED
+    assert "WORKSHOP_SYNCING" not in env
+    assert "WORKSHOP_SYNCING" not in os.environ
 
 
 # What is current, and what is not, in the order the verb reads it.
