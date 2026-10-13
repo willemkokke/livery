@@ -676,10 +676,7 @@ def render(
 def _sections_of(entry: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """The sections *entry* carries, by name, each its unit and its numbers per package.
 
-    A row collected before the run's file named its sections carries
-    the coverage extension's percentages under ``coverage`` alone;
-    the series' window holds such rows until it rolls past them, and
-    they read as that section.
+    A row without ``sections`` carries none.
     """
     found: dict[str, dict[str, Any]] = {}
     raw = entry.get("sections")
@@ -688,11 +685,6 @@ def _sections_of(entry: dict[str, Any]) -> dict[str, dict[str, Any]]:
             section = _section(value)
             if section is not None:
                 found[str(name)] = section
-    older = entry.get("coverage")
-    if "coverage" not in found and isinstance(older, dict):
-        section = _section({"unit": "%", "packages": older})
-        if section is not None:
-            found["coverage"] = section
     return found
 
 
