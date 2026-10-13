@@ -645,6 +645,10 @@ Acceptance:
   `test_workshop_workflow.py` 6%, `test_workshop_shells.py` 6%.
   Splitting them by feature takes about half of it inside the file
   grain, once phase 11's selectivity row shows which files dominate.
+- 2026-10-13, Willem: incremental proofs for larger repositories are
+  an option (open 8), not part of the plan. They are measured once the
+  closure check exists, since what they save depends on its cost and
+  on decisions not yet taken.
 
 ## Open
 
@@ -665,3 +669,37 @@ Acceptance:
    categories before a package writes any. The agent, at phase 6.
 7. The audit hook on the Windows leg: whether the `.pth` path meters
    the child the same way. The agent, at phase 3.
+8. **Incremental proofs, for a repository larger than this one.** An
+   option beside the ruled nightly full run, not a plan:
+   - The closure check moves onto every narrowed leg. By induction from
+     one full proof: a unit whose closure a change does not touch reads
+     nothing that changed, so its footprint is unchanged and stays
+     inside its closure. Only the units a change selects need
+     re-proving, and those are the units the leg already runs. With the
+     footprint recorded on every leg, an undeclared read fails on the
+     pull request, before its merge. This is contract 1's chain rule
+     applied to the footprint.
+   - The auditor cannot narrow the same way: its runs would be chosen
+     by the closure whose misses it looks for. It runs the day's
+     selection plus a slice of the rest, 1/N of it, so every unit runs
+     whole every N nights, and an escape through a hidden input is
+     found within N days. N = 1 is the ruled nightly.
+   - A full proof starts the chain, and follows every invalidate-all
+     change and the proof's age limit.
+
+   Does not cover: a unit that reads differently on two runs of one
+   tree (the clock, the network, randomness) breaks the induction, and
+   only the rotation finds it, up to N days late; a day that touches a
+   module nearly every test reaches selects nearly everything, and the
+   option saves nothing that day. For this repository it saves little:
+   over the 30 days to 2026-10-13, a day's merges selected 96.3% of the
+   suite's test time on average, and 76.7% counting Python files alone,
+   since about 20 merges a day touch the workshop's pytest plugins or
+   `livery.footman`.
+
+   To measure before it is ruled, once the closure check exists: the
+   check's own cost per leg (the audit hook in every metered process,
+   the fold, the comparison), the footprint rows a leg writes, and a
+   repository's daily selected share, which the `selection` series
+   gives per day. Willem, when a repository's daily share and the
+   check's cost show it pays.
