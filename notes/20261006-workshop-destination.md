@@ -1474,7 +1474,7 @@ neither needs nor rules out).
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | `KindRecord.extractor` and `[docs] generators` as two mechanisms | `Generator` (phase 11c) |
 | `_unmetered` and `_write_unit` copied into the coverage extension's `_pages` beside the python extension's | one copy, in the coverage extension, when the union moves there (12e, P2b) |
-| `[qa] coverage-floor`, `coverage-epsilon` and the coverage machinery in the base | the coverage extension (phase 12e) |
+| the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
@@ -2819,6 +2819,16 @@ neither needs nor rules out).
   both for a union query and refuses for any other. Why: the pages
   leave the kinds before the renderer changes, so the renderer of P3 is
   compared against the same pages.
+
+- 2026-10-13, 12e's P2a (#1553): `[coverage]` replaces `[qa]`. The
+  coverage extension declares a package's `floor`, `epsilon` and
+  `required`; `[qa]` refuses, naming the new table, and a `[coverage]`
+  table while the workspace does not list coverage refuses, naming the
+  extension. A package with tests and no floor is judged at 100, as
+  ruled for 12e, and `required = false` is never judged and says so.
+  `fm new.project` lists coverage. Every package here keeps its figure
+  and floor. The change touches every package's contract, so until
+  #1328 is fixed each package's next changelog carries it.
 
 ## Open
 
