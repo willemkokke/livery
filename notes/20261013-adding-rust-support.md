@@ -58,7 +58,10 @@ Measured on `origin/main` at `96702420c`, 2026-10-13.
   `Entry` with statements, counts, excluded lines, multi-line spans,
   branches by target or by index, functions and classes as `Region`,
   and the contexts that reached each line. Native lines enter it as a
-  lines-only measurer. It has no column anywhere.
+  lines-only measurer. It has no column anywhere. Since 12e's P4 the
+  format is version 2 with counted ranges, and the cmake extension
+  reads llvm-cov's JSON export and gcov's JSON format: phase 1 below
+  is done (decision record).
 - **The toolchain engine is planned, not built.** The extensions plan
   gives the base `[toolchain.<language>]`, the receipts under
   `.workshop/receipts/toolchain/` and the release record, and gives a
@@ -492,7 +495,8 @@ After PR #1569 merges. Format version 2: `Range`, `Entry.ranges`, and
 reads `llvm-cov export -format=text` in place of lcov and fills line
 counts, branches by index, functions with demangled names, and
 ranges; skipped regions mark their lines excluded. The renderer marks
-the part of a line that never ran. gcov's reduction is unchanged.
+the part of a line that never ran. Done inside 12e's P4 (decision
+record), which also reads gcov as its JSON format.
 
 Acceptance:
 
@@ -672,7 +676,6 @@ second workspace resolves it from there.
 
 | Temporary | Replaced by | When |
 | --- | --- | --- |
-| llvm's reading through `llvm-cov export -format=lcov`, lines alone | the JSON export, every field | Phase 1 |
 | nanobind's consumer code in `_backends/_python_nanobind.py` | the shared consumer helper | Phase 7 |
 | nanobind's one wheel per interpreter, the only mode | `[wheels] abi` | Phase 9 |
 | clang's llvm-cov found beside the compiler | the toolchain plan's llvm record; Rust uses its own `llvm-tools` from phase 5 | the toolchain plan |
@@ -720,6 +723,11 @@ second workspace resolves it from there.
   logic and a PyO3 binding that is never published; the version lives
   in `pyproject.toml`; the cache keys come from the cargo closure,
   never a hand list.
+- 2026-10-13, Willem: "Fold it in": phase 1, counted ranges in the line
+  format, is built inside 12e's P4 (#1583), which already moved the
+  llvm reading to the JSON export and the record to a new schema, so
+  the format changes and every unit is measured afresh once, not twice.
+  Ranges are LLVM's, so clang's C and C++ fill them as rustc will.
 
 ## Open
 

@@ -324,7 +324,7 @@ every kind the check judges"). What changes:
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
 | which categories the site reads, for the docs job's skip | `_provenance.site_reads` | `inputs` on the job, the same table a check declares; the shell's skip rule reads it |
 | the API extractor on a kind | `_kinds.Extractor`, `KindRecord.extractor`, `kind_extractor` | `livery.extensions.docs.Generator`, declared in `[generators.<name>]` by a generator extension of its own (`mkdocstrings`, `doxygen`), naming the package-level extensions it extracts for, and read by the docs extension through `contributions_for("docs")`; its site configuration a `zensical.toml` fragment |
-| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; its own renderer draws every language's pages from parts in the line format, made at render time from the record's rows, a measurer's rows reduced through `coverage.measurers`, which pytest answers in `[for.coverage]` | coverage's step of the docs phase, reading the parts the record stores |
+| coverage pages | the coverage extension's answer to `docs.coverage-pages`, a workspace query the docs extension declares, in its `[for.docs.queries]` table; its own renderer draws every language's pages from the parts the record stores, each check leg having reduced its suites through `coverage.measurers`, which pytest answers in `[for.coverage]`, and cmake writing its own parts | coverage's step of the docs phase, reading the parts the record stores |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | the coverage extension's `[coverage]` table and pages; the base's `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
@@ -2928,6 +2928,25 @@ neither needs nor rules out).
   Microsoft's engine nor the .NET SDK. This repository's root contract
   still requires the engine for its own Windows leg's proof, so its
   lock is unchanged.
+
+- 2026-10-13, 12e's P4 (#1583): the coverage record stores parts in
+  the line format, version 2. A check leg reduces each suite it ran
+  once; each row holds what ran, and each file's fixed facts (its
+  statements, exclusions, spans, branches with their sentences,
+  regions and range extents) are stored once under `facts/`, named by
+  their own blob id, so every row, leg and kept row shares them. The
+  union merges parts with no coverage.py command, the floors count
+  what each file's measurer judges, and the pages draw the stored
+  parts. Folded in on Willem's word: the Rust plan's phase 1, counted
+  ranges. llvm-cov is read as its JSON export, with ranges, branches
+  by index, demangled functions and removed lines, its line counts
+  equal to its own lcov export; gcov is read as its JSON format, and
+  Cobertura gives how many of a line's branches ran. Measured on main's
+  record converted, ubuntu leg: current rows 5.61 to 1.34 MB raw, kept
+  rows 111.1 to 27.4 MB raw, a cold fetch's pack 11.47 to 5.27 MB, the
+  pages' read of three legs 17 s to about 0.1 s. The first full run
+  after this merges measures every unit afresh, since main's rows are of
+  the old schema.
 
 ## Open
 
