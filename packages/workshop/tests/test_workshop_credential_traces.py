@@ -178,3 +178,32 @@ def test_each_url_builder_hands_git_a_secret(
     )
     _e2e._authenticate_remote(tmp_path, TOKEN)
     assert [type(url) for url in handed] == [Secret]
+
+
+def test_a_refused_origin_url_shows_no_token(tmp_path: Path) -> None:
+    # A remote the loop authenticated carries its token; a refusal that
+    # names the URL must not print it.
+    from livery.footman import Failed
+    from livery.workshop._forge_lane import forge_repository
+
+    work = _work(tmp_path)
+    _git(
+        work,
+        "remote",
+        "add",
+        "origin",
+        f"http://oauth2:{TOKEN}@localhost:3000/onlyname",
+    )
+    with pytest.raises(Failed) as refused:
+        forge_repository(work)
+    assert TOKEN not in str(refused.value)
+    assert "http://***@localhost:3000/onlyname" in str(refused.value)
+
+
+def test_a_shown_url_masks_its_credentials_and_keeps_an_ssh_user() -> None:
+    from livery.workshop._forge_lane import shown_url
+
+    secret = f"https://x-access-token:{TOKEN}@github.com/o/n.git"
+    assert shown_url(secret) == "https://***@github.com/o/n.git"
+    assert shown_url("git@github.com:o/n.git") == "git@github.com:o/n.git"
+    assert shown_url("https://github.com/o/n") == "https://github.com/o/n"

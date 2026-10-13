@@ -32,6 +32,20 @@ _REMOTE_RE = re.compile(
     r"(?:https?://[^/]+/|git@[^:]+:)(?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?$"
 )
 
+#: A URL's user and password, the part a credential rides in before the host.
+_USERINFO_RE = re.compile(r"^(?P<scheme>[a-z][a-z0-9+.-]*://)[^/@]*@", re.IGNORECASE)
+
+
+def shown_url(url: str) -> str:
+    """*url* as a message may show it: any user and password replaced by ``***``.
+
+    A remote's URL can carry a token (``http://oauth2:<token>@host/...``),
+    and a refusal that names the URL is printed, logged and recorded. An
+    ``ssh`` spelling (``git@host:owner/name``) names a user and no secret,
+    and is shown as it is.
+    """
+    return _USERINFO_RE.sub(r"\g<scheme>***@", url)
+
 
 def forge_repository(root: Path) -> str:
     """This workspace's repository name on its forge: the name ``origin`` points at.
@@ -49,7 +63,7 @@ def forge_repository(root: Path) -> str:
         fail(f"no origin remote:\n{error}")
     match = _REMOTE_RE.search(url)
     if match is None:
-        fail(f"cannot read owner/name from origin url {url!r}")
+        fail(f"cannot read owner/name from origin url {shown_url(url)!r}")
     return match.group("name")
 
 
