@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Iterator
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from livery.workshop._docs_contract import (
 from livery.workshop._packages import discover_packages
 from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_extension_fakes import fake_extensions
+from workshop_measured import measure
 
 _FAILURES = (SystemExit, Failed)
 
@@ -1488,6 +1490,158 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
     out = capsys.readouterr().out
     assert "core: the local data names files that moved or went" in out
     assert not stale.exists()
+
+
+class _PageReader(HTMLParser):
+    """What a reader sees on a coverage page: its source lines and its table rows.
+
+    A source line is keyed by its ``tN`` anchor and holds its classes and
+    its text. A table row maps each column's heading to the cell's text,
+    the last of a repeated heading winning, and ``href`` to the row's
+    first link. Text has its runs of whitespace, the no-break spaces
+    included, collapsed to one space.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.lines: dict[int, tuple[set[str], str]] = {}
+        self.rows: list[dict[str, str]] = []
+        self._headings: list[str] = []
+        self._line: set[str] | None = None
+        self._number = 0
+        self._cells: list[str] | None = None
+        self._heading_row = False
+        self._href = ""
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        found = dict(attrs)
+        if tag == "p":
+            self._line = set((found.get("class") or "").split())
+            self._number = 0
+            self._text = []
+        elif tag == "tr":
+            self._cells = []
+            self._href = ""
+        elif tag in ("td", "th"):
+            self._heading_row = tag == "th"
+            self._text = []
+        elif tag == "a":
+            anchor = found.get("id") or ""
+            if self._line is not None and anchor[:1] == "t" and anchor[1:].isdigit():
+                self._number = int(anchor[1:])
+            if self._cells is not None and not self._href:
+                self._href = found.get("href") or ""
+
+    def handle_data(self, data: str) -> None:
+        self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        text = " ".join("".join(self._text).split())
+        if tag == "p" and self._line is not None:
+            if self._number:
+                self.lines[self._number] = (self._line, text)
+            self._line = None
+        elif tag in ("td", "th") and self._cells is not None:
+            self._cells.append(text)
+        elif tag == "tr" and self._cells is not None:
+            if self._heading_row:
+                self._headings = self._cells
+            else:
+                cells = zip(self._headings, self._cells, strict=True)
+                row = {heading: cell for heading, cell in cells if heading}
+                self.rows.append({**row, "href": self._href})
+            self._cells = None
+
+
+def _read_page(page: Path) -> _PageReader:
+    reader = _PageReader()
+    reader.feed(page.read_text("utf-8"))
+    return reader
+
+
+def _region_rows(rows: list[dict[str, str]], noun: str) -> list[tuple[str, ...]]:
+    """The rows of a region index for the fixture's file, as a reader reads them.
+
+    Each row: the region, the line its link lands on, then statements,
+    missing, excluded, branches, partial, and the total coverage.
+    """
+    return [
+        (
+            row[noun],
+            row["href"].partition("#")[2],
+            row["statements"],
+            row["missing"],
+            row["excluded"],
+            row["branches"],
+            row["partial"],
+            row["coverage"],
+        )
+        for row in rows
+        if row.get("File", "").endswith("measured.py")
+    ]
+
+
+def test_a_partial_line_s_page_names_the_jump_that_never_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.docs import _site as _docs
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
+    monkeypatch.setattr(
+        "livery.extensions.python._backend._stored_legs", lambda root: ([], [])
+    )
+    assert _docs.render_coverage_pages(root) == ["core"]
+    report = root / "packages" / "core" / "htmlcov"
+    # Each function and class has its row, narrowed to its own lines and
+    # linked to its first; the lines outside every one have a row too.
+    functions = _read_page(report / "function_index.html").rows
+    assert _region_rows(functions, "function") == [
+        ("Tally.__init__", "t2", "1", "0", "0", "0", "0", "100%"),
+        ("Tally.note", "t5", "2", "0", "0", "2", "1", "75%"),
+        ("total", "t10", "6", "2", "0", "4", "2", "60%"),
+        ("unused", "t19", "0", "0", "1", "0", "0", "100%"),
+        ("(no function)", "", "9", "0", "1", "2", "0", "100%"),
+    ]
+    assert _region_rows(_read_page(report / "class_index.html").rows, "class") == [
+        ("Tally", "t1", "3", "0", "0", "2", "1", "80%"),
+        ("(no class)", "", "15", "2", "2", "6", "2", "81%"),
+    ]
+    # The file's page, as the index links it: each partial line carries
+    # the partial class and names its untaken jump, with the sentence
+    # that says why. The line whose untaken jump `# pragma: no branch`
+    # waives is not partial.
+    page = next(row["href"] for row in functions if row.get("function") == "total")
+    lines = _read_page(report / page.partition("#")[0]).lines
+    partial = {
+        number: text for number, (classes, text) in lines.items() if "par" in classes
+    }
+    assert sorted(partial) == [6, 12, 14]
+    for number, jump, sentence in (
+        (
+            6,
+            "6 ↛ exit",
+            "line 6 didn't return from function 'note' because the condition on"
+            " line 6 was always true",
+        ),
+        (
+            12,
+            "12 ↛ 13",
+            "line 12 didn't jump to line 13 because the loop on line 12 never started",
+        ),
+        (
+            14,
+            "14 ↛ 15",
+            "line 14 didn't jump to line 15 because the condition on line 14 was"
+            " never true",
+        ),
+    ):
+        assert jump in partial[number]
+        assert sentence in partial[number]
 
 
 def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
