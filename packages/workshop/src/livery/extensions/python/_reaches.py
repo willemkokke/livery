@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.extensions.python._parse import ParsedModule
-    from livery.workshop import Changes, PhaseContext
+    from livery.workshop import PhaseContext
     from livery.workshop._packages import Package, RuleContext
 
 #: Where the allowance lives in the root contract.
@@ -53,26 +53,6 @@ def private_reaches(ctx: PhaseContext) -> None:
     found = problems(parsed_modules(ctx.root, ctx.packages, files), context)
     if found:
         fail("the sources break the private-reaches rule:\n  " + "\n  ".join(found))
-
-
-def graph_changed(changes: Changes) -> bool:
-    """Whether a contract, a native manifest or a root ``src/`` changed.
-
-    The step's inputs widen on them: the distributions' roots come
-    from the manifests and the allowance from the root contract, so a
-    change there judges every source, as the base's layering steps do
-    ([livery.workshop._steps.graph_files][]).
-    """
-    from livery.workshop._categories import matches
-    from livery.workshop._steps import NOT_INPUTS, graph_files
-
-    patterns = graph_files(changes.root)
-    return any(
-        matches(pattern, path)
-        for path in changes.paths
-        if not any(matches(ignored, path) for ignored in NOT_INPUTS)
-        for pattern in patterns
-    )
 
 
 def problems(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:

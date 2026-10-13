@@ -181,10 +181,17 @@ def test_the_python_extension_declares_the_step_and_the_mount_registers_it() -> 
 
     declared = installed_declaration("python")
     assert declared is not None
-    (step,) = [
-        record for record in declared.additions.steps if record.phase == "layering"
-    ]
-    assert step.name == "layering.private-reaches"
+    layering = {
+        record.name: record
+        for record in declared.additions.steps
+        if record.phase == "layering"
+    }
+    assert set(layering) == {
+        "layering.private-reaches",
+        "layering.runner-terminal",
+        "layering.declared-imports",
+    }
+    step = layering["layering.private-reaches"]
     assert step.fix is None
     # The step reaches the files the base's layering steps reach.
     assert step.inputs is not None

@@ -986,8 +986,17 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+coverage = [
+    { name = "coverage" },
+]
+
 [package.metadata]
-requires-dist = [{ name = "livery-workshop", editable = "packages/workshop" }]
+requires-dist = [
+    { name = "coverage", marker = "extra == 'coverage'", specifier = ">=7.13" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["coverage"]
 
 [[package]]
 name = "livery-extensions-ruff"

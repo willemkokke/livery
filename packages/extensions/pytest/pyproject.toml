@@ -25,6 +25,13 @@ dependencies = [
     "livery-workshop>=0.6.0",
 ]
 
+[project.optional-dependencies]
+# coverage.py, which this extension imports inside the functions that
+# measure the suites for the coverage extension. While coverage is
+# listed, this extension's own lines of the workspace's dev group
+# install it.
+coverage = ["coverage>=7.13"]
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 
