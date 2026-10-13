@@ -4,6 +4,10 @@ The suffixes of a C or C++ source, a header and a test source, and the
 answers a C or C++ package gives where a python package names modules:
 none, since other packages reach its code through headers and
 libraries, never an import path.
+
+Nothing here answers the ``references`` query, so the layering phase
+reads no C or C++ source for references: a header of another member,
+included with no requirement on that member, goes unseen.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from livery.workshop._packages import Neighbours, Package
+    from livery.workshop._packages import Package
 
 
 def module_roots(package: Package) -> tuple[str, ...]:
@@ -28,16 +32,6 @@ def public_modules(package: Package) -> tuple[str, ...]:
     """Nothing: a C or C++ package has no importable API to verify."""
     del package
     return ()
-
-
-def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
-    """Nothing: the layering phase reads no C or C++ source for references.
-
-    A header of another member, included with no requirement on that
-    member, goes unseen: the empty answer is no verdict.
-    """
-    del package, around
-    return {}
 
 
 #: The extensions of a C or C++ test source under ``tests/``.

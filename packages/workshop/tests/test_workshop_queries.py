@@ -800,6 +800,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "public-modules",
         "compile-commands",
         "module-roots",
+        "references",
         "current-version",
         "version-files",
         "requirements",

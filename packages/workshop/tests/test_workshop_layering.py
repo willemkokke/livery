@@ -581,22 +581,6 @@ def test_a_runtime_edges_floor_must_match_its_requirement(tmp_path: Path) -> Non
         verify_workspace(tmp_path)
 
 
-def test_a_kind_that_reads_no_sources_contributes_no_reference() -> None:
-    from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import Neighbours, Package
-
-    package = Package(
-        directory=Path("/nowhere"),
-        path="packages/native",
-        name="native",
-        kind="cpp-conan",
-        depends=(),
-    )
-    around = Neighbours(owners={}, by_path={})
-    assert _cpp_conan.module_roots(package) == ()
-    assert _cpp_conan.referenced_siblings(package, around) == {}
-
-
 def test_a_contract_naming_the_kind_under_type_is_refused_with_the_migration(
     tmp_path: Path,
 ) -> None:
@@ -789,7 +773,9 @@ def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
 def test_the_layering_phase_parses_each_source_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop import _ast_rules
+    from livery.extensions.python import _parse
+    from livery.extensions.python._reaches import scan
+    from livery.workshop import _lifecycle
 
     _package(tmp_path, "tool")
     _module(tmp_path, "tool", "a.py", "import json\n")
@@ -797,23 +783,31 @@ def test_the_layering_phase_parses_each_source_once(
     (tmp_path / "tasks.py").write_text("x = 1\n")
     _forge_stub(tmp_path)
     counted: list[Path] = []
-    real = _ast_rules._parse
+    real = _parse._parse
 
-    def counting(path: Path) -> _ast_rules.Parsed | None:
+    def counting(path: Path) -> _parse.Parsed | None:
         counted.append(path)
         return real(path)
 
-    monkeypatch.setattr(_ast_rules, "_parse", counting)
-    _ast_rules._PARSED.clear()
+    def gate() -> None:
+        # The base's rules, the python extension's private-reaches scan,
+        # and each package's references answer.
+        packages = verify_workspace(tmp_path)
+        assert scan(_parse.parsed_modules(tmp_path, packages), packages) == {}
+        for package in packages:
+            assert _lifecycle.references(package)
+
+    monkeypatch.setattr(_parse, "_parse", counting)
+    _parse._PARSED.clear()
     assert len(RULES) >= 3
-    verify_workspace(tmp_path)
+    gate()
     assert sorted(p.name for p in counted) == ["a.py", "b.py", "ok.py", "tasks.py"]
     # The memo: a second gate over the same bytes parses nothing.
-    verify_workspace(tmp_path)
+    gate()
     assert len(counted) == 4
     # An edited file parses again, once.
     _module(tmp_path, "tool", "a.py", "import json\nimport re\n")
-    verify_workspace(tmp_path)
+    gate()
     assert [p.name for p in counted[4:]] == ["a.py"]
 
 

@@ -1036,6 +1036,14 @@ combine = "nearest"
 [queries.module-roots]
 combine = "union"
 
+# What each of a package's sources references, one record per source:
+# its path, the name other code references it by, each name it
+# references with how the source makes the reference, and the names
+# its language's conventions account for. A record naming a file
+# outside the package, or a file two extensions answer for, refuses.
+[queries.references]
+combine = "union"
+
 # The version a package's own manifests declare.
 [queries.current-version]
 combine = "agreed"

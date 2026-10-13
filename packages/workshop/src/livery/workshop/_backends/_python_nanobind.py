@@ -44,7 +44,7 @@ verify = _python.verify
 module_roots = _python.module_roots
 public_modules = _python.public_modules
 compile_commands = _python.compile_commands
-referenced_siblings = _python.referenced_siblings
+references = _python.references
 
 #: The extensions a ``python-nanobind`` package that lists none is taken
 #: to hold beside python's: cpp for its extension module's sources,

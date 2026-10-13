@@ -335,7 +335,7 @@ every kind the check judges"). What changes:
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
 | the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
-| the layering check's python parse | `_ast_rules.parsed_source`, `imports_of` | the `references` query: a language extension answers what a source references; rules register against it |
+| the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the base's terminal and forge rules still walk that parse until 11c's PA1 | the `references` query: a language extension answers what a source references; rules register against it |
 | the registry kinds and their defaults | `_registries._ECOSYSTEM` | ecosystems as registrations (phase 13) |
 
 Everything else the docs extension reaches is generic and becomes
@@ -723,7 +723,7 @@ need none of these once they are words).
 | `Query`, `answer` | a typed question about a package, and its answer across the package's extensions | basedpyright (`public_modules`), clang-tidy (`compile_commands`), docs | `livery.workshop` |
 | `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]`; an extension answers them under `[queries]` | the same | `livery.workshop` |
 | `Stamper` | what the `stamp` phase writes through | python, cpp, conan | `livery.workshop` |
-| `ParsedModule`, `RuleContext` | what a rule's `judge` reference receives | housekeeping | `livery.workshop` |
+| `ParsedModule`, `RuleContext` | what a rule's `judge` reference receives (`ParsedModule` the python extension's, `RuleContext` the base's) | housekeeping | `livery.workshop` |
 | the toolchain types | phase 14 names them | cpp | `livery.workshop`, phase 14 |
 
 **Workspace extensions.**
@@ -1184,7 +1184,9 @@ slices, each mergeable alone:
    backend, and the base modules that code serves (the nanobind kind,
    the release driver) import it as they imported the backend. `BASE_EXTENSION_IMPORTS`, the allowance of the
    layering check's `base-imports-no-extension` rule, names each such
-   module; it only shrinks, and a test keeps it exact.
+   module; a test keeps it exact. It shrinks, apart from one entry 11c's
+   PA2 adds for the base's terminal and forge rules, which PA1 removes
+   with them.
    1. **The move** (issue #1352): the kind's backend becomes the
       extension's code, and nothing behaves differently.
    2. **The queries** (issue #1353): the extension answers
@@ -1310,7 +1312,7 @@ alone.
 
 - P0: pins in today's spelling, and a control pair of site builds that
   fixes what every later same-site comparison excludes.
-- PA2: the `references` query, which the python extension answers from
+- PA2 (built, #1598): the `references` query, which the python extension answers from
   its own parse, replaces the base's python parse in the layering
   checks; a package that lists nothing is answered through its kind
   until the kinds go.
@@ -1506,7 +1508,7 @@ neither needs nor rules out).
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
-| the layering check's python parse in the base | the `REFERENCES` query (phase 11c) |
+| the base's terminal and forge rules walking the python extension's parse, and their `BASE_EXTENSION_IMPORTS` entry for `livery.workshop._packages` | the python extension's layering step and its declared-imports rule (11c's PA1) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |

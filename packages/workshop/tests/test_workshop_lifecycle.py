@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -9,7 +10,13 @@ import pytest
 
 from livery.workshop import _kinds, _lifecycle
 from livery.workshop._kinds import KindRecord
-from livery.workshop._packages import Neighbours, Package, graph_problems
+from livery.workshop._packages import (
+    Package,
+    ReferencedName,
+    SourceReferences,
+    graph_problems,
+)
+from livery.workshop._queries import QueryError
 from livery.workshop._registries import RegistryTarget
 from workshop_extension_fakes import (
     fake_package_extensions,
@@ -53,11 +60,10 @@ def _package(tmp_path: Path, kind_name: str) -> Package:
 
 
 def _answers_nothing(package: Package) -> None:
-    around = Neighbours(owners={}, by_path={package.path: package})
     assert _lifecycle.declared_requirements(package) is None
     assert _lifecycle.module_roots(package) == ()
     assert _lifecycle.plugin_modules(package) == ()
-    assert _lifecycle.referenced_siblings(package, around) is None
+    assert _lifecycle.references(package) == ()
 
 
 def test_an_abstract_kind_answers_nothing_and_refuses_to_build(
@@ -184,6 +190,112 @@ def test_a_package_whose_extensions_answer_takes_their_answers(
     assert _lifecycle.declared_requirements(package) == {"acme-other": ">=1"}
     assert _lifecycle.module_roots(package) == ("acme.answered",)
     assert _lifecycle.public_modules(package) == ("acme.answered",)
+
+
+# What a package's sources reference: its extensions' answer where one
+# of them answers, its kind's otherwise; every file inside the package,
+# and one extension answering for each.
+
+#: A fake's declaration answering the references query from its steps.
+ANSWERS_REFERENCES = (
+    PACKAGE + '\n[queries]\nreferences = "{package}._steps:references"\n'
+)
+
+
+def _references_of(*paths: str) -> str:
+    """A fake's steps answering the references query with a record per path."""
+    records = ", ".join(f"SourceReferences({path!r})" for path in paths)
+    return (
+        "from livery.workshop._packages import SourceReferences\n\n\n"
+        f"def references(package):\n    return ({records},)\n"
+    )
+
+
+def test_a_source_outside_its_package_refuses_naming_the_extension_and_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(tmp_path, monkeypatch, outside=ANSWERS_REFERENCES)
+    fake_steps(tmp_path, "outside", _references_of("packages/other/src/x.py"))
+    package = _listing(tmp_path, "acme.outside")
+    with pytest.raises(
+        QueryError,
+        match=re.escape(
+            "packages/core: references: acme.outside answers for"
+            " packages/other/src/x.py, a file outside the package"
+        ),
+    ):
+        _lifecycle.references(package)
+    # A path that climbs out of the package is outside it as well.
+    fake_steps(tmp_path, "outside", _references_of("packages/core/../other/x.py"))
+    with pytest.raises(QueryError, match=re.escape("packages/core/../other/x.py")):
+        _lifecycle.references(package)
+
+
+def test_two_extensions_answering_one_source_refuse_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(
+        tmp_path, monkeypatch, one=ANSWERS_REFERENCES, two=ANSWERS_REFERENCES
+    )
+    fake_steps(tmp_path, "one", _references_of("packages/core/src/x.py"))
+    fake_steps(tmp_path, "two", _references_of("packages/core/src/x.py"))
+    package = _listing(tmp_path, "acme.one", "acme.two")
+    with pytest.raises(
+        QueryError,
+        match=re.escape(
+            "packages/core: references: acme.one and acme.two both answer for"
+            " packages/core/src/x.py"
+        ),
+    ):
+        _lifecycle.references(package)
+
+
+def test_a_package_whose_extensions_read_no_source_references_nothing(
+    tmp_path: Path,
+) -> None:
+    # A C++ package, listing its extensions or not: none of them, and not
+    # its kind, reads a source for references, the python one under its
+    # src included.
+    directory = tmp_path / "packages" / "native"
+    (directory / "src").mkdir(parents=True)
+    (directory / "src" / "native.cpp").write_text('#include "other/other.hpp"\n')
+    (directory / "src" / "helper.py").write_text("import acme.other\n")
+    for extensions in ((), ("cmake", "conan")):
+        package = Package(
+            directory=directory,
+            path="packages/native",
+            name="acme-native",
+            kind="cpp-conan",
+            depends=(),
+            extensions=extensions,
+        )
+        assert _lifecycle.module_roots(package) == ()
+        assert _lifecycle.references(package) == ()
+
+
+def test_a_package_that_lists_nothing_answers_through_its_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: an installed extension answering the query is
+    # never asked for a package that lists nothing; its kind answers.
+    fake_package_extensions(tmp_path, monkeypatch, loud=ANSWERS_REFERENCES)
+    fake_steps(tmp_path, "loud", _references_of("packages/core/src/answered.py"))
+    package = _listing(tmp_path)
+    source = package.directory / "src" / "acme" / "core" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("import json\n")
+    assert _lifecycle.references(package) == (
+        SourceReferences(
+            "packages/core/src/acme/core/__init__.py",
+            module="acme.core",
+            references=(ReferencedName("json"),),
+        ),
+    )
+    # Listing the extension takes its answer instead.
+    listing = _listing(tmp_path, "acme.loud")
+    assert _lifecycle.references(listing) == (
+        SourceReferences("packages/core/src/answered.py"),
+    )
 
 
 def _stepping(

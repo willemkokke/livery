@@ -57,7 +57,7 @@ from livery.workshop._categories import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.workshop._packages import Neighbours, Package
+    from livery.workshop._packages import Package
     from livery.workshop._registries import RegistryTarget
 
 
@@ -160,18 +160,6 @@ class Backend(Protocol):
         What a tool that reads one takes (clang-tidy's ``-p``); None for
         a kind whose build writes none. The file exists once the build
         is configured.
-        """
-        ...
-
-    def referenced_siblings(
-        self, package: Package, around: Neighbours
-    ) -> dict[str, str]:
-        """Which siblings the package's sources use, by area, unaccounted for.
-
-        The area is ``src`` or ``tests``, which decides a runtime edge
-        from a test one. A reference the kind's own conventions
-        already account for is left out, so the caller judges only
-        what nothing explains.
         """
         ...
 

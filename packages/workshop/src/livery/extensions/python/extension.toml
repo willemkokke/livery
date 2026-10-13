@@ -14,6 +14,7 @@ version-files = "livery.extensions.python._answers:version_files"
 requirements = "livery.extensions.python._answers:requirements"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
+references = "livery.extensions.python._answers:references"
 
 # Who prints a machine's coverage preview after its suites ran, a query
 # a listed extension answers with the function that prints it, given

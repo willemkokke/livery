@@ -352,6 +352,7 @@ or the rule's answer over nothing. The base declares:
 | --- | --- | --- | --- |
 | `public-modules` | package | the modules that declare the public API | the union |
 | `module-roots` | package | the names other packages reference the code by | the union |
+| `references` | package | what each source references: its file, its module name, each name with how the source makes the reference, and the names its language's conventions account for | the union; a file outside the package, or one two extensions answer for, refuses |
 | `version-files` | package | the files `stamp` may write a version into | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
@@ -704,17 +705,25 @@ the repository's own `fragments/` last. The gate, verbs, kinds and
 tools sections render from the registries, so no fragment names a
 checker by hand.
 
-The layering phase parses every python source once per gate and
-memoises the parse by the file's path, size and modification time.
-Each rule over the sources is a step of the phase: the base's four
-(the runner's one-answer rule, the base importing no extension, the
-forge's stdlib rule, and the sibling references, whose fix writes the
-edges the graph already reaches), and an extension's own, declared as
-`[phases.layering.<step>]` with `main = "module:function"`, called
-with the gate's context. A step asks for the parsed modules in its
-scope, the files a narrowed run reaches or every source, and the
-steps run in one process, so every one reads the one parse. A step's
-fix runs inside the gate's rewrite, before the judges.
+Each rule over the sources is a step of the layering phase: the
+base's four (the runner's one-answer rule, the base importing no
+extension, the forge's stdlib rule, and the sibling references, whose
+fix writes the edges the graph already reaches), and an extension's
+own, declared as `[phases.layering.<step>]` with
+`main = "module:function"`, called with the gate's context. The base
+importing no extension and the sibling references read each package's
+`references` answer, one record per source: the file, the name other
+code references it by, each name the source references, and the names
+its language's conventions account for. Each name says whether the
+source makes the reference at import time or lazily, inside a function
+or a method body, and whether only a type checker makes it or the
+source runs without it. A record names a file inside its package, and
+one extension answers for each file. The python extension answers for
+python sources from one parse per gate, memoised by the file's path,
+size and modification time, and the other steps over python syntax
+read the same parse, over the files a narrowed run reaches or every
+source. A step's fix runs inside the gate's rewrite, before the
+judges.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into

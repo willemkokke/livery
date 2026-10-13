@@ -221,7 +221,7 @@ def test_the_rule_steps_judge_the_files_they_were_handed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _packages
-    from livery.workshop._ast_rules import ParsedModule, RuleContext
+    from livery.workshop._packages import RuleContext
 
     member = tmp_path / "packages" / "tool"
     (member / "src").mkdir(parents=True)
@@ -231,9 +231,8 @@ def test_the_rule_steps_judge_the_files_they_were_handed(
     (member / "src" / "b.py").write_text("y = 1\n")
     seen: list[str] = []
 
-    def judge(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
-        del context
-        seen.extend(module.relative for module in modules)
+    def judge(context: RuleContext) -> list[str]:
+        seen.extend(source.path for source in context.sources())
         return []
 
     monkeypatch.setattr(_packages, "RULES", {"acme-seen": judge})

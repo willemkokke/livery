@@ -15,7 +15,7 @@ from livery.workshop._kinds import (
     kind_tools,
     register_kind,
 )
-from livery.workshop._packages import Neighbours, Package
+from livery.workshop._packages import Package
 from livery.workshop._registries import RegistryTarget
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
@@ -60,11 +60,6 @@ class _FakeBackend:
 
     def compile_commands(self, package: Package) -> Path | None:
         return None
-
-    def referenced_siblings(
-        self, package: Package, around: Neighbours
-    ) -> dict[str, str]:
-        return {}
 
     def publish_artifact(
         self,

@@ -62,6 +62,7 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         CURRENT_VERSION,
         MODULE_ROOTS,
         PUBLIC_MODULES,
+        REFERENCES,
         REQUIREMENTS,
         VERSION_FILES,
         answer,
@@ -88,6 +89,68 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         assert answer(package, PUBLIC_MODULES) == tuple(
             _backend.public_modules(package)
         )
+        assert answer(package, REFERENCES) == _backend.references(package)
+
+
+def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.python._backend import references
+    from livery.workshop._packages import Package, ReferencedName
+
+    directory = tmp_path / "packages" / "core"
+    source = directory / "src" / "acme" / "core" / "__init__.py"
+    source.parent.mkdir(parents=True)
+    (directory / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
+    source.write_text(
+        "import json\n"
+        "from typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n"
+        "    from acme.shapes import Shape\n\n"
+        "try:\n"
+        "    import yaml\n"
+        "except ImportError:\n"
+        "    yaml = None\n\n\n"
+        "def load() -> object:\n"
+        "    import tomllib\n\n"
+        "    return tomllib\n\n\n"
+        "class Loader:\n"
+        "    def read(self) -> object:\n"
+        "        from acme.lazy import helper\n\n"
+        "        return helper\n"
+    )
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        kind="python",
+        depends=(),
+    )
+    (record,) = references(package)
+    assert record.path == "packages/core/src/acme/core/__init__.py"
+    assert record.module == "acme.core"
+    # Guarded and lazy first: a type checker's import, one the source
+    # runs without, and one inside a function and a method.
+    guarded = [ref for ref in record.references if ref.type_checking or ref.optional]
+    assert guarded == [
+        ReferencedName("acme.shapes", type_checking=True),
+        ReferencedName("acme.shapes.Shape", type_checking=True),
+        ReferencedName("yaml", optional=True),
+    ]
+    assert [ref for ref in record.references if ref.lazy] == [
+        ReferencedName("tomllib", lazy=True),
+        ReferencedName("acme.lazy", lazy=True),
+        ReferencedName("acme.lazy.helper", lazy=True),
+    ]
+    # Then the module level, made at import time.
+    assert [
+        ref for ref in record.references if ref not in guarded and not ref.lazy
+    ] == [
+        ReferencedName("json"),
+        ReferencedName("typing"),
+        ReferencedName("typing.TYPE_CHECKING"),
+    ]
+    assert record.accounted == ()
 
 
 def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
