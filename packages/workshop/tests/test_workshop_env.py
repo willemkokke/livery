@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -540,7 +541,7 @@ def test_apply_entry_skips_a_broken_receipt_and_still_enters_the_venv(
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.delenv("VIRTUAL_ENV", raising=False)
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
-    added = _env_tasks.apply_entry(tmp_path)
+    added = _env_tasks.apply_entry(tmp_path, os.environ)
     assert added == (str(venv_bin(tmp_path)),)
     assert "tool receipts skipped" in capsys.readouterr().err
     assert os.environ["PATH"] == f"{venv_bin(tmp_path)}{os.pathsep}/usr/bin"
@@ -560,7 +561,7 @@ def test_apply_entry_puts_the_venv_ahead_of_a_tool_already_on_path(
     _receipt(tmp_path, "ruff", paths=(ruff,))
     monkeypatch.setenv("PATH", os.pathsep.join(["/usr/bin", str(venv_bin(tmp_path))]))
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
-    assert _env_tasks.apply_entry(tmp_path) == (ruff,)
+    assert _env_tasks.apply_entry(tmp_path, os.environ) == (ruff,)
     assert os.environ["PATH"].split(os.pathsep) == [
         str(venv_bin(tmp_path)),
         ruff,
@@ -583,7 +584,7 @@ def test_apply_entry_leads_with_the_emission_in_order_and_is_idempotent(
     monkeypatch.setenv("RUFF_FLAG", "shell")
     monkeypatch.delenv("VIRTUAL_ENV", raising=False)
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
-    added = _env_tasks.apply_entry(tmp_path)
+    added = _env_tasks.apply_entry(tmp_path, os.environ)
     assert added == (str(venv_bin(tmp_path)), ruff)
     assert os.environ["PATH"].split(os.pathsep) == [
         str(venv_bin(tmp_path)),
@@ -593,10 +594,10 @@ def test_apply_entry_leads_with_the_emission_in_order_and_is_idempotent(
     ]
     assert os.environ["RUFF_FLAG"] == "shell"  # the environment wins
     assert {"VIRTUAL_ENV": str(tmp_path / ".venv")} == _env_tasks._APPLIED
-    assert _env_tasks.apply_entry(tmp_path) == ()
+    assert _env_tasks.apply_entry(tmp_path, os.environ) == ()
     # A receipt variable the environment lacks is applied and remembered.
     monkeypatch.delenv("RUFF_FLAG")
-    assert _env_tasks.apply_entry(tmp_path) == ()
+    assert _env_tasks.apply_entry(tmp_path, os.environ) == ()
     assert os.environ["RUFF_FLAG"] == "1"
     assert _env_tasks._APPLIED["RUFF_FLAG"] == "1"
 
@@ -630,7 +631,8 @@ def test_the_first_task_hook_enters_the_tools_its_sync_wrote(
 ) -> None:
     # A checkout that never synced has no receipt when the cascade hook
     # enters the environment; the per-task hook's sync writes them, once
-    # per process, before the first task, and enters again.
+    # per process, before the first task, and enters again, into the
+    # task's own environment.
     from types import SimpleNamespace
     from typing import cast
 
@@ -655,19 +657,81 @@ def test_the_first_task_hook_enters_the_tools_its_sync_wrote(
     monkeypatch.setattr(_env_tasks, "_SYNCED", [])
     monkeypatch.setenv("PATH", "/usr/bin")
     inv = cast(footman.Invocation, None)
-    handle = SimpleNamespace(name="check", env={})
+    handle = SimpleNamespace(name="check", env={"PATH": "/usr/bin"})
     _env_tasks.sync_first(inv, handle)
     assert asked == ["check"]
-    assert handle.env == {"SEEN": "by the sync's children"}
-    assert os.environ["PATH"].split(os.pathsep) == [
+    assert handle.env["SEEN"] == "by the sync's children"
+    assert handle.env["PATH"].split(os.pathsep) == [
         str(venv_bin(tmp_path)),
         ruff,
         "/usr/bin",
     ]
+    assert handle.env["VIRTUAL_ENV"] == str(tmp_path / ".venv")
+    # The process environment is never written: inside a task, footman
+    # notes that write as a misuse.
+    assert os.environ["PATH"] == "/usr/bin"
     # The second task of the same command, and the sync's own nested
     # executions, ask nothing more.
     _env_tasks.sync_first(inv, SimpleNamespace(name="docs.build", env={}))
     assert asked == ["check"]
+
+
+#: A child that writes the PATH it started with to the file it is given.
+_PATH_WRITER = "import os, sys; open(sys.argv[1], 'w').write(os.environ['PATH'])"
+
+
+def test_a_command_whose_first_sync_wrote_receipts_runs_with_their_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A fresh checkout: the command starts before any receipt exists,
+    # and its first task's sync writes them without changing installed
+    # code. Under the repository's own notes policy, which fails a task
+    # that writes os.environ, the command exits 0, and the process its
+    # task starts sees the receipts' tools on PATH.
+    from livery.footman.testing import Runner
+    from livery.workshop import _env_tasks, _sync
+
+    ruff = str(tmp_path / "store" / "ruff")
+    seen = tmp_path / "child-path"
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "ws"\n\n[tool.footman.notes]\n"*" = "error"\n'
+    )
+    tasks = tmp_path / "tasks.py"
+    tasks.write_text(
+        textwrap.dedent(
+            f"""
+            import sys
+
+            import livery.footman as footman
+            from livery.workshop._env_tasks import sync_first
+
+            @footman.pre_task
+            def first(inv, task):
+                sync_first(inv, task)
+
+            @footman.task
+            def build():
+                footman.run([sys.executable, "-c", {_PATH_WRITER!r}, {str(seen)!r}])
+            """
+        )
+    )
+
+    def sync(**kwargs: object) -> bool:
+        _receipt(tmp_path, "ruff", paths=(ruff,))
+        return True
+
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: True)
+    monkeypatch.setattr(_sync, "sync", sync)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    monkeypatch.setattr(_env_tasks, "_SYNCED", [])
+    monkeypatch.delenv("WORKSHOP_SYNCING", raising=False)
+    result = Runner().invoke("build", tasks=tasks, cwd=tmp_path)
+    assert result.exit_code == 0, result.stderr
+    child = seen.read_text().split(os.pathsep)
+    assert child[:2] == [str(venv_bin(tmp_path)), ruff]
 
 
 def test_the_first_task_hook_never_fails_the_task(

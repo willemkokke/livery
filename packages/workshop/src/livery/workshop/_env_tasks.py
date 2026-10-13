@@ -34,6 +34,8 @@ from livery.workshop._envfile import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import MutableMapping
+
     from livery.workshop._tools import Receipt
 
 #: Names never emitted for an agent: the PATH family is composed per
@@ -91,7 +93,7 @@ def apply_cascade(inv: footman.Invocation) -> None:
             _APPLIED[key] = value
     # The tools' half of the entry contract: whatever launched this
     # process, it runs entered.
-    apply_entry(root)
+    apply_entry(root, os.environ)
     _warn_unmounted_extensions(root)
 
 
@@ -108,9 +110,12 @@ def sync_first(inv: footman.Invocation, task: Any) -> None:
     inside the run: footman refuses a task call at discovery, where the
     completion child would make it on a Tab press. The sync verb
     decides from the checkout's receipts
-    ([livery.workshop._reconcile.apply][]); a sync that wrote receipts
-    this process entered without enters again, into this task's own
-    environment, which its subprocesses see.
+    ([livery.workshop._reconcile.apply][]). A sync that wrote receipts
+    this process entered without enters again, into the task's own
+    environment, `task.env`: the task's body, the processes it starts
+    and the tasks it calls read it. Never `os.environ`: inside a task
+    footman notes that write as a misuse, and a workspace's notes policy
+    can fail the task for it.
     """
     from livery.workshop._extensions import workspace_root
 
@@ -131,29 +136,31 @@ def sync_first(inv: footman.Invocation, task: Any) -> None:
         if _reconcile.is_cli_process() and _reconcile.apply(
             root, str(task.name), task.env
         ):
-            apply_entry(root)
+            apply_entry(root, task.env)
     except Exception as error:
         import sys
 
         sys.stderr.write(f"environment sync skipped ({error})\n")
 
 
-def apply_entry(root: Path) -> tuple[str, ...]:
-    """Enter the environment for this process: the venv and the receipts' tools.
+def apply_entry(root: Path, environ: MutableMapping[str, str]) -> tuple[str, ...]:
+    """Enter the venv and the receipts' tools into *environ*.
 
     The same PATH entries and variables `env.emit` hands an entered
-    shell, applied to this process, so every `fm` invocation resolves
-    the locked tools whatever launched it: an agent's shell, a CI
-    step, a bare terminal. The emission leads PATH in its own order,
-    the venv's bin first and the tools after it, and the rest of PATH
-    follows; an entry the emission names moves to its place in front,
-    since a tool directory ahead of the venv would shadow the venv's
-    pytest and mypy with the store's plain ones. A variable the
-    environment already has wins, as the cascade's do, and what the
-    hook contributes is remembered in `_APPLIED`. A receipts directory
-    holding a file that is not a receipt costs the tools' half alone,
-    said on stderr, never the command. Idempotent: a second
-    application changes nothing.
+    shell, so every `fm` invocation resolves the locked tools whatever
+    launched it: an agent's shell, a CI step, a bare terminal. The
+    cascade hook enters the process environment before the run starts,
+    and every task starts from it; the per-task hook enters a task's
+    own environment ([livery.workshop._env_tasks.sync_first][]). The
+    emission leads PATH in its own order, the venv's bin first and the
+    tools after it, and the rest of PATH follows; an entry the emission
+    names moves to its place in front, since a tool directory ahead of
+    the venv would shadow the venv's pytest and mypy with the store's
+    plain ones. A variable *environ* already has wins, as the cascade's
+    do, and what the hook contributes is remembered in `_APPLIED`. A
+    receipts directory holding a file that is not a receipt costs the
+    tools' half alone, said on stderr, never the command. Idempotent: a
+    second application changes nothing.
 
     Returns:
         The PATH entries that were not on PATH before, in order.
@@ -165,7 +172,7 @@ def apply_entry(root: Path) -> tuple[str, ...]:
     except ValueError as error:
         sys.stderr.write(f"tool receipts skipped ({error})\n")
         paths, env = (), {}
-    current = [e for e in os.environ.get("PATH", "").split(os.pathsep) if e]
+    current = [e for e in environ.get("PATH", "").split(os.pathsep) if e]
     leading: list[str] = []
     seen: set[str] = set()
     for entry in (str(venv_bin(root)), *paths):
@@ -179,12 +186,12 @@ def apply_entry(root: Path) -> tuple[str, ...]:
     )
     rest = [c for c in current if os.path.normcase(c) not in seen]
     composed = os.pathsep.join([*leading, *rest])
-    if composed != os.environ.get("PATH", ""):
-        os.environ["PATH"] = composed
+    if composed != environ.get("PATH", ""):
+        environ["PATH"] = composed
     values = {"VIRTUAL_ENV": str(root / ".venv"), **env}
     for key, value in values.items():
-        if not os.environ.get(key):
-            os.environ[key] = value
+        if not environ.get(key):
+            environ[key] = value
             _APPLIED[key] = value
     return added
 
