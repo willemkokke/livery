@@ -182,14 +182,14 @@ def site_request(root: Path) -> dict[str, Any]:
     renders, with the page it publishes on, the API reference's one
     per module and then the authored pages'; the handler's options
     with the members policy applied, as the site's config writes them;
-    the task providers each member advertises, with the member, when a
-    member declares the task reference among its generators; and the
+    the task providers each member advertises, with the member, while
+    the root contract turns the task reference's step on; and the
     sources of the members that decline their reference.
     """
-    from livery.extensions.docs._contract import package_generators
     from livery.extensions.docs._site import API_DIR, members_policy
-    from livery.extensions.docs._taskref import GENERATOR, advertised_providers
+    from livery.extensions.docs._taskref import STEP, advertised_providers
     from livery.workshop._docs_contract import declines_api
+    from livery.workshop._extensions import enabled_steps
     from livery.workshop._kinds import ALL_MEMBERS, kind_extractor
     from livery.workshop._packages import discover_packages
 
@@ -213,11 +213,7 @@ def site_request(root: Path) -> dict[str, Any]:
     with_sources = [
         package for package in packages if (package.directory / "src").is_dir()
     ]
-    referenced = any(
-        verb == GENERATOR
-        for package in packages
-        for verb, _requires in package_generators(package)
-    )
+    referenced = STEP in enabled_steps(root)
     return {
         "sources": [
             str((package.directory / "src").resolve()) for package in with_sources

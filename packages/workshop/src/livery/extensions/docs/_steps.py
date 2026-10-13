@@ -1,5 +1,7 @@
-"""The docs extension's steps: links resolve, and every export has a docstring.
+"""The docs extension's steps: generators run, links resolve, exports have docstrings.
 
+`docs.generators`, a step of the docs phase, runs the verbs each
+package names under ``[docs] generators`` before the site builds.
 `lint.doclinks` reads the authored markdown of the workspace's `docs/`
 and of every member's `docs/`, and refuses a link to a file that does
 not exist or an anchor no heading of the target makes. `lint.docrefs`
@@ -232,6 +234,56 @@ def headings_removed(changes: Changes) -> bool:
         if had - has:
             return True
     return False
+
+
+def run_generators(root: Path) -> list[str]:
+    """Run every package's declared docs generators; the verbs run.
+
+    Each verb runs as its own runner invocation at the workspace
+    root, in the packages' order and each verb once, so a generator is
+    the task a person would type. A failing generator turns the build
+    red with the verb and its package named; its own output has already
+    streamed. Generators must be idempotent: a second run on unchanged
+    input is a no-op.
+    """
+    import shutil
+
+    import livery.footman as footman
+    from livery.extensions.docs._contract import package_generators
+    from livery.workshop import discover_packages
+
+    ran: list[str] = []
+    runner = ""
+    for package in discover_packages(root):
+        for verb, _requires in package_generators(package):
+            if verb in ran:
+                continue  # two declarations of one shared verb run it once
+            if not runner:
+                runner = shutil.which(footman.prog()) or ""
+                if not runner:
+                    fail(
+                        f"{footman.prog()} is not on PATH, so the declared"
+                        f" docs generators cannot run; enter the"
+                        " environment (source setup.sh) first"
+                    )
+            code = footman.run([runner, verb], cwd=root, nofail=True)
+            if int(code) != 0:
+                fail(
+                    f"docs generator `{footman.prog()} {verb}`"
+                    f" ({package.name}) exited {int(code)}"
+                )
+            ran.append(verb)
+    return ran
+
+
+def generators_run(ctx: PhaseContext) -> None:
+    """Run the verbs the packages name under ``[docs] generators``: a docs step.
+
+    `run_generators` over the workspace, the verbs it ran said.
+    """
+    ran = run_generators(ctx.root)
+    if ran:
+        print(f"  generators: {', '.join(ran)}")
 
 
 def docrefs_run(ctx: PhaseContext) -> None:

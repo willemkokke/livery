@@ -1,5 +1,5 @@
-# The docs extension: the site, its pages, its steps of the lint phase
-# and its CI jobs.
+# The docs extension: the site, its pages, the two phases around its
+# build, its steps of the lint phase and its CI jobs.
 # Read at every mount; its verbs arrive through its plugin.
 
 [extension]
@@ -96,6 +96,37 @@ inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = tr
 [phases.lint.docstrings]
 main = "livery.extensions.docs._steps:docstrings_run"
 
+# The docs phase: what writes the site's generated pages, run by every
+# docs verb before it assembles the config, its steps side by side. A
+# listed extension adds a step here in its [for.docs] table. The gate
+# never runs it, and it has no verb of its own.
+[phases.docs]
+level = "workspace"
+gated = false
+verb = false
+
+# The task reference of every package that advertises footman.tasks
+# entry points. Off unless the root contract turns it on with
+# [phases.docs.task-reference] enabled = true.
+[phases.docs.task-reference]
+main = "livery.extensions.docs._taskref:task_reference_run"
+enabled = false
+
+# The verbs each package names under [docs] generators, run at the root
+# in the packages' order, each verb once.
+[phases.docs.generators]
+main = "livery.extensions.docs._steps:generators_run"
+
+# The deploy phase: what docs.publish runs on the built site just before
+# it publishes it. A listed extension adds a step here in its [for.docs]
+# table, to draw a page from what the merge left behind; a failing step
+# stops the publish. The gate never runs it, and it has no verb of its
+# own.
+[phases.deploy]
+level = "workspace"
+gated = false
+verb = false
+
 # The strict site build: the gate point's verdict waits for it. The
 # tags are fetched so the release view renders from the receipts; a
 # tagless clone renders its no-tags fallback page instead.
@@ -132,12 +163,13 @@ publishes = "site"
 paths = ["site"]
 
 # On the merge point the gate job takes the built site after its
-# verdict, renders this run's coverage trees into it from the union it
-# just judged, and publishes it through the seam the root contract
-# names: the container and ssh seams and none from here, the forge's
-# pages by handing the site to the forge's own pages deploy.
+# verdict, after the union it judged, and publishes it: docs.publish
+# runs the deploy phase on the site, puts each declared coverage
+# report's tree into it, and publishes it through the seam the root
+# contract names: the container and ssh seams and none from here, the
+# forge's pages by handing the site to the forge's own pages deploy.
 [ci.jobs.merge.gate]
-entries = ["docs.coverage-pages", "docs.publish"]
+entries = ["docs.publish"]
 collects = "site"
 deploy = "livery.extensions.docs._contract:publish_seam"
 
@@ -156,11 +188,3 @@ values = ["public", "all"]
 [queries."docs.theme"]
 level = "workspace"
 combine = "livery.extensions.docs._theme:merge_theme"
-
-# Who draws the coverage pages, a query a listed extension answers with
-# the function that draws them, given the workspace root and the
-# packages that declare an htmlcov report: one answer, the nearest.
-# With no answer, each such report's page states the absence.
-[queries."docs.coverage-pages"]
-level = "workspace"
-combine = "nearest"

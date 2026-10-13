@@ -48,8 +48,12 @@ extensions = [
 ]
 
 # The steps the listed extensions declare off, turned on here at each
-# step's own address: every public API is type-complete.
+# step's own address: every public API is type-complete, and the site
+# documents the tasks each package advertises.
 [phases.typecomplete.basedpyright]
+enabled = true
+
+[phases.docs.task-reference]
 enabled = true
 
 [docs]

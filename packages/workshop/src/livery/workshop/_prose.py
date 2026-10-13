@@ -410,15 +410,17 @@ def fragments(
 def render_gate(root: Path, audience: str | None) -> str:
     """The gate's steps for the extensions the members hold.
 
-    A list for the agent, a table for a reader.
+    A list for the agent, a table for a reader. A step of a phase the
+    gate does not run, one declared ``gated = false``, is left out.
     """
-    from livery.workshop._steps import steps_by_name
+    from livery.workshop._steps import _gated, steps_by_name
 
     present = present_extensions(root)
     records = [
         record
         for record in steps_by_name().values()
-        if not record.extensions or present & set(record.extensions)
+        if _gated(record)
+        and (not record.extensions or present & set(record.extensions))
     ]
     if not records:
         return ""

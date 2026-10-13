@@ -881,6 +881,22 @@ def _package(root: Path, name: str):
     return next(p for p in discover_packages(root) if p.directory.name == name)
 
 
+def _mount(root: Path) -> None:
+    """Mount what *root* lists, so its phases' steps register as a verb finds them."""
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_extensions
+
+    with registry.capture():
+        mount_extensions(root)
+
+
+def _run_docs_phase(root: Path) -> None:
+    """Run the docs phase's registered steps over *root*, as every docs verb does."""
+    from livery.extensions.docs._site import DOCS_PHASE, run_site_phase
+
+    run_site_phase(root, DOCS_PHASE)
+
+
 def test_a_broken_generator_declaration_refuses(tmp_path: Path) -> None:
     import pytest
 
@@ -935,14 +951,14 @@ def test_a_failing_generator_names_the_verb_and_package(
     import pytest
 
     import livery.footman as footman
-    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.broken"]\n')
+    _mount(root)
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     monkeypatch.setattr(footman, "run", lambda *a, **k: 3)
     with pytest.raises(BaseException, match=r"docsgen\.broken.*acme-core.*exited 3"):
-        run_generators(root)
+        _run_docs_phase(root)
 
 
 def test_a_missing_runner_refuses_with_the_remedy(
@@ -952,7 +968,7 @@ def test_a_missing_runner_refuses_with_the_remedy(
 
     import pytest
 
-    from livery.extensions.docs._site import run_generators
+    from livery.extensions.docs._steps import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.any"]\n')
@@ -962,15 +978,15 @@ def test_a_missing_runner_refuses_with_the_remedy(
 
 
 def test_generators_run_in_declaration_order_at_the_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import shutil as shutil_module
 
     import livery.footman as footman
-    from livery.extensions.docs._site import run_generators
 
     root = _workspace(tmp_path)
     _declare_generators(root, "core", 'generators = ["docsgen.one", "docsgen.two"]\n')
+    _mount(root)
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     calls: list[tuple[list[str], object]] = []
 
@@ -979,7 +995,8 @@ def test_generators_run_in_declaration_order_at_the_root(
         return 0
 
     monkeypatch.setattr(footman, "run", _record)
-    assert run_generators(root) == ["docsgen.one", "docsgen.two"]
+    _run_docs_phase(root)
+    assert "  generators: docsgen.one, docsgen.two\n" in capsys.readouterr().out
     assert [argv[-1] for argv, _cwd in calls] == ["docsgen.one", "docsgen.two"]
     assert all(cwd == root for _argv, cwd in calls)
 
@@ -1369,52 +1386,67 @@ def test_a_missing_report_states_the_absence_and_stays_green(
 
 
 def test_on_a_push_the_page_frames_a_tree_the_gate_job_renders_later(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from types import SimpleNamespace
 
-    from livery.extensions.docs._site import (
-        generate_coverage_pages,
-        refresh_site_coverage,
-    )
+    from livery.extensions.docs import _site as _docs
+    from livery.workshop import PhaseContext
+    from livery.workshop._steps import StepRecord, register_step
 
     root = _workspace(tmp_path)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     # No site built yet: nothing to refresh, and no tree to frame.
-    assert refresh_site_coverage(root) == []
+    assert _docs.refresh_site_coverage(root) == []
     monkeypatch.setattr("livery.workshop.ci_run", lambda: SimpleNamespace(event="push"))
-    assert generate_coverage_pages(root) == ["core"]
+    assert _docs.generate_coverage_pages(root) == ["core"]
     page = (root / "packages/core/docs/_generated/coverage.md").read_text()
     assert 'src="coverage/python/index.html"' in page
-    # The built site: a tree rendered after the build lands where the
-    # mount put it, and a report with no tree gets a page saying so.
+    # The built site: the publish puts a report with no tree into it as
+    # a page saying so, where the page frames it.
     site = root / "site"
     (site / "packages" / "core" / "coverage").mkdir(parents=True)
     (site / "index.html").write_text("<h1>site</h1>\n")
-    assert refresh_site_coverage(root) == ["core"]
+    monkeypatch.chdir(root)
+    _docs.docs_publish()
     placed = site / "packages/core/coverage/python/index.html"
     assert "No measured data for core (Python)" in placed.read_text()
+    # A step of the deploy phase renders the tree after the build, and
+    # the publish puts it there.
     report = root / "packages/core/htmlcov"
-    report.mkdir()
-    (report / "index.html").write_text("<h1>report</h1>\n")
-    assert refresh_site_coverage(root) == ["core"]
+
+    def render(ctx: PhaseContext) -> None:
+        del ctx
+        report.mkdir(exist_ok=True)
+        (report / "index.html").write_text("<h1>report</h1>\n")
+
+    register_step(StepRecord("tree", "deploy", render, extension="acme.tree"))
+    _docs.docs_publish()
     assert placed.read_text() == "<h1>report</h1>\n"
+    out = capsys.readouterr().out
+    assert out.count("  site refreshed for core\n") == 2
+    assert "  publish seam is none: skipping by declaration\n" in out
 
 
 #: A workspace listing the site and the extension that draws its
-#: coverage pages, which answers the site's query while both are listed.
-_DRAWN = 'extensions = ["docs", "coverage"]\n'
+#: coverage pages, and a measurer, so that extension is awake and adds
+#: its step to the docs phase.
+_DRAWN = 'extensions = ["docs", "acme.meter", "coverage"]\n'
 
 
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.cmake._readings import Reading, write_part
     from livery.extensions.docs import _site as _docs
+    from livery.workshop._steps import steps_by_name
+    from workshop_coverage_meter import install_meter
 
+    install_meter(tmp_path, monkeypatch)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     root = _workspace(tmp_path)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
@@ -1430,43 +1462,50 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
         "gcov",
     )
     report = root / "packages" / "core" / "htmlcov"
-    # Docs alone, and docs beside coverage whose `for` list leaves docs
-    # out, so its [for.docs] answer is never asked: no listed extension
-    # draws, and the declared report states the absence.
-    for listed in ('["docs"]', '["docs", { name = "coverage", for = [] }]'):
+    page = root / "packages" / "core" / "docs" / "_generated" / "coverage.md"
+    # Docs alone, and docs beside an awake coverage whose `for` list
+    # leaves docs out, so its [for.docs] table adds no step: nothing in
+    # the docs phase draws, and the declared report states the absence.
+    for listed in (
+        '["docs"]',
+        '["docs", "acme.meter", { name = "coverage", for = [] }]',
+    ):
         (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
-        assert _docs.render_coverage_pages(root) == []
-        out = capsys.readouterr().out
-        assert (
-            "  coverage: core: no listed extension draws coverage pages; its page"
-            " states the absence\n"
-        ) in out
+        _mount(root)
+        assert "docs.coverage" not in steps_by_name()
+        _run_docs_phase(root)
         assert not report.exists()
-    # Both listed, coverage draws from the same data.
+        assert _docs.generate_coverage_pages(root) == ["core"]
+        assert "was not produced in this build" in page.read_text()
+    # Both listed, coverage's step draws from the same data, and the
+    # page frames what it drew.
     (root / "workshop.toml").write_text(f"[workspace]\n{_DRAWN}")
-    assert _docs.render_coverage_pages(root) == ["core"]
+    _mount(root)
+    _run_docs_phase(root)
     assert (report / "index.html").is_file()
+    assert _docs.generate_coverage_pages(root) == ["core"]
+    assert 'src="coverage/python/index.html"' in page.read_text()
 
 
-def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
+def test_the_deploy_phase_draws_main_s_record_where_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.extensions.cmake._readings import Reading, write_part
-    from livery.extensions.docs import _site as _docs
+    from livery.extensions.coverage import _pages
     from workshop_coverage_meter import stored_unit
 
-    root = _workspace(tmp_path, docs_table=_DRAWN)
+    root = _workspace(tmp_path, docs_table='extensions = ["docs", "coverage"]\n')
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     source = root / "packages" / "core" / "src" / "core" / "mod.c"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text("int a = 1;\nint b = 2;\n")
-    # Outside CI nothing is pulled: no data, nothing rendered.
+    # The docs phase's step pulls nothing: no data, nothing drawn.
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    assert _docs.render_coverage_pages(root) == []
-    # Inside CI the store's units stand in for the legs' data: the parts
-    # a leg made, as main's record keeps them.
+    assert _pages.draw(root, merged=False) == []
+    # The deploy phase's step draws the store's units in the legs' place:
+    # the parts a leg made, as main's record keeps them.
     written = write_part(
         root,
         "packages/core",
@@ -1486,7 +1525,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     _declare_generators(
         root, "bare", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
-    assert _docs.render_coverage_pages(root) == ["core"]
+    assert _pages.draw(root, merged=True) == ["core"]
     out = capsys.readouterr().out
     assert "  coverage: main/check-b: nothing recorded\n" in out
     assert "bare: no measured data; its page states the absence" in out
@@ -1523,7 +1562,7 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
     # reduction, a distribution of its own: a run of this wheel alone
     # has none.
     pytest.importorskip("livery.extensions.pytest")
-    from livery.extensions.docs import _site as _docs
+    from livery.extensions.coverage import _pages
 
     root = _workspace(
         tmp_path, docs_table='extensions = ["docs", "pytest", "coverage"]\n'
@@ -1533,7 +1572,7 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
     )
     measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    assert _docs.render_coverage_pages(root) == ["core"]
+    assert _pages.draw(root, merged=False) == ["core"]
     report = root / "packages" / "core" / "htmlcov"
     # Each function and class has its row, narrowed to its own lines and
     # linked to its first; the lines outside every one have a row too.

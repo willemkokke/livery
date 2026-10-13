@@ -401,14 +401,14 @@ def _shown(page: Page, row: dict[str, str]) -> tuple[str, ...]:
 def test_the_pages_show_what_coverage_py_shows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.docs import _site as _docs
+    from livery.extensions.coverage import _pages
 
     root = _workspace(tmp_path / "ws")
     measure(root)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.chdir(root)
     reference, report = _reference(root)
-    assert _docs.render_coverage_pages(root) == ["core"]
+    assert _pages.draw(root, merged=False) == ["core"]
     tree = root / "packages" / "core" / "htmlcov"
     index = read_page(tree / "index.html")
     rows = {row["File"]: row for row in index.rows if row["File"] != "Total"}
@@ -462,23 +462,22 @@ def test_the_pages_show_what_coverage_py_shows(
 def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # One tree, one measurement: drawn on a machine from the data at
-    # render time, and in the merge point's gate job from the part a leg
-    # made of the same data and main's record stored. Only the lines that
-    # say where the measurement comes from differ: the record's source on
+    # One tree, one measurement: drawn by the docs phase from the data
+    # at render time, and by the deploy phase from the part a leg made of
+    # the same data and main's record stored. Only the lines that say
+    # where the measurement comes from differ: the record's source on
     # the index, and the suite a stored part names on each file's page.
     # The tests that reached each line are the member's own, so the leg
     # keeps them, and both pages list them.
     from livery.extensions.coverage import _format, _pages
     from livery.extensions.coverage._record import Unit
-    from livery.extensions.docs import _site as _docs
 
     root = _workspace(tmp_path / "ws")
     tests = "packages/core/tests/test_shapes.py::"
     measure(root, contexts=(f"{tests}test_a", f"{tests}test_b"))
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.chdir(root)
-    assert _docs.render_coverage_pages(root) == ["core"]
+    assert _pages.draw(root, merged=False) == ["core"]
     tree = root / "packages" / "core" / "htmlcov"
     at_render = {path.relative_to(tree): path.read_bytes() for path in tree.rglob("*")}
     (root / ".coverage").rename(root / ".coverage.host.1")
@@ -494,7 +493,7 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
         }
     }
     monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
-    assert _docs.render_coverage_pages(root) == ["core"]
+    assert _pages.draw(root, merged=True) == ["core"]
     stored = {path.relative_to(tree): path.read_bytes() for path in tree.rglob("*")}
     assert sorted(stored) == sorted(at_render)
     local = b"Measured on this machine, from the data its last gate run left."
