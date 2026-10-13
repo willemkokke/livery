@@ -133,10 +133,9 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
 
     # Scratch contracts naming the extensions the workshop's own wheel
     # ships, so the suite needs nothing beyond the package's own
-    # dependencies when it runs against the wheel. Coverage answers its
-    # one query in its [for.docs] table and declares nothing else: it
-    # mounts all the same, with docs unlisted too, since the mount counts
-    # what a declaration answers and the query decides what it asks.
+    # dependencies when it runs against the wheel. Coverage mounts with
+    # docs unlisted: its plugin carries its verbs, and its declaration
+    # joins the gate point's jobs.
     contract = tmp_path / "workshop.toml"
     contract.write_text('[workspace]\nextensions = ["coverage"]\n')
     # The mount lands in a captured tree, never the process global.

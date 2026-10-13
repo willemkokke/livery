@@ -780,6 +780,36 @@ def withdraw_job(point: str, name: str) -> None:
         del _JOINED_JOBS[key]
 
 
+def snapshot() -> tuple[
+    dict[tuple[str, str], JobContribution],
+    dict[tuple[str, str, str], JobContribution],
+    Tasks | None,
+]:
+    """The jobs the extensions added and joined, and the kept task tree, for restore.
+
+    Judges ride their joins' entries. [livery.workshop._points.restore][]
+    puts all three back.
+    """
+    return dict(_CONTRIBUTED_JOBS), dict(_JOINED_JOBS), MOUNTED
+
+
+def restore(
+    state: tuple[
+        dict[tuple[str, str], JobContribution],
+        dict[tuple[str, str, str], JobContribution],
+        Tasks | None,
+    ],
+) -> None:
+    """Put the added jobs, the joins and the kept task tree back to *state*."""
+    global MOUNTED
+    added, joined, tree = state
+    _CONTRIBUTED_JOBS.clear()
+    _CONTRIBUTED_JOBS.update(added)
+    _JOINED_JOBS.clear()
+    _JOINED_JOBS.update(joined)
+    MOUNTED = tree
+
+
 def contributed_jobs(point: str) -> tuple[JobContribution, ...]:
     """The jobs the extensions contributed to *point*, in contribution order."""
     return tuple(item for item in _CONTRIBUTED_JOBS.values() if item.point == point)
