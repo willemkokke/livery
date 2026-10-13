@@ -60,6 +60,12 @@ if TYPE_CHECKING:
 EVENT_NAMES = ("pull_request", "push", "schedule", "workflow_dispatch")
 
 
+#: The nightly's dispatch input naming the scheduled tasks a run takes,
+#: comma-separated; empty runs the whole schedule. A rehearsal names the
+#: loop alone, ``fm ci.dispatch --point=nightly --only=ci.e2e``.
+ONLY = "only"
+
+
 @dataclass(frozen=True)
 class Input:
     """One input a dispatched point takes, as the forge prompts for it.
@@ -300,6 +306,13 @@ DECLARED: tuple[Point, ...] = (
         "nightly",
         "nightly.yml",
         ("schedule", "workflow_dispatch"),
+        inputs=(
+            Input(
+                ONLY,
+                "the scheduled tasks to run, comma-separated; empty runs the"
+                " whole schedule",
+            ),
+        ),
         cron=CLOCK,
         note=(
             "The nightly point: the clock and a dispatch entry, one call per"
@@ -940,11 +953,16 @@ def events_of(root: Path | None, point: str) -> tuple[str, ...]:
 
 
 def dispatchable(root: Path | None) -> tuple[str, ...]:
-    """The points a person starts by hand: a dispatch entry and no inputs."""
+    """The points a person starts by hand: a dispatch entry and no input to supply.
+
+    An optional input, the nightly's ``only``, leaves a point
+    dispatchable; a required one, the release's ``ref``, does not.
+    """
     return tuple(
         point.name
         for point in points(root)
-        if "workflow_dispatch" in point.events and not point.inputs
+        if "workflow_dispatch" in point.events
+        and not any(item.required for item in point.inputs)
     )
 
 
@@ -956,13 +974,14 @@ WORKFLOWS = {point.name: point.workflow for point in DECLARED}
 EVENTS = {point.name: point.events for point in DECLARED}
 
 #: The points a person starts by hand through ``ci.dispatch``: a
-#: dispatch entry and no inputs to supply. The merge point runs on a
-#: push alone, and the release wave takes inputs, so the merge point
-#: dispatches it through ``workflow.release.dispatch``.
+#: dispatch entry and no input to supply. The merge point runs on a
+#: push alone, and the release wave takes a required input, so the
+#: merge point dispatches it through ``workflow.release.dispatch``.
 DISPATCHABLE = tuple(
     point.name
     for point in DECLARED
-    if "workflow_dispatch" in point.events and not point.inputs
+    if "workflow_dispatch" in point.events
+    and not any(item.required for item in point.inputs)
 )
 
 #: A point whose jobs include another point's: the merge point runs
@@ -1371,6 +1390,39 @@ def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
     )
 
 
+def scheduled_tasks(root: Path, point: str) -> tuple[str, ...]:
+    """Every task *point* runs, across its jobs, in schedule order, once each."""
+    found: dict[str, None] = {}
+    for job in jobs_of(root, point):
+        for entry in entries_for(root, point, job):
+            found.setdefault(entry.task, None)
+    return tuple(found)
+
+
+def asked_tasks(root: Path, point: str, only: str) -> tuple[str, ...]:
+    """The tasks a dispatch's *only* names, judged against what *point* runs.
+
+    Empty for an empty *only*, which runs the whole schedule.
+
+    Raises:
+        Failed: when *only* names a task the point does not run, naming
+            the ones it does.
+    """
+    asked = tuple(
+        dict.fromkeys(name.strip() for name in only.split(",") if name.strip())
+    )
+    if not asked:
+        return ()
+    runs = scheduled_tasks(root, point)
+    unknown = [name for name in asked if name not in runs]
+    if unknown:
+        fail(
+            f"the {point} point runs {', '.join(runs) or 'nothing'}; --only names"
+            f" {', '.join(unknown)}, which it does not run"
+        )
+    return asked
+
+
 def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     """The runners a pull request's check legs fan out to.
 
@@ -1472,7 +1524,9 @@ def run_point(
     A red builtin entry stops the job at once, since the entries after
     it read its verdict; a red entry of the contract's schedule stands
     on its own, so the scheduled entries after it still run, and the
-    job fails at the end naming each red one.
+    job fails at the end naming each red one. A dispatch that names
+    tasks in the nightly's ``only`` input runs those alone, builtin or
+    scheduled, and says what it skipped.
 
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
@@ -1525,6 +1579,7 @@ def run_point(
             tuple(item.name for item in point_by_name(root)[resolved].inputs)
         )
     )
+    asked = asked_tasks(root, resolved, facts.get(ONLY, ""))
     prog = footman.prog()
     # One listing of the state store's namespace for the whole job:
     # every entry reads through it and records what it writes for the
@@ -1550,6 +1605,12 @@ def run_point(
         red: list[str] = []
         try:
             for entry in entries:
+                if asked and entry.task not in asked:
+                    print(
+                        f"  {resolved}/{job}: {entry.task} ({entry.source}) is not"
+                        " among the tasks this dispatch asked for; skipped"
+                    )
+                    continue
                 if entry.once:
                     first_os, first_python = first_leg(root, resolved, job)
                     leg_is_first = (not os_label or os_label == first_os) and (
