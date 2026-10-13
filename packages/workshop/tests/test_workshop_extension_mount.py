@@ -18,6 +18,9 @@ from workshop_extension_fakes import fake_extensions, root_contract
 
 _FAILURES = (BaseException,)
 
+#: This repository's root, where the workshop under test lives in its checkout.
+ROOT = Path(__file__).resolve().parents[3]
+
 
 @pytest.fixture
 def restored_steps():
@@ -651,6 +654,30 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
         assert _steps.steps_by_name()["lint.house"].extension == "acme.house"
         assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
+
+
+def test_a_workspace_listing_coverage_without_docs_mounts(tmp_path: Path) -> None:
+    """The plain pass's stack mounts: pytest measures for coverage, and no site.
+
+    Coverage is awake there, and its tables for the docs extension apply
+    to nothing while docs is unlisted, so the mount refuses none of them.
+    """
+    import livery.workshop
+    from livery.workshop._e2e import loop_stack
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
+        # The release train's isolated leg installs the workshop's wheel
+        # alone, and the stack's other extensions ship in wheels of their own.
+        pytest.skip("the plain pass's stack names extensions this checkout installs")
+    stack = loop_stack()
+    assert "coverage" in stack and "docs" not in stack
+    root_contract(tmp_path, "[" + ", ".join(f'"{name}"' for name in stack) + "]")
+    assert _extensions.dormancy(tmp_path) == {}
+    assert _extensions.resolved_targets(tmp_path)["coverage"] == ()
+    from livery.footman import _registry as registry
+
+    with registry.capture():
+        assert _extensions.mount_extensions(tmp_path) == stack
 
 
 #: An extension that judges what another measures for it: dormant until

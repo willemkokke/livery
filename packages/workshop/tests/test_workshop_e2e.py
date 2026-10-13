@@ -2036,13 +2036,33 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert "members loop-native, loop-cpp: landed through the loop's own gate" in out
 
 
-def test_a_plain_pass_births_without_the_docs_extension() -> None:
-    from livery.workshop._extensions import SELF
+def test_the_plain_pass_lists_the_stock_list_without_the_site() -> None:
+    """The site is the docs extension and every stock entry that requires it.
+
+    The pass proves the gate, the release train and the points, and
+    nothing in it reads a site. The stack is pinned too, since the
+    hosted rehearsal's plain pass births it.
+    """
+    from livery.workshop._extensions import SELF, declaration
     from livery.workshop._new_project import birth_extensions
 
     stock = tuple(birth_extensions([SELF]))
-    assert "docs" in stock
-    assert _e2e.loop_stack() == tuple(entry for entry in stock if entry != "docs")
+
+    def builds_the_site(name: str) -> bool:
+        found = declaration(name)
+        needed = found.requires if found is not None else ()
+        return name == "docs" or any(builds_the_site(other) for other in needed)
+
+    site = tuple(name for name in stock if builds_the_site(name))
+    assert "docs" in site
+    assert _e2e.loop_stack() == tuple(name for name in stock if name not in site)
+    assert _e2e.loop_stack() == (
+        "changelog",
+        "ruff",
+        "basedpyright",
+        "pytest",
+        "coverage",
+    )
 
 
 def test_a_red_run_prints_its_failed_jobs_log_tails_and_nothing_of_the_green() -> None:
