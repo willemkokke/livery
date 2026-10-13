@@ -11,17 +11,18 @@ closure. It leaves them in the line format's stored form, with the
 fixed facts they name and the scope the leg measured, for the leg's
 one write, which puts them on the leg's per-run ref beside its timing
 row, and it prints each suite's size as a record stores it, what ran
-and its fixed facts, raw and gzipped.
+and its fixed facts, raw and gzipped, with the share of what ran that
+names the tests that reached each line.
 """
 
 from __future__ import annotations
 
 import gzip
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from livery import git
 from livery.extensions.coverage._format import (
@@ -105,14 +106,20 @@ def request(packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
     }
 
 
-def sizes(unit: Unit) -> tuple[int, int, int, int]:
-    """*unit* as a record stores it: its row's bytes, then its fixed facts'.
+def sizes(unit: Unit) -> tuple[int, int, int, int, int, int]:
+    """*unit* as a record stores it: its row's bytes, the tests' share, its facts'.
 
     Each raw, then gzipped at zlib's default level, the level git
-    stores an object at, the facts one file each as the record keeps
-    them.
+    stores an object at: the row; what the tests that reached each
+    line add to it, the row's size less its size without its parts'
+    contexts and each file's ``reached``; and the fixed facts, one
+    file each as the record keeps them.
     """
     row = json.dumps(list(unit.parts), sort_keys=True).encode("utf-8")
+    bare = json.dumps(
+        [_without_tests(part) for part in unit.parts], sort_keys=True
+    ).encode("utf-8")
+    packed = _gzipped(row)
     facts = [
         facts_text(unit.facts[name]).encode("utf-8")
         for name in unit.named
@@ -120,10 +127,32 @@ def sizes(unit: Unit) -> tuple[int, int, int, int]:
     ]
     return (
         len(row),
-        _gzipped(row),
+        packed,
+        len(row) - len(bare),
+        max(0, packed - _gzipped(bare)),
         sum(len(item) for item in facts),
         sum(_gzipped(item) for item in facts),
     )
+
+
+def _without_tests(part: Mapping[str, Any]) -> dict[str, Any]:
+    """*part*, as a row holds it, without the tests that reached each line."""
+    files: object = part.get("files")
+    held = cast("dict[str, Any]", files) if isinstance(files, dict) else {}
+    return {
+        **part,
+        "contexts": [],
+        "files": {
+            name: {
+                key: value
+                for key, value in cast("dict[str, Any]", entry).items()
+                if key != "reached"
+            }
+            if isinstance(entry, dict)
+            else entry
+            for name, entry in held.items()
+        },
+    }
 
 
 def _gzipped(content: bytes) -> int:
@@ -132,11 +161,17 @@ def _gzipped(content: bytes) -> int:
 
 
 def shown_sizes(unit: Unit) -> str:
-    """*unit*'s size as a line shows it: what ran, then its fixed facts."""
-    row, packed, facts, facts_packed = sizes(unit)
+    """*unit*'s size as a line shows it: what ran, its fixed facts, the tests' share."""
+    row, packed, tests, tests_packed, facts, facts_packed = sizes(unit)
+    share = (
+        f"; the tests that reached each line take {shown_size(tests)} raw,"
+        f" {shown_size(tests_packed)} gzipped of what ran"
+        if tests
+        else ""
+    )
     return (
         f"{shown_size(row)} raw, {shown_size(packed)} gzipped, and its fixed facts"
-        f" {shown_size(facts)} raw, {shown_size(facts_packed)} gzipped"
+        f" {shown_size(facts)} raw, {shown_size(facts_packed)} gzipped{share}"
     )
 
 

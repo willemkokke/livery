@@ -99,6 +99,10 @@ def _entry(**keys: Any) -> dict[str, Any]:
         (_raw(**{"a/../b.py": _entry()}), 'files["a/../b.py"]: is no path from the'),
         (_raw(**{"a//b.py": _entry()}), 'files["a//b.py"]: is no path from the'),
         ({**_raw(), "contexts": [3]}, "contexts[0]: is 3, and text is wanted"),
+        (
+            {**_raw(), "contexts": ["", "t1", ""]},
+            "contexts[2]: repeats ''; a numbering names each once",
+        ),
         (_raw(**{"a.py": {"statements": "1"}}), 'files["a.py"].digest: is None'),
         (
             _raw(**{"a.py": _entry(statements="1-x")}),
@@ -215,6 +219,55 @@ def test_a_part_off_the_format_refuses_naming_its_source_and_the_key(
         fmt.decode(raw, source="the probe's part")
     assert str(refused.value).startswith("the probe's part: ")
     assert message in str(refused.value)
+
+
+def test_a_part_whose_context_index_names_no_context_refuses_naming_the_file() -> None:
+    # Line 2's set names context 2, and the part numbers two: "" and t1.
+    sets = [fmt.pack_set({0}), fmt.pack_set({0, 1}), fmt.pack_set({2})]
+    named = _entry(hits="1-2", reached={"sets": sets, "lines": [[1, 0], [2, 2]]})
+    raw = _raw(**{"packages/x/a.py": named})
+    message = (
+        'the row: files["packages/x/a.py"].reached.sets[2]: names context 2, and'
+        " the part names 2"
+    )
+    with pytest.raises(PartError) as refused:
+        fmt.decode(raw, source="the row")
+    assert str(refused.value) == message
+    # The stored form keeps what ran as the part does, and refuses alike.
+    kept, facts = fmt.stored(
+        fmt.decode(_raw(**{"packages/x/a.py": _entry()}), source="p")
+    )
+    kept["files"]["packages/x/a.py"]["reached"] = named["reached"]
+    with pytest.raises(PartError) as refused:
+        fmt.from_stored(kept, facts, source="the row")
+    assert str(refused.value) == message
+    # A numbering never moves an index it cannot read.
+    for move in (fmt.renumbered, fmt.numbered):
+        with pytest.raises(PartError) as refused:
+            move(raw, ["", "t1"], source="the row")
+        assert str(refused.value) == message
+
+
+def test_a_numbering_that_drops_a_known_context_refuses() -> None:
+    raw = _raw(
+        **{
+            "a.py": _entry(
+                hits="1",
+                reached={"sets": [fmt.pack_set({1})], "lines": [[1, 0]]},
+            )
+        }
+    )
+    # t1 is the part's, and a numbering only appends: one without it
+    # would leave line 1's set naming nothing.
+    with pytest.raises(PartError) as refused:
+        fmt.renumbered(raw, ["", "t2"], source="the row")
+    assert str(refused.value) == (
+        "the row: contexts[1]: is 't1', and the numbering drops it; a numbering"
+        " only appends, so every context keeps its index"
+    )
+    # A numbering names each context once.
+    with pytest.raises(PartError, match=r"numbering\[2\]: repeats 't1'"):
+        fmt.renumbered(raw, ["", "t1", "t1"], source="the row")
 
 
 def test_a_part_of_format_version_1_refuses_and_names_its_version() -> None:
@@ -475,6 +528,55 @@ def test_a_part_reads_back_from_its_stored_form_its_facts_kept_apart() -> None:
     kept, facts = fmt.stored(unread)
     assert kept["files"] == {"packages/n/gone.cpp": {"digest": ""}} and facts == {}
     assert fmt.from_stored(kept, facts, source="p") == unread
+
+
+def test_a_numbering_keeps_each_context_s_index_and_appends_the_new_ones() -> None:
+    # The row before numbered "", t2 and t5; this reading names "", t1
+    # and t2, sorted as its reduction gave them: t1 is new and sorts
+    # first, t5's test is gone.
+    known = ("", "t2", "t5")
+    assert fmt.numbering(known, ["t2", "", "t1"]) == ("", "t2", "t5", "t1")
+    assert fmt.numbering((), ["t2", "", "t1"]) == ("", "t1", "t2")
+    entry = Entry(
+        digest="a" * 40,
+        statements=frozenset({1, 2, 3}),
+        counts={1: 1, 2: 1, 3: 1},
+        reached={1: frozenset({0}), 2: frozenset({1, 2}), 3: frozenset({2})},
+    )
+    part = Part("packages/x", COVERAGE_PY, {"packages/x/a.py": entry}, ("", "t1", "t2"))
+    moved = fmt.numbered(fmt.encode(part), known, source="p")
+    # Each set names the contexts it named before, by their new places:
+    # t2 keeps index 1, t5 keeps 2 and names no line, t1 takes 3.
+    assert moved["contexts"] == ["", "t2", "t5", "t1"]
+    assert moved["files"]["packages/x/a.py"]["reached"] == {
+        "sets": [fmt.pack_set({0}), fmt.pack_set({1, 3}), fmt.pack_set({1})],
+        "lines": [[1, 0], [2, 1], [3, 2]],
+    }
+    read = fmt.decode(moved, source="p")
+    assert {
+        line: {read.contexts[index] for index in held}
+        for line, held in read.files["packages/x/a.py"].reached.items()
+    } == {1: {""}, 2: {"t1", "t2"}, 3: {"t2"}}
+    # Nothing else moves, and the stored form moves the same way.
+    assert {**moved, "contexts": [], "files": {}} == {
+        **fmt.encode(part),
+        "contexts": [],
+        "files": {},
+    }
+    kept, facts = fmt.stored(part)
+    stored = fmt.numbered(kept, known, source="p")
+    assert fmt.from_stored(stored, facts, source="p") == read
+    # A part already numbered so is left as it is.
+    assert fmt.numbered(moved, known, source="p") == moved
+    # The merge reads the contexts by name, and one no line names, the
+    # test that is gone, is no merged context.
+    combined = fmt.merge([read])
+    assert combined.contexts == ("", "t1", "t2")
+    # Merged for the floors alone, the contexts stay out.
+    counted = fmt.merge([read], contexts=False)
+    assert counted.contexts == ()
+    assert counted.files["packages/x/a.py"].entry.reached == {}
+    assert counted.files["packages/x/a.py"].entry.executed == {1, 2, 3}
 
 
 def test_a_file_counts_as_coverage_py_counts_it() -> None:

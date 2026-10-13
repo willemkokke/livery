@@ -71,7 +71,9 @@ class Reduction(Protocol):
         closure>]}``, and a unit without ``within`` takes every file. A
         unit's part holds the files of its closure the data names, each
         as the unit's own tests and the code outside every test reached
-        it.
+        it, and names the contexts that reached each line wherever the
+        data names a test. The record numbers the contexts when it
+        stores the part, so a reduction numbers them as it likes.
         """
         ...
 
@@ -171,14 +173,15 @@ class Unioned:
 def write_union(root: Path, combined: Combined, units: Sequence[str]) -> Path:
     """Write *combined*, the union of *units*' parts, to `UNION`; the path.
 
-    The merged files are grouped into one part per measurer, so the
-    file reads back with the line format's own reader.
+    The merged files are grouped into one part per measurer, each
+    numbering *combined*'s contexts, so the file reads back with the
+    line format's own reader.
     """
     by_measurer: dict[Measurer, dict[str, Any]] = {}
     for name, merged in combined.files.items():
         by_measurer.setdefault(merged.measurer, {})[name] = merged.entry
     parts = [
-        encode(Part(".", measurer, files))
+        encode(Part(".", measurer, files, combined.contexts))
         for measurer, files in sorted(
             by_measurer.items(), key=lambda item: item[0].identity
         )

@@ -11,11 +11,12 @@ from typing import Any
 import pytest
 
 from livery import git
+from livery.extensions.coverage import _format as fmt
 from livery.extensions.coverage import _record as coverage_record
 from livery.workshop import _ci_context
 from livery.workshop._ci_context import state_store
 from livery.workshop._packages import Edge, Package
-from workshop_coverage_meter import stored_unit
+from workshop_coverage_meter import read_parts, stored_unit
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 LEG = "check-linux-3.14"
@@ -124,7 +125,68 @@ def _unit(
     )
 
 
+def _tested(
+    path: str,
+    contexts: list[str],
+    reached: dict[int, set[int]],
+    *,
+    closure: str = "a" * 64,
+    run: str = "1013",
+) -> coverage_record.Unit:
+    """A unit whose one file's four lines ran, each reached by the contexts named.
+
+    *reached* gives each line's contexts as indexes into *contexts*, as
+    the leg's reduction numbered them.
+    """
+    sets: list[str] = []
+    lines: list[list[int]] = []
+    for line, held in sorted(reached.items()):
+        packed = fmt.pack_set(held)
+        if packed not in sets:
+            sets.append(packed)
+        lines.append([line, sets.index(packed)])
+    part = _part(path, {f"{path}/src/m.py": "1-4"})
+    part["contexts"] = contexts
+    part["files"][f"{path}/src/m.py"]["reached"] = {"sets": sets, "lines": lines}
+    return stored_unit(path, (part,), closure=closure, run=run, sha="b" * 40)
+
+
+def _tests_of(unit: coverage_record.Unit) -> dict[int, set[str]]:
+    """The tests that reached each line of *unit*'s one file, by name."""
+    (part,) = read_parts(unit)
+    (entry,) = part.files.values()
+    return {
+        line: {part.contexts[index] for index in held}
+        for line, held in entry.reached.items()
+    }
+
+
+def _set_of(unit: coverage_record.Unit, line: int) -> str:
+    """The set *unit*'s row keeps for *line* of its one file, as stored."""
+    (entry,) = unit.parts[0]["files"].values()
+    by_line = dict(map(tuple, entry["reached"]["lines"]))
+    return str(entry["reached"]["sets"][by_line[line]])
+
+
 # --- the refusals and misses first --------------------------------------------
+
+
+def test_a_fresh_row_whose_context_index_names_no_context_refuses_the_write(
+    work: Path,
+) -> None:
+    # Line 2's set names context 5, and the part numbers two.
+    broken = _tested("packages/base", ["", "t1"], {1: {0}, 2: {1}})
+    entry = broken.parts[0]["files"]["packages/base/src/m.py"]
+    entry["reached"]["sets"][1] = fmt.pack_set({5})
+    why = coverage_record.put_record(
+        work, RUN, leg=LEG, fresh={"packages/base": broken}
+    )
+    assert why == (
+        "refusing: packages/base's fresh row, part 0:"
+        ' files["packages/base/src/m.py"].reached.sets[1]: names context 5, and'
+        " the part names 2"
+    )
+    assert coverage_record.recorded(work, leg=LEG) == coverage_record.Record({})
 
 
 def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
@@ -247,7 +309,8 @@ def test_a_row_of_the_old_schema_is_a_miss_and_the_unit_is_measured_afresh(
     held = coverage_record.recorded(work, leg=LEG)
     assert held.units == {} and not held.failed
     assert [str(item) for item in held.skipped] == [
-        "packages-base.json: schema 2, this reader speaks 3; skipped"
+        f"packages-base.json: schema 2, this reader speaks {coverage_record.SCHEMA};"
+        " skipped"
     ]
     # The kept row of the old shape names no moment, so the next write
     # lets it go, and the union never carries it.
@@ -270,6 +333,31 @@ def test_a_row_of_the_old_schema_is_a_miss_and_the_unit_is_measured_afresh(
     )
     again = coverage_record.recorded(work, leg=LEG)
     assert again.units == fresh and again.skipped == () and again.kept == ()
+
+
+def test_a_row_written_before_rows_named_the_tests_is_a_miss(work: Path) -> None:
+    # A row of parts, its suite's tests not named: written by schema 3.
+    row = {
+        "schema": 3,
+        "unit": "packages/base",
+        "closure": "a" * 64,
+        "run": "5",
+        "sha": "b" * 40,
+        "parts": [_part("packages/base")],
+    }
+    ref = coverage_record.record_ref(LEG)
+    assert (
+        git.put(
+            state_store(work), ref, {"packages-base.json": json.dumps(row)}, message="3"
+        )
+        == ""
+    )
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.units == {} and not held.failed
+    assert [str(item) for item in held.skipped] == [
+        f"packages-base.json: schema 3, this reader speaks {coverage_record.SCHEMA};"
+        " skipped"
+    ]
 
 
 def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None:
@@ -300,8 +388,9 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
     assert sorted(str(item) for item in held.skipped) == [
         "bare.json: carries no unit; skipped",
         "junk.json: does not parse; skipped",
-        "odd.json: schema 99, this reader speaks 3; skipped",
-        "packages-base.json: schema 1, this reader speaks 3; skipped",
+        f"odd.json: schema 99, this reader speaks {coverage_record.SCHEMA}; skipped",
+        f"packages-base.json: schema 1, this reader speaks {coverage_record.SCHEMA};"
+        " skipped",
         "packages-top.json: holds a part of format 1, and this workshop reads"
         " format 2; skipped",
     ]
@@ -673,6 +762,137 @@ def test_the_record_keeps_one_file_s_fixed_facts_once_and_drops_what_no_row_name
     # The janitor counts the rows alone.
     lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
     assert f"  {coverage_record.record_ref(LEG)}: 1 row(s), within its bounds" in lines
+
+
+def test_each_write_numbers_the_tests_as_the_row_it_replaces(work: Path) -> None:
+    # The first run: the code outside every test reached line 1, and the
+    # tests t2 and t5 the rest.
+    first = _tested(
+        "packages/base", ["", "t2", "t5"], {1: {0}, 2: {1}, 3: {1, 2}, 4: {2}}
+    )
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": first})
+        == ""
+    )
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.units["packages/base"].parts[0]["contexts"] == ["", "t2", "t5"]
+    # A run later t1 is a new test that sorts before t2, and t5's test is
+    # gone; the leg numbers the contexts its run recorded, sorted.
+    later = _ci_context.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
+    second = _tested(
+        "packages/base",
+        ["", "t1", "t2"],
+        {1: {0}, 2: {2}, 3: {1, 2}, 4: {1}},
+        closure="c" * 64,
+        run="2",
+    )
+    why = coverage_record.put_record(
+        work, later, leg=LEG, fresh={"packages/base": second}, held=held
+    )
+    assert why == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    row = held.units["packages/base"]
+    # t2 keeps index 1, t5 keeps 2 and no line names it, and t1 takes 3.
+    assert row.parts[0]["contexts"] == ["", "t2", "t5", "t1"]
+    assert _tests_of(row) == {1: {""}, 2: {"t2"}, 3: {"t1", "t2"}, 4: {"t1"}}
+    # The lines t2 alone reached keep their set's bytes, so the two rows
+    # differ only where the tests that reached a line did.
+    assert _set_of(row, 2) == _set_of(first, 2)
+    # The row moved on from stays a day with its own numbering.
+    assert held.at("packages/base", "a" * 64) == first
+    assert _tests_of(first) == {1: {""}, 2: {"t2"}, 3: {"t2", "t5"}, 4: {"t5"}}
+
+
+def test_one_run_numbers_a_unit_s_tests_alike_on_every_leg(work: Path) -> None:
+    other = "check-macos-3.14"
+    # Each leg ran a test the other did not: t3 on this leg alone, t1 on
+    # the other.
+    linux = {
+        "packages/base": _tested(
+            "packages/base", ["", "t2", "t3"], {1: {0}, 2: {1}, 3: {2}}
+        )
+    }
+    macos = {
+        "packages/base": _tested(
+            "packages/base", ["", "t1", "t2"], {1: {0}, 2: {2}, 3: {1}}
+        )
+    }
+    named = coverage_record.run_contexts([linux, macos])
+    assert named == {"packages/base": {"coverage.py": {"", "t1", "t2", "t3"}}}
+    for leg, rows in ((LEG, linux), (other, macos)):
+        why = coverage_record.put_record(
+            work, RUN, leg=leg, fresh=rows, run_contexts=named
+        )
+        assert why == ""
+    first = {
+        leg: coverage_record.recorded(work, leg=leg).units["packages/base"]
+        for leg in (LEG, other)
+    }
+    # One numbering on both legs, each leg's lines naming its own tests.
+    for unit in first.values():
+        assert unit.parts[0]["contexts"] == ["", "t1", "t2", "t3"]
+    assert _tests_of(first[LEG]) == {1: {""}, 2: {"t2"}, 3: {"t3"}}
+    assert _tests_of(first[other]) == {1: {""}, 2: {"t2"}, 3: {"t1"}}
+    # The line both legs' t2 reached alone is the same bytes on both.
+    assert _set_of(first[LEG], 2) == _set_of(first[other], 2)
+    # A run later each leg has a new test of its own: both append both.
+    later = _ci_context.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
+    linux = {
+        "packages/base": _tested(
+            "packages/base",
+            ["", "t0", "t2"],
+            {1: {0}, 2: {2}, 3: {1}},
+            closure="c" * 64,
+            run="2",
+        )
+    }
+    macos = {
+        "packages/base": _tested(
+            "packages/base",
+            ["", "t2", "t9"],
+            {1: {0}, 2: {1}, 3: {2}},
+            closure="c" * 64,
+            run="2",
+        )
+    }
+    named = coverage_record.run_contexts([linux, macos])
+    for leg, rows in ((LEG, linux), (other, macos)):
+        held = coverage_record.recorded(work, leg=leg)
+        why = coverage_record.put_record(
+            work, later, leg=leg, fresh=rows, held=held, run_contexts=named
+        )
+        assert why == ""
+    for leg in (LEG, other):
+        row = coverage_record.recorded(work, leg=leg).units["packages/base"]
+        assert row.parts[0]["contexts"] == ["", "t1", "t2", "t3", "t0", "t9"]
+
+
+def test_a_branch_s_first_write_numbers_the_tests_as_main_s_row(work: Path) -> None:
+    main = _tested("packages/base", ["", "t2", "t5"], {1: {0}, 2: {1}, 3: {2}})
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": main})
+        == ""
+    )
+    mains = coverage_record.recorded(work, leg=LEG).units
+    # The branch's record holds no row of base yet: it numbers as main's.
+    fresh = {
+        "packages/base": _tested(
+            "packages/base", ["", "t1", "t2"], {1: {0}, 2: {2}, 3: {1}}, run="1014"
+        ),
+        # No row of top anywhere: its own contexts, sorted, number it.
+        "packages/top": _tested(
+            "packages/top", ["t9", "", "t3"], {1: {1}, 2: {0}, 3: {2}}, run="1014"
+        ),
+    }
+    why = coverage_record.put_record(
+        work, PULL, leg=LEG, fresh=fresh, base="feat/x", numbered_like=mains
+    )
+    assert why == ""
+    branch = coverage_record.recorded(work, leg=LEG, base="feat/x").units
+    assert branch["packages/base"].parts[0]["contexts"] == ["", "t2", "t5", "t1"]
+    assert _tests_of(branch["packages/base"]) == {1: {""}, 2: {"t2"}, 3: {"t1"}}
+    assert branch["packages/top"].parts[0]["contexts"] == ["", "t3", "t9"]
+    assert _tests_of(branch["packages/top"]) == {1: {""}, 2: {"t9"}, 3: {"t3"}}
 
 
 def _contract(work: Path, runners: str) -> None:

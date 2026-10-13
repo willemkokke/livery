@@ -63,6 +63,17 @@ string, ``1-12,15,17-40``. Per file:
   ``contexts``, each sorted, delta-coded as unsigned LEB128 and
   base64-encoded; ``lines`` pairs a line with the index of its set.
 
+A part names each context once, and its ``contexts`` are its
+numbering: a set holds a context by its place in the list. A record
+keeps a unit's numbering from one reading to the next (`numbering`): a
+context keeps its index whether or not the next reading names it
+again, and a context the record has not numbered yet takes the next
+index. Two readings of a unit a run apart then differ only where the
+tests that reached a line did, and git can store the second as its
+small difference from the first; a numbering sorted afresh would move
+the index of every context after a new test's. `renumbered` moves a part
+to another numbering.
+
 A record keeps each part in its stored form, which `stored` writes and
 `from_stored` reads back. A file's fixed facts, what its content and
 its measurer decide whatever ran, move to a table of their own, named
@@ -723,7 +734,7 @@ def decode(raw: object, *, source: str) -> Part:
     reader.known(table, (), ("format", "unit", "measurer", "contexts", "files"))
     unit = reader.text(table.get("unit"), ("unit",), empty=False)
     measurer = reader.measurer(table.get("measurer"), ("measurer",))
-    contexts = reader.texts(table.get("contexts", []), ("contexts",))
+    contexts = reader.contexts(table.get("contexts", []), ("contexts",))
     files = {
         reader.file_name(name): reader.entry(
             value, ("files", name), measurer, len(contexts)
@@ -795,6 +806,18 @@ class _Reader:
     def texts(self, raw: object, path: KeyPath) -> list[str]:
         items = self.listed(raw, path)
         return [self.text(item, (*path, index)) for index, item in enumerate(items)]
+
+    def contexts(self, raw: object, path: KeyPath) -> list[str]:
+        """A numbering: texts, each named once, as a set holds a context by place."""
+        names = self.texts(raw, path)
+        seen: set[str] = set()
+        for index, name in enumerate(names):
+            if name in seen:
+                raise self.refuse(
+                    (*path, index), f"repeats {name!r}; a numbering names each once"
+                )
+            seen.add(name)
+        return names
 
     def listed(self, raw: object, path: KeyPath) -> list[Any]:
         if not isinstance(raw, list):
@@ -1048,12 +1071,11 @@ class _Reader:
             found.append(found_range)
         return tuple(sorted(found, key=_range_order))
 
-    def reached(self, raw: object, path: KeyPath, contexts: int) -> dict[int, Lines]:
-        if raw is None:
-            return {}
-        table = self.table(raw, path)
-        self.known(table, path, ("sets", "lines"))
-        sets: list[Lines] = []
+    def sets(
+        self, table: Mapping[str, Any], path: KeyPath, contexts: int
+    ) -> list[Lines]:
+        """The sets of the ``reached`` *table*, each naming indexes below *contexts*."""
+        found: list[Lines] = []
         for index, text in enumerate(
             self.texts(table.get("sets", []), (*path, "sets"))
         ):
@@ -1067,7 +1089,15 @@ class _Reader:
                     (*path, "sets", index),
                     f"names context {beyond[0]}, and the part names {contexts}",
                 )
-            sets.append(held)
+            found.append(held)
+        return found
+
+    def reached(self, raw: object, path: KeyPath, contexts: int) -> dict[int, Lines]:
+        if raw is None:
+            return {}
+        table = self.table(raw, path)
+        self.known(table, path, ("sets", "lines"))
+        sets = self.sets(table, path, contexts)
         found: dict[int, Lines] = {}
         for index, item in enumerate(
             self.listed(table.get("lines", []), (*path, "lines"))
@@ -1084,6 +1114,87 @@ class _Reader:
                 )
             found[line] = sets[held_at]
         return found
+
+
+# --- the numbering of contexts ----------------------------------------------------
+
+
+def numbering(known: Sequence[str], contexts: Iterable[str]) -> tuple[str, ...]:
+    """*known*, then each of *contexts* it lacks, sorted: a numbering that only appends.
+
+    A record numbers a unit's contexts this way at every write, *known*
+    being the numbering of the unit's row before it: each context keeps
+    its index, a test that is gone among them, and each new one takes
+    the next.
+    """
+    held = set(known)
+    return (*known, *sorted(set(contexts) - held))
+
+
+def numbered(
+    raw: Mapping[str, Any], known: Sequence[str], *, source: str
+) -> dict[str, Any]:
+    """*raw*, a part as JSON holds it or in its stored form, numbered to extend *known*.
+
+    Its contexts take `numbering` of *known* and its own, so every
+    context of *known* keeps its index and its own new ones follow.
+
+    Raises:
+        PartError: as `renumbered` does, naming *source*.
+    """
+    reader = _Reader(source)
+    table = reader.table(raw, ())
+    own = reader.contexts(table.get("contexts", []), ("contexts",))
+    return renumbered(table, numbering(known, own), source=source)
+
+
+def renumbered(
+    raw: Mapping[str, Any], order: Sequence[str], *, source: str
+) -> dict[str, Any]:
+    """*raw*, a part as JSON or in its stored form, its contexts numbered by *order*.
+
+    Each set of each file's ``reached`` names the contexts it named
+    before, each now by its place in *order*; a context *order* adds
+    names no line, and nothing else in *raw* changes. *order* names
+    each context once and keeps every context of *raw*: a numbering
+    only appends, so one that drops a context is refused, never
+    guessed.
+
+    Raises:
+        PartError: when *order* repeats a context or drops one of
+            *raw*'s, naming it; when a set names an index past *raw*'s
+            contexts, naming the file and the set; and when the
+            contexts or a ``reached`` are off the format. Each names
+            *source*.
+    """
+    reader = _Reader(source)
+    table = reader.table(raw, ())
+    contexts = reader.contexts(table.get("contexts", []), ("contexts",))
+    wanted = reader.contexts(list(order), ("numbering",))
+    place = {name: index for index, name in enumerate(wanted)}
+    for index, name in enumerate(contexts):
+        if name not in place:
+            raise reader.refuse(
+                ("contexts", index),
+                f"is {name!r}, and the numbering drops it; a numbering only"
+                " appends, so every context keeps its index",
+            )
+    moved = [place[name] for name in contexts]
+    files: dict[str, Any] = {}
+    for name, value in reader.table(table.get("files", {}), ("files",)).items():
+        entry = reader.table(value, ("files", name))
+        if entry.get("reached") is None:
+            files[name] = entry
+            continue
+        path: KeyPath = ("files", name, "reached")
+        held = reader.table(entry["reached"], path)
+        reader.known(held, path, ("sets", "lines"))
+        sets = [
+            pack_set(moved[index] for index in found)
+            for found in reader.sets(held, path, len(contexts))
+        ]
+        files[name] = {**entry, "reached": {**held, "sets": sets}}
+    return {**table, "contexts": wanted, "files": files}
 
 
 # --- merging --------------------------------------------------------------------
@@ -1121,7 +1232,12 @@ class Combined:
     left_out: tuple[str, ...]
 
 
-def merge(parts: Iterable[Part], current: Mapping[str, str] | None = None) -> Combined:
+def merge(
+    parts: Iterable[Part],
+    current: Mapping[str, str] | None = None,
+    *,
+    contexts: bool = True,
+) -> Combined:
     """Merge *parts*: each file's readings at one content and by one measurer.
 
     *current* maps a file to its digest in the checkout. A file merges
@@ -1137,15 +1253,25 @@ def merge(parts: Iterable[Part], current: Mapping[str, str] | None = None) -> Co
     keeps the most taken, a region is one by its kind, name and start
     with its calls added, a range is one by where it is with its counts
     added, and the contexts that reached a line are the union, by name.
+    With *contexts* false the merge leaves the contexts out, for a
+    reader that counts alone: no merged reading holds a ``reached``,
+    and the result names no context.
     """
     readings: dict[str, list[tuple[Part, Entry]]] = {}
     names: set[str] = set()
     for part in parts:
-        names.update(part.contexts)
+        if contexts:
+            # A context that reached no line, a test that is gone, keeps
+            # its index in its part's numbering and is no merged context.
+            used: set[int] = set()
+            for entry in part.files.values():
+                for held in entry.reached.values():
+                    used.update(held)
+            names.update(part.contexts[index] for index in used)
         for name, entry in part.files.items():
             readings.setdefault(name, []).append((part, entry))
-    contexts = tuple(sorted(names))
-    index_of = {name: index for index, name in enumerate(contexts)}
+    numbered_by = tuple(sorted(names))
+    index_of = {name: index for index, name in enumerate(numbered_by)}
     files: dict[str, Merged] = {}
     left_out: list[str] = []
     for name in sorted(readings):
@@ -1160,13 +1286,18 @@ def merge(parts: Iterable[Part], current: Mapping[str, str] | None = None) -> Co
             measurer=chosen[0][0].measurer,
             entry=_merged(
                 [
-                    (_reindexed(entry.reached, part.contexts, index_of), entry)
+                    (
+                        _reindexed(entry.reached, part.contexts, index_of)
+                        if contexts
+                        else {},
+                        entry,
+                    )
                     for part, entry in chosen
                 ]
             ),
             units=tuple(dict.fromkeys(part.unit for part, _ in chosen)),
         )
-    return Combined(files, contexts, tuple(left_out))
+    return Combined(files, numbered_by, tuple(left_out))
 
 
 def _reading(part: Part, entry: Entry) -> str:

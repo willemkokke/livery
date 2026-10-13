@@ -1100,11 +1100,15 @@ def _union(
     records: dict[str, coverage_record.Record] | None = None,
     listing: str = "",
     proved: str = "",
+    likes: list[list[str]] | None = None,
+    named: list[dict[str, dict[str, list[str]]]] | None = None,
 ) -> list[tuple[str, str, list[str], list[str]]]:
     """Stand in for the store: the legs, the records by base, and the writes.
 
     *held* is main's record, *records* the others by base, *proved* the
-    branch the verified row names for a push's tree.
+    branch the verified row names for a push's tree. *likes* gathers,
+    write by write, the units each write is handed rows to number by,
+    and *named* the contexts it is handed to append.
     """
     by_base = dict(records or {})
     if held is not None:
@@ -1131,8 +1135,19 @@ def _union(
         remove: tuple[str, ...] = (),
         base: str = "main",
         held: coverage_record.Record | None = None,
+        numbered_like: dict[str, coverage_record.Unit] | None = None,
+        run_contexts: dict[str, dict[str, set[str]]] | None = None,
     ) -> str:
         written.append((base, leg, sorted(fresh), sorted(remove)))
+        if likes is not None:
+            likes.append(sorted(numbered_like or {}))
+        if named is not None:
+            named.append(
+                {
+                    path: {measurer: sorted(held) for measurer, held in found.items()}
+                    for path, found in (run_contexts or {}).items()
+                }
+            )
         return ""
 
     monkeypatch.setattr(coverage_record, "put_record", _put)
@@ -1586,8 +1601,13 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
             "tests": _unit(tmp_path, "tests", {source: [3, 4]}, run="6"),
         }
     )
+    likes: list[list[str]] = []
     written = _union(
-        monkeypatch, [_leg("check-a", "verified")], held=main, records={"feat/x": own}
+        monkeypatch,
+        [_leg("check-a", "verified")],
+        held=main,
+        records={"feat/x": own},
+        likes=likes,
     )
     assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
@@ -1597,7 +1617,55 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
     assert "coverage: tests on check-a: reused from run 6 (1 files), main's" in out
     # Only the row copied from main is written; the branch's own row stands.
     assert written == [("feat/x", "check-a", ["tests"], [])]
+    # A unit the branch's record lacks numbers its tests as main's row.
+    assert likes == [["packages/x", "tests"]]
     assert "coverage record: feat/x/check-a: 0 fresh, 2 carried, 0 removed" in out
+
+
+def test_every_leg_s_write_numbers_a_unit_s_tests_alike(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.coverage._format import Entry, Part, digest, encode
+    from workshop_coverage_meter import COVERAGE_PY
+
+    x = _suite(tmp_path, "x")
+    source = _name(tmp_path, "x")
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+
+    def tested(contexts: tuple[str, ...], line: int) -> coverage_record.Unit:
+        """X's suite: line 1 run at import time, *line* by the leg's own test."""
+        entry = Entry(
+            digest=digest((tmp_path / source).read_bytes()),
+            statements=frozenset({1, 2, 3, 4}),
+            counts=dict.fromkeys((1, 2, 3, 4), 1),
+            reached={1: frozenset({0}), line: frozenset({1})},
+        )
+        return stored_unit(
+            "packages/x",
+            (encode(Part("packages/x", COVERAGE_PY, {source: entry}, contexts)),),
+        )
+
+    # Each leg ran a test the other did not.
+    legs = [
+        _leg("check-a", "full", units={"packages/x": tested(("", "t2"), 2)}),
+        _leg(
+            "check-b",
+            "full",
+            units={"packages/x": tested(("", "t1"), 3)},
+            label="check-b",
+        ),
+    ]
+    named: list[dict[str, dict[str, list[str]]]] = []
+    written = _union(monkeypatch, legs, named=named)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert [(base, leg) for base, leg, _rows, _gone in written] == [
+        ("main", "check-a"),
+        ("main", "check-b"),
+    ]
+    # Each leg's write appends every test the run's rows of x name on
+    # any leg, so both rows number t1 and t2 alike.
+    assert named == [{"packages/x": {"coverage.py": ["", "t1", "t2"]}}] * 2
 
 
 def test_a_narrowed_leg_reuses_the_suite_it_skipped(

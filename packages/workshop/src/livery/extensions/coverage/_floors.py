@@ -287,7 +287,10 @@ def _left_files(root: Path) -> tuple[Mapping[str, Merged], tuple[str, ...]]:
         for name in names
         if (root / name).is_file()
     }
-    return merge(parts, current).files, tuple(part.unit for part in parts)
+    return (
+        merge(parts, current, contexts=False).files,
+        tuple(part.unit for part in parts),
+    )
 
 
 def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:

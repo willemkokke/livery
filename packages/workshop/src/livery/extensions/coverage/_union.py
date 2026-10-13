@@ -70,9 +70,13 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     copied in, the target's own carried rows stand, and the rows of
     units that no longer exist go. On main's run the branch is the one
     the verified record names for the tree, so the merge copies the
-    branch's record into main's. A record that cannot be written
-    prints why: the next run reruns what it cannot reuse, the safe
-    direction.
+    branch's record into main's. Each row written numbers the tests
+    that reached its lines as the row it replaces does, and a unit the
+    target lacks as the other record's row of it, so a branch's rows
+    number them as main's do; each appends every test the run's rows
+    of its unit name on any leg, so every leg's row numbers a test
+    alike. A record that cannot be written prints why: the next run
+    reruns what it cannot reuse, the safe direction.
 
     A leg the contract names and a pull request did not run, one
     outside ``[ci] pull-request-runners``, is carried whole from the
@@ -98,6 +102,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         closure_id,
         put_record,
         row_name,
+        run_contexts,
         run_legs,
     )
     from livery.workshop._ci_context import run_context
@@ -137,7 +142,15 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     merged: list[tuple[Unit, str]] = []
     reused = 0
     ran = 0
-    writes: list[tuple[str, dict[str, Unit], dict[str, tuple[str, Unit]], Record]] = []
+    writes: list[
+        tuple[
+            str,
+            dict[str, Unit],
+            dict[str, tuple[str, Unit]],
+            Record,
+            dict[str, Unit],
+        ]
+    ] = []
     for leg in sorted(legs, key=lambda item: item.key):
         if leg.why:
             fail(
@@ -236,7 +249,8 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             )
         if target:
             own = _read_record(root, held, target, leg.label)
-            writes.append((leg.label, dict(leg.units), carried, own))
+            like = _numbered_like(root, held, bases, target, leg.label)
+            writes.append((leg.label, dict(leg.units), carried, own, like))
     if not merged:
         print("  coverage: no unit to union; nothing judged")
         return ()
@@ -258,16 +272,31 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             f" this run's {head[:12]}; not written, the newer run writes"
         )
         return tuple(packages)
-    for label, fresh, carried, own in writes:
-        stale = own.stale(keys)
-        # The rows carried from another record are copied in; the
-        # target's own carried rows already stand. A stale row a new
-        # row replaces by name (a row of an older shape, say) is
-        # replaced, not removed: only the rest go.
-        rows = dict(fresh)
-        rows.update(
-            {path: row for path, (base, row) in carried.items() if base != target}
+    # The rows carried from another record are copied in; the target's
+    # own carried rows already stand.
+    puts = [
+        (
+            label,
+            fresh,
+            carried,
+            own,
+            like,
+            {
+                **fresh,
+                **{
+                    path: row for path, (base, row) in carried.items() if base != target
+                },
+            },
         )
+        for label, fresh, carried, own, like in writes
+    ]
+    # Every leg's row of a unit numbers its tests alike: each write
+    # appends every test the run's rows of the unit name on any leg.
+    named = run_contexts([rows for *_, rows in puts])
+    for label, fresh, carried, own, like, rows in puts:
+        stale = own.stale(keys)
+        # A stale row a new row replaces by name (a row of an older
+        # shape, say) is replaced, not removed: only the rest go.
         removed = [name for name in stale if name not in {row_name(p) for p in rows}]
         if not rows and not stale:
             print(
@@ -276,7 +305,15 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             )
             continue
         why = put_record(
-            root, run, leg=label, fresh=rows, remove=stale, base=target, held=own
+            root,
+            run,
+            leg=label,
+            fresh=rows,
+            remove=stale,
+            base=target,
+            held=own,
+            numbered_like=like,
+            run_contexts=named,
         )
         if why:
             print(
@@ -297,7 +334,9 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
     A file's readings merge at the content the checkout holds, so the
     checkout's digest of every file the parts name is read first. Each
     part is read from its stored form with the fixed facts its unit
-    holds.
+    holds. The union file holds what the floors count, so the tests
+    that reached each line stay in the parts: the pages read them from
+    the record.
 
     Raises:
         Failed: when a part is off the line format, or names fixed
@@ -327,7 +366,7 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
         for name in names
         if (root / name).is_file()
     }
-    combined = merge(parts, current)
+    combined = merge(parts, current, contexts=False)
     for line in combined.left_out:
         print(f"  coverage: {line}")
     write_union(root, combined, [unit.path for unit, _source in merged])
@@ -335,6 +374,32 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
         f"  coverage: {len(combined.files)} file(s) unioned from {len(parts)}"
         f" part(s), written to {UNION}"
     )
+
+
+def _numbered_like(
+    root: Path, held: dict[str, Record], bases: tuple[str, ...], target: str, label: str
+) -> dict[str, Unit]:
+    """The rows whose numbering a unit takes when *target*'s record lacks it, by path.
+
+    The current rows of the records other than *target* on the leg
+    *label*, in the order of *bases*, the first that holds a unit
+    winning: main's on a branch's first write, so the branch's rows
+    number the tests that reached their lines as main's do. A record
+    the union has not read is read here, and one that cannot be read
+    numbers nothing: the write then numbers afresh.
+    """
+    from livery.extensions.coverage._record import recorded
+
+    found: dict[str, Unit] = {}
+    for base in bases:
+        if base == target:
+            continue
+        record = held.get(base) or recorded(root, leg=label, base=base)
+        if record.failed:
+            continue
+        for path, unit in record.units.items():
+            found.setdefault(path, unit)
+    return found
 
 
 def _read_record(root: Path, held: dict[str, Record], base: str, label: str) -> Record:

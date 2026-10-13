@@ -33,8 +33,10 @@ This extension also reduces coverage.py's measurements to parts in the
 coverage extension's line format, per file coverage.py's own analysis of
 it. On each check leg the coverage extension asks it once for every suite
 the leg ran: the suite's part holds the files of its closure, as the
-suite's own tests and the code outside every test reached them, and that
-part is what the leg stores. On a machine the data the last run left at
+suite's own tests and the code outside every test reached them, with
+the tests that reached each line, each named by its node id and the code
+outside every test as the empty context, and that part is what the leg
+stores. On a machine the data the last run left at
 the root becomes one part, which the coverage pages and the preview read.
 Each file's numbers are checked against coverage.py's before a part is
 handed over, and a file whose numbers differ stops the reduction, named.
