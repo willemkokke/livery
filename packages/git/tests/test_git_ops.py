@@ -109,6 +109,41 @@ def test_run_raises_with_gits_words_and_call_returns_the_code(
     assert git.run(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
 
 
+def test_a_secret_argument_reads_as_stars_in_the_error_and_reaches_git(
+    repo: tuple[Path, Path],
+) -> None:
+    from livery.footman import Secret
+
+    # The failure first: a token-carrying URL set on a remote that does
+    # not exist fails, and the message names the call with *** where
+    # the URL stands. On a remote that exists the URL is set as it is:
+    # git receives the value.
+    clone, _ = repo
+    url = Secret("http://oauth2:s3cret@forge.example/acme/tools.git")
+    with pytest.raises(git.GitError) as caught:
+        git.set_remote_url(clone, "nonesuch", url)
+    assert str(caught.value).startswith("git remote set-url nonesuch *** exited ")
+    assert "s3cret" not in str(caught.value)
+    git.set_remote_url(clone, "origin", url)
+    assert git.remote_url(clone) == "http://oauth2:s3cret@forge.example/acme/tools.git"
+
+
+def test_call_hands_each_argument_to_the_tool_as_the_object_it_is(
+    repo: tuple[Path, Path],
+) -> None:
+    from livery.footman import Secret
+    from livery.toolroom.tools.testing import answers
+
+    # A Secret that reaches the tool handle unchanged is shown as ***;
+    # one turned into a plain str on the way would be shown in the clear.
+    clone, _ = repo
+    url = Secret("http://oauth2:s3cret@forge.example/acme/tools.git")
+    with answers() as calls:
+        git.call(clone, "push", "-q", url, "main")
+    assert calls[0].args[2] is url
+    assert calls[0].command == "git push -q *** main"
+
+
 # --- failures the real git cannot stage, forced through a failing handle ------
 
 

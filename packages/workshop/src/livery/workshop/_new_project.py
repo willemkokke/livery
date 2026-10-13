@@ -171,12 +171,16 @@ def _push_target(clone_url: str, token: str) -> str:
     """Where pushes go: the token-embedded URL when one resolved.
 
     Only http(s) URLs can carry the credential; anything else pushes
-    to the remote as-is. Never printed and never recorded: the
-    caller passes it to git alone.
+    to the remote as-is. The token-embedded URL is a
+    [livery.footman.Secret][]: a profile trace and every other place
+    a command line is shown carry ``***`` in its place, and git alone
+    receives the value. The caller passes it to git unchanged, since
+    any string operation on it returns a plain `str`, which is shown
+    in the clear.
     """
     if token and clone_url.startswith(("http://", "https://")):
         scheme, _, rest = clone_url.partition("://")
-        return f"{scheme}://oauth2:{token}@{rest}"
+        return footman.Secret(f"{scheme}://oauth2:{token}@{rest}")
     return "origin"
 
 
