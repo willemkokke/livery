@@ -290,11 +290,6 @@ class KindRecord:
             in one call ([livery.workshop.run_suites][]); None for
             a kind that runs none that way. A child kind takes the
             nearest ancestor's.
-        coverage_pages: How the kind renders the coverage report
-            pages of its packages for the site, given the workspace
-            root and the packages that declare one; returns the names
-            of the packages it rendered. None for a kind with no such
-            pages. A child kind takes the nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools and seed tree, builds
             nothing, and is never a package's ``kind``. A concrete
@@ -325,7 +320,6 @@ class KindRecord:
         Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
     ) = None
     suites: SuiteRunner | None = None
-    coverage_pages: Callable[[Path, tuple[Package, ...]], list[str]] | None = None
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
     host_build: Callable[[Path], None] | None = None
@@ -550,16 +544,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-def kind_coverage_pages(
-    kind_name: str,
-) -> Callable[[Path, tuple[Package, ...]], list[str]] | None:
-    """The coverage page renderer of *kind_name*, else its nearest ancestor's."""
-    for record in reversed(kind_chain(kind_name)):
-        if record.coverage_pages is not None:
-            return record.coverage_pages
-    return None
-
-
 def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
     """The union of host allowances the present kinds grant, sorted."""
     tools: set[str] = set()
@@ -640,7 +624,6 @@ def _register_builtin() -> None:
             extractor=_python.extractor(),
             examples=_python.run_examples,
             suites=_python.run_test,
-            coverage_pages=_python.render_coverage_pages,
             # A package that lists no extension is taken to hold the
             # python extension: its categories and steps are the same.
             stands_for=("python",),

@@ -14,6 +14,10 @@ extension's; two extensions declaring one query refuse naming both.
 An extension answers a query under ``[queries]`` in its declaration
 file: ``<name> = "module:function"``, a function called with the
 package or the workspace root, or a literal, ``[queries.<name>] value``.
+It answers under ``[for.<target>.queries]`` the same way, and that
+answer is asked only while the target is listed and the extension's
+listing contributes to it, the rule
+[livery.workshop.contributions_for][] reads a target's tables by.
 [livery.workshop.answer][] asks a package's set in composition order,
 or the listed extensions in list order, and combines the answers by
 the query's rule. A handle, [livery.workshop.Query][], names a query
@@ -31,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 if TYPE_CHECKING:
     from livery.workshop._composition import Lookup
-    from livery.workshop._declaration import Reference
+    from livery.workshop._declaration import DeclaredValue, Reference
     from livery.workshop._packages import Package
 
 T = TypeVar("T")
@@ -327,6 +331,71 @@ def _walk(subject: Package | Path, spec: QuerySpec, lookup: Lookup) -> tuple[str
         return tuple(sorted(members))
 
 
+def _contributing(subject: Package | Path) -> dict[str, frozenset[str]]:
+    """Each listed extension to the listed targets its listing contributes to.
+
+    The rule [livery.workshop.contributions_for][] reads a target's
+    tables by: the entry's ``for`` list when it has one, otherwise every
+    listed target the extension declares a ``[for.<target>]`` table for.
+    """
+    from livery.workshop._extensions import extension_names, resolved_targets
+
+    start = subject if isinstance(subject, Path) else subject.directory
+    listed = frozenset(extension_names(start))
+    return {
+        owner: listed.intersection(targets)
+        for owner, targets in resolved_targets(start).items()
+    }
+
+
+def _one_answer(
+    name: str,
+    held: list[tuple[tuple[str, ...], Reference | DeclaredValue]],
+    subject: Package | Path,
+    spec: QuerySpec,
+) -> object:
+    """The answer of the extension *name* from each place *held* names.
+
+    Each place is a key path in the declaration file and the answer
+    there, asked and judged against the query's values. Answers from
+    two places make one for a ``union`` query, every item once in the
+    order first met; for a query of any other rule they refuse.
+    """
+    from livery.workshop._contract_keys import shown
+    from livery.workshop._declaration import DeclaredValue
+
+    values: dict[str, object] = {}
+    for place, answered in held:
+        value = (
+            answered.value if isinstance(answered, DeclaredValue) else answered(subject)
+        )
+        if spec.values is not None and value not in spec.values:
+            listed = ", ".join(repr(known) for known in spec.values)
+            at = f" at {shown(place)}" if place[0] == "for" else ""
+            raise QueryError(
+                f"{name} answers {spec.name} with {value!r}{at}, whose values are"
+                f" {listed}"
+            )
+        values[shown(place)] = value
+    if len(values) == 1:
+        return next(iter(values.values()))
+    if spec.combine != UNION:
+        raise QueryError(
+            f"{name} answers {spec.name} at {' and at '.join(values)}; only a"
+            " union query takes two answers from one extension, so answer it in"
+            " one place"
+        )
+    items: dict[object, None] = {}
+    for where, value in values.items():
+        if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
+            raise QueryError(
+                f"{name} answers {spec.name} with {value!r} at {where}, and a union"
+                " combines lists; answer a list"
+            )
+        items.update(dict.fromkeys(cast("Iterable[object]", value)))
+    return tuple(items)
+
+
 def answers(
     subject: Package | Path, query: Query[T], *, lookup: Lookup | None = None
 ) -> dict[str, T]:
@@ -335,33 +404,43 @@ def answers(
     *subject* is the package for a package-level query, and the
     workspace root, or a directory in the workspace, for a
     workspace-level one. Each declaration is read through *lookup*,
-    the installed ones when absent.
+    the installed ones when absent. An extension answers at the top
+    level of its declaration file, and in a ``[for.<target>]`` table
+    while *target* is listed and the extension's listing contributes to
+    it; answering in two of those places, it answers a ``union`` query
+    with every item of both.
 
     Raises:
         QueryError: when no extension declares the query, when *subject*
-            is at the other level, or when an answer is off the query's
-            values, naming the extension.
+            is at the other level, when an answer is off the query's
+            values, naming the extension, or when an extension answers a
+            query of another rule in two places, naming both.
     """
-    from livery.workshop._declaration import DeclaredValue
-
     if lookup is None:
         from livery.workshop._extensions import installed_declaration
 
         lookup = installed_declaration
     spec = query_spec(query.name)
     found: dict[str, T] = {}
+    contributing: dict[str, frozenset[str]] | None = None
     for name in _walk(subject, spec, lookup):
         declared = lookup(name)
-        held = declared.queries.get(query.name) if declared is not None else None
-        if held is None:
+        if declared is None:
             continue
-        value = held.value if isinstance(held, DeclaredValue) else held(subject)
-        if spec.values is not None and value not in spec.values:
-            listed = ", ".join(repr(known) for known in spec.values)
-            raise QueryError(
-                f"{name} answers {query.name} with {value!r}, whose values are {listed}"
-            )
-        found[name] = cast("T", value)
+        held: list[tuple[tuple[str, ...], Reference | DeclaredValue]] = []
+        if query.name in declared.queries:
+            held.append((("queries", query.name), declared.queries[query.name]))
+        for target, answered in declared.target_queries.items():
+            if query.name not in answered:
+                continue
+            if contributing is None:
+                # Read once, and only when a [for] table answers.
+                contributing = _contributing(subject)
+            if target in contributing.get(name, frozenset()):
+                place = ("for", target, "queries", query.name)
+                held.append((place, answered[query.name]))
+        if held:
+            found[name] = cast("T", _one_answer(name, held, subject, spec))
     return found
 
 

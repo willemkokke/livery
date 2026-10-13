@@ -1399,21 +1399,48 @@ def test_on_a_push_the_page_frames_a_tree_the_gate_job_renders_later(
     assert placed.read_text() == "<h1>report</h1>\n"
 
 
-def test_a_kind_with_no_coverage_renderer_states_the_absence(
+#: A workspace listing the site and the extension that draws its
+#: coverage pages, which answers the site's query while both are listed.
+_DRAWN = 'extensions = ["docs", "coverage"]\n'
+
+
+def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from coverage import CoverageData
+
     from livery.extensions.docs import _site as _docs
 
+    monkeypatch.setattr(
+        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
+    )
     root = _workspace(tmp_path)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
-    monkeypatch.setattr(
-        "livery.workshop._kinds.kind_coverage_pages", lambda kind_name: None
-    )
-    assert _docs.render_coverage_pages(root) == []
-    out = capsys.readouterr().out
-    assert "core: the python kind renders no coverage pages" in out
+    # Measured data a drawer reads, so the listing alone differs below.
+    source = root / "packages" / "core" / "src" / "acme" / "core" / "mod.py"
+    source.write_text("a = 1\n")
+    data = CoverageData(basename=str(root / ".coverage"))
+    data.add_arcs({str(source): {(-1, 1), (1, -1)}})
+    data.write()
+    report = root / "packages" / "core" / "htmlcov"
+    # Docs alone, and docs beside coverage whose `for` list leaves docs
+    # out, so its [for.docs] answer is never asked: no listed extension
+    # draws, and the declared report states the absence.
+    for listed in ('["docs"]', '["docs", { name = "coverage", for = [] }]'):
+        (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
+        assert _docs.render_coverage_pages(root) == []
+        out = capsys.readouterr().out
+        assert (
+            "  coverage: core: no listed extension draws coverage pages; its page"
+            " states the absence\n"
+        ) in out
+        assert not report.exists()
+    # Both listed, coverage draws from the same data.
+    (root / "workshop.toml").write_text(f"[workspace]\n{_DRAWN}")
+    assert _docs.render_coverage_pages(root) == ["core"]
+    assert (report / "index.html").is_file()
 
 
 def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
@@ -1423,7 +1450,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
 
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path)
+    root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
@@ -1440,7 +1467,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     data.add_arcs({str(source): {(-1, 1), (1, 2), (2, -1)}})
     data.write()
     monkeypatch.setattr(
-        "livery.extensions.python._backend._stored_legs",
+        "livery.extensions.coverage._pages._stored_legs",
         lambda root: ([stored], ["packages/other on check-a"]),
     )
     # A declared package the data never touched states the absence.
@@ -1463,7 +1490,7 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
 
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path)
+    root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
@@ -1478,7 +1505,7 @@ def test_local_data_naming_a_moved_file_states_the_absence_on_a_desk_only(
     stale.mkdir(parents=True)
     (stale / "index.html").write_text("an older report")
     monkeypatch.setattr(
-        "livery.extensions.python._backend._stored_legs", lambda root: ([], [])
+        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
     )
     # Inside CI the data is the record of the tree being built: red.
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
@@ -1587,13 +1614,13 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
 ) -> None:
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path)
+    root = _workspace(tmp_path, docs_table=_DRAWN)
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
     monkeypatch.setattr(
-        "livery.extensions.python._backend._stored_legs", lambda root: ([], [])
+        "livery.extensions.coverage._pages._stored_legs", lambda root: ([], [])
     )
     assert _docs.render_coverage_pages(root) == ["core"]
     report = root / "packages" / "core" / "htmlcov"
@@ -1730,7 +1757,7 @@ def test_the_generators_output_is_printed_in_ci_only() -> None:
 def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.python import _backend as _python
+    from livery.extensions.coverage import _pages
 
     root = _workspace(tmp_path)
     calls: list[tuple[list[str], Path]] = []
@@ -1741,24 +1768,24 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
         calls.append((labels, into))
         return [into / "x.coverage"], ["packages/bare on check-a"]
 
-    monkeypatch.setattr(_python, "stored_union", _pull)
+    monkeypatch.setattr(_pages, "stored_union", _pull)
     monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    assert _python._stored_legs(root) == ([], [])
+    assert _pages._stored_legs(root) == ([], [])
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
     monkeypatch.setenv("WORKSHOP_POINT", "gate")
     monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _python._stored_legs(root) == ([], [])
+    assert _pages._stored_legs(root) == ([], [])
     # The merge point's docs job builds the site without the trees:
     # the gate job renders them after its union.
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "docs")
-    assert _python._stored_legs(root) == ([], [])
+    assert _pages._stored_legs(root) == ([], [])
     monkeypatch.setenv("WORKSHOP_POINT", "merge")
     monkeypatch.setenv("WORKSHOP_LEG", "gate")
-    files, misses = _python._stored_legs(root)
+    files, misses = _pages._stored_legs(root)
     assert files == [root / "coverage-data" / "x.coverage"]
     assert misses == ["packages/bare on check-a"]
     assert calls == [(["check-a"], root / "coverage-data")]

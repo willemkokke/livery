@@ -73,6 +73,7 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 [project.entry-points."workshop.extensions"]
 cmake = "livery.extensions.cmake"
 conan = "livery.extensions.conan"
+coverage = "livery.extensions.coverage"
 cpp = "livery.extensions.cpp"
 docs = "livery.extensions.docs"
 nanobind = "livery.extensions.nanobind"
@@ -133,6 +134,7 @@ module-name = [
     "livery.workshop",
     "livery.extensions.cmake",
     "livery.extensions.conan",
+    "livery.extensions.coverage",
     "livery.extensions.cpp",
     "livery.extensions.docs",
     "livery.extensions.nanobind",

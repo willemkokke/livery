@@ -1392,7 +1392,9 @@ def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bo
     the judge naming nothing since a missing ``for`` is not a problem.
     """
     listed = ", ".join(f'"{target}"' for target in targets)
-    line = re.compile(rf'^(\s*)"({_entry_pattern(owner)})",?\s*(#.*)?$', re.M)
+    # The entry's own line alone: a newline in the gap before the comment
+    # would take the next line's comment onto the rewritten entry.
+    line = re.compile(rf'^(\s*)"({_entry_pattern(owner)})",?[ \t]*(#.*)?$', re.M)
     match = line.search(text)
     if match is not None:
         comment = f"  {match.group(3)}" if match.group(3) else ""

@@ -491,6 +491,11 @@ def _references(declared: Declaration) -> list[tuple[str, Reference]]:
         (shown(("queries", name)), reference)
         for name, reference in declared.queries.items()
     ]
+    found += [
+        (shown(("for", target, "queries", name)), reference)
+        for target, answered in declared.target_queries.items()
+        for name, reference in answered.items()
+    ]
     return [(key, value) for key, value in found if isinstance(value, Reference)]
 
 
