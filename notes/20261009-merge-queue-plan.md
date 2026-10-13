@@ -1,7 +1,8 @@
 # The merge queue: main's tip is always a proved tree
 
 Status: written 2026-10-09 as a future plan; not started, no issue
-filed. Phases 1 to 3 build a serial queue the workshop drives on
+filed. Deferred on 2026-10-13 until it can be done properly (decision
+record). Phases 1 to 3 build a serial queue the workshop drives on
 every forge and prove it in the local loop. Phase 4 adds GitHub's
 native queue as a probed capability, taken when the metrics record
 shows queue latency on the busy days.
@@ -387,6 +388,10 @@ paragraph.
   coverage, not to mention that windows and macos are much closer in
   speed now we've optimised our git usage, so it wouldn't save that
   much." Pull requests have run every runner since 2026-10-12 (#1499).
+
+- 2026-10-13, Willem: "No merge queue for now until we can do it
+  properly, too much of a distraction now." The plan waits; open item
+  7 stays open for when it is taken up.
 
 ## Open
 
