@@ -2,33 +2,46 @@
 
 A package states its policy in its ``[coverage]`` table, a table this
 extension declares: a floor, the mark on the store, or no verdict at
-all ([livery.extensions.coverage._floors.coverage_policy][]). The
-figure is one computation,
-[livery.extensions.coverage._floors.measured_coverage][]: the gate
-job judges it over the union of every leg
-([livery.extensions.coverage._floors.enforce_coverage][]), and a
+all (`coverage_policy`). The figure is one computation, `figures`, over
+merged parts in the line format: each source file's measurer judges
+what it names, its lines alone or its lines and branches. The gate job
+judges it over the union of every leg (`enforce_coverage`), and a
 machine's run of the tests prints it over its own run, beside each
-floor, as a preview that judges nothing
-([livery.extensions.coverage._floors.report_coverage][]). The coverage
-pages state each package's floor in the words
-[livery.extensions.coverage._floors.floor_status][] gives.
+floor, as a preview that judges nothing (`report_coverage`); both read
+their data through `measured_coverage`. The coverage pages state each
+package's floor in the words `floor_status` gives.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
-from dataclasses import dataclass
-from pathlib import Path, PurePath
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
+from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
 from livery.extensions.coverage import _marks
-from livery.extensions.coverage._leg import suites_of, workspace_name
-from livery.extensions.coverage._lines import measures_lines, percent, read_parts
+from livery.extensions.coverage._format import (
+    Merged,
+    OtherVersion,
+    Part,
+    PartError,
+    decode,
+    digest,
+    merge,
+    numbers,
+)
+from livery.extensions.coverage._leg import suites_of
 from livery.extensions.coverage._marks import AUTO_RATCHET, DEFAULT_EPSILON
+from livery.extensions.coverage._parts import (
+    MEASURERS,
+    native,
+    part_files,
+    read_part,
+    read_union,
+    reduced,
+)
 from livery.footman import fail
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import WORKSPACE_TESTS
@@ -157,96 +170,124 @@ def floor_status(
     )
 
 
-#: What coverage.py says when the run left no data: a selection of
-#: tests that reached no source measures nothing, which a preview
-#: reports and a judged leg refuses.
-NO_DATA = "No data to report"
+#: The category of a package's files its figure counts.
+SOURCE = "source"
+
+
+def figures(
+    root: Path,
+    files: Mapping[str, Merged],
+    units: Iterable[str],
+    packages: tuple[Package, ...],
+) -> dict[str, float]:
+    """Each measured package's figure over its source files in *files*.
+
+    A file counts in the package that holds it when its category there
+    is ``source`` and the checkout holds it, so a test's own lines and a
+    build script never dilute the figure, and a module a test built
+    under its temporary directory counts nowhere. Each file counts what
+    its measurer judges (`numbers`): coverage.py's statements and
+    branches, a native measurer's lines alone, the figure being what is
+    covered over what can be.
+
+    *units* are the units whose parts *files* merged. A native
+    package is measured only when its own suite's parts are among them,
+    since its suite's measurer leaves them; any other package is
+    measured when any unit that is not a native suite's is, and a
+    package measured with no source file reached is 100. A package not
+    measured has no figure.
+    """
+    from livery.workshop._categories import category_of
+
+    held = set(units)
+    natives = {package.path for package in packages if native(package)}
+    others = any(unit not in natives for unit in held)
+    found: dict[str, float] = {}
+    for package in packages:
+        if (package.path not in held) if package.path in natives else not others:
+            continue
+        prefix = f"{package.path}/"
+        covered = coverable = 0
+        for name, reading in files.items():
+            if not name.startswith(prefix) or not (root / name).is_file():
+                continue
+            if category_of(package, name[len(prefix) :]).name != SOURCE:
+                continue
+            counted = numbers(reading.entry, reading.measurer)
+            covered += counted.covered
+            coverable += counted.coverable
+        found[package.path] = 100.0 * covered / coverable if coverable else 100.0
+    return found
 
 
 def measured_coverage(
     root: Path, packages: tuple[Package, ...], *, none_ok: bool = False
 ) -> dict[str, float]:
-    """Per-package coverage from the run's ``.coverage`` data, statements and branches.
+    """Each measured package's figure (`figures`) over the measured data at *root*.
 
-    A python package's percentage is the statements and branches of
-    its files the data reached, over all of them, the figure
-    coverage.py reports as a file's total; a package with none to
-    reach is 100. A native package's is its lines part's, the lines
-    hit over the instrumentable lines of its sources, and a native
-    package with no part left is absent, never a number. A run that
-    left no python data (`NO_DATA`) is empty under *none_ok* and a
-    refusal otherwise. A measured file the disk no longer has, a module
-    a test built under its temporary directory, is skipped: no package
-    owns it, so it changes no number. A file the data names with no
-    line run, a source nothing imported, is left out too, as the leg's
-    split leaves it out of every unit
-    ([livery.extensions.coverage._leg.suite_arcs_by_context][]): the
-    preview a machine prints over its own run and the figure the gate
-    job judges over the union are this one computation, and agree on
-    every file both measured.
+    In the gate job the data is the union every leg's parts and the
+    records' made, which its judge wrote at *root*. Anywhere else it is
+    what the last run on this machine left: the parts a native suite's
+    measurer left, and the parts the listed reductions make of the rest
+    of the data. A machine's data is the whole run's, which names every
+    source under the meter's directory, one nothing imported among
+    them with no line run; the leg's units hold the files their suites
+    reached alone, so such a file is left out here too, and the preview
+    and the union agree on every file both measured. A run that left no
+    data for a package that is not native is empty under *none_ok*, and
+    refuses otherwise.
     """
-    lines_parts = read_parts(root)
-    measured: dict[str, float] = {}
-    for package in packages:
-        if measures_lines(package) and package.path in lines_parts:
-            reached = percent(lines_parts[package.path], package)
-            measured[package.path] = 100.0 if reached is None else reached
-    arcs_packages = tuple(p for p in packages if not measures_lines(p))
-    if not arcs_packages:
-        return measured
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
-        report = handle.name
-    # The data read is *root*'s, by contract. Under a metered gate the
-    # ambient COVERAGE_*/COV_CORE_* variables re-point the coverage CLI
-    # at the outer run's live data file, whose parallel parts are still
-    # being written; scrubbing them keeps the read on the file the
-    # caller named.
-    scrubbed = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    try:
+        unioned = read_union(root)
+    except PartError as error:
+        fail(f"coverage: {error}")
+    if unioned is not None:
+        return figures(root, unioned.files, unioned.units, packages)
+    files, units = _left_files(root)
+    if not units and not none_ok and not all(native(item) for item in packages):
+        fail(
+            "coverage: nothing measured here: no union was written at"
+            f" {root}, and no measured run on this machine left data; run the"
+            " tests measured first"
+        )
+    return figures(root, files, units, packages)
+
+
+def _left_files(root: Path) -> tuple[Mapping[str, Merged], tuple[str, ...]]:
+    """The files the last run on this machine measured, merged; and their units.
+
+    A part of another format version is named and left out; a part off
+    the format refuses, naming its source and the key.
+    """
+    from livery.workshop import answer
+
+    parts: list[Part] = []
+    for path in part_files(root):
+        try:
+            parts.append(read_part(path, root))
+        except OtherVersion as error:
+            print(f"  coverage: {error}; the figure reads without it")
+        except PartError as error:
+            fail(f"coverage: {error}")
+    for name, reduction in sorted(answer(root, MEASURERS).items()):
+        source = f"the {name} measurer's data on this machine"
+        for item in reduced(partial(reduction.left, root), source):
+            try:
+                part = decode(item, source=source)
+            except OtherVersion as error:
+                print(f"  coverage: {error}; the figure reads without it")
+                continue
+            except PartError as error:
+                fail(f"coverage: {error}")
+            ran = {file: entry for file, entry in part.files.items() if entry.counts}
+            parts.append(replace(part, files=ran))
+    names = sorted({name for part in parts for name in part.files})
+    current = {
+        name: digest((root / name).read_bytes())
+        for name in names
+        if (root / name).is_file()
     }
-    # nofail: the exit code is read here, so a run that left no data
-    # is told apart from a broken read instead of ending the gate.
-    # --ignore-errors: the data names every livery.* module the tests
-    # imported, a fake one a test built under its tmp_path included,
-    # and a passing test deletes that directory at teardown. A file
-    # outside the workspace is no package's, so the sums below never
-    # read it, and a source the disk no longer has must not stop them.
-    result = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True)(
-        "json", "--ignore-errors", "-o", report
-    )
-    if result.code != 0:
-        if none_ok and NO_DATA in result.stdout + result.stderr:
-            return measured
-        fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
-    data = json.loads(Path(report).read_text("utf-8"))
-    Path(report).unlink(missing_ok=True)
-    lined = run_files(root)
-    totals: dict[str, list[int]] = {package.path: [0, 0] for package in arcs_packages}
-    for filename, entry in data.get("files", {}).items():
-        # coverage spells a relative path with the platform's separator;
-        # a package's path is spelled with slashes everywhere.
-        spelled = PurePath(filename).as_posix()
-        if spelled not in lined:
-            continue
-        for package in arcs_packages:
-            if spelled.startswith(f"{package.path}/src/"):
-                summary = entry.get("summary", {})
-                totals[package.path][0] += int(summary.get("covered_lines", 0)) + int(
-                    summary.get("covered_branches", 0)
-                )
-                totals[package.path][1] += int(summary.get("num_statements", 0)) + int(
-                    summary.get("num_branches", 0)
-                )
-                break
-    measured.update(
-        {
-            path: (100.0 * covered / statements if statements else 100.0)
-            for path, (covered, statements) in totals.items()
-        }
-    )
-    return measured
+    return merge(parts, current).files, tuple(part.unit for part in parts)
 
 
 def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
@@ -263,25 +304,20 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
             "  coverage: nothing measured by this run (its tests reached no"
             " source); the CI union judges the floors"
         )
-    arcs_measured = any(
-        not measures_lines(package) and package.path in measured for package in packages
-    )
     for package in packages:
         if package.path == WORKSPACE_TESTS:
             continue  # a unit of the union, never a package with a floor
         policy = coverage_policy(package)
         if policy is None:
             continue
-        if measures_lines(package):
-            if package.path not in measured:
+        if package.path not in measured:
+            if native(package):
                 print(
                     f"  coverage {package.path}: not measured here (its tests did"
                     " not run, or ran without their measurer)"
                 )
-                continue
-        elif not arcs_measured:
             continue
-        percent = measured.get(package.path, 0.0)
+        percent = measured[package.path]
         if not policy.required:
             judged = UNJUDGED
         elif policy.ratchet:
@@ -300,28 +336,6 @@ def previewer(root: Path) -> Callable[[Path, tuple[Package, ...]], None]:
     """
     del root
     return report_coverage
-
-
-def run_files(root: Path) -> set[str]:
-    """The files *root*'s coverage data names with a line run, workspace-relative.
-
-    A file the meter names with no line run, a source under the
-    measured directory that nothing imported, is not among them, and
-    neither is a file outside *root*. Empty without a data file.
-    """
-    from coverage import CoverageData
-
-    path = root / ".coverage"
-    if not path.is_file():
-        return set()
-    data = CoverageData(basename=str(path))
-    data.read()
-    named = (
-        workspace_name(filename, root)
-        for filename in data.measured_files()
-        if data.lines(filename)
-    )
-    return {name for name in named if name is not None}
 
 
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
@@ -359,7 +373,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
             figure = "not measured" if reached is None else f"{reached:.1f}%"
             print(f"  coverage {package.path}: {figure} ({UNJUDGED})")
             continue
-        if package.path not in measured and measures_lines(package):
+        if package.path not in measured and native(package):
             print(f"  coverage {package.path}: not measured")
             problems.append(
                 f"{package.path}: not measured; its tests ran without their"

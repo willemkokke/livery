@@ -1,7 +1,7 @@
 # The coverage extension: each package's coverage policy, the measured
 # union the gate job judges it on, the record and the marks that carry
-# it across runs, and the site's coverage pages, drawn from the measured
-# data in the line format.
+# it across runs, and the site's coverage pages, every one of them in
+# the line format the measurers hand their readings over in.
 # Read at every mount; its verbs arrive through its plugin, and a
 # query's answer is imported when it is asked.
 
@@ -40,19 +40,19 @@ doc = "whether anything judges the package's coverage; true when absent, and fal
 
 # While docs is listed, the function that draws the coverage pages of
 # the packages that declare an htmlcov report: each file's lines,
-# branches, functions and classes as coverage.py counts them, from
-# main's record in the merge point's gate job and from the data a gate
-# run left anywhere else.
+# branches, functions and classes as coverage.py counts them, from the
+# parts main's record stores in the merge point's gate job and from the
+# data a gate run left anywhere else.
 [for.docs.queries]
 "docs.coverage-pages" = "livery.extensions.coverage._pages:renderer"
 
-# Each check leg leaves its measured suites for the leg's one write,
-# after the gate and before that write: the suites no record can
-# supply run first, measured.
+# Each check leg leaves its measured suites' parts for the leg's one
+# write, after the gate and before that write: the suites no record
+# can supply run first, measured.
 [ci.jobs.gate.check]
 entries = ["coverage.leg"]
 
-# The gate job unions every leg's suites with the records and judges
+# The gate job unions every leg's parts with the records' and judges
 # the floors before it collects the run's rows: a package below its
 # floor stops the job before the verdict and the stamp.
 [ci.jobs.gate.gate]
@@ -66,11 +66,13 @@ judges = ["coverage.union"]
 "store.series" = "livery.extensions.coverage._record:series"
 "python.test.preview" = "livery.extensions.coverage._floors:previewer"
 
-# Who reduces the stored rows of a measurer this extension does not
-# read itself, coverage.py's arcs say: each listed extension answers
-# with a function of the workspace root that returns its reductions, by
-# the name a row's measurer carries. One extension reduces each
-# measurer, and the lines measurer's rows are read here.
+# Who reduces the data a measurer leaves to parts, coverage.py's arcs
+# say: each listed extension answers with a function of the workspace
+# root that returns its reductions, by the measurer's name. A check
+# leg asks them for the parts of the suites it ran, and a machine's
+# pages and preview for the parts of its last run. One extension
+# reduces each measurer; a measurer that writes its parts in its own
+# step, a native build's, answers nothing here.
 [queries."coverage.measurers"]
 level = "workspace"
-combine = "livery.extensions.coverage._pages:measurers_by_name"
+combine = "livery.extensions.coverage._parts:measurers_by_name"

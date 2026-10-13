@@ -269,7 +269,13 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
 
 def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     # measured_coverage and enforce_coverage run for real, against a
-    # coverage data file recorded here, not a monkeypatch.
+    # coverage data file recorded here, not a monkeypatch. coverage.py's
+    # data reaches the figure through the pytest extension's reduction,
+    # a distribution of its own: a run of this wheel alone has none.
+    pytest.importorskip("livery.extensions.pytest")
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["pytest", "coverage"]\n'
+    )
     package_dir = tmp_path / "packages" / "thing"
     (package_dir / "src").mkdir(parents=True)
     (package_dir / "workshop.toml").write_text(

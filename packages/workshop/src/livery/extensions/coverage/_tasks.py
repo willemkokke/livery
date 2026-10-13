@@ -29,42 +29,44 @@ def _root() -> Path:
 
 @coverage_group.task(name="leg", hidden=True)
 def coverage_leg() -> None:
-    """Leave this leg's measured suites for its write, measuring the unrecorded first.
+    """Leave this leg's suites' parts for its write, measuring the unrecorded first.
 
     The check leg's entry, after the gate and before the leg's own
-    write, ``ci.leg``: the run left one data file per process. When the
-    gate ran narrowed or skipped, the suites no record can supply at
-    their current closure run first, measured. Then each suite the
-    leg ran is split out and left, with the scope the leg measured, for
-    the leg's write, which puts it on the leg's per-run ref beside the
-    timing row; the parts combine into one ``.coverage``. Refuses when
-    a leg that ran its gate left no data, naming the variable that arms
-    the meter, and when the lines could not be left, so a leg that
-    measured is never judged as an empty union.
+    write, ``ci.leg``. When the gate ran narrowed or skipped, the
+    suites no record can supply at their current closure run first,
+    measured. Then each suite the leg ran gets its parts in the line
+    format, the ones its measurer left and the ones the reductions make
+    of the run's data, and they are left, with the scope the leg
+    measured, for the leg's write, which puts them on the leg's per-run
+    ref beside the timing row; each suite's size prints raw and
+    gzipped. Refuses when a leg that ran its suites left no part of
+    any, or a reduction refuses, and when the parts could not be left,
+    so a leg that measured is never judged as an empty union.
     """
-    from livery.extensions.coverage._leg import combine_leg, top_up
+    from livery.extensions.coverage._leg import gather_leg, top_up
     from livery.workshop._quality import _packages
     from livery.workshop._verified import read_marker
 
     root = _root()
     packages = _packages()
-    combine_leg(root, packages, marker=top_up(root, packages, read_marker(root)))
+    gather_leg(root, packages, marker=top_up(root, packages, read_marker(root)))
 
 
 @coverage_group.task(name="union", hidden=True)
 def coverage_union() -> None:
-    """Union the run's legs' lines with the records and enforce the floors.
+    """Union the run's legs' parts with the records' and enforce the floors.
 
-    The gate job's judge: every check leg's lines are read from its
+    The gate job's judge: every check leg's parts are read from its
     per-run ref, every suite no leg ran is carried from a record on
-    that leg at the suite's current closure, and the union judges
+    that leg at the suite's current closure, the parts merge by the
+    line format's rules into the union file, and the union judges
     every package. On main's run the record is then written back.
-    Refuses when no leg left its lines, when a leg that ran its gate
+    Refuses when no leg left its parts, when a leg that ran its gate
     left none, and when a suite neither the run nor the record can
-    supply, so nothing passes as a smaller union; the report and the
-    verdicts print, so the numbers on screen are the numbers enforced.
-    The percentages are left as the coverage section of the run's row,
-    which the collect after it folds into the run's file.
+    supply, so nothing passes as a smaller union; the verdicts print,
+    so the numbers on screen are the numbers enforced. The percentages
+    are left as the coverage section of the run's row, which the
+    collect after it folds into the run's file.
     """
     from contextlib import nullcontext
 
@@ -94,12 +96,12 @@ def coverage_union() -> None:
 
 @coverage_group.task(name="enforce")
 def coverage_enforce() -> None:
-    """Enforce every package's floor on the combined coverage data.
+    """Enforce every package's floor on the measured data here.
 
-    Runs where a merged ``.coverage`` file already exists, the
-    aggregating CI job after it combines every leg's data; the same
-    floors `fm test` checks quickly on one machine, here judged on
-    the cross-platform union.
+    In the gate job, after its union, the data is the union file every
+    leg's parts made; on a machine it is what the last measured run
+    left. The same floors a machine's run of the tests previews, here
+    judged on the cross-platform union.
     """
     from livery.extensions.coverage._floors import enforce_coverage
     from livery.workshop._quality import _packages

@@ -461,14 +461,18 @@ workshop wheel, listed as `coverage`, and answers it in its
 `[for.docs]` table. It draws each such package's pages itself, from
 parts in its line format: per file, the statements and the lines that
 ran, the branches with the sentence that says why an untaken one never
-ran, the functions and classes, and the tests that reached each line.
-The numbers are coverage.py's own, and the source is highlighted by
-Pygments, so every language draws alike. The pages read main's
-coverage record in the merge point's gate job and the data a gate run
-left anywhere else. A native suite's lines are read by the extension
-itself; a measurer's rows it cannot read are reduced by the extension
-that answers its `coverage.measurers` query for that measurer, the
-pytest extension for coverage.py's arcs. A measured file the checkout
+ran, the functions and classes, the tests that reached each line, and,
+for a measurer that reads columns, each stretch of code with its
+count, so a line that ran with code that never did is drawn partial
+and that code is marked. The numbers are coverage.py's own, and the
+source is highlighted by Pygments, so every language draws alike. The
+pages read the parts
+main's coverage record stores in the merge point's gate job, as the
+legs made them, and the data a gate run left anywhere else: the parts
+a native suite's measurer left in the workspace, and the parts the
+extension that answers the `coverage.measurers` query for a measurer
+makes of that measurer's data, the pytest extension of coverage.py's.
+A measured file the checkout
 no longer has is red in CI and named on the index on a machine, and a
 file at other content keeps its numbers and says so. Each index states
 the package's floor: the one its contract names or the default, the
@@ -1186,57 +1190,80 @@ workspace that lists one of them without coverage runs its tests with
 no meter and prints no preview. A workspace that lists coverage and
 nothing that measures has coverage dormant: no entry, no judge, and
 `fm extensions` and `fm doctor` name what would wake it.
-Measurement is the kind's answer, reduced to one shape before
-anything is stored. A python suite's is coverage.py's arcs. A native
-suite's is lines: the gate build is instrumented for the compiler
+Measurement is the measurer's, reduced to one shape before anything
+is stored: parts in the coverage extension's line format, one per
+suite and measurer, each file's statements and the lines that ran,
+with its branches, functions and classes where the measurer names
+them. A python suite's part is the pytest extension's reduction of
+coverage.py's data, made on the check leg once for each suite. A
+native suite's holds the most its measurer gives: the gate build is
+instrumented for the compiler
 family CMake detected (gcc with `--coverage`, clang and apple-clang
 with `-fprofile-instr-generate -fcoverage-mapping`), ctest runs, and
-the measurer beside that compiler reads which lines of each source
-file ran, gcov's JSON or llvm-profdata and llvm-cov's lcov. A run
+the measurer beside that compiler reads the run. gcov's JSON gives
+each line's count, each line's branches by index with an exception's
+path tagged, and the functions. llvm-profdata and llvm-cov's JSON
+export give each line's count as llvm-cov's own line view counts it,
+each condition's two branches, the functions, named by the demangler
+beside the compiler, each code region as a range with a macro counted
+where it is called, and the code the preprocessor removed as excluded
+lines. A run
 built with MSVC is measured by Microsoft's Code Coverage engine,
 `dotnet-coverage`, a tool of the store that cmake's `[for.coverage]`
 table requires as `dotnet_coverage@windows`, with the .NET SDK it runs
 on, so a workspace that does not list coverage locks and installs
 neither: each test executable is instrumented statically for the run,
 ctest runs under the collector, its verdict is read from the report
-ctest writes, and the Cobertura report is read per line. On Windows
-the gate builds with MSVC unless `CXX` names another compiler,
-entering the newest Visual Studio's C++ build tools itself when `cl`
-is not already on PATH. The result is one part per package at the
-workspace root, beside coverage.py's own. A host with the compiler and
-without its measurer refuses on that leg by name. The union across
-legs is a set union of lines per file, so two compilers never merge
-raw profiles, and a native package's floor is line coverage over its
-`source` category while a python package's stays statements and
-branches. A package with a floor that no leg measured refuses by name
-and never passes.
+ctest writes, and the Cobertura report gives each line's count, how
+many of a line's branches ran, and the methods. On Windows the gate
+builds with MSVC unless `CXX` names another compiler, entering the
+newest Visual Studio's C++ build tools itself when `cl` is not already
+on PATH. The result is one part per package under
+`.workshop/coverage/parts/`, named after its measurer. A host with the
+compiler and without its measurer refuses on that leg by name. The
+union across legs merges each file's parts by the line format's rules:
+the readings at the content the checkout holds and by one measurer
+merge, and a reading of other content or by another measurer is named
+and left out, so two compilers' readings never merge. A package's
+figure counts its `source` category's files, each by what its
+measurer judges: a native measurer's lines alone, coverage.py's
+statements and branches. A package with a floor that no leg measured
+refuses by name and never passes.
 Coverage stays global
 under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the pytest extension's plugin,
-quiet outside a measured run), the leg splits the run's data
-per suite and leaves each suite's lines for the leg's one write,
+quiet outside a measured run), the leg reduces the run's data
+to a part per suite and leaves the parts for the leg's one write,
 which puts them on its per-run ref of the state store, with the
 identity of the suite's dependency closure
 (the tree ids of the package and of every package it depends on,
 plus the root's `pyproject.toml` and `uv.lock`). Main has a
 coverage record, and so does every branch with a pull request run:
-per check leg, one row per suite, the arcs the last run judged and
-the closure each was measured at. The gate narrows on what the change
+per check leg, one row per suite, its parts as the last run judged
+them and the closure each was measured at. A row keeps what ran; each
+file's fixed facts, what its content and its measurer decide whatever
+ran (its statements, its branches, its functions, its ranges, and the
+sentence of each branch), are a file of their own beside the rows,
+named by their digest and held once however many rows name them, and
+a write drops the facts no row names. A read of a record parses its
+current rows and the facts they name alone, and a row naming facts the
+record lacks is skipped, naming them and the content, so its suite is
+measured afresh. The gate narrows on what the change
 affects alone; after it, the coverage leg runs every suite neither
 its branch's record nor main's holds at the suite's current closure,
 measured for its lines, and says why. The workspace's own
 `tests/` directory is a unit too, keyed by every package's tree, and
 every leg that runs a suite runs it. The gate job unions the legs'
-lines with every skipped suite carried from the records before it
-judges, so the union is the same global union a full run produces,
+parts with the parts of every skipped suite, carried from the records,
+before it judges, so the union is the same global union a full run produces,
 and writes that union back onto the branch's record; a suite no
 record can supply is red by name, never a smaller union. A branch's
 record outlives the branch by a day, because main's run for the
 squash that merged it carries the suites its legs skipped from that
 record, minutes after the merge deleted the branch. A row a write
 replaces at another closure, or removes, stays a day too, under its
-closure's name: a leg may skip a suite on main's row minutes before
+closure's name and the moment it was kept: a leg may skip a suite on main's row minutes before
 main's run for another merge moves that row on, and the run's union
 still finds the row at the closure the leg skipped on. A leg itself
 skips on current rows alone. At the
@@ -1331,7 +1358,7 @@ package each, which `fm ci.timings` renders as a trend.
 | `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
+| `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |

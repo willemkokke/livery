@@ -1,25 +1,28 @@
-"""Reduce coverage.py's measurements to the line format the coverage pages draw.
+"""Reduce coverage.py's measurements to the line format the coverage extension reads.
 
 While coverage is listed, the coverage extension asks its
-``coverage.measurers`` query which extension reduces the stored rows of
-each measurer, and this extension answers for ``arcs``, coverage.py's
-arcs, in its ``[for.coverage]`` table:
-[livery.extensions.pytest._coverage.measurers][].
-[livery.extensions.pytest._coverage.Arcs][] turns each stored row, or
-the data a run left at the workspace root, into a part in the line
-format, version 1: per file, coverage.py's own analysis of it under the
-workspace's ``.coveragerc``. A part holds the statements and the ones
-that ran, the excluded lines, the statements written over several
-lines, each branch of a line with more than one exit with the sentence
-that says why an untaken one never ran, the functions and classes, and,
-where the data names them, the tests that reached each line. A branch
-the source waives with ``# pragma: no branch`` counts as taken, as
-coverage.py counts it.
+``coverage.measurers`` query which extension reduces each measurer's
+data, and this extension answers for ``arcs``, coverage.py's arcs, in
+its ``[for.coverage]`` table (`measurers`). `Arcs` turns the data a
+check leg's metered run left into one part per suite the leg ran, each
+suite's arcs within its closure as its own tests and the code outside
+every test reached them; and on a machine, the data its last run left
+into one part of the whole run. A part is in the line format, version
+2: per file, coverage.py's own analysis of it under the workspace's
+``.coveragerc``. It holds the statements and the ones that ran, the
+excluded lines, the statements written over several lines, each
+branch of a line with more than one exit with the sentence that says
+why it would not run, the functions and classes, and, where a
+machine's data names them, the tests that reached each line.
+coverage.py reads no columns, so a part holds no ranges. A branch the
+source waives with ``# pragma: no branch`` counts as taken, as
+coverage.py counts it, and is tagged ``waived``.
 
-coverage.py's parser reads each file once, however many rows name it.
-Before a part is handed over, each file's numbers are checked against
-coverage.py's own analysis of the same data, and a file whose numbers
-differ refuses the reduction, naming the file.
+coverage.py's parser reads each file once, however many suites name
+it, and says each branch's sentence once. Before a part is handed
+over, each file's numbers are checked against coverage.py's own
+analysis of the same data, and a file whose numbers differ refuses the
+reduction, naming the file.
 """
 
 from __future__ import annotations
@@ -27,9 +30,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import platform
+import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -42,12 +46,16 @@ if TYPE_CHECKING:
 MEASURER = "arcs"
 
 #: The line format version the parts are written in.
-FORMAT = 1
+FORMAT = 2
 
 #: The data a run leaves at the workspace root, and the configuration
-#: coverage.py reads there.
+#: coverage.py reads there. A metered leg leaves one data file per
+#: process, each named after the data file with a suffix.
 DATA_FILE = ".coverage"
 CONFIG_FILE = ".coveragerc"
+
+#: The variable that arms the meter in every python the tests start.
+METER = "COVERAGE_PROCESS_START"
 
 #: The tag of a branch the source waives, which counts as taken.
 WAIVED = "waived"
@@ -65,31 +73,59 @@ def measurers(root: Path) -> dict[str, Arcs]:
 class Arcs:
     """coverage.py's arcs, reduced to parts in the line format."""
 
-    def rows(
-        self, root: Path, rows: Sequence[Mapping[str, Any]]
+    def leg(
+        self, root: Path, units: Sequence[Mapping[str, Any]]
     ) -> list[dict[str, Any]]:
-        """One part per stored row, in the rows' order.
+        """One part per unit, in the units' order, from the data a check leg left.
 
-        Each row is ``{"unit": <the unit's path>, "files": {<file>: <arcs>}}``,
-        an arc a pair of line numbers and a file's path relative to
-        *root*.
+        Each unit is ``{"unit": <its path>, "tests": <the prefix its
+        own tests' contexts start with>, "within": [<the path prefixes
+        of its closure>]}``; a unit without ``within`` takes every
+        file. The leg's data files combine in memory, and a unit's part
+        holds the arcs of the files within its closure that its own
+        tests reached, each test's context its node id, and that the
+        code outside every test reached, import time's: those belong to
+        every suite whose closure holds their file. A file the data
+        names with no arc is in no unit's part.
 
         Raises:
-            ValueError: when a row is not a unit's arcs, or a file's
-                numbers differ from coverage.py's, naming it.
+            ValueError: when the leg left no data, naming the variable
+                that arms the meter; when a unit names no path; or when a
+                file's numbers differ from coverage.py's, naming it.
         """
         from coverage import CoverageData
 
+        found = sorted(root.glob(f"{DATA_FILE}.*"))
+        if not found:
+            raise ValueError(
+                f"the leg left no coverage.py data ({DATA_FILE}.*) at {root}:"
+                f" inside CI the test runner arms {METER} in pytest's environment,"
+                " so the tests and every process they start are metered; a leg"
+                " that ran its suites and left no data ran no metered pytest"
+            )
+        combined = CoverageData(no_disk=True)
         reducer = _Reducer(root)
         parts: list[dict[str, Any]] = []
-        for index, row in enumerate(rows):
-            unit, files = _row(row, index)
-            data = CoverageData(no_disk=True)
-            try:
-                data.add_arcs(files)
-                parts.append(reducer.part(unit, data, {name: name for name in files}))
-            finally:
-                data.close(force=True)
+        try:
+            for path in found:
+                piece = CoverageData(basename=str(path))
+                try:
+                    piece.read()
+                    combined.update(piece)
+                finally:
+                    piece.close(force=True)
+            for index, unit in enumerate(units):
+                name, files = _unit_arcs(combined, root, unit, index)
+                data = CoverageData(no_disk=True)
+                try:
+                    data.add_arcs(files)
+                    parts.append(
+                        reducer.part(name, data, {each: each for each in files})
+                    )
+                finally:
+                    data.close(force=True)
+        finally:
+            combined.close(force=True)
         return parts
 
     def left(self, root: Path) -> list[dict[str, Any]]:
@@ -121,27 +157,44 @@ class Arcs:
             data.close(force=True)
 
 
-def _row(
-    row: Mapping[str, Any], index: int
+def _unit_arcs(
+    data: CoverageData, root: Path, unit: Mapping[str, Any], index: int
 ) -> tuple[str, dict[str, set[tuple[int, int]]]]:
-    """A stored row's unit and its arcs per file.
+    """*unit*'s path and the arcs of its closure's files in the leg's *data*.
+
+    The arcs its own tests reached, then the arcs the code outside
+    every test reached; a file is named from *root* with forward
+    slashes, whichever platform's leg measured it.
 
     Raises:
-        ValueError: when the row holds no unit's path or no files of arcs.
+        ValueError: when *unit* names no path, naming its place.
     """
-    unit = row.get("unit")
-    files = row.get("files")
-    if not isinstance(unit, str) or not unit or not isinstance(files, Mapping):
-        raise ValueError(
-            f"row {index} is no unit's arcs: it holds a unit's path and its files"
-        )
+    name = unit.get("unit")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"unit {index} names no path; each names its suite's")
+    tests = str(unit.get("tests", f"{name}/"))
+    within = unit.get("within")
+    prefixes = (
+        tuple(str(prefix) for prefix in cast("Iterable[object]", within))
+        if within is not None
+        else None
+    )
     found: dict[str, set[tuple[int, int]]] = {}
-    for name, arcs in cast("Mapping[str, Iterable[Sequence[int]]]", files).items():
-        # A part names a file with forward slashes, whichever platform's
-        # leg measured it.
-        held = found.setdefault(name.replace("\\", "/"), set())
-        held.update((arc[0], arc[1]) for arc in arcs)
-    return unit, found
+    try:
+        for query in ([rf"^{re.escape(tests)}"], [r"^$"]):
+            data.set_query_contexts(query)
+            for measured in data.measured_files():
+                relative = _relative(measured, root)
+                if relative is None or (
+                    prefixes is not None and not relative.startswith(prefixes)
+                ):
+                    continue
+                arcs = data.arcs(measured) or []
+                if arcs:
+                    found.setdefault(relative, set()).update(arcs)
+    finally:
+        data.set_query_contexts(None)
+    return name, found
 
 
 def _relative(filename: str, root: Path) -> str | None:
@@ -157,12 +210,25 @@ def _relative(filename: str, root: Path) -> str | None:
 
 @dataclass(frozen=True)
 class _Static:
-    """What a file's source says, read once: its digest, reporter, spans and regions."""
+    """What a file's source says, read once: its digest, reporter, spans and regions.
+
+    Each branch's sentence is the parser's, said once and kept in
+    ``sentences`` by the branch's line and target.
+    """
 
     digest: str
     reporter: PythonFileReporter
     spans: list[list[int]]
     regions: list[list[Any]]
+    sentences: dict[tuple[int, int], str] = field(default_factory=dict)
+
+    def sentence(self, source: int, target: int) -> str:
+        """Why the branch from *source* to *target* would not run, in a sentence."""
+        found = self.sentences.get((source, target))
+        if found is None:
+            found = self.reporter.missing_arc_description(source, target)
+            self.sentences[(source, target)] = found
+        return found
 
 
 class _Reducer:
@@ -187,6 +253,7 @@ class _Reducer:
             "branches": "targets",
             "regions": ["function", "class"],
             "judges": ["lines", "branches"],
+            "columns": False,
         }
 
     def static(self, name: str) -> _Static | None:
@@ -284,13 +351,10 @@ class _Reducer:
         for source, target in possible:
             index = place.get(source, 0)
             place[source] = index + 1
-            if (source, target) in analysis.arcs_executed_set:
-                branches.append([source, target, index, 1])
-            elif source in analysis.no_branch:
-                branches.append([source, target, index, 1, WAIVED])
-            else:
-                why = static.reporter.missing_arc_description(source, target)
-                branches.append([source, target, index, 0, why])
+            waived = source in analysis.no_branch
+            taken = waived or (source, target) in analysis.arcs_executed_set
+            why = WAIVED if waived else static.sentence(source, target)
+            branches.append([source, target, index, int(taken), why])
         hits = analysis.executed & statements
         self.check(name, analysis, hits, branches)
         found: dict[str, Any] = {"digest": static.digest}

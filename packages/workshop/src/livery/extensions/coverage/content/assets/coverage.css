@@ -405,6 +405,13 @@ main.moved .notice {
   border-left-color: var(--par-mark);
 }
 
+/* The code of a line that ran which never did, for a measurer that
+   reads columns. */
+.ln .nr {
+  background: var(--mis);
+  box-shadow: inset 0 -2px 0 var(--mis-mark);
+}
+
 body.hide-run .ln.run,
 body.hide-run .ln.run2,
 body.hide-mis .ln.mis,
@@ -415,6 +422,11 @@ body.hide-par .ln.par,
 body.hide-par .ln.par2 {
   border-left-color: transparent;
   background: none;
+}
+
+body.hide-par .ln.par .nr {
+  background: none;
+  box-shadow: none;
 }
 
 .ln.selected {

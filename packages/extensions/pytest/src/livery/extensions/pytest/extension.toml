@@ -48,7 +48,9 @@ value = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]
 # for it: the test step runs the suites metered, the sync writes the
 # root .coveragerc and the lines that ignore the meter's data, both
 # shipped under content/for/coverage/, and the arcs coverage.py records
-# are reduced to the line format coverage's pages draw.
+# are reduced to the line format coverage reads: on each check leg,
+# once for every suite the leg ran, and on a machine for its pages and
+# its preview.
 [for.coverage.queries]
 "coverage.measurers" = "livery.extensions.pytest._coverage:measurers"
 

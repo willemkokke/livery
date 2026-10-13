@@ -206,12 +206,18 @@ class Rows:
             exists, or reach the remote at all. An absent ref reads as
             no rows and no failure.
         reason: Why it could not answer, in the store's one wording.
+        unread: The files a read that named the ones it wants passed
+            over, by name, never read.
+        blobs: The blobs the read was asked for, by name, each the
+            text its writer wrote ([livery.git.Series][]'s ``blobs``).
     """
 
     rows: tuple[Row, ...]
     skipped: tuple[Skipped, ...] = ()
     failed: bool = False
     reason: str = ""
+    unread: tuple[str, ...] = ()
+    blobs: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -243,6 +249,13 @@ class Series:
             [livery.git.TRACE_NAMESPACE][] is the one
             such prefix, pushed to origin and mirrored by nothing.
             Empty means the class ``local`` chooses.
+        blobs: The directory, ending in a slash, of the files the
+            series keeps beside its rows as their writer wrote them,
+            such as a file named by its own content (``facts/``). A
+            read hands them back as text and never parses one as a
+            row, a write puts them unstamped, and the janitor counts
+            the rows alone. Empty for none. A window ranks files by
+            their stamps, so a series with blobs declares none.
     """
 
     name: str
@@ -252,6 +265,7 @@ class Series:
     local: bool = False
     age: timedelta | None = None
     namespace: str = ""
+    blobs: str = ""
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -264,6 +278,16 @@ class Series:
                 f"{self.name}: a series in {self.namespace} is not local; declare"
                 " one or the other"
             )
+        if self.blobs and (not self.blobs.endswith("/") or self.window is not None):
+            raise ValueError(
+                f"{self.name}: blobs name a directory ending in a slash, and a"
+                " series with blobs declares no window, which ranks files by"
+                " their stamps"
+            )
+
+    def blob(self, name: str) -> bool:
+        """Whether the file *name* is one of the series' blobs, not a row."""
+        return bool(self.blobs) and name.startswith(self.blobs)
 
     @property
     def ref(self) -> str:
@@ -272,36 +296,48 @@ class Series:
             self.name
         )
 
-    def rows(self, store: StateStore) -> Rows:
+    def rows(
+        self, store: StateStore, *, only: Callable[[str], bool] | None = None
+    ) -> Rows:
         """Every row of the series, newest first, with what was skipped and why.
 
         An absent ref is no rows and no failure. A ref the transport
         could not read is a failure with its reason, so every caller
         falls open the same way. A file that does not parse or is of
-        another schema is skipped and named, and the rest stand.
+        another schema is skipped and named, and the rest stand. A blob
+        the read accepts comes back as text in ``blobs``. With
+        *only*, the files whose names it accepts are read and parsed,
+        and every other file is named in ``unread``, never read: a
+        series of large rows answers a reader of a few of them at the
+        cost of those few.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=only)
         if found.files is None:
             return Rows((), failed=found.failed, reason=self._unreadable(found))
         rows: list[Row] = []
         skipped: list[Skipped] = []
+        blobs: dict[str, str] = {}
         for name in sorted(found.files):
+            if self.blob(name):
+                blobs[name] = found.files[name]
+                continue
             data, why = _parse(self, found.files[name])
             if data is None:
                 skipped.append(Skipped(name, why))
             else:
                 rows.append(Row(name, data))
         rows.sort(key=_newest, reverse=True)
-        return Rows(tuple(rows), tuple(skipped))
+        unread = tuple(name for name in found.names if name not in found.files)
+        return Rows(tuple(rows), tuple(skipped), unread=unread, blobs=blobs)
 
     def row(self, store: StateStore, name: str) -> tuple[Row | None, str]:
         """The row in the file *name*.
 
         ``(None, "")`` when the ref or the file is absent, and
         ``(None, reason)`` when the ref could not be read or the file
-        is not a row of the schema.
+        is not a row of the schema. The ref's other files are not read.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=name.__eq__)
         if found.files is None:
             return None, self._unreadable(found)
         text = found.files.get(name)
@@ -317,9 +353,9 @@ class Series:
 
         For a series whose files are not rows: a leg's trace, kept as
         its writer wrote it. ``(None, "")`` is absence, of the ref or
-        of the file.
+        of the file. The ref's other files are not read.
         """
-        found = read(store, self.ref)
+        found = read(store, self.ref, only=name.__eq__)
         if found.files is None:
             return None, self._unreadable(found)
         return found.files.get(name), ""
@@ -331,27 +367,43 @@ class Series:
         *,
         message: str,
         remove: Iterable[str] = (),
+        blobs: Mapping[str, str] | None = None,
     ) -> str:
-        """Write *rows* by file name, stamped; ``""`` or the reason.
+        """Write *rows*, stamped, and *blobs* by file name; ``""`` or the reason.
 
         Every row is written with the schema and the time stamped on
         it, and the stamp wins over a ``schema`` or ``when`` the row
-        carries. The rows the series already holds stand, less the
-        file names in *remove*, so a caller replacing a record in
-        place names what goes and puts what changed.
+        carries. Each blob is written as the text given, so a blob of
+        the same text is the same object git already holds. The files
+        the series already holds stand, less the file names in
+        *remove*, so a caller replacing a record in place names what
+        goes and puts what changed.
 
         The window keeps the newest rows by their stamps, so a series
         keyed by something other than time (a tree id) keeps its
         newest too. A write the declaration forbids is refused with
-        the rule; the transport's refusals come back as they are.
+        the rule, and so is a row named as a blob, or a blob named
+        outside the series' ``blobs``; the transport's refusals come
+        back as they are.
         """
+        given = dict(blobs or {})
+        astray = sorted(
+            [name for name in rows if self.blob(name)]
+            + [name for name in given if not self.blob(name)]
+        )
+        if astray:
+            return (
+                f"refusing {self.ref}: {', '.join(astray)}: a row lives outside"
+                f" the series' blobs ({self.blobs or 'none declared'}) and a"
+                " blob inside them"
+            )
         stamp = datetime.now(UTC).isoformat(timespec="microseconds")
         files = {
             name: json.dumps(
                 {**row, "schema": self.schema, "when": stamp}, sort_keys=True
             )
             for name, row in rows.items()
-        }
+        } | given
         # The transport's put: a class body is no scope for its methods.
         return put(
             store,
@@ -414,6 +466,8 @@ class Keyed:
             janitor bounds like any other series. A family of blobs (a
             leg's trace) says false: its files are not rows, and
             ``keep`` is the whole bound.
+        blobs: The directory of every series' blobs, as for a
+            [livery.git.Series][].
     """
 
     name: str
@@ -428,6 +482,7 @@ class Keyed:
     linger: timedelta | None = None
     keep: Callable[[Path], int | None] | None = None
     holds_rows: bool = True
+    blobs: str = ""
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -473,6 +528,7 @@ class Keyed:
             schema=self.schema,
             local=self.local,
             namespace=self.namespace,
+            blobs=self.blobs,
         )
 
     def listed(self, store: StateStore, *head: str) -> list[tuple[str, ...]] | None:
@@ -523,7 +579,8 @@ class Read:
 
     Attributes:
         files: The tree's files by name, or ``None`` when there is
-            nothing to read.
+            nothing to read; a read that named the files it wants holds
+            those alone.
         sha: The commit the ref points at on the remote, the lease a
             write carries; ``None`` when the ref does not exist.
         failed: Whether ``None`` means the transport could not answer
@@ -531,12 +588,15 @@ class Read:
             rather than a ref that has never been written. A reader
             may fall open on either; a writer refuses on a failure.
         reason: The transport's words when it could not answer.
+        names: The name of every file the tree holds, read or not,
+            sorted; empty when there is nothing to read.
     """
 
     files: dict[str, str] | None
     sha: str | None
     failed: bool
     reason: str = ""
+    names: tuple[str, ...] = ()
 
 
 @dataclass
@@ -949,7 +1009,9 @@ def _ref_exists(store: StateStore, ref: str) -> tuple[bool | None, str]:
     return bool(probe.stdout.strip()), ""
 
 
-def read(store: StateStore, ref: str) -> Read:
+def read(
+    store: StateStore, ref: str, *, only: Callable[[str], bool] | None = None
+) -> Read:
     """Read *ref*'s files, saying whether a miss is absence or failure.
 
     A remote ref is fetched from origin: the fetch lands in
@@ -962,7 +1024,8 @@ def read(store: StateStore, ref: str) -> Read:
     A local ref, or one of the mirror under `FETCHED_NAMESPACE`, is
     read from the checkout's own git directory: a missing ref is
     absence, and anything else git refuses is a failure with git's
-    words.
+    words. With *only*, the files whose names it accepts are read and
+    the rest are named in ``names`` alone, never read.
     """
     if ref.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE)):
         try:
@@ -972,7 +1035,7 @@ def read(store: StateStore, ref: str) -> Read:
             return Read(None, None, failed=True, reason=_no_repository(store))
         if held is None:
             return Read(None, None, failed=False)
-        return _tree_files(store, held.decode())
+        return _tree_files(store, held.decode(), only)
     snapshot = _snapshot(store)
     if snapshot is not None:
         if snapshot.refs is None:
@@ -990,14 +1053,14 @@ def read(store: StateStore, ref: str) -> Read:
             return Read(None, listed, failed=True, reason=why)
         if sha is None:
             return Read(None, None, failed=False)
-        return _tree_files(store, sha)
+        return _tree_files(store, sha, only)
     fetched = _git(store.root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
         exists, why = _ref_exists(store, ref)
         if exists is False:
             return Read(None, None, failed=False)
         return Read(None, None, failed=True, reason=why or _words(fetched))
-    return _tree_files(store, _fetch_head(store))
+    return _tree_files(store, _fetch_head(store), only)
 
 
 def _fetch_head(store: StateStore) -> str:
@@ -1007,17 +1070,20 @@ def _fetch_head(store: StateStore) -> str:
     return text.split()[0] if text.strip() else ""
 
 
-def _tree_files(store: StateStore, sha: str) -> Read:
+def _tree_files(
+    store: StateStore, sha: str, only: Callable[[str], bool] | None = None
+) -> Read:
     """The files of the root commit *sha*, read in-process as the bytes git holds.
 
     No process and no checkout conversion: each blob comes back as it
     was written on any platform, and a row a Windows checkout once
     wrote with carriage returns reads back with them, which the
-    row's parser takes as whitespace.
+    row's parser takes as whitespace. With *only*, the files it
+    refuses are named and never read.
     """
     try:
         with _objects.opened(store.root) as repo:
-            blobs = _objects.tree_files(repo, sha.encode())
+            blobs, names = _objects.tree_files(repo, sha.encode(), only)
     except _objects.NotGitRepository:
         return Read(None, sha, failed=True, reason=_no_repository(store))
     except (KeyError, _objects.Unresolved):
@@ -1027,7 +1093,7 @@ def _tree_files(store: StateStore, sha: str) -> Read:
         files = {name: data.decode("utf-8") for name, data in blobs.items()}
     except UnicodeDecodeError as error:
         return Read(None, sha, failed=True, reason=f"the tree's files: {error}")
-    return Read(files, sha, failed=False)
+    return Read(files, sha, failed=False, names=names)
 
 
 def list_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
@@ -1357,7 +1423,18 @@ def sweep(
 def _sweep_series(
     store: StateStore, series: Series, *, dry_run: bool, now: datetime
 ) -> list[str]:
-    """Trim *series* to its window and drop its aged rows; the lines."""
+    """Trim *series* to its window and drop its aged rows; the lines.
+
+    A series with neither a window nor an age has nothing to trim, so
+    its rows are counted by name and none is read: a ref of large
+    rows costs its listing alone. Its blobs are not rows.
+    """
+    if series.window is None and series.age is None:
+        named = series.rows(store, only=lambda _name: False)
+        if named.failed:
+            return [f"  {series.ref}: {named.reason}; nothing swept"]
+        counted = sum(1 for name in named.unread if not series.blob(name))
+        return [f"  {series.ref}: {counted} row(s), within its bounds"]
     found = series.rows(store)
     if found.failed:
         return [f"  {series.ref}: {found.reason}; nothing swept"]

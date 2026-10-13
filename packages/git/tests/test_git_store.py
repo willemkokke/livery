@@ -8,6 +8,7 @@ tests' own identity, the default snapshot variable.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -251,6 +252,130 @@ def test_a_file_that_is_not_a_row_is_skipped_and_named(
     assert ROWS.row(_store(work), "a") == (None, "a: does not parse")
     assert ROWS.row(_store(work), "b") == (None, "b: schema 1, this reader speaks 2")
     assert ROWS.row(_store(work), "d") == (git.Row("d", {"schema": 2, "x": 1}), "")
+
+
+def _object_reads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every object the store reads in-process from here on, by its id."""
+    from dulwich.repo import Repo
+
+    asked: list[str] = []
+    original = Repo.__getitem__
+
+    def counted(self: Repo, name: bytes) -> Any:
+        asked.append(bytes(name).decode())
+        return original(self, name)
+
+    monkeypatch.setattr(Repo, "__getitem__", counted)
+    return asked
+
+
+def _blob_ids(work: Path) -> dict[str, str]:
+    """The blob id of each file the last commit the store built holds."""
+    listed = _git(work, "ls-tree", "-r", store_module.IMPORT_REF)
+    return {line.split()[3]: line.split()[2] for line in listed.splitlines()}
+
+
+def test_a_read_that_names_its_files_reads_those_alone_and_names_the_rest(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A series of large rows answers a reader of a few at the cost of
+    # those few: a file the read passes over is named, never read.
+    _, work = repos
+    files = {name: json.dumps({"schema": 2, "x": name}) for name in ("a", "b", "c")}
+    assert git.put(_store(work), ROWS.ref, files, message="three") == ""
+    blobs = _blob_ids(work)
+    asked = _object_reads(monkeypatch)
+    found = ROWS.rows(_store(work), only="b".__eq__)
+    assert [row.name for row in found.rows] == ["b"]
+    assert found.unread == ("a", "c") and found.skipped == ()
+    assert blobs["b"] in asked
+    assert blobs["a"] not in asked and blobs["c"] not in asked
+    named = git.read(_store(work), ROWS.ref, only=lambda _name: False)
+    assert named.files == {} and named.names == ("a", "b", "c")
+    # One row or one file by name reads that file alone.
+    asked.clear()
+    assert ROWS.row(_store(work), "c") == (git.Row("c", json.loads(files["c"])), "")
+    assert ROWS.file(_store(work), "a") == (files["a"], "")
+    assert blobs["b"] not in asked
+    # A whole read reads every file and names them all.
+    whole = git.read(_store(work), ROWS.ref)
+    assert whole.files == files and whole.names == ("a", "b", "c")
+
+
+def test_the_janitor_counts_a_series_without_bounds_by_name_alone(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A series with neither a window nor an age has nothing to trim, so
+    # the janitor reads none of its rows to say so.
+    _, work = repos
+    unbounded = git.Series("open", ci_only=False, local=True)
+    rows = {name: {"x": name} for name in ("a", "b")}
+    assert unbounded.put(_store(work), rows, message="two") == ""
+    asked = _object_reads(monkeypatch)
+    lines = git.sweep(_store(work), (unbounded,), remote=False)
+    assert lines == [f"  {unbounded.ref}: 2 row(s), within its bounds"]
+    blobs = _blob_ids(work)
+    assert not set(blobs.values()) & set(asked)
+
+
+def test_a_series_refuses_blobs_without_a_directory_or_beside_a_window(
+    repos: tuple[Path, Path],
+) -> None:
+    with pytest.raises(ValueError, match="blobs name a directory ending in a slash"):
+        git.Series("kept", ci_only=False, blobs="facts")
+    with pytest.raises(ValueError, match="declares no window"):
+        git.Series("kept", ci_only=False, blobs="facts/", window=3)
+    # A row named inside the blobs, or a blob outside them, is refused.
+    _, work = repos
+    kept = git.Series("kept", ci_only=False, local=True, blobs="facts/")
+    for rows, blobs in (({"facts/a.json": {"x": 1}}, {}), ({}, {"a.json": "{}"})):
+        why = kept.put(_store(work), rows, message="astray", blobs=blobs)
+        assert why.startswith(f"refusing {kept.ref}: ")
+        assert "a row lives outside the series' blobs (facts/)" in why
+    assert kept.rows(_store(work)) == git.Rows(())
+
+
+def test_a_series_keeps_its_blobs_as_written_and_reads_them_back_as_text(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    family = git.Keyed("kept", ("leg",), ci_only=False, local=True, blobs="facts/")
+    kept = family.series("a")
+    assert kept.blobs == "facts/"
+    text = '{"statements":"1-2"}'
+    why = kept.put(
+        _store(work),
+        {"row.json": {"x": 1}},
+        message="one row, one blob",
+        blobs={"facts/one.json": text},
+    )
+    assert why == ""
+    # A blob is the text given, unstamped: its git blob id is the text's.
+    blobs = _blob_ids(work)
+    header = f"blob {len(text)}\0".encode()
+    assert (
+        blobs["facts/one.json"]
+        == hashlib.sha1(header + text.encode(), usedforsecurity=False).hexdigest()
+    )
+    # A read never parses a blob as a row: it hands back the text of the
+    # ones it accepts, and names the rest.
+    found = kept.rows(_store(work))
+    assert [row.name for row in found.rows] == ["row.json"] and found.skipped == ()
+    assert found.blobs == {"facts/one.json": text}
+    asked = _object_reads(monkeypatch)
+    found = kept.rows(_store(work), only="row.json".__eq__)
+    assert found.blobs == {} and found.unread == ("facts/one.json",)
+    assert blobs["facts/one.json"] not in asked
+    # A write lays its rows over the blobs, which stand until named.
+    assert kept.put(_store(work), {"row.json": {"x": 2}}, message="again") == ""
+    assert kept.rows(_store(work)).blobs == {"facts/one.json": text}
+    assert kept.put(_store(work), {}, message="drop", remove=["facts/one.json"]) == ""
+    assert kept.rows(_store(work)).blobs == {}
+    # The janitor counts the rows alone.
+    again = kept.put(_store(work), {}, message="blob", blobs={"facts/two.json": text})
+    assert again == ""
+    lines = git.sweep(_store(work), (family,), remote=False)
+    assert lines == [f"  {kept.ref}: 1 row(s), within its bounds"]
 
 
 def test_a_tree_the_checkout_lacks_fails_naming_it(

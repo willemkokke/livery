@@ -1,7 +1,3 @@
-# The data a measured run leaves, the native suites' lines parts, the
-# union's scratch, and the coverage pages drawn from them.
-.coverage
-.coverage.*
-.coverage-lines.*
-coverage-data/
+# The coverage pages drawn from the measured data; the parts and the
+# union live under .workshop/, which the base ignores.
 packages/**/htmlcov/

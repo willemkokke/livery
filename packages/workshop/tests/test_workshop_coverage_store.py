@@ -6,6 +6,7 @@ import json
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,6 +15,7 @@ from livery.extensions.coverage import _record as coverage_record
 from livery.workshop import _ci_context
 from livery.workshop._ci_context import state_store
 from livery.workshop._packages import Edge, Package
+from workshop_coverage_meter import stored_unit
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 LEG = "check-linux-3.14"
@@ -87,14 +89,39 @@ def _packages(work: Path) -> tuple[Package, Package]:
     return _package(work, "base"), _package(work, "top", ("base",))
 
 
+def _part(path: str, lines: dict[str, str] | None = None) -> dict[str, Any]:
+    """A unit's part in the line format: each file's statements, all of them run."""
+    return {
+        "format": 2,
+        "unit": path,
+        "measurer": {
+            "name": "coverage.py",
+            "version": "7.16.2",
+            "runtime": "CPython 3.14",
+            "counts": "presence",
+            "branches": "targets",
+            "regions": [],
+            "judges": ["lines", "branches"],
+            "columns": False,
+        },
+        "contexts": [],
+        "files": {
+            name: {"digest": "", "statements": held, "hits": held}
+            for name, held in (lines or {}).items()
+        },
+    }
+
+
 def _unit(
     path: str,
     *,
     closure: str = "a" * 64,
     run: str = "1013",
-    files: dict[str, list[tuple[int, int]]] | None = None,
+    lines: dict[str, str] | None = None,
 ) -> coverage_record.Unit:
-    return coverage_record.Unit(path, closure, run, "b" * 40, files or {})
+    return stored_unit(
+        path, (_part(path, lines),), closure=closure, run=run, sha="b" * 40
+    )
 
 
 # --- the refusals and misses first --------------------------------------------
@@ -104,7 +131,7 @@ def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
     why = coverage_record.leave_run(
         work, RUN, leg="", scope="full", packages=(), units={}
     )
-    assert why == "refusing: the leg has no label, so its lines have no key"
+    assert why == "refusing: the leg has no label, so its parts have no key"
     held = coverage_record.recorded(work, leg="")
     assert held.failed and held.reason == "this leg has no label"
     why = coverage_record.put_record(work, RUN, leg="", fresh={})
@@ -199,6 +226,52 @@ def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
     assert legs == [] and why.endswith("the remote could not be listed")
 
 
+def test_a_row_of_the_old_schema_is_a_miss_and_the_unit_is_measured_afresh(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.extensions.coverage._leg import unrecorded
+
+    base, top = _packages(work)
+    key = coverage_record.closure_id(work, (base, top), base)
+    # Rows of arcs, written before the record held parts: the current
+    # row of base at its current closure, and a row kept a day.
+    arcs = {"schema": 2, "unit": "packages/base", "closure": key, "run": "5"}
+    rows = {
+        "packages-base.json": json.dumps(
+            {**arcs, "files": {"packages/base/src/base/mod.py": [[-1, 1], [1, -1]]}}
+        ),
+        f"packages-base.{key}.json": json.dumps({**arcs, "files": {}}),
+    }
+    ref = coverage_record.record_ref(LEG)
+    assert git.put(state_store(work), ref, rows, message="arcs") == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.units == {} and not held.failed
+    assert [str(item) for item in held.skipped] == [
+        "packages-base.json: schema 2, this reader speaks 3; skipped"
+    ]
+    # The kept row of the old shape names no moment, so the next write
+    # lets it go, and the union never carries it.
+    assert held.expired(datetime.now(UTC)) == [f"packages-base.{key}.json"]
+    assert held.at("packages/base", key) is None
+    # The leg asks the record and finds no measurement: the suite runs.
+    assert unrecorded(work, RUN, (base, top), (base,), bases=("main",)) == (base,)
+    assert (
+        "coverage store: packages/base runs, nothing to reuse (on this leg main's"
+        " record holds no measurement of it)" in capsys.readouterr().out
+    )
+    # The first write of the new schema replaces the row by name and
+    # lets the kept one go.
+    fresh = {"packages/base": _unit("packages/base", closure=key)}
+    assert (
+        coverage_record.put_record(
+            work, RUN, leg=LEG, fresh=fresh, remove=held.stale(["packages/base"])
+        )
+        == ""
+    )
+    again = coverage_record.recorded(work, leg=LEG)
+    assert again.units == fresh and again.skipped == () and again.kept == ()
+
+
 def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None:
     ref = coverage_record.record_ref(LEG)
     rows = {
@@ -212,6 +285,14 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
         "packages-base.json": json.dumps(
             {"schema": 1, "unit": "packages/base", "files": {"a.py": [1, 2]}}
         ),
+        # A row whose part is of a format this workshop does not read.
+        "packages-top.json": json.dumps(
+            {
+                "schema": coverage_record.SCHEMA,
+                "unit": "packages/top",
+                "parts": [{**_part("packages/top"), "format": 1}],
+            }
+        ),
     }
     assert git.put(state_store(work), ref, rows, message="foreign") == ""
     held = coverage_record.recorded(work, leg=LEG)
@@ -219,14 +300,17 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
     assert sorted(str(item) for item in held.skipped) == [
         "bare.json: carries no unit; skipped",
         "junk.json: does not parse; skipped",
-        "odd.json: schema 99, this reader speaks 2; skipped",
-        "packages-base.json: schema 1, this reader speaks 2; skipped",
+        "odd.json: schema 99, this reader speaks 3; skipped",
+        "packages-base.json: schema 1, this reader speaks 3; skipped",
+        "packages-top.json: holds a part of format 1, and this workshop reads"
+        " format 2; skipped",
     ]
     assert sorted(held.stale(())) == [
         "bare.json",
         "junk.json",
         "odd.json",
         "packages-base.json",
+        "packages-top.json",
     ]
 
 
@@ -335,10 +419,7 @@ def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> Non
 def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
     from livery.workshop import _metrics
 
-    unit = _unit(
-        "packages/base",
-        files={"packages/base/src/base/mod.py": [(3, -1), (-1, 1), (1, 3)]},
-    )
+    unit = _unit("packages/base", lines={"packages/base/src/base/mod.py": "1-3"})
     why = coverage_record.leave_run(
         work,
         RUN,
@@ -366,15 +447,8 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
         ("packages/base",),
         "",
     )
-    assert leg.units == {
-        "packages/base": coverage_record.Unit(
-            "packages/base",
-            "a" * 64,
-            "1013",
-            "b" * 40,
-            {"packages/base/src/base/mod.py": [(-1, 1), (1, 3), (3, -1)]},
-        )
-    }
+    assert leg.units == {"packages/base": unit}
+    assert unit.files == ("packages/base/src/base/mod.py",)
     # Another run's refs are another run's; the lines go with the ref.
     other = _ci_context.RunContext("gitea", "9", "push", "refs/heads/main", leg=LEG)
     assert coverage_record.run_legs(work, other) == ([], "")
@@ -388,7 +462,7 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     series = coverage_record.RECORD.series(coverage_record.MAIN, LEG)
     assert series.ref == coverage_record.record_ref(LEG)
     assert series.ref == git.NAMESPACE + "coverage/main/" + git.slug(LEG)
-    base = _unit("packages/base", run="1", files={"packages/base/src/b.py": [(-1, 1)]})
+    base = _unit("packages/base", run="1", lines={"packages/base/src/b.py": "1"})
     top = _unit("packages/top", closure="c" * 64, run="1")
     ghost = _unit("packages/ghost", run="1")
     fresh = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
@@ -430,20 +504,28 @@ def test_a_record_that_cannot_be_read_refuses_the_write_naming_why(work: Path) -
 
 def test_a_kept_row_past_the_day_or_without_a_stamp_expires() -> None:
     now = datetime(2026, 10, 1, 12, tzinfo=UTC)
-    unit = _unit("packages/base")
+    closure = "c" * 64
+    young = coverage_record.kept_name(
+        "packages/base", closure, now - timedelta(hours=23)
+    )
+    old = coverage_record.kept_name("packages/base", closure, now - timedelta(hours=25))
+    assert young == f"packages-base.{closure}.20260930T130000Z.json"
     record = coverage_record.Record(
         {},
         kept=(
-            coverage_record.Kept(
-                "young.json", unit, (now - timedelta(hours=23)).isoformat()
-            ),
-            coverage_record.Kept(
-                "old.json", unit, (now - timedelta(hours=25)).isoformat()
-            ),
-            coverage_record.Kept("unstamped.json", unit, ""),
+            coverage_record.Kept(young),
+            coverage_record.Kept(old),
+            coverage_record.Kept(f"packages-base.{closure}.json"),
+            coverage_record.Kept(f"packages-base.{closure}.yesterday.json"),
         ),
     )
-    assert record.expired(now) == ["old.json", "unstamped.json"]
+    assert record.expired(now) == [
+        old,
+        f"packages-base.{closure}.json",
+        f"packages-base.{closure}.yesterday.json",
+    ]
+    assert record.kept[0].closure == closure
+    assert record.kept[0].when == now - timedelta(hours=23)
 
 
 def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> None:
@@ -472,11 +554,14 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     assert why == ""
     held = coverage_record.recorded(work, leg=LEG)
     assert held.units == {"packages/base": moved, "packages/top": again}
-    assert sorted(kept.name for kept in held.kept) == [
-        coverage_record.kept_name("packages/base", old),
-        coverage_record.kept_name("packages/ghost", "a" * 64),
+    # A read names the kept rows and reads none of them.
+    assert all(kept.unit is None for kept in held.kept)
+    assert sorted((kept.name.split(".")[0], kept.closure) for kept in held.kept) == [
+        ("packages-base", old),
+        ("packages-ghost", "a" * 64),
     ]
-    # The union asks at the closure its leg skipped on.
+    # The union asks at the closure its leg skipped on, and the kept row
+    # is read then.
     assert held.at("packages/base", old) == base
     assert held.at("packages/base", new) == moved
     assert held.at("packages/ghost", "a" * 64) == ghost
@@ -490,6 +575,104 @@ def test_a_row_moved_on_or_dropped_stays_a_day_at_its_closure(work: Path) -> Non
     held = coverage_record.recorded(work, leg=LEG)
     assert held.kept == ()
     assert held.units == {"packages/base": moved, "packages/top": again}
+
+
+def _facts_files(work: Path) -> list[str]:
+    """The fixed facts files main's record on the leg holds, by name."""
+    found = git.read(state_store(work), coverage_record.record_ref(LEG))
+    return [name for name in found.names if name.startswith(coverage_record.FACTS)]
+
+
+def test_a_row_naming_fixed_facts_the_record_lacks_is_skipped_naming_its_content(
+    work: Path,
+) -> None:
+    content = "c" * 40
+    base = stored_unit(
+        "packages/base",
+        [
+            {
+                **_part("packages/base"),
+                "files": {
+                    "packages/base/src/b.py": {
+                        "digest": content,
+                        "statements": "1-2",
+                        "hits": "1",
+                    }
+                },
+            }
+        ],
+    )
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": base})
+        == ""
+    )
+    (facts,) = _facts_files(work)
+    name = facts.removeprefix(coverage_record.FACTS).removesuffix(".json")
+    ref = coverage_record.record_ref(LEG)
+    assert git.put(state_store(work), ref, {}, message="lose", remove=[facts]) == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    # The row cannot be read without its facts: a miss, its unit measured
+    # afresh, and the row named for the next write to drop.
+    assert held.units == {} and not held.failed
+    assert [str(item) for item in held.skipped] == [
+        f"packages-base.json: names the fixed facts {name} of content"
+        f" {content[:12]}, and the record holds no {facts}; skipped"
+    ]
+    assert held.stale(()) == ["packages-base.json"]
+
+
+def test_the_record_keeps_one_file_s_fixed_facts_once_and_drops_what_no_row_names(
+    work: Path,
+) -> None:
+    shared = {"packages/base/src/b.py": "1-2"}
+    base = _unit("packages/base", closure="c" * 64, run="1", lines=shared)
+    top = _unit("packages/top", run="1", lines=shared)
+    first = {"packages/base": base, "packages/top": top}
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=first) == ""
+    # Two rows name the facts of one content: the record holds them once.
+    (kept_facts,) = _facts_files(work)
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.units == first and held.held_facts == (kept_facts,)
+    # base moves on to other content: its old row stays a day as a kept
+    # row, and so do the facts it names.
+    later = _ci_context.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
+    moved = _unit(
+        "packages/base",
+        closure="d" * 64,
+        run="2",
+        lines={"packages/base/src/b.py": "1-3"},
+    )
+    why = coverage_record.put_record(
+        work, later, leg=LEG, fresh={"packages/base": moved}, held=held
+    )
+    assert why == ""
+    assert len(_facts_files(work)) == 2 and kept_facts in _facts_files(work)
+    # top's unit goes: its row is kept a day too, still naming the facts.
+    held = coverage_record.recorded(work, leg=LEG)
+    why = coverage_record.put_record(
+        work,
+        later,
+        leg=LEG,
+        fresh={},
+        remove=[coverage_record.row_name("packages/top")],
+        held=held,
+    )
+    assert why == ""
+    assert kept_facts in _facts_files(work)
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.at("packages/top", "a" * 64) == top
+    # A day on, the kept rows go, and the facts no row names go with them.
+    tomorrow = datetime.now(UTC) + timedelta(days=1, minutes=1)
+    why = coverage_record.put_record(
+        work, later, leg=LEG, fresh={}, held=held, now=tomorrow
+    )
+    assert why == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.units == {"packages/base": moved} and held.kept == ()
+    assert _facts_files(work) == list(held.held_facts) != [kept_facts]
+    # The janitor counts the rows alone.
+    lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
+    assert f"  {coverage_record.record_ref(LEG)}: 1 row(s), within its bounds" in lines
 
 
 def _contract(work: Path, runners: str) -> None:
@@ -587,12 +770,8 @@ def test_the_stored_rows_are_every_recorded_unit_and_the_misses_are_named(
     from livery.extensions.coverage._pages import stored_rows
 
     fresh = {
-        "packages/base": _unit(
-            "packages/base", files={"packages/base/src/x.py": [(-1, 1), (1, -1)]}
-        ),
-        "packages/top": _unit(
-            "packages/top", files={"packages/top/src/x.py": [(-1, 1), (1, 2), (2, -1)]}
-        ),
+        "packages/base": _unit("packages/base", lines={"packages/base/src/x.py": "1"}),
+        "packages/top": _unit("packages/top", lines={"packages/top/src/x.py": "1-2"}),
     }
     assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
     held, misses = stored_rows(work, [LEG, "check-other"])

@@ -76,7 +76,8 @@ index = "records"
 # What this repository's own tasks run beyond the python kind's tools;
 # a tool locked here has a stub, and one that is not types as `Tool`.
 # conan and the cmake-conan provider are here because the workshop's
-# own tests build a native library and an extension against it.
+# own tests build a native library and an extension against it, and
+# coverage because the toolroom package's tests run it and type its stub.
 requires = [
     "git",
     "coverage",

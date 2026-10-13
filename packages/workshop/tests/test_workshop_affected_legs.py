@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -469,11 +470,12 @@ def test_a_leg_skips_a_suite_on_a_current_row_and_never_on_a_kept_one(
     root = _root(tmp_path, "affected-legs = true\n")
     x, y = _member(root, "x"), _member(root, "y")
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
-    unit = coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, {})
+    unit = coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, ())
     kept = coverage_record.Kept(
-        coverage_record.kept_name("packages/y", "k" * 64),
+        coverage_record.kept_name(
+            "packages/y", "k" * 64, datetime(2026, 10, 1, 2, 5, tzinfo=UTC)
+        ),
         unit,
-        "2026-10-01T02:05:00+00:00",
     )
     monkeypatch.setattr(
         coverage_record,
@@ -538,8 +540,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     # The record holds y at the current closure and z at another: one
     # read decides both, and only z runs.
     held = {
-        "packages/y": coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, {}),
-        "packages/z": coverage_record.Unit("packages/z", "j" * 64, "4", "a" * 40, {}),
+        "packages/y": coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, ()),
+        "packages/z": coverage_record.Unit("packages/z", "j" * 64, "4", "a" * 40, ()),
     }
     reads: list[tuple[str, str]] = []
 
@@ -619,14 +621,14 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
         "feat/x": coverage_record.Record(
             {
                 "packages/y": coverage_record.Unit(
-                    "packages/y", "k" * 64, "9", "a" * 40, {}
+                    "packages/y", "k" * 64, "9", "a" * 40, ()
                 )
             }
         ),
         "main": coverage_record.Record(
             {
                 "packages/z": coverage_record.Unit(
-                    "packages/z", "k" * 64, "5", "a" * 40, {}
+                    "packages/z", "k" * 64, "5", "a" * 40, ()
                 )
             }
         ),
@@ -666,7 +668,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     )
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     held = {
-        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, {})
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, ())
         for path in ("packages/x", "packages/y")
     }
     monkeypatch.setattr(
@@ -759,7 +761,7 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     root, packages, ran = _proved(tmp_path, monkeypatch)
     # Every unit recorded at its closure: the leg runs nothing.
     every = {
-        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, {})
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, ())
         for path in ("packages/x", "packages/y", "tests")
     }
     reads: list[tuple[str, str]] = []
@@ -780,7 +782,7 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     # measured, and its file names the measured scope.
     moved = dict(every)
     moved["packages/y"] = coverage_record.Unit(
-        "packages/y", "j" * 64, "4", "a" * 40, {}
+        "packages/y", "j" * 64, "4", "a" * 40, ()
     )
     del moved["tests"]
     monkeypatch.setattr(

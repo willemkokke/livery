@@ -1,3 +1,0 @@
-# The lines part a measured CMake test run leaves at the root, one per
-# package, which the coverage extension reads.
-.coverage-lines.*

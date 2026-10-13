@@ -16,6 +16,7 @@ from livery.extensions.coverage._format import (
     OtherVersion,
     Part,
     PartError,
+    Range,
     Region,
 )
 
@@ -31,13 +32,16 @@ COVERAGE_PY = Measurer(
 GCOV = Measurer(
     "gcov", "14.2", "", fmt.COUNTS, fmt.INDEXES, ("function",), (fmt.LINES,)
 )
+LLVM = Measurer(
+    "llvm-cov", "", "", fmt.COUNTS, fmt.INDEXES, ("function",), (fmt.LINES,), True
+)
 LINES_ONLY = Measurer("lines", counts=fmt.COUNTS)
 
 
 def _raw(**files: Any) -> dict[str, Any]:
     """A part of coverage.py's as JSON holds it, with *files*."""
     return {
-        "format": 1,
+        "format": 2,
         "unit": "packages/x",
         "measurer": {
             "name": "coverage.py",
@@ -47,6 +51,7 @@ def _raw(**files: Any) -> dict[str, Any]:
             "branches": "targets",
             "regions": ["function", "class"],
             "judges": ["lines", "branches"],
+            "columns": False,
         },
         "contexts": ["", "t1"],
         "files": files,
@@ -66,7 +71,7 @@ def _entry(**keys: Any) -> dict[str, Any]:
         ([], "the part: is [], and a table is wanted"),
         (
             {**_raw(), "extra": 1},
-            "the part: holds extra, which format 1 has no key for; its keys are"
+            "the part: holds extra, which format 2 has no key for; its keys are"
             " format, unit, measurer, contexts, files",
         ),
         ({**_raw(), "unit": ""}, "unit: is '', and text that is not empty is wanted"),
@@ -113,7 +118,7 @@ def _entry(**keys: Any) -> dict[str, Any]:
         ),
         (
             _raw(**{"a.py": _entry(counts=[[1, 2]])}),
-            'files["a.py"]: holds counts, which format 1 has no key for',
+            'files["a.py"]: holds counts, which format 2 has no key for',
         ),
         (
             _raw(**{"a.py": _entry(branches=[[2, None, 0, 1]])}),
@@ -194,8 +199,12 @@ def _entry(**keys: Any) -> dict[str, Any]:
             "reached.lines[0][1]: is 3, and the part has 1 sets",
         ),
         (
+            {**_raw(), "measurer": {**_raw()["measurer"], "columns": "yes"}},
+            "measurer.columns: is 'yes', and true or false is wanted",
+        ),
+        (
             _raw(**{"a.py": _entry(reached={"lines": [], "every": 1})}),
-            "reached: holds every, which format 1 has no key for",
+            "reached: holds every, which format 2 has no key for",
         ),
     ],
 )
@@ -208,16 +217,77 @@ def test_a_part_off_the_format_refuses_naming_its_source_and_the_key(
     assert message in str(refused.value)
 
 
-def test_a_part_of_another_format_version_is_its_own_refusal() -> None:
+def test_a_part_of_format_version_1_refuses_and_names_its_version() -> None:
     with pytest.raises(OtherVersion) as refused:
-        fmt.decode({**_raw(), "format": 2}, source="the probe's part")
-    assert refused.value.version == 2
+        fmt.decode({**_raw(), "format": 1}, source="the probe's part")
+    assert refused.value.version == 1
     assert str(refused.value) == (
-        "the probe's part: a part of format 2; this workshop reads format 1"
+        "the probe's part: a part of format 1; this workshop reads format 2"
     )
-    # A part with no version at all is of another version too.
+    # Its stored form too, and a part with no version at all.
+    with pytest.raises(OtherVersion, match="a part of format 1; this workshop"):
+        fmt.from_stored({**_raw(), "format": 1}, {}, source="the probe's part")
     with pytest.raises(OtherVersion, match="a part of format None"):
         fmt.decode({"unit": "x"}, source="the probe's part")
+
+
+def test_a_measurer_without_columns_leaves_ranges_empty() -> None:
+    # A reading of ranges by a measurer that reads no columns is off the
+    # format; one that reads them takes them.
+    raw = _raw(**{"a.py": _entry(ranges=[[1, 1, 1, 4, 0]])})
+    with pytest.raises(
+        PartError,
+        match=r'files\["a\.py"\]\.ranges: names ranges, and coverage\.py reads no'
+        " columns",
+    ):
+        fmt.decode(raw, source="p")
+    columns = {**raw, "measurer": {**raw["measurer"], "columns": True}}
+    read = fmt.decode(columns, source="p").files["a.py"]
+    assert read.ranges == (Range(1, 1, 1, 4, 0),)
+    # coverage.py's measurer and gcov's say so, and their parts hold none.
+    assert not COVERAGE_PY.columns and not GCOV.columns and LLVM.columns
+    written = fmt.encode(_rich())
+    assert written["measurer"]["columns"] is False
+    assert all("ranges" not in entry for entry in written["files"].values())
+
+
+def test_a_range_outside_its_file_refuses() -> None:
+    # Off the format whatever the text: a range that ends before it
+    # starts, one that names column 0, and one named twice.
+    for ranges, message in (
+        ([[2, 5, 1, 9, 0]], r"ranges\[0\]\[2\]: is 1, and a whole number from 2"),
+        ([[2, 5, 2, 4, 0]], r"ranges\[0\]\[3\]: is 4, and a whole number from 5"),
+        ([[2, 0, 2, 4, 0]], r"ranges\[0\]\[1\]: is 0, and a whole number from 1"),
+        ([[2, 1, 2, 4, 0], [2, 1, 2, 4, 1]], r"ranges\[1\]: repeats the range 2:1-2:4"),
+        ([[2, 1, 2, 4]], r"ranges\[0\]: is no \[start line, start column, end line"),
+    ):
+        raw = _raw(**{"a.py": _entry(ranges=ranges)})
+        raw["measurer"]["columns"] = True
+        with pytest.raises(PartError, match=message):
+            fmt.decode(raw, source="p")
+    # Against the text it was measured at: a line it lacks, and a column
+    # past a line's end. A column counts bytes, and the end column is
+    # the one after the last, so a range may end one past the line.
+    text = "int a;\nint é;\n"
+    fits = Entry(digest="", ranges=(Range(1, 1, 1, 7, 1), Range(2, 5, 2, 8, 0)))
+    fmt.check_ranges(fits, text, source="a.c")
+    for item, message in (
+        (
+            Range(2, 1, 3, 2, 0),
+            "a.c: ranges[0]: 2:1-3:2 lies outside the file: the file has 2 lines",
+        ),
+        (
+            Range(1, 8, 1, 8, 0),
+            "a.c: ranges[0]: 1:8-1:8 lies outside the file: line 1 has 6 columns",
+        ),
+        (
+            Range(2, 1, 2, 9, 0),
+            "a.c: ranges[0]: 2:1-2:9 lies outside the file: line 2 has 7 columns",
+        ),
+    ):
+        with pytest.raises(PartError) as refused:
+            fmt.check_ranges(Entry(digest="", ranges=(item,)), text, source="a.c")
+        assert str(refused.value) == message
 
 
 def test_a_measurer_s_branches_match_how_it_names_them() -> None:
@@ -310,6 +380,101 @@ def test_a_part_reads_back_what_it_wrote() -> None:
     assert written["files"]["packages/n/a.cpp"]["counts"] == [[1, 7], [2, 3]]
     assert "hits" not in written["files"]["packages/n/a.cpp"]
     assert fmt.decode(json.loads(json.dumps(written)), source="p") == native
+
+
+def _native() -> Part:
+    """A part of llvm-cov's, with every key a native measurer fills."""
+    return Part(
+        "packages/n",
+        LLVM,
+        {
+            "packages/n/a.cpp": Entry(
+                digest="b" * 40,
+                statements=frozenset({1, 2, 4}),
+                counts={1: 7, 2: 3},
+                excluded=frozenset({5}),
+                branches=(Branch(2, None, 0, 3), Branch(2, None, 1, 0, fmt.THROW)),
+                branch_counts=((4, 2, 1),),
+                regions=(
+                    Region("function", "main", 1, frozenset({1, 2, 3, 4}), 7),
+                    Region("function", "unused", 6, frozenset({6}), 0),
+                ),
+                ranges=(Range(1, 12, 4, 2, 7), Range(2, 3, 2, 9, 0)),
+            )
+        },
+    )
+
+
+def test_a_stored_part_naming_facts_it_lacks_refuses_naming_the_content() -> None:
+    kept, facts = fmt.stored(_native())
+    (name,) = facts
+    with pytest.raises(PartError) as refused:
+        fmt.from_stored(kept, {}, source="the row")
+    assert str(refused.value) == (
+        f'the row: files["packages/n/a.cpp"].facts: names the fixed facts {name} of'
+        " content bbbbbbbbbbbb, and no facts of that name are held"
+    )
+    assert fmt.facts_names(kept) == {name: "b" * 40}
+    # A place past the facts' items, and a key the stored form lacks.
+    entry = kept["files"]["packages/n/a.cpp"]
+    for extra, message in (
+        ({"taken": [[9, 1]]}, "taken: names place 9, and its fixed facts hold 2"),
+        ({"range-counts": [[3, 1]]}, "range-counts: names place 3, and its fixed"),
+        ({"calls": [[1]]}, r"calls\[0\]: is no \[place, number\] pair"),
+        ({"statements": "1"}, "holds statements, which format 2 has no key for"),
+    ):
+        broken = {**kept, "files": {"packages/n/a.cpp": {**entry, **extra}}}
+        with pytest.raises(PartError, match=message):
+            fmt.from_stored(broken, facts, source="the row")
+
+
+def test_a_part_reads_back_from_its_stored_form_its_facts_kept_apart() -> None:
+    part = _rich()
+    kept, facts = fmt.stored(part)
+    (name,) = facts
+    assert kept["files"]["packages/x/a.py"] == {
+        "digest": "a" * 40,
+        "facts": name,
+        "hits": "1-3,6",
+        "taken": "1,3-4",
+        "reached": fmt.encode(part)["files"]["packages/x/a.py"]["reached"],
+    }
+    assert facts[name] == {
+        "statements": "1-3,5-6",
+        "excluded": "8-9",
+        "spans": [[6, 7]],
+        "branches": [
+            [2, 3, 0],
+            [2, 5, 1, "line 2 didn't jump to line 5"],
+            [6, -1, 0, fmt.WAIVED],
+            [6, 8, 1],
+        ],
+        "regions": [["function", "f", 1, "2-3"]],
+    }
+    # The facts' name is the git blob id of their text, so a record that
+    # keeps them as a file of that text names the file as git does.
+    assert name == fmt.facts_name(facts[name])
+    assert name == fmt.digest(fmt.facts_text(facts[name]).encode("utf-8"))
+    assert fmt.from_stored(json.loads(json.dumps(kept)), facts, source="p") == part
+    native = _native()
+    kept, facts = fmt.stored(native)
+    (name,) = facts
+    assert kept["files"]["packages/n/a.cpp"] == {
+        "digest": "b" * 40,
+        "facts": name,
+        "counts": [[1, 7], [2, 3]],
+        "taken": [[1, 3]],
+        "counted": [[1, 1]],
+        "calls": [[1, 7], [2, 0]],
+        "range-counts": [[1, 7]],
+    }
+    assert facts[name]["ranges"] == [[1, 12, 4, 2], [2, 3, 2, 9]]
+    assert fmt.from_stored(json.loads(json.dumps(kept)), facts, source="p") == native
+    # A file the measurer could not read has no facts to name.
+    unread = Part("packages/n", LLVM, {"packages/n/gone.cpp": Entry(digest="")})
+    kept, facts = fmt.stored(unread)
+    assert kept["files"] == {"packages/n/gone.cpp": {"digest": ""}} and facts == {}
+    assert fmt.from_stored(kept, facts, source="p") == unread
 
 
 def test_a_file_counts_as_coverage_py_counts_it() -> None:
@@ -430,7 +595,7 @@ def test_readings_at_two_digests_merge_the_current_and_name_the_other() -> None:
     assert (merged.units, merged.entry.executed) == (("packages/x",), frozenset({1}))
     assert combined.left_out == (
         "packages/x/a.py: left out the reading of tests by coverage.py 7.16.2 on"
-        " CPython 3.14 at content bbbbbbbbbbbb; the pages draw the one of"
+        " CPython 3.14 at content bbbbbbbbbbbb; the union keeps the one of"
         " packages/x by coverage.py 7.16.2 on CPython 3.14 at content"
         " aaaaaaaaaaaa",
     )
@@ -457,7 +622,7 @@ def test_readings_of_two_runtimes_never_merge() -> None:
     assert "by coverage.py 7.16.2 on CPython 3.11" in combined.left_out[0]
 
 
-def test_a_merge_ors_runs_and_keeps_a_sentence_only_while_never_taken() -> None:
+def test_a_merge_adds_runs_and_keeps_each_branch_s_sentence() -> None:
     one = _reading(
         "packages/x",
         counts={1: 1, 2: 1},
@@ -488,7 +653,12 @@ def test_a_merge_ors_runs_and_keeps_a_sentence_only_while_never_taken() -> None:
     assert dict(entry.counts) == {1: 3, 2: 1, 3: 1}
     assert entry.excluded == {8, 9}
     assert entry.spans == ((3, 4),)
-    assert entry.branches == (Branch(2, 3, 0, 1), Branch(2, 4, 1, 0, "nor here"))
+    # A branch's sentence depends on the source alone, so a taken branch
+    # keeps it, and a page shows it only while the branch never ran.
+    assert entry.branches == (
+        Branch(2, 3, 0, 1, "never jumped"),
+        Branch(2, 4, 1, 0, "nor here"),
+    )
     assert entry.branch_counts == ((1, 2, 2), (3, 2, 0))
     assert entry.regions == (Region("function", "f", 1, frozenset({2, 3}), 4),)
     # Each context by its name: t1 was index 1 in one part and in the
@@ -500,3 +670,19 @@ def test_a_merge_ors_runs_and_keeps_a_sentence_only_while_never_taken() -> None:
         [one, _reading("tests", regions=one.files["packages/x/a.py"].regions)]
     )
     assert alone.files["packages/x/a.py"].entry.regions[0].calls is None
+    # A range is one by where it is, its counts added.
+    stretch = Range(2, 1, 2, 5, 1)
+    ranged = fmt.merge(
+        [
+            _reading("packages/x", measurer=LLVM, ranges=(stretch,)),
+            _reading(
+                "tests",
+                measurer=LLVM,
+                ranges=(Range(2, 1, 2, 5, 2), Range(3, 1, 3, 4, 0)),
+            ),
+        ]
+    )
+    assert ranged.files["packages/x/a.py"].entry.ranges == (
+        Range(2, 1, 2, 5, 3),
+        Range(3, 1, 3, 4, 0),
+    )

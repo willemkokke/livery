@@ -1,69 +1,27 @@
-"""The gate job's half of coverage: every leg's lines and the records, as one union.
+"""The gate job's half of coverage: every leg's parts and the records', as one union.
 
 The gate job's judge, ``coverage.union``, reads what each check leg
 left on its per-run ref, carries every unit a leg did not measure from
-the records, combines them into the workspace's ``.coverage`` and the
-native packages' lines parts, and writes the union back onto the
-branch's record or main's
-([livery.extensions.coverage._union.combine_union][]). The floors are
-then judged on that one union
-([livery.extensions.coverage._floors.enforce_coverage][]).
+the records, merges every unit's parts by the line format's rules, and
+writes the merged files to the workspace's union file, which the floors
+then judge (`combine_union`). It writes the run's units back onto the
+branch's record or main's.
 """
 
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import livery.toolroom.tools as tools
 from livery import git
 from livery.extensions.coverage._leg import MEASURED, suites_that_ran, units_of
 from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.extensions.coverage._record import Record
+    from livery.extensions.coverage._format import Part
+    from livery.extensions.coverage._record import Record, Unit
     from livery.workshop._ci_context import RunContext
     from livery.workshop._packages import Package
-
-#: The gate job's scratch directory for the union's inputs: one
-#: directory per leg, the leg's fresh units and the units carried from
-#: main's record as coverage data files. Ignored by the template's
-#: gitignore, written afresh by every union.
-COVERAGE_DATA = "coverage-data"
-
-
-def _unmetered() -> dict[str, str]:
-    """The environment for a coverage CLI call on a named data file.
-
-    Ambient ``COVERAGE_*`` and ``COV_CORE_*`` variables, from a shell
-    that armed the meter or a pytest-cov parent, would re-point the
-    coverage CLI at that process's live data file and meter the CLI
-    process itself; scrubbing them keeps the call on the files the
-    caller named.
-    """
-    return {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("COVERAGE_", "COV_CORE_"))
-    }
-
-
-def _write_unit(
-    folder: Path, name: str, files: dict[str, list[tuple[int, int]]]
-) -> Path:
-    """One unit's arcs as a coverage data file under *folder*; the path."""
-    from coverage import CoverageData
-
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / name
-    data = CoverageData(basename=str(path))
-    data.add_arcs(
-        {file: {(arc[0], arc[1]) for arc in arcs} for file, arcs in files.items()}
-    )
-    data.write()
-    return path
 
 
 #: The scope of a leg a pull request did not run: every suite carried.
@@ -87,19 +45,24 @@ def expected_legs(root: Path, run: RunContext) -> tuple[list[str], list[str]]:
 
 
 def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """Union the run's legs' lines with the records; the packages it judges.
+    """Union the run's legs' parts with the records; the packages it judges.
 
     Each check leg's per-run ref carries the scope its gate ran and
-    the units it measured. A full leg measured every suite, a narrowed
-    or measured leg the suites its marker names; a leg whose gate
-    skipped (a tree already proved, or nothing affected) measured
-    nothing. Every unit a leg did not measure is carried from a record
-    on that leg, the branch's own before main's, at the unit's current
-    closure identity, so the union is the same global union a full run
-    produces and every package is judged. A unit no record can supply
+    the units it measured, each unit's parts in the line format. A full
+    leg measured every suite, a narrowed or measured leg the suites its
+    marker names; a leg whose gate skipped (a tree already proved, or
+    nothing affected) measured nothing. Every unit a leg did not
+    measure is carried from a record on that leg, the branch's own
+    before main's, at the unit's current closure identity, so the union
+    is the same global union a full run produces and every package is
+    judged. A unit no record can supply
     refuses by name: a leg skips a suite only when a record holds it,
     so a miss here is a leg that narrowed without the records, or a
-    record moved on since, never a smaller union.
+    record moved on since, never a smaller union. Every unit's parts
+    merge by the line format's rules: one file's readings merge at the
+    content the checkout holds and by one measurer, and every reading
+    left out is named. The merged files go to the union file, which the
+    floors read; no union file outlives a run that did not write one.
 
     The union is written back per leg: a pull request's run onto its
     branch's record, main's run onto main's. The leg's fresh units
@@ -117,27 +80,21 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     line only another platform reaches stays covered by main's
     measurement of it.
 
-    Refuses by name when no leg left its lines, when a leg's ref
+    Refuses by name when no leg left its parts, when a leg's ref
     carries no readable file, when a leg names no scope the union
-    reads, when a leg that ran a suite left its lines out, and when a
-    unit is neither the run's nor any record's.
+    reads, when a leg that ran a suite left its parts out, when a unit
+    is neither the run's nor any record's, and when a part is off the
+    line format, naming where it came from and the key.
 
     Returns:
         The judged packages, in *packages* order; empty when the
         workspace has no unit to union, and then no union file is
         written.
     """
-    from livery.extensions.coverage._lines import (
-        from_pairs,
-        merge,
-        remove_parts,
-        write_part,
-    )
+    from livery.extensions.coverage._parts import UNION
     from livery.extensions.coverage._record import (
-        LINES,
         RUN_FILE,
         Leg,
-        Unit,
         closure_id,
         put_record,
         row_name,
@@ -146,19 +103,21 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     from livery.workshop._ci_context import run_context
     from livery.workshop._verified import AFFECTED, FULL, NOTHING, VERIFIED
 
+    # The floors read the union file this run writes, and no other.
+    (root / UNION).unlink(missing_ok=True)
     run = run_context()
     if run is None:
         fail(
             "the union reads the run's per-run refs, and outside CI there is no"
-            " run: the legs' lines are unioned and judged inside CI alone"
+            " run: the legs' parts are unioned and judged inside CI alone"
         )
     legs, why = run_legs(root, run)
     if why:
         fail(f"the run's per-run refs could not be read ({why}); nothing to union")
     if not legs:
         fail(
-            f"no check leg left its lines on run {run.run_id}'s refs: every leg"
-            f" puts its scope and its lines there ({RUN_FILE}) at its end, and"
+            f"no check leg left its parts on run {run.run_id}'s refs: every leg"
+            f" puts its scope and its parts there ({RUN_FILE}) at its end, and"
             " a missing put is a red leg, never a smaller union"
         )
     every, due = expected_legs(root, run)
@@ -171,24 +130,18 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             " ([ci] pull-request-runners); every suite carried from the records"
         )
         legs.append(Leg(label, label, ABSENT, (), {}))
-    scratch = root / COVERAGE_DATA
-    shutil.rmtree(scratch, ignore_errors=True)
-    scratch.mkdir()
     units = units_of(root, packages)
     keys = {unit.path: closure_id(root, packages, unit) for unit in units}
     bases, target = _record_bases(root, run)
-    collected: list[Path] = []
-    reused: list[Path] = []
-    # The lines units, merged per package across the legs and the
-    # records; written as parts once every leg is read.
-    lines_by_package: dict[str, dict[str, dict[int, int]]] = {}
-    lines_reused = 0
+    # Every unit the union merges, with where its parts came from.
+    merged: list[tuple[Unit, str]] = []
+    reused = 0
     ran = 0
     writes: list[tuple[str, dict[str, Unit], dict[str, tuple[str, Unit]], Record]] = []
     for leg in sorted(legs, key=lambda item: item.key):
         if leg.why:
             fail(
-                f"leg {leg.key}: {leg.why}; the leg died before its lines, or"
+                f"leg {leg.key}: {leg.why}; the leg died before its parts, or"
                 " its put failed, and a missing put is a red leg, never a"
                 " smaller union"
             )
@@ -209,22 +162,13 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 fail(
                     f"leg {leg.label} ran {leg.scope!r} and its ref lacks"
                     f" {', '.join(missing)}: a leg that ran a suite puts its"
-                    " lines, and a missing put is a red leg, never a smaller union"
+                    " parts, and a missing put is a red leg, never a smaller union"
                 )
             ran += 1
-            for path, unit in sorted(leg.units.items()):
-                if unit.measurer == LINES:
-                    lines_by_package[path] = merge(
-                        lines_by_package.get(path, {}), from_pairs(unit.files)
-                    )
-                    continue
-                collected.append(
-                    _write_unit(
-                        scratch / leg.label,
-                        f"fresh-{git.slug(path)}.coverage",
-                        unit.files,
-                    )
-                )
+            merged.extend(
+                (unit, f"leg {leg.label}'s {path}")
+                for path, unit in sorted(leg.units.items())
+            )
         else:
             fail(
                 f"leg {leg.label}: its ref names a scope the union does not read"
@@ -284,19 +228,8 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                     " that day; a run of the full gate measures it again."
                 )
             base, row = carried[suite.path]
-            if row.measurer == LINES:
-                lines_by_package[suite.path] = merge(
-                    lines_by_package.get(suite.path, {}), from_pairs(row.files)
-                )
-                lines_reused += 1
-            else:
-                reused.append(
-                    _write_unit(
-                        scratch / leg.label,
-                        f"reuse-{git.slug(suite.path)}.coverage",
-                        row.files,
-                    )
-                )
+            merged.append((row, f"{base}'s record on {leg.label}, {suite.path}"))
+            reused += 1
             print(
                 f"  coverage: {suite.path} on {leg.label}: reused from run"
                 f" {row.run} ({len(row.files)} files), {base}'s record{kept}"
@@ -304,32 +237,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         if target:
             own = _read_record(root, held, target, leg.label)
             writes.append((leg.label, dict(leg.units), carried, own))
-    if not collected and not reused and not lines_by_package:
+    if not merged:
         print("  coverage: no unit to union; nothing judged")
         return ()
-    scrubbed = _unmetered()
-    if collected or reused:
-        result = tools.coverage.opts(
-            cwd=root, env=scrubbed, nofail=True, recorded=False
-        )("combine", *(str(path) for path in collected + reused))
-        if result.code != 0:
-            fail(
-                f"coverage combine exited {result.code}:\n"
-                f"{result.stdout}{result.stderr}"
-            )
-        report = tools.coverage.opts(
-            cwd=root, env=scrubbed, nofail=True, recorded=False
-        )("report", "--sort=cover")
-        print(report.stdout.rstrip())
-    remove_parts(root)
-    for path, lines in sorted(lines_by_package.items()):
-        write_part(root, path, lines)
-    if lines_by_package:
-        print(f"  coverage: {len(lines_by_package)} native package(s) unioned by lines")
-    print(
-        f"  coverage: the union of {ran} leg(s) and {len(reused) + lines_reused}"
-        " reused suite(s)"
-    )
+    _write_merged(root, merged)
+    print(f"  coverage: the union of {ran} leg(s) and {reused} reused suite(s)")
     if not target:
         print(
             f"  coverage record: not written, a {run.event or 'local'} run"
@@ -377,6 +289,52 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             f" {len(carried)} carried, {len(removed)} removed"
         )
     return tuple(packages)
+
+
+def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
+    """Merge every unit's parts and write the union file; each left-out reading named.
+
+    A file's readings merge at the content the checkout holds, so the
+    checkout's digest of every file the parts name is read first. Each
+    part is read from its stored form with the fixed facts its unit
+    holds.
+
+    Raises:
+        Failed: when a part is off the line format, or names fixed
+            facts its unit does not hold, naming the unit it came from
+            and the key at fault.
+    """
+    from livery.extensions.coverage._format import (
+        PartError,
+        digest,
+        from_stored,
+        merge,
+    )
+    from livery.extensions.coverage._parts import UNION, write_union
+
+    parts: list[Part] = []
+    for unit, source in merged:
+        for index, raw in enumerate(unit.parts):
+            try:
+                parts.append(
+                    from_stored(raw, unit.facts, source=f"{source}, part {index}")
+                )
+            except PartError as error:
+                fail(f"coverage: {error}")
+    names = sorted({name for part in parts for name in part.files})
+    current = {
+        name: digest((root / name).read_bytes())
+        for name in names
+        if (root / name).is_file()
+    }
+    combined = merge(parts, current)
+    for line in combined.left_out:
+        print(f"  coverage: {line}")
+    write_union(root, combined, [unit.path for unit, _source in merged])
+    print(
+        f"  coverage: {len(combined.files)} file(s) unioned from {len(parts)}"
+        f" part(s), written to {UNION}"
+    )
 
 
 def _read_record(root: Path, held: dict[str, Record], base: str, label: str) -> Record:

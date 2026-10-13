@@ -15,10 +15,11 @@ compile-commands = "livery.extensions.cmake._build:compile_commands"
 
 # While coverage is listed, this extension measures every native suite
 # for it: the gate build includes coverage.cmake, each ctest run is read
-# by the compiler family's own measurer, and its lines land as the
-# package's part at the root, which the ignore line under
-# content/for/coverage/ keeps out of git. While it is not, the gate
-# build is not instrumented and ctest runs alone.
+# by the compiler family's own measurer, and what it read, lines,
+# branches, functions and, from llvm-cov, ranges, lands as the
+# package's part in the line format under .workshop/coverage/parts/,
+# where coverage gathers it. While it is not, the gate build is not
+# instrumented and ctest runs alone.
 [for.coverage]
 
 # Microsoft's coverage engine measures a build made with MSVC, so the
