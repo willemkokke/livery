@@ -70,8 +70,8 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
     refused = _refusal(package, '[extension]\nlevel = ["workspace"]\n')
     assert refused == (
         f"{package / 'extension.toml'}:\n"
-        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
-        " requires; did you mean 'levels'?"
+        "  [extension] has no key 'level': it takes api-version, dormant-until,"
+        " levels, plugin, requires; did you mean 'levels'?"
     )
     refused = _refusal(package, STEP + "claim = []\n")
     assert "[phases.lint.acme] has no key 'claim'" in refused
@@ -1016,3 +1016,47 @@ def test_a_fragment_declares_its_target_its_render_and_whether_it_is_local(
         DeclaredOutput("NOTES.md", Reference("acme_declared._steps", "judge")),
         DeclaredOutput(".acme/", Reference("acme_declared._steps", "mend"), local=True),
     )
+
+
+def test_a_for_table_s_fragment_refuses_naming_its_key_and_reads_by_target(
+    package: Path,
+) -> None:
+    from livery.workshop._declaration import DeclaredOutput
+
+    refused = _refusal(package, '[for.docs.fragments."NOTES.md"]\nlocal = true\n')
+    assert 'for.docs.fragments."NOTES.md" names no render' in refused
+    found = _declare(
+        package,
+        '[for.docs.fragments."NOTES.md"]\nrender = "acme_declared._steps:judge"\n',
+    )
+    assert found.fragments == ()
+    assert found.target_fragments == {
+        "docs": (
+            DeclaredOutput("NOTES.md", Reference("acme_declared._steps", "judge")),
+        )
+    }
+
+
+def test_content_for_a_target_with_no_for_table_refuses_naming_both(
+    package: Path,
+) -> None:
+    # The files under content/for/<target>/ are delivered while the
+    # [for.<target>] table applies; with no table they never would be.
+    shipped = package / "content" / "for" / "acme.python" / "root"
+    shipped.mkdir(parents=True)
+    (shipped / "notes.txt").write_text("notes\n")
+    refused = _refusal(package, STEP)
+    assert (
+        "content/for/acme.python/ ships files for acme.python, and the file"
+        ' declares no [for."acme.python"] table; declare one, or move the files'
+    ) in refused
+    found = _declare(package, STEP + '\n[for."acme.python"]\n')
+    assert found.target_tables == {"acme.python": {}}
+
+
+def test_dormant_until_says_what_another_extension_does_for_this_one(
+    package: Path,
+) -> None:
+    assert _declare(package, STEP).dormant_until == ""
+    found = _declare(package, '[extension]\ndormant-until = "measures"\n')
+    assert found.dormant_until == "measures"

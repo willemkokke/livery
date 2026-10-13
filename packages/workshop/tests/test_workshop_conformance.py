@@ -190,8 +190,9 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     monkeypatch.syspath_prepend(str(tmp_path))
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:\n"
-        "  [extension] has no key 'level': it takes api-version, levels, plugin,"
-        " requires; did you mean 'levels'?; the mount refuses the extension"
+        "  [extension] has no key 'level': it takes api-version, dormant-until,"
+        " levels, plugin, requires; did you mean 'levels'?; the mount refuses"
+        " the extension"
     ]
     declaration.write_text(
         '[phases.lint.acme]\nmain = "acme_kit_extension._steps:judge"\n'

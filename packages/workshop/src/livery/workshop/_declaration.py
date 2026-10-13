@@ -27,7 +27,15 @@ literal answer, and ``<name> = "module:function"`` under ``[queries]``
 answers by a function. An answer to a query no declaration names
 refuses naming the declared ones. A ``[for.<target>.queries]`` table
 answers in the same grammar, asked while the target is listed, and
-declares no query.
+declares no query. A ``[for.<target>.fragments]`` table writes its files
+while the target is listed, and so are the files the extension ships
+under ``content/for/<target>/``; a directory there for a target the file
+declares no ``[for.<target>]`` table for refuses, naming both.
+
+``[extension] dormant-until`` names, as a verb, what another extension
+does for this one by declaring a ``[for.<this>]`` table: until a listed
+extension does, this one is dormant
+([livery.workshop._extensions.dormancy][]).
 
 A step is declared at ``[phases.<phase>.<step>]`` and reads into one
 record whatever its phase's level
@@ -196,6 +204,9 @@ class Declaration:
         levels: The levels it may be listed at.
         plugin: The footman plugin carrying its verbs; empty for none.
         requires: The extensions it cannot work without.
+        dormant_until: What another extension does for this one by
+            declaring a ``[for.<this>]`` table, a verb; empty for an
+            extension that is never dormant.
         tools: The tools its verbs need, as requirement strings.
         additions: What it adds whenever it is mounted.
         targets: What it adds to each target while the target is listed.
@@ -207,6 +218,9 @@ class Declaration:
         deletes: Each earlier extension's shipped file it deletes, to the
             reason.
         fragments: The files its code writes, by target.
+        target_fragments: The files each ``[for.<target>]`` table's code
+            writes, by target; a target whose table writes none is left
+            out.
         phase_specs: The phases it declares, by name.
         phases: The steps its top-level ``[phases.<phase>.<step>]``
             tables add, by phase, each the one step record whatever
@@ -231,6 +245,7 @@ class Declaration:
     levels: tuple[str, ...] = ("workspace",)
     plugin: str = ""
     requires: tuple[str, ...] = ()
+    dormant_until: str = ""
     tools: tuple[str, ...] = ()
     additions: Additions = Additions()
     targets: dict[str, Additions] = field(default_factory=dict[str, Additions])
@@ -241,6 +256,9 @@ class Declaration:
     replaces: dict[str, str] = field(default_factory=dict[str, str])
     deletes: dict[str, str] = field(default_factory=dict[str, str])
     fragments: tuple[DeclaredOutput, ...] = ()
+    target_fragments: dict[str, tuple[DeclaredOutput, ...]] = field(
+        default_factory=dict[str, tuple[DeclaredOutput, ...]]
+    )
     phase_specs: dict[str, PhaseSpec] = field(default_factory=dict[str, "PhaseSpec"])
     phases: dict[str, tuple[StepRecord, ...]] = field(
         default_factory=dict[str, tuple["StepRecord", ...]]
@@ -409,6 +427,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         raise DeclarationError(
             f"{path}:\n" + "\n".join(f"  {line}" for line in problems)
         )
+    reader.shipped_for(data)
     own = phase_specs_of(data, path, extension=extension)
     reader.specs = _known_phases(own, path)
     own_queries = query_specs_of(data, path, extension=extension, package=package)
@@ -443,6 +462,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         levels=tuple(str(level) for level in identity.get("levels", ("workspace",))),
         plugin=str(identity.get("plugin", "")),
         requires=tuple(str(name) for name in identity.get("requires", ())),
+        dormant_until=str(identity.get("dormant-until", "")),
         tools=tuple(str(text) for text in data.get("toolroom", {}).get("requires", ())),
         additions=additions,
         targets=targets,
@@ -458,6 +478,14 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
             reader.output(str(target), table)
             for target, table in data.get("fragments", {}).items()
         ),
+        target_fragments={
+            str(target): tuple(
+                reader.output(str(written), table, ("for", str(target)))
+                for written, table in held["fragments"].items()
+            )
+            for target, held in data.get("for", {}).items()
+            if held.get("fragments")
+        },
         phase_specs=own,
         phases=phases,
         query_specs=own_queries,
@@ -1142,18 +1170,48 @@ class _Reader:
             found.append(Fragment(file, str(entry["text"]), extensions=extensions))
         return tuple(found)
 
-    def output(self, target: str, table: dict[str, Any]) -> DeclaredOutput:
-        """The file *target* names, written by the render its table references."""
+    def output(
+        self, target: str, table: dict[str, Any], prefix: tuple[str, ...] = ()
+    ) -> DeclaredOutput:
+        """The file *target* names, written by the render its table references.
+
+        *prefix* is the ``[for.<target>]`` table the fragment is under,
+        empty for the top level.
+        """
+        where = (*prefix, "fragments", target)
         if "render" not in table:
             raise self.refuse(
-                ("fragments", target),
+                where,
                 "names no render; a fragment's code is render = 'module:function'",
             )
         return DeclaredOutput(
             target,
-            self.reference(table["render"], ("fragments", target, "render")),
+            self.reference(table["render"], (*where, "render")),
             local=bool(table.get("local", False)),
         )
+
+    def shipped_for(self, data: dict[str, Any]) -> None:
+        """Refuse ``content/for/<target>/`` for a target with no ``[for]`` table.
+
+        The files under it are delivered while the extension contributes
+        to the target, which a ``[for.<target>]`` table declares, so a
+        directory for a target the file declares nothing for would never
+        be delivered: a misspelled target, or a table that went.
+        """
+        from livery.workshop._contract_keys import shown
+
+        shipped = self.path.parent / "content" / "for"
+        if not shipped.is_dir():
+            return
+        declared = data.get("for", {})
+        for held in sorted(shipped.iterdir()):
+            if held.is_dir() and held.name not in declared:
+                raise DeclarationError(
+                    f"{self.path}: content/for/{held.name}/ ships files for"
+                    f" {held.name}, and the file declares no"
+                    f" [{shown(('for', held.name))}] table; declare one, or"
+                    " move the files"
+                )
 
     def context_keys(
         self, table: dict[str, Any], where: tuple[str, ...], provider: str

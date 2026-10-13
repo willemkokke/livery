@@ -1,8 +1,8 @@
 # Shipped by the workshop and handed to the gate's configure through
-# CMAKE_PROJECT_INCLUDE: the gate build is instrumented for coverage
-# by the family of the compiler CMake detected, and the measurer
-# beside that compiler reads the run. A release build never includes
-# this file.
+# CMAKE_PROJECT_INCLUDE while coverage is listed: the gate build is
+# instrumented for coverage by the family of the compiler CMake
+# detected, and the measurer beside that compiler reads the run. A
+# release build never includes this file.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options(--coverage)
   add_link_options(--coverage)

@@ -1,6 +1,6 @@
-# Written by `{{ prog }} sync` from the pytest extension; the gate keeps it
-# matching. Edit inside the region at the end, which is the repository's
-# own; an edit anywhere else is drift.
+# Written by `{{ prog }} sync` from the pytest extension while coverage is
+# listed; the gate keeps it matching. Edit inside the region at the end,
+# which is the repository's own; an edit anywhere else is drift.
 [run]
 # The tests measure, and every process they start, every
 # {{ runner_prog }} child a test spawns included: inside CI the test
@@ -12,6 +12,8 @@
 # gate job.
 patch = subprocess
 parallel = true
+# Each file is named from the workspace root, the names the legs' data
+# and the union read; absolute names would differ by checkout.
 relative_files = true
 # Branches as well as statements: a conditional's untaken arm is
 # uncovered, where line coverage shows the conditional as covered

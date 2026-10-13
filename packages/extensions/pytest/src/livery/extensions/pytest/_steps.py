@@ -5,7 +5,9 @@ here. ``test.pytest`` narrows by packages: the workshop names the members a
 run reaches ([livery.workshop.scoped_packages][]), and the python
 kind's runner runs their suites in one call
 ([livery.workshop.run_suites][]), with the workspace's own tests
-([livery.workshop.workspace_suite][]) beside them. A member whose
+([livery.workshop.workspace_suite][]) beside them, measured while this
+extension contributes its ``[for.coverage]`` table
+([livery.workshop.contributions_for][]). A member whose
 suite is not worker-safe sets the step's ``parallel`` option to false
 and runs in a call of its own, under ``-n 0``. ``examples.pytest`` runs
 each member's documentation examples with its kind's examples runner
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 from livery.workshop import (
     PhaseContext,
+    contributions_for,
     kind_examples,
     run_suites,
     scoped_files,
@@ -28,13 +31,25 @@ from livery.workshop import (
 #: The kind whose suites and examples pytest runs, its children with it.
 KIND = "python"
 
+#: The name a workspace lists this extension by.
+NAME = "pytest"
+
+#: The extension this one measures the suites for, while its
+#: ``[for.coverage]`` table applies.
+MEASURED_FOR = "coverage"
+
 #: The steps' names, as the workshop addresses them.
 TEST = "test.pytest"
 EXAMPLES = "examples.pytest"
 
 
 def judge_test(ctx: PhaseContext) -> None:
-    """Run the suites of the packages the run reaches, and the workspace's own tests."""
+    """Run the suites of the packages the run reaches, and the workspace's own tests.
+
+    The suites run measured while coverage is listed and this
+    extension's listing contributes its ``[for.coverage]`` table, and
+    with no meter otherwise.
+    """
     # A package whose examples alone changed runs them, not its suite.
     members = tuple(
         package
@@ -52,6 +67,7 @@ def judge_test(ctx: PhaseContext) -> None:
     # call collects the packages it is handed and no other.
     serial = tuple(p for p in members if not step_option(TEST, p, "parallel"))
     parallel = tuple(p for p in suites if p not in serial)
+    measured = NAME in contributions_for(MEASURED_FOR, ctx.root)
     for group, extra in ((parallel, ()), (serial, ("-n", "0"))):
         if group:
             run_suites(
@@ -62,6 +78,7 @@ def judge_test(ctx: PhaseContext) -> None:
                 root=ctx.root,
                 selection=ctx.tests,
                 point=ctx.point,
+                measured=measured,
             )
 
 

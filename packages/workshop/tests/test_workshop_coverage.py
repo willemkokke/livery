@@ -336,6 +336,34 @@ def _suite(tmp_path: Path, name: str) -> Package:
     return package
 
 
+def test_without_coverage_the_tests_run_unmetered_and_print_no_preview(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    thing = _suite(tmp_path, "thing")
+    fake = _FakePytest()
+    monkeypatch.setattr(_python, "pytest", fake)
+
+    def _never(root: Path, packages: tuple[Package, ...]) -> None:
+        raise AssertionError("a run that is not measured prints no preview")
+
+    # Coverage answers the preview while it is listed; a run nothing
+    # measures for never asks.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    monkeypatch.setattr(coverage_floors, "report_coverage", _never)
+    for name in ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
+    # On a machine the run takes no meter's options.
+    _python.run_test(packages=(thing,), root=tmp_path)
+    args, _env = fake.calls[-1]
+    assert args == ("packages/thing/tests",)
+    # Inside CI no meter is armed in pytest's environment.
+    _in_ci(monkeypatch, "check-a")
+    _python.run_test(packages=(thing,), root=tmp_path)
+    args, env = fake.calls[-1]
+    assert args == ("packages/thing/tests",)
+    assert env is not None and "COVERAGE_PROCESS_START" not in env
+
+
 def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -349,7 +377,7 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
 
     monkeypatch.setattr(coverage_floors, "enforce_coverage", refuse)
     _in_ci(monkeypatch, "check-a")
-    _python.run_test(packages=(thing, other), root=tmp_path)
+    _python.run_test(packages=(thing, other), root=tmp_path, measured=True)
     # One process for every suite, under the leg's own prefix: the
     # plugin names each test's context, and the leg splits the data.
     # The meter is armed in pytest's environment alone, with the
@@ -370,8 +398,10 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     unit = workspace_suite(tmp_path)
     assert unit is not None
     fake.calls.clear()
-    _python.run_test(packages=(thing,), root=tmp_path)
-    _python.run_test(packages=(thing, unit), root=tmp_path, point="merge")
+    _python.run_test(packages=(thing,), root=tmp_path, measured=True)
+    _python.run_test(
+        packages=(thing, unit), root=tmp_path, point="merge", measured=True
+    )
     assert [args for args, _env in fake.calls] == [
         ("packages/thing/tests",),
         ("packages/thing/tests", "tests", "--workshop-point=merge"),
@@ -532,11 +562,11 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     # The fallback first: a package with no tests directory gives pytest
     # nothing to collect, and handed no path it would collect the whole
     # configuration, so no pytest starts.
-    _python.run_test(packages=(package,), root=tmp_path)
+    _python.run_test(packages=(package,), root=tmp_path, measured=True)
     assert seen == [] and enforced == []
     assert "no test directory in packages/thing" in capsys.readouterr().out
     (package.directory / "tests").mkdir()
-    _python.run_test(packages=(package,), root=tmp_path)
+    _python.run_test(packages=(package,), root=tmp_path, measured=True)
     assert seen[0][0] == "packages/thing/tests"
     assert any(arg == "--cov" for arg in seen[0])
     assert enforced == [tmp_path]
@@ -555,7 +585,7 @@ def test_a_machines_run_prints_no_preview_while_no_extension_answers(
 
     monkeypatch.setattr(coverage_floors, "report_coverage", _never)
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["ruff"]\n')
-    _python.run_test(packages=(package,), root=tmp_path)
+    _python.run_test(packages=(package,), root=tmp_path, measured=True)
 
 
 def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
@@ -577,7 +607,12 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
         "packages/thing": ("packages/thing/tests/test_a.py",),
         "tests": ("tests/test_all.py",),
     }
-    _python.run_test(packages=(thing, other, unit), root=tmp_path, selection=selection)
+    _python.run_test(
+        packages=(thing, other, unit),
+        root=tmp_path,
+        selection=selection,
+        measured=True,
+    )
     args, env = fake.calls[0]
     assert args[:3] == (
         "packages/thing/tests/test_a.py",
@@ -591,13 +626,13 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
     assert env["GITHUB_ACTIONS"] == "true"
     assert "GITHUB_ACTIONS" not in os.environ
     # The kind's own test call: the package's suite alone, or its
-    # selection.
+    # selection, with no meter: measuring is the test extension's to ask.
     fake.calls.clear()
     _python.test(thing, tmp_path, selection=("tests/test_b.py",))
-    assert fake.calls[0][0][:2] == ("packages/thing/tests/test_b.py", "--cov")
+    assert fake.calls[0][0] == ("packages/thing/tests/test_b.py",)
     fake.calls.clear()
     _python.test(thing, tmp_path)
-    assert fake.calls[0][0][:2] == ("packages/thing/tests", "--cov")
+    assert fake.calls[0][0] == ("packages/thing/tests",)
 
 
 # --- the leg: its refusal, then what it stores --------------------------------

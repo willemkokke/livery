@@ -532,7 +532,8 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
     # makes the tree dirty, which a workflow verb refuses; coverage's own
     # configuration, `.coveragerc`, is a tracked file beside them. The
     # extensions that write the data ship its lines: the meter's data is
-    # pytest's, the rest coverage's, and the base names none of them.
+    # pytest's, while it measures for coverage, the rest coverage's, and
+    # the base names none of them.
     import subprocess
 
     from livery.extensions.coverage._lines import PART_PREFIX
@@ -557,20 +558,23 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
 
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
     assert [name for name in data if ignored(name)] == []
+    # Listed alone, pytest runs no meter and leaves no data to ignore.
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", ("pytest",)))
-    assert [name for name in data if ignored(name)] == list(metered)
+    assert [name for name in data if ignored(name)] == []
     listed = ("pytest", "coverage")
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", listed))
     assert [name for name in data if not ignored(name)] == []
     assert not ignored(".coveragerc")
 
 
-def test_a_native_package_s_lines_part_is_ignored_with_coverage_unlisted(
+def test_a_native_package_s_lines_part_is_ignored_while_coverage_is_listed(
     tmp_path: Path,
 ) -> None:
-    # The cmake extension's test leaves a lines part at the root whether
-    # coverage is listed or not, so the extension that writes it ships
-    # its ignore line, delivered while a package's kind holds cmake.
+    # The cmake extension's test leaves a lines part at the root while
+    # it measures for coverage, so it ships the part's ignore line in
+    # its [for.coverage] content, delivered while a package's kind holds
+    # cmake and coverage is listed. The fallback first: unlisted, the
+    # test leaves no part and the line is not there.
     from livery.extensions.coverage._lines import PART_PREFIX
     from livery.workshop._shipped_files import outputs
 
@@ -580,8 +584,12 @@ def test_a_native_package_s_lines_part_is_ignored_with_coverage_unlisted(
     (workspace / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-lib"\n')
     (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
+    assert f"{PART_PREFIX}*" not in ignored.body.decode().splitlines()
+    assert "cmake:for/coverage/.gitignore" not in ignored.owners
+    (workspace / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
     assert f"{PART_PREFIX}*" in ignored.body.decode().splitlines()
-    assert f"{PART_PREFIX}*" not in _composed(tmp_path, ".gitignore").splitlines()
+    assert "cmake:for/coverage/.gitignore" in ignored.owners
 
 
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:

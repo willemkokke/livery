@@ -71,6 +71,14 @@ spelling. Every key is optional:
   the root's list, each one before it; for a package-level extension,
   in the package's set, which takes them in. `layering.graph` keeps
   them listed, and its `--fix` writes a missing workspace entry;
+- `[extension] dormant-until`, what another extension does for this one
+  by declaring a `[for.<this>]` table, as a verb: coverage says
+  `measures`. Until a listed extension contributes such a table, this
+  one is dormant: it registers no step and no job, its plugin still
+  mounts, and `fm extensions` and `fm doctor` say what it waits for and
+  which installed extensions would wake it, `nothing listed measures;
+  cmake and pytest would`. A listing kept for a contributor still to
+  come is a statement of intent, so it is named, never refused;
 - `[phases.<phase>]`, a phase the extension declares, in the grammar
   the base declares its own in: `level`, `package` for a phase run
   over one package at a time or `workspace` for one run over the
@@ -119,8 +127,13 @@ spelling. Every key is optional:
   `enabled = false` registers only while the root contract turns it on
   at the step's own address, `[phases.<phase>.<step>] enabled = true`;
 - `[for.<target>]`, the same tables, read only while the target is
-  listed, its `[for.<target>.queries]` answers among them; a query is
-  declared at the top level alone;
+  listed, its `[for.<target>.queries]` answers and its
+  `[for.<target>.fragments]` files among them; a query is declared at
+  the top level alone. The files the extension ships under
+  `content/for/<target>/root/` and `content/for/<target>/package/` are
+  delivered while the table applies, as its `content/root/` and
+  `content/package/` files always are; a directory there for a target
+  the file declares no table for refuses, naming both;
 - `[replaces]` and `[deletes]`, an earlier extension's shipped file,
   `"<owner>:<name>"`, that its own file of that name replaces or that it
   deletes, to the reason.
@@ -212,8 +225,8 @@ carry refuses. A name the extension declares no contribution for
 mounts nothing, and `layering.graph` names the entry.
 `fm extensions` prints the base, then each extension in mount order,
 who requires it, the packages whose sets hold a package-level one, its
-tools, its targets, and each step it declares off with whether the
-root contract turns it on.
+tools, its targets, whether it is dormant and what would wake it, and
+each step it declares off with whether the root contract turns it on.
 
 A package's `extensions` names the package-level extensions it is
 composed of. Its set is that list and every package-level extension
@@ -453,7 +466,10 @@ itself; a measurer's rows it cannot read are reduced by the extension
 that answers its `coverage.measurers` query for that measurer, the
 pytest extension for coverage.py's arcs. A measured file the checkout
 no longer has is red in CI and named on the index on a machine, and a
-file at other content keeps its numbers and says so. An
+file at other content keeps its numbers and says so. Each index states
+the package's floor: the one its contract names or the default, the
+mark it ratchets to, read in the merge point's gate job, or that
+nothing judges it. An
 extension's site css ships in
 its wheel under `content/docs/assets/`; the build stages it under
 `docs/_extensions/` and lists it in `extra_css` in extension order, before
@@ -1156,6 +1172,14 @@ check leg before the leg's own write, and its judge `coverage.union`
 joins the gate job before the run's rows are collected, so a package
 below its floor stops the job before the verdict and the stamp. A
 workspace that does not list `coverage` runs neither.
+Measuring belongs to the test extensions, each through its
+`[for.coverage]` table: pytest measures the python suites, writing the
+root `.coveragerc` and adding coverage.py and pytest-cov to the dev
+group, and cmake instruments and measures the native gate builds. A
+workspace that lists one of them without coverage runs its tests with
+no meter and prints no preview. A workspace that lists coverage and
+nothing that measures has coverage dormant: no entry, no judge, and
+`fm extensions` and `fm doctor` name what would wake it.
 Measurement is the kind's answer, reduced to one shape before
 anything is stored. A python suite's is coverage.py's arcs. A native
 suite's is lines: the gate build is instrumented for the compiler
@@ -1181,8 +1205,8 @@ with a floor that no leg measured refuses by name and never passes.
 Coverage stays global
 under the
 affected mode: in a check leg's one measured run every test records
-under a context named by its node id (the workshop's own pytest
-plugin, quiet outside a measured run), the leg splits the run's data
+under a context named by its node id (the pytest extension's plugin,
+quiet outside a measured run), the leg splits the run's data
 per suite and leaves each suite's lines for the leg's one write,
 which puts them on its per-run ref of the state store, with the
 identity of the suite's dependency closure

@@ -248,9 +248,15 @@ def runner_shaped(env: Mapping[str, str]) -> dict[str, str]:
 
 
 #: coverage.py's own configuration file, which the test step's
-#: extension writes at the root: the meter armed in every process the
-#: tests start reads it, and the coverage CLI finds it first.
+#: extension writes at the root while the suites are measured: the
+#: meter armed in every process the tests start reads it, and the
+#: coverage CLI finds it first.
 COVERAGE_CONFIG = ".coveragerc"
+
+#: coverage.py's own variable: set in pytest's environment to the
+#: configuration's path, it starts the meter in every python the tests
+#: start, from interpreter start.
+METER = "COVERAGE_PROCESS_START"
 
 #: Who prints a machine's coverage preview after its suites ran: the
 #: function a listed extension answers with, given the workspace root
@@ -266,6 +272,7 @@ def run_test(
     root: Path,
     selection: Mapping[str, tuple[str, ...]] | None = None,
     point: str = "",
+    measured: bool = False,
 ) -> None:
     """Run the suites of *packages* in one pytest call, *pytest_args* unchanged.
 
@@ -274,16 +281,18 @@ def run_test(
     nothing else, so a package a run leaves out is never collected;
     *selection* names, per package path, the test files that stand for
     the package's directory. *point* selects that CI point's tests,
-    through the workshop's points plugin. The run measures coverage
-    over the namespace the configuration names: inside CI the tests
-    run metered for the gate job's union, and on a machine the run
-    prints the preview a listed extension answers ``python.test.preview``
-    with ([livery.extensions.python._backend.PREVIEW][]), the coverage
-    extension's figure beside each floor, or none. A machine's run
-    sets the runner's variables (`RUNNER_VARIABLES`), so the suite is
-    judged the way the legs judge it. With no test directory among
-    the packages no pytest starts, since one handed no path would
-    collect the whole configuration.
+    through the workshop's points plugin. A *measured* run measures
+    coverage over the namespace the configuration names: inside CI the
+    tests run metered for the gate job's union, and on a machine the
+    run prints the preview a listed extension answers
+    ``python.test.preview`` with
+    ([livery.extensions.python._backend.PREVIEW][]), the coverage
+    extension's figure beside each floor, or none. A run that is not
+    measured runs no meter and prints no preview. A machine's run sets
+    the runner's variables (`RUNNER_VARIABLES`), so the suite is judged
+    the way the legs judge it. With no test directory among the
+    packages no pytest starts, since one handed no path would collect
+    the whole configuration.
     """
     from livery.workshop._packages import WORKSPACE_TESTS
 
@@ -305,7 +314,6 @@ def run_test(
         print(f"  tests: no test directory in {names}; nothing to collect")
         return
     from livery.workshop._ci_context import run_context
-    from livery.workshop._pytest_contexts import ARMED
     from livery.workshop._pytest_speed import FILE_VARIABLE
 
     run = run_context()
@@ -317,15 +325,15 @@ def run_test(
         env = {**os.environ, FILE_VARIABLE: str(sums)}
         try:
             if run is not None:
-                # Inside CI the tests run metered, and only they.
-                # Coverage's own subprocess variable is armed in
+                # Inside CI a measured run meters the tests, and only
+                # them. Coverage's own subprocess variable is armed in
                 # pytest's environment, never in the gate's own, so
                 # every python the tests start inherits it (the xdist
                 # workers, the runner's children a test spawns in a
                 # fixture workspace) and the driver that decides what
                 # to run records nothing: a line counts only when a
                 # test reached it, whatever the gate ran around the
-                # tests. The workshop's pytest plugin names each
+                # tests. The test extension's pytest plugin names each
                 # test's context in that run, the leg splits the one
                 # run's data per suite, and the floors are judged
                 # once, on the union, in the gate job. Captured, and
@@ -335,7 +343,7 @@ def run_test(
                 # captured child gets its own hidden console on Windows,
                 # where a streamed one shares the runner's and a control
                 # event a worker raises would interrupt the runner too.
-                armed = {**env, ARMED: str(root / COVERAGE_CONFIG)}
+                armed = {**env, METER: str(root / COVERAGE_CONFIG)} if measured else env
                 result = pytest.opts(in_process=False, env=armed, nofail=True)(
                     *dirs, *pytest_args
                 )
@@ -344,17 +352,19 @@ def run_test(
                     print(result.stderr, end="")
                     fail(f"pytest exited {result.code}")
             else:
-                # Bare --cov: the measured source is the configuration's
-                # `[run] source`, the namespace the render derived, never
-                # a spelled module. The runner's variables are set, so
-                # a test that reads them is judged here as on the leg.
+                # Bare --cov on a measured run: the measured source is
+                # the configuration's `[run] source`, the namespace the
+                # render derived, never a spelled module. The runner's
+                # variables are set, so a test that reads them is
+                # judged here as on the leg.
+                metered = ("--cov", "--cov-report=") if measured else ()
                 pytest.opts(in_process=False, env=runner_shaped(env))(
-                    *dirs, "--cov", "--cov-report=", *pytest_args
+                    *dirs, *metered, *pytest_args
                 )
         finally:
             for line in speed_lines(root, sums, leg=run.leg if run else ""):
                 print(line)
-    if run is None:
+    if run is None and measured:
         from livery.workshop import answer
 
         preview = answer(root, PREVIEW)

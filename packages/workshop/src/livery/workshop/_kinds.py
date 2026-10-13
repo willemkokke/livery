@@ -83,8 +83,9 @@ class SuiteRunner(Protocol):
         root: Path,
         selection: Mapping[str, tuple[str, ...]] | None = None,
         point: str = "",
+        measured: bool = False,
     ) -> None:
-        """Run the suites of *packages*; a refusal is the verdict."""
+        """Run *packages*' suites, metered when *measured*; a refusal is the verdict."""
         ...
 
 
@@ -483,6 +484,7 @@ def run_suites(
     root: Path,
     selection: Mapping[str, tuple[str, ...]] | None = None,
     point: str = "",
+    measured: bool = False,
 ) -> None:
     """Run the test suites of *packages* in one call of *kind_name*'s runner.
 
@@ -492,6 +494,9 @@ def run_suites(
     [livery.workshop.workspace_suite][] is in *packages*.
     *selection* names, per package path, the test files that stand for
     the package's suite, and *point* selects that CI point's tests.
+    *measured* runs the suites metered, which the test extension asks
+    for while a listed extension judges what it measures; unmeasured,
+    the suites run with no meter.
 
     Raises:
         Failed: when the kind runs no suites, or when a suite fails.
@@ -504,6 +509,7 @@ def run_suites(
                 root=root,
                 selection=selection,
                 point=point,
+                measured=measured,
             )
             return
     fail(f"kind {kind_name!r} runs no test suites")

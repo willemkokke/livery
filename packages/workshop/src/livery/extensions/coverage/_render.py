@@ -9,9 +9,10 @@ extension's ``content/assets``. The numbers are coverage.py's
 branches and percentages its report shows, and the category it draws
 each line in. Beyond them, a page shows how many times each line ran
 for a measurer that counts runs, a measurer's numbered branches and
-its counts of a line's branches, who measured each file, and where the
-measurement comes from. The pages depend on the readings alone:
-drawing the same readings again writes the same tree.
+its counts of a line's branches, who measured each file, where the
+measurement comes from, and the package's floor. The pages depend on
+the readings alone: drawing the same readings again writes the same
+tree.
 """
 
 from __future__ import annotations
@@ -96,6 +97,8 @@ class Report:
             measurement comes from, and the commit drawn.
         absent: The measured files the checkout no longer has.
         precision: The decimals a percentage shows.
+        floor: The line each index states under its heading about the
+            package's floor; empty for none.
     """
 
     title: str
@@ -104,6 +107,7 @@ class Report:
     notes: tuple[str, ...] = ()
     absent: tuple[str, ...] = ()
     precision: int = 0
+    floor: str = ""
 
 
 def render(into: Path, report: Report) -> Numbers:
@@ -459,6 +463,7 @@ class _Pages:
             '<header class="top">\n',
             f'<h1>Coverage for {_e(report.title)}: <span class="figure">'
             f"{self.percent(totals.percent)}</span></h1>\n",
+            f'<p class="floor">{_e(report.floor)}</p>\n' if report.floor else "",
             f'<ul class="about">{notes}</ul>\n' if notes else "",
             "\n".join(views),
             "\n",

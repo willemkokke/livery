@@ -1,14 +1,14 @@
 """Name each test's coverage context in a metered pytest run.
 
-Registered through livery-workshop's ``pytest11`` entry point, so every
-pytest this venv starts carries it. It acts only when coverage's
-process startup is measuring the process (inside a CI check leg the
-test runner arms ``COVERAGE_PROCESS_START`` in pytest's environment,
-and in the gate's own never): each phase of a test records under a
-context made of the test's node id and the phase, the shape pytest-cov
-uses, so a leg can split one pooled run's data by the suite each test
-belongs to. Outside a metered run every hook returns at once, and a
-meter that is not collecting is left alone.
+Registered through livery-extensions-pytest's ``pytest11`` entry point,
+so every pytest this venv starts carries it. It acts only when
+coverage's process startup is measuring the process (inside a CI check
+leg the test runner arms ``COVERAGE_PROCESS_START`` in pytest's
+environment while coverage is listed, and in the gate's own never):
+each test records under one context, its node id, from its setup to
+its teardown, so a leg can split one pooled run's data by the suite
+each test belongs to. Outside a metered run every hook returns at
+once, and a meter that is not collecting is left alone.
 
 Under coverage's sysmon core a line is recorded under the first
 context that reaches it and never again, so a suite's contexts hold
@@ -55,18 +55,13 @@ def _switch(context: str) -> None:
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
-    """Record the test's setup under its own context."""
-    _switch(f"{item.nodeid}|setup")
+    """Record the test under its node id, from its setup to its teardown.
 
-
-def pytest_runtest_call(item: pytest.Item) -> None:
-    """Record the test's body under its own context."""
-    _switch(f"{item.nodeid}|run")
-
-
-def pytest_runtest_teardown(item: pytest.Item) -> None:
-    """Record the test's teardown under its own context."""
-    _switch(f"{item.nodeid}|teardown")
+    Switched in the process that runs the test, at its setup: the hooks
+    that report on a test also run in the process that schedules the
+    tests, whose own lines belong to no test.
+    """
+    _switch(item.nodeid)
 
 
 def pytest_runtest_logfinish(nodeid: str, location: object) -> None:

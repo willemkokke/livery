@@ -9,7 +9,9 @@ job judges it over the union of every leg
 ([livery.extensions.coverage._floors.enforce_coverage][]), and a
 machine's run of the tests prints it over its own run, beside each
 floor, as a preview that judges nothing
-([livery.extensions.coverage._floors.report_coverage][]).
+([livery.extensions.coverage._floors.report_coverage][]). The coverage
+pages state each package's floor in the words
+[livery.extensions.coverage._floors.floor_status][] gives.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from livery.workshop._contract import load_contract
 from livery.workshop._packages import WORKSPACE_TESTS
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from livery.workshop._packages import Package
 
@@ -118,6 +120,41 @@ def _floor_words(policy: FloorPolicy) -> str:
     """The floor as a coverage line names it, saying when it is the default."""
     assert policy.floor is not None
     return f"floor {policy.floor:.1f}%" + (" by default" if policy.default else "")
+
+
+def floor_status(
+    package: Package, marks: Mapping[str, _marks.Mark] | None = None
+) -> str:
+    """The line a package's coverage pages state about its floor.
+
+    The floor its contract names, or the default one; under auto-ratchet
+    the mark it ratchets to, from *marks*, the marks read from the state
+    store, and the mode alone when they were not read (None); or that
+    nothing judges it: on purpose, ``required = false``, or for want of
+    tests.
+    """
+    policy = coverage_policy(package)
+    if policy is None:
+        return "Not judged: the package has no tests and names no floor."
+    if not policy.required:
+        return f"{UNJUDGED[0].upper()}{UNJUDGED[1:]}."
+    epsilon = f"with an epsilon of {policy.epsilon}%"
+    if not policy.ratchet:
+        assert policy.floor is not None
+        default = " by default" if policy.default else ""
+        return (
+            f"Floor: {policy.floor:.1f}%{default}, {epsilon}; the gate job judges"
+            " the union of every leg against it."
+        )
+    if marks is None:
+        return f"Floor: the mark on the state store, {epsilon}."
+    mark = marks.get(package.path)
+    if mark is None:
+        return "Floor: the mark on the state store, which the next CI run records."
+    return (
+        f"Floor: the mark on the state store, {mark.value:.1f}% ({mark.kind} by"
+        f" {mark.by}), {epsilon}."
+    )
 
 
 #: What coverage.py says when the run left no data: a selection of

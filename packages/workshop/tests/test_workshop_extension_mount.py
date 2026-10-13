@@ -620,6 +620,79 @@ def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
     assert "    for: acme.python" in _extensions.describe_extensions(tmp_path)
 
 
+#: An extension that judges what another measures for it: dormant until
+#: a listed extension contributes a table to it, with a step, a CI entry
+#: and a judge of its own, and a step it adds to a python extension.
+_SLEEPER = """\
+[extension]
+dormant-until = "measures"
+
+[phases.lint.sleeper]
+main = "{package}._steps:noop"
+
+[ci.jobs.gate.check]
+entries = ["acme.leg"]
+
+[ci.jobs.gate.gate]
+judges = ["acme.union"]
+
+[for."acme.python".phases.lint.sleepy]
+main = "{package}._steps:noop"
+"""
+
+#: What wakes it: a table contributed to it.
+_METER = """\
+[for."acme.sleeper"]
+"""
+
+
+def test_a_dormant_extension_registers_no_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    from livery.workshop import _points
+
+    fake_extensions(tmp_path, monkeypatch, sleeper=_SLEEPER, meter=_METER, python="")
+
+    def joined() -> list[tuple[str, tuple[str, ...]]]:
+        return [
+            (item.job.name, tuple(entry.task for entry in item.entries))
+            for item in _points.joined_jobs("gate")
+            if item.extension == "acme.sleeper"
+        ]
+
+    # Listed with nothing that contributes to it, the extension is
+    # dormant: no step, no entry, no judge, no contribution of its own,
+    # and the list says what would wake it.
+    root_contract(tmp_path, '["acme.python", "acme.sleeper"]')
+    waits = "nothing listed measures; acme.meter would"
+    assert _extensions.dormancy(tmp_path) == {"acme.sleeper": waits}
+    _mount(tmp_path)
+    assert joined() == []
+    assert not {"lint.sleeper", "lint.sleepy"} & set(_steps.steps_by_name())
+    assert f"    dormant: {waits}" in _extensions.describe_extensions(tmp_path)
+    # A listing that contributes wakes it, wherever it stands in the list.
+    root_contract(tmp_path, '["acme.python", "acme.sleeper", "acme.meter"]')
+    assert _extensions.dormancy(tmp_path) == {}
+    _mount(tmp_path)
+    assert joined() == [("check", ("acme.leg",)), ("gate", ("acme.union",))]
+    assert {"lint.sleeper", "lint.sleepy"} <= set(_steps.steps_by_name())
+
+
+def test_a_dormant_extension_nothing_installed_would_wake_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An installed extension whose declaration cannot be read is not the
+    # workspace's to judge while it is unlisted: it wakes nothing, and
+    # the line is said all the same.
+    fake_extensions(
+        tmp_path, monkeypatch, sleeper=_SLEEPER, python="", odd="[unknown]\n"
+    )
+    root_contract(tmp_path, '["acme.python", "acme.sleeper"]')
+    assert _extensions.dormancy(tmp_path) == {
+        "acme.sleeper": "nothing listed measures; no installed extension would"
+    }
+
+
 _HOUSE_OFF = """\
 [for."acme.python".phases.lint.house]
 main = "{package}._steps:noop"

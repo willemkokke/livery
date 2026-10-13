@@ -12,7 +12,7 @@ pages draw parts alone. A part is JSON:
               "runtime": "CPython 3.14", "counts": "presence",
               "branches": "targets", "regions": ["function", "class"],
               "judges": ["lines", "branches"]},
- "contexts": ["", "packages/workshop/tests/test_graph.py::test_walk|run"],
+ "contexts": ["", "packages/workshop/tests/test_graph.py::test_walk"],
  "files": {"packages/workshop/src/livery/workshop/_graph.py": {
    "digest": "<the file's git blob id>",
    "statements": "1-12,15,17-40", "hits": "1-9,15,17-30",

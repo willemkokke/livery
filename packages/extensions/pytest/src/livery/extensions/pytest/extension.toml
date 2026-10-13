@@ -35,24 +35,25 @@ extensions = ["python"]
 tools = ["pytest"]
 claims = [{ category = "example", suffixes = [".py", ".pyi"] }]
 
-# pytest and coverage import the project's environment, so they live in
-# the venv: pytest 9 for the pytest.toml it reads, coverage 7.13 for the
-# .pth it installs, which starts the meter in every python the tests
-# start once the runner arms it and imports nothing otherwise, and xdist
-# for -n auto.
+# pytest imports the project's environment, so it lives in the venv:
+# pytest 9 for the pytest.toml it reads, and xdist for -n auto.
 [queries."python.dev-group"]
-value = [
-    "pytest>=9.0",
-    "pytest-cov>=5",
-    "coverage>=7.13",
-    "pytest-xdist>=3.6",
-]
+value = ["pytest>=9.0", "pytest-xdist>=3.6"]
 
 # The options the rendered pytest.toml hands every run.
 [queries."python.test.addopts"]
 value = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]
 
-# While coverage is listed, the reduction of coverage.py's arcs, the
-# measurer of every python suite, to the line format its pages draw.
+# While coverage is listed, this extension measures every python suite
+# for it: the test step runs the suites metered, the sync writes the
+# root .coveragerc and the lines that ignore the meter's data, both
+# shipped under content/for/coverage/, and the arcs coverage.py records
+# are reduced to the line format coverage's pages draw.
 [for.coverage.queries]
 "coverage.measurers" = "livery.extensions.pytest._coverage:measurers"
+
+# coverage 7.13 for the .pth it installs, which starts the meter in
+# every python the tests start once the runner arms it and imports
+# nothing otherwise, and pytest-cov for a machine's measured run.
+[for.coverage.queries."python.dev-group"]
+value = ["pytest-cov>=5", "coverage>=7.13"]

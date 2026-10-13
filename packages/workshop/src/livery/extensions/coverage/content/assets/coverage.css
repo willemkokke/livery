@@ -107,6 +107,11 @@ header.top h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.floor {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
 .about {
   margin: 0 0 10px;
   padding: 0;

@@ -107,11 +107,9 @@ python = "livery.extensions.python"
 "livery.workshop.uv-cache" = "livery.workshop._doctor:uv_cache"
 "livery.workshop.ssh" = "livery.workshop._doctor:ssh"
 
-# Every pytest this venv starts carries the context plugin: in a
-# metered CI leg it names each test's coverage context by node id,
-# so the leg splits one run's data per suite; elsewhere it is quiet.
+# The workshop's pytest plugins: every pytest this venv starts carries
+# them.
 [project.entry-points.pytest11]
-livery-workshop-contexts = "livery.workshop._pytest_contexts"
 # A package's documentation examples, the files under docs/examples/,
 # collected as tests when pytest is pointed at them.
 livery-workshop-examples = "livery.workshop._pytest_examples"
