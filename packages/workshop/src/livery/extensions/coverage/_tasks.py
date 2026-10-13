@@ -34,8 +34,7 @@ def coverage_leg() -> None:
     The check leg's entry, after the gate and before the leg's own
     write, ``ci.leg``: the run left one data file per process. When the
     gate ran narrowed or skipped, the suites no record can supply at
-    their current closure run first, measured
-    ([livery.extensions.coverage._leg.top_up][]). Then each suite the
+    their current closure run first, measured. Then each suite the
     leg ran is split out and left, with the scope the leg measured, for
     the leg's write, which puts it on the leg's per-run ref beside the
     timing row; the parts combine into one ``.coverage``. Refuses when
