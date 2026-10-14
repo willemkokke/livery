@@ -449,7 +449,7 @@ BUILD_STEP = (
 def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
     where = package / "extension.toml"
     # A step its owner does not declare: the refusal names the phase's
-    # installed steps, the base's among them.
+    # installed steps, every installed extension's.
     refused = _refusal(
         package, BUILD_STEP + 'deletes = { "python:build.wheel" = "it builds twice" }\n'
     )
@@ -458,7 +458,7 @@ def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
         " installed extension or the base declares; the build phase's are "
     )
     listed = refused.rpartition("the build phase's are ")[2].split(", ")
-    assert {"python:build.python", "livery.workshop:build.configure"} <= set(listed)
+    assert {"python:build.python", "cmake:build.configure"} <= set(listed)
     # An owner nothing installs, in a phase no step is installed in.
     assert _refusal(
         package,
@@ -619,7 +619,9 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
         " steps, [phases.build.<step>], each with main"
     )
     # Then the read: several steps in one phase, in code or in words,
-    # each a package record naming the extension, registering no step.
+    # each a package record naming the extension. The gate runs the
+    # build phase's tree side, which a step naming no side serves, so
+    # both register in the gate as well.
     found = _declare(
         package,
         identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
@@ -627,7 +629,7 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
         '[phases.build.other]\ntools = ["acme"]\nmain = ["acme", "build"]\n'
         'after = ["build.acme"]\n',
     )
-    assert found.additions.steps == ()
+    assert found.additions.steps == found.phases["build"]
     first, second = found.phases["build"]
     assert (first.name, str(first.run), first.scope, first.extensions) == (
         "build.acme",

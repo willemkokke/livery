@@ -1066,51 +1066,16 @@ BASE_MODULE = "livery.workshop"
 EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
-#: The base modules that import an extension: each module and the
-#: extension it imports, to why. The base registers the C and C++
-#: library's build and test steps, which call cmake's code through a
-#: module that gathers cmake's, conan's and cpp's names. A test keeps
-#: the list exact.
-BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
-    ("livery.workshop._backends._cpp_conan", "livery.extensions.cmake"): (
-        "the base's C and C++ build and test steps run cmake's gate build and ctest"
-    ),
-    ("livery.workshop._backends._cpp_conan", "livery.extensions.conan"): (
-        "the C and C++ library's recipe and its release are conan's code,"
-        " gathered in one module"
-    ),
-    ("livery.workshop._backends._cpp_conan", "livery.extensions.cpp"): (
-        "the C and C++ library's file conventions are cpp's code, gathered in"
-        " one module"
-    ),
-}
-
-
-def allowed_extension_import(module: str, imported: str) -> bool:
-    """Whether the base module *module* may import *imported*, an extension's module.
-
-    True when [livery.workshop._packages.BASE_EXTENSION_IMPORTS][] names
-    the pair: the extension itself, or a module under it.
-    """
-    return any(
-        imported == extension or imported.startswith(extension + ".")
-        for base, extension in BASE_EXTENSION_IMPORTS
-        if base == module
-    )
-
-
 def extension_imports_in_the_base(sources: Iterable[SourceReferences]) -> list[str]:
     """Each base module that imports an extension, with the extension named.
 
     The base (``livery.workshop``) imports no extension under
     ``livery.extensions``: what an extension needs of the base it takes through
     the base's seams, and the base reaches an extension only through the
-    registries the extension fills at mount. The one exception is
-    [livery.workshop._packages.BASE_EXTENSION_IMPORTS][]: a module it names may
-    import the extensions it names beside it, and nothing else under the
-    namespace. *sources* are records of the ``references`` answers; a
-    module that runs without the name it imports is left alone, and
-    one importing it lazily or for a type checker is judged.
+    registries the extension fills at mount. *sources* are records of the
+    ``references`` answers; a module that runs without the name it imports
+    is left alone, and one importing it lazily or for a type checker is
+    judged.
     """
     problems: list[str] = []
     for source in sources:
@@ -1118,7 +1083,7 @@ def extension_imports_in_the_base(sources: Iterable[SourceReferences]) -> list[s
             continue
         for reference in source.references:
             imported = reference.name
-            if reference.optional or allowed_extension_import(source.module, imported):
+            if reference.optional:
                 continue
             if imported == EXTENSIONS_NAMESPACE or imported.startswith(
                 EXTENSIONS_NAMESPACE + "."

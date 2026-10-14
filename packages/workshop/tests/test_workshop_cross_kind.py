@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.workshop._backends import _cpp_conan
+from livery.extensions.conan import _package as _conan
 from livery.workshop._graph import (
     affected_packages,
     dependents_closure,
@@ -154,7 +154,7 @@ def test_conan_requirements_reads_every_declared_form(tmp_path: Path) -> None:
         "    def requirements(self):\n"
         '        self.requires("delta/[>=4.0]")\n'
     )
-    assert _cpp_conan.conan_requirements(recipe) == {
+    assert _conan.conan_requirements(recipe) == {
         "alpha": "[>=1.0]",
         "beta": "[>=2.0]",
         "gamma": "3.1",

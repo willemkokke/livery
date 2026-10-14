@@ -319,14 +319,13 @@ def test_the_wheel_is_platform_tagged_and_imports(
     cache, and nothing is registered in it.
     """
     from livery.extensions.conan import _package as _conan
-    from livery.workshop._backends import _cpp_conan
 
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
     _render_library(tmp_path)
     package = _render_chain(tmp_path)
     _consume_the_library(package)
-    workspace = _cpp_conan.workspace_file(tmp_path)
-    (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(workspace)
+    workspace = _conan.workspace_file(tmp_path)
+    (tmp_path / _conan.WORKSPACE_FILE).write_text(workspace)
     dist = _build.build_dist(package, tmp_path)
     wheels = sorted(dist.glob("*.whl"))
     assert wheels, "cibuildwheel produced no wheel"
@@ -345,18 +344,18 @@ def test_the_wheel_is_platform_tagged_and_imports(
 def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as _conan
 
     # An extension consumes conan and its recipe names no reference: no
     # member, so the file lists no package.
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
-    assert _cpp_conan.workspace_file(tmp_path).endswith("packages: []\n")
+    assert _conan.workspace_file(tmp_path).endswith("packages: []\n")
     # The library beside it is a member. Its entry is its path: conan
     # reads the reference from the recipe, so a release's version stamp
     # never leaves the file behind.
     _render_library(tmp_path)
-    text = _cpp_conan.workspace_file(tmp_path)
+    text = _conan.workspace_file(tmp_path)
     assert text.endswith("packages:\n  - path: packages/geometry\n")
     assert "ref:" not in text
 
@@ -367,7 +366,7 @@ def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
 def test_the_build_container_finds_a_workspace_file_at_its_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as _conan
 
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
@@ -376,9 +375,7 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
     # that set it aside, gives the container none, so a sibling
     # resolves from the package the leg created.
     assert _container.container_workspace(tmp_path) is None
-    (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(
-        _cpp_conan.workspace_file(tmp_path)
-    )
+    (tmp_path / _conan.WORKSPACE_FILE).write_text(_conan.workspace_file(tmp_path))
     written = _container.container_workspace(tmp_path)
     assert written is not None
     # The package builds in /project, outside the workspace. The copy
@@ -709,14 +706,13 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     """
     from livery.extensions.conan import _package as _conan
     from livery.forge.testing import FakeForge
-    from livery.workshop._backends import _cpp_conan
     from livery.workshop._packages import Edge
 
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
     library = _render_library(tmp_path)
-    _cpp_conan.stamp_version(library).stamp("0.1.0")
-    _cpp_conan.build(library, tmp_path)
-    saved = _cpp_conan.save_cache(library, "0.1.0", library.directory / "dist")
+    _conan.stamp_version(library).stamp("0.1.0")
+    _conan.build(library, tmp_path)
+    saved = _conan.save_cache(library, "0.1.0", library.directory / "dist")
     # 0.2.0 adds the symbol the extension calls.
     header = library.directory / "src" / "geometry.hpp"
     header.write_text(
@@ -733,8 +729,8 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
             "double area(double width, double height) { return width * height; }",
         )
     )
-    _cpp_conan.stamp_version(library).stamp("0.2.0")
-    _cpp_conan.build(library, tmp_path)
+    _conan.stamp_version(library).stamp("0.2.0")
+    _conan.build(library, tmp_path)
     # The floor's package leaves this machine's cache, so the leg has
     # to fetch it back from the release to build at all.
     _conan._conan(library.directory, "remove", "acme-geometry/0.1.0", "-c")

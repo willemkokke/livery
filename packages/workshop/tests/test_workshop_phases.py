@@ -594,9 +594,9 @@ def test_a_frozen_view_records_the_exit_code_through_the_shared_state(
     assert ctx.exit_code == 7
 
 
-def _sided(name: str, side: str) -> str:
-    """A declaration adding *name*'s one step to the test phase, on *side*."""
-    lines = [f"[phases.test.{name}]", 'main = "{package}._steps:main"']
+def _sided(name: str, side: str, phase: str = "test") -> str:
+    """A declaration adding *name*'s one step to *phase*, the test's, on *side*."""
+    lines = [f"[phases.{phase}.{name}]", 'main = "{package}._steps:main"']
     if side:
         lines.append(f"isolated = {side}")
     return PACKAGE + "\n" + "\n".join(lines) + "\n"
@@ -640,6 +640,53 @@ def test_a_step_serving_the_isolated_side_alone_registers_no_gate_step(
     assert [(r.name, r.isolated) for r in tree.additions.steps] == [
         ("test.tree", False)
     ]
+
+
+def test_an_isolated_only_build_step_registers_no_gate_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The gate builds each package on the build phase's tree side, so of
+    # that package-level phase's steps the isolated one stays out of the
+    # registry and in the phase's steps, as the release's builds do.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        iso=_sided("iso", "true", "build"),
+        tree=_sided("tree", "false", "build"),
+        both=_sided("both", "", "build"),
+    )
+    for name in ("iso", "tree", "both"):
+        fake_steps(tmp_path, name, SAYS.format(name=name))
+    iso = _extensions.declaration("acme.iso")
+    tree = _extensions.declaration("acme.tree")
+    both = _extensions.declaration("acme.both")
+    assert iso is not None and tree is not None and both is not None
+    assert iso.additions.steps == ()
+    assert [(r.name, r.isolated) for r in iso.phases["build"]] == [("build.iso", True)]
+    assert [(r.name, r.isolated) for r in tree.additions.steps] == [
+        ("build.tree", False)
+    ]
+    assert [(r.name, r.isolated) for r in both.additions.steps] == [
+        ("build.both", None)
+    ]
+    # The builds the release runs: python's, conan's and nanobind's serve
+    # the isolated side alone, and none reaches the gate.
+    for name in ("python", "conan", "nanobind"):
+        declared = _extensions.declaration(name)
+        assert declared is not None
+        assert [r.isolated for r in declared.phases["build"]] == [True]
+        assert [r.name for r in declared.additions.steps if r.phase == "build"] == []
+    # A package-level phase the gate never runs, the release's stamp,
+    # registers its steps on neither side.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        mark=PACKAGE + '\n[phases.stamp.mark]\nmain = "{package}._steps:main"\n',
+    )
+    fake_steps(tmp_path, "mark", SAYS.format(name="mark"))
+    mark = _extensions.declaration("acme.mark")
+    assert mark is not None and mark.additions.steps == ()
+    assert [r.name for r in mark.phases["stamp"]] == ["stamp.mark"]
 
 
 # The declared phases: the base's from its contract file, an extension's

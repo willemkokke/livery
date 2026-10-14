@@ -15,7 +15,6 @@ import pytest
 
 from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
-from livery.workshop._backends import _cpp_conan
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -24,6 +23,7 @@ from livery.workshop._steps import (
     run_step,
     step_for,
 )
+from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -48,7 +48,7 @@ needs_toolchain = pytest.mark.skipif(
 _MISSING_MSVC = tuple(tool for tool in ("cmake", "ninja") if shutil.which(tool) is None)
 needs_msvc = pytest.mark.skipif(
     sys.platform != "win32"
-    or not _cpp_conan.vswhere_path().is_file()
+    or not _cmake.vswhere_path().is_file()
     or bool(_MISSING_MSVC),
     reason="the MSVC leg needs Windows, Visual Studio's installer, cmake and ninja",
 )
@@ -119,6 +119,49 @@ def _render_cpp(tmp_path: Path) -> Package:
 # The refusals and the skips first.
 
 
+def _contract(root: Path, member: str, listed: str) -> None:
+    """Give *root* a member *member* listing *listed*, with a project file."""
+    directory = root / "packages" / member
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text(
+        f'name = "acme-{member}"\nextensions = {listed}\n'
+    )
+    (directory / "pyproject.toml").write_text(
+        f'[project]\nname = "acme-{member}"\nversion = "0.1.0"\n'
+    )
+
+
+def test_a_workspace_without_cmake_registers_no_build_step(tmp_path: Path) -> None:
+    from livery.workshop._steps import restore, snapshot, steps_by_name
+    from workshop_members import mounted_now
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _contract(root, "py", '["python"]')
+    _contract(root, "native", '["nanobind"]')
+
+    def registered() -> list[tuple[str, str]]:
+        restore(snapshot(initial=True))
+        mounted_now(root)
+        return [
+            (name, record.extension)
+            for name, record in steps_by_name().items()
+            if name.startswith("build.") or name == "test.ctest"
+        ]
+
+    # python's, conan's and nanobind's builds serve the isolated side, the
+    # release's, so no build step reaches the gate, and no ctest either.
+    assert registered() == []
+    # A package that lists cmake brings cmake's three, under its name.
+    _contract(root, "lib", '["cmake", "conan"]')
+    assert registered() == [
+        ("build.configure", "cmake"),
+        ("build.compile", "cmake"),
+        ("test.ctest", "cmake"),
+    ]
+
+
 def test_build_refuses_without_conan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -135,7 +178,7 @@ def test_build_refuses_without_conan(
     )
     package.directory.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="conan is not on PATH"):
-        _cpp_conan.build(package, tmp_path)
+        _conan.build(package, tmp_path)
 
 
 class _Said:
@@ -193,7 +236,7 @@ def test_a_machine_where_detection_finds_no_compiler_refuses(
 ) -> None:
     calls = _profile_conan(monkeypatch, [_COMPILERLESS, _COMPILERLESS])
     with pytest.raises(_FAILURES, match="found none on this machine: install a C"):
-        _cpp_conan.ensure_profile(tmp_path)
+        _conan.ensure_profile(tmp_path)
     assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW]
 
 
@@ -202,7 +245,7 @@ def test_a_detection_conan_refuses_is_named_in_its_words(
 ) -> None:
     _profile_conan(monkeypatch, [], detect=1)
     with pytest.raises(_FAILURES) as caught:
-        _cpp_conan.ensure_profile(tmp_path)
+        _conan.ensure_profile(tmp_path)
     assert "conan profile detect exited 1" in str(caught.value)
     assert "no default profile written" in str(caught.value)
 
@@ -214,7 +257,7 @@ def test_a_profile_conan_cannot_show_is_named_and_kept(
     # replaces it.
     calls = _profile_conan(monkeypatch, [], show=1)
     with pytest.raises(_FAILURES) as caught:
-        _cpp_conan.ensure_profile(tmp_path)
+        _conan.ensure_profile(tmp_path)
     assert "conan profile show exited 1" in str(caught.value)
     assert "the profile does not parse" in str(caught.value)
     assert _FORCE not in calls
@@ -224,7 +267,7 @@ def test_a_profile_that_names_no_compiler_is_detected_again_and_said(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _profile_conan(monkeypatch, [_COMPILERLESS, _DETECTED])
-    assert _cpp_conan.ensure_profile(tmp_path) == [
+    assert _conan.ensure_profile(tmp_path) == [
         "  conan: the default profile named no compiler; detected again: apple-clang 21"
     ]
     assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW]
@@ -234,7 +277,7 @@ def test_a_profile_that_names_a_compiler_is_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _profile_conan(monkeypatch, [_DETECTED])
-    assert _cpp_conan.ensure_profile(tmp_path) == []
+    assert _conan.ensure_profile(tmp_path) == []
     assert calls == [_EXIST_OK, _SHOW]
 
 
@@ -263,7 +306,7 @@ def test_a_profile_file_that_names_a_compiler_costs_no_process(
         "[settings]\narch=armv8\ncompiler=apple-clang\ncompiler.version=21\n"
     )
     assert _package.profile_names_compiler(profile)
-    assert _cpp_conan.ensure_profile(tmp_path) == []
+    assert _conan.ensure_profile(tmp_path) == []
     assert calls == []
     # Without CONAN_HOME the file is conan's own default.
     monkeypatch.delenv("CONAN_HOME")
@@ -279,7 +322,7 @@ def test_conan_create_runs_once_the_profile_names_a_compiler(
         tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
     )
     package.directory.mkdir(parents=True)
-    assert _cpp_conan.build(package, tmp_path) == package.directory / "build"
+    assert _conan.build(package, tmp_path) == package.directory / "build"
     assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW, ("create", ".")]
     assert "detected again: apple-clang 21" in capsys.readouterr().out
 
@@ -297,7 +340,7 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
     )
     package.directory.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="ctest is not on PATH"):
-        _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+        _cmake.test(package, tmp_path, selection=("tests/test_native.cpp",))
 
 
 def _native_lines(root: Path) -> dict[str, dict[str, dict[int, int]]]:
@@ -350,17 +393,17 @@ def test_a_native_build_without_coverage_is_not_instrumented(
     # Coverage unlisted: the configure takes no instrumentation and
     # removes the include an earlier measured configure left in CMake's
     # cache, and ctest runs alone, measured by nothing and leaving no part.
-    _cpp_conan.configure(package)
+    _cmake.configure(package)
     assert "-UCMAKE_PROJECT_INCLUDE" in configured[-1]
     assert not [arg for arg in configured[-1] if str(_cmake.COVERAGE_CMAKE) in arg]
-    _cpp_conan.test(package, tmp_path)
+    _cmake.test(package, tmp_path)
     assert "LLVM_PROFILE_FILE" not in ran[-1]
-    assert not (member / _cpp_conan.GATE_BUILD_DIR / _cpp_conan.PROFILE_DIR).exists()
+    assert not (member / _cmake.GATE_BUILD_DIR / _cmake.PROFILE_DIR).exists()
     assert _native_lines(tmp_path) == {}
     assert "coverage" not in capsys.readouterr().out
     # Listed, cmake measures for coverage: the configure instruments.
     _listing_coverage(tmp_path)
-    _cpp_conan.configure(package)
+    _cmake.configure(package)
     assert f"-DCMAKE_PROJECT_INCLUDE={_cmake.COVERAGE_CMAKE}" in configured[-1]
     assert "-UCMAKE_PROJECT_INCLUDE" not in configured[-1]
 
@@ -394,22 +437,22 @@ def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
 @needs_toolchain
 def test_a_selection_no_ctest_answers_to_is_a_refusal(tmp_path: Path) -> None:
     package = _render_cpp(tmp_path)
-    _cpp_conan.gate_build(package, tmp_path)
+    _cmake.gate_build(package, tmp_path)
     with pytest.raises(_FAILURES, match="no ctest is named test_missing"):
-        _cpp_conan.test(package, tmp_path, selection=("tests/test_missing.cpp",))
+        _cmake.test(package, tmp_path, selection=("tests/test_missing.cpp",))
 
 
 @needs_toolchain
 def test_a_selected_test_runs_its_ctest_on_the_gate_build(tmp_path: Path) -> None:
     package = _render_cpp(tmp_path)
-    _cpp_conan.gate_build(package, tmp_path)
-    _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+    _cmake.gate_build(package, tmp_path)
+    _cmake.test(package, tmp_path, selection=("tests/test_native.cpp",))
     test_file = package.directory / "tests" / "test_native.cpp"
     test_file.write_text(test_file.read_text().replace("return 0;", "return 1;"))
     # The rebuild after the edit is what the reflex runs before the tests.
-    _cpp_conan.gate_build(package, tmp_path)
+    _cmake.gate_build(package, tmp_path)
     with pytest.raises(_FAILURES, match="ctest failed"):
-        _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+        _cmake.test(package, tmp_path, selection=("tests/test_native.cpp",))
 
 
 @needs_toolchain
@@ -418,9 +461,9 @@ def test_a_red_ctest_is_a_refusal(tmp_path: Path) -> None:
     test_file = package.directory / "tests" / "test_native.cpp"
     broken = test_file.read_text().replace("return 0;", "return 1;")
     test_file.write_text(broken)
-    _cpp_conan.gate_build(package, tmp_path)
+    _cmake.gate_build(package, tmp_path)
     with pytest.raises(_FAILURES, match="ctest failed"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
 
 
 def test_no_rendered_python_line_of_a_cpp_member_is_over_the_column_limit(
@@ -451,7 +494,10 @@ def test_the_cpp_template_seeds_no_floor_and_the_default_judges_it(
 
 
 def test_python_steps_skip_a_native_member_by_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], python_steps: object
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+    cmake_steps: object,
 ) -> None:
     from livery.workshop._steps import judged_by
 
@@ -478,7 +524,7 @@ NATIVE_CHECKS = (
 
 
 def test_a_pure_python_workspace_gate_is_unchanged(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], cmake_steps: object
 ) -> None:
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     from livery.workshop._steps import judged_by, judges_extensions, steps_by_name
@@ -494,7 +540,10 @@ def test_a_pure_python_workspace_gate_is_unchanged(
 
 
 def test_the_native_steps_run_per_package_in_order(
-    restored_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    restored_registry,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    cmake_steps: object,
 ) -> None:
     from dataclasses import replace
 
@@ -538,9 +587,11 @@ def test_the_native_steps_run_per_package_in_order(
     ]
 
 
-def test_the_native_steps_hand_their_tool_the_words_after_the_dashes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_the_native_build_steps_hand_cmake_the_words_after_the_dashes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cmake_steps: object
 ) -> None:
+    from dataclasses import replace
+
     handed: list[tuple[str, tuple[str, ...]]] = []
 
     def configure(package: Package, arguments: tuple[str, ...]) -> None:
@@ -558,19 +609,27 @@ def test_the_native_steps_hand_their_tool_the_words_after_the_dashes(
     ) -> None:
         handed.append(("ctest", arguments))
 
-    monkeypatch.setattr(_cpp_conan, "configure", configure)
-    monkeypatch.setattr(_cpp_conan, "compile", compile_)
-    monkeypatch.setattr(_cpp_conan, "test", ctest)
+    monkeypatch.setattr(_cmake, "configure", configure)
+    monkeypatch.setattr(_cmake, "compile", compile_)
+    monkeypatch.setattr(_cmake, "test", ctest)
     native = _package(tmp_path / "packages" / "native", "acme-native", "cmake", "conan")
     words = ("-j", "4")
     ctx = PhaseContext(
         root=tmp_path, packages=(native,), package=native, arguments=words
     )
-    for name in ("build.configure", "build.compile", "test.ctest"):
+    for name in ("build.configure", "build.compile"):
         record = step_for(name)
         assert record.arguments
         record.run(ctx)
-    assert handed == [("configure", words), ("compile", words), ("ctest", words)]
+    assert handed == [("configure", words), ("compile", words)]
+    # ctest names no tool: a tool a test step names is a verdict tool,
+    # which no workspace serves from the host, and a workspace may serve
+    # cmake from the host. So its verb takes no words after --, and the
+    # step hands ctest the context's, which are none.
+    record = step_for("test.ctest")
+    assert not record.arguments
+    record.run(replace(ctx, arguments=()))
+    assert handed[-1] == ("ctest", ())
 
 
 def test_a_package_listing_cmake_and_conan_is_categorised_by_cpp_s_table(
@@ -597,17 +656,17 @@ def test_a_package_listing_cmake_and_conan_is_categorised_by_cpp_s_table(
 def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_failure(
     tmp_path: Path,
 ) -> None:
-    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
-    aside = tmp_path / f"{_cpp_conan.WORKSPACE_FILE}.aside"
+    workspace = tmp_path / _conan.WORKSPACE_FILE
+    aside = tmp_path / f"{_conan.WORKSPACE_FILE}.aside"
     # No workspace file: the block runs and nothing moves.
-    with _cpp_conan.workspace_aside(tmp_path):
+    with _conan.workspace_aside(tmp_path):
         assert not workspace.exists()
     assert not workspace.exists() and not aside.exists()
     workspace.write_text("packages: []\n")
     # A block that fails still puts the file back.
 
     def failing_leg() -> None:
-        with _cpp_conan.workspace_aside(tmp_path):
+        with _conan.workspace_aside(tmp_path):
             assert not workspace.exists()
             raise RuntimeError("leg failed")
 
@@ -617,7 +676,7 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
     # A leg killed inside its block left the file aside, and a sync
     # wrote it again: the stale copy gives way to the current one.
     aside.write_text("stale\n")
-    with _cpp_conan.workspace_aside(tmp_path):
+    with _conan.workspace_aside(tmp_path):
         assert not workspace.exists()
         assert aside.read_text() == "packages: []\n"
     assert workspace.read_text() == "packages: []\n" and not aside.exists()
@@ -626,7 +685,7 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
 # The seed chain and the tools.
 
 
-def test_the_cpp_seed_tree_is_written_over_the_base_alone() -> None:
+def test_the_cpp_seed_tree_is_written_over_the_base_alone(cmake_steps: object) -> None:
     # No python tree comes between them; the shared base tree still
     # comes first, carrying the docs seeds.
     from livery.workshop._seeds import chain
@@ -638,10 +697,14 @@ def test_the_cpp_seed_tree_is_written_over_the_base_alone() -> None:
     # The build tools come from the [toolroom] tables of the extensions
     # a package born from the seeds holds, cmake's and conan's, and the
     # measurer of a build made with MSVC from cmake's [for.coverage]
-    # table; the steps those extensions hold run no tool of their own.
+    # table; of the steps those extensions hold, cmake's configure and
+    # compile name cmake, the tool they run.
     from livery.workshop._steps import tools_for
 
-    assert {tool for tool, _ in tools_for(("cmake", "conan", "cpp"))} == set()
+    assert tools_for(("cmake", "conan", "cpp")) == (
+        ("cmake", "build.configure"),
+        ("cmake", "build.compile"),
+    )
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
@@ -677,10 +740,10 @@ def test_the_rendered_package_builds_and_its_ctest_passes(tmp_path: Path) -> Non
     assert (package.directory / "CMakeLists.txt").is_file()
     assert (package.directory / "src" / "native.cpp").is_file()
     # The kind's records, in the order the gate runs them.
-    _cpp_conan.gate_build(package, tmp_path)
-    _cpp_conan.test(package, tmp_path)
-    assert (package.directory / _cpp_conan.GATE_BUILD_DIR).is_dir()
-    database = _cpp_conan.compile_commands(package)
+    _cmake.gate_build(package, tmp_path)
+    _cmake.test(package, tmp_path)
+    assert (package.directory / _cmake.GATE_BUILD_DIR).is_dir()
+    database = _cmake.compile_commands(package)
     assert database is not None and database.is_file()
 
 
@@ -741,11 +804,11 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
 
     package = _render_cpp(tmp_path)
     _listing_coverage(tmp_path)
-    _cpp_conan.gate_build(package, tmp_path)
-    compiler_id, compiler = _cpp_conan.compiler_of(package)
+    _cmake.gate_build(package, tmp_path)
+    compiler_id, compiler = _cmake.compiler_of(package)
     assert _cmake.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
     assert compiler
-    _cpp_conan.test(package, tmp_path)
+    _cmake.test(package, tmp_path)
     parts = _native_lines(tmp_path)
     assert list(parts) == ["packages/native"]
     sources = [
@@ -773,7 +836,7 @@ def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
     assert "coverage: " in capsys.readouterr().out
     # The selected arm measures its run too, afresh: the counters of
     # the full run do not leak into it.
-    _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+    _cmake.test(package, tmp_path, selection=("tests/test_native.cpp",))
     assert list(_native_lines(tmp_path)) == ["packages/native"]
 
 
@@ -787,12 +850,12 @@ def test_the_toolchain_environment_is_this_process_s_own_off_windows(
     monkeypatch.setattr(_cmake, "_on_windows", lambda: False)
     monkeypatch.delenv("CXX", raising=False)
     monkeypatch.setenv("WORKSHOP_PROBE", "here")
-    env = _cpp_conan.toolchain_env()
+    env = _cmake.toolchain_env()
     assert env["WORKSHOP_PROBE"] == "here"
     assert "CXX" not in env
     # A copy each call: a caller's additions never reach the next.
     env["CTEST_OUTPUT_ON_FAILURE"] = "1"
-    assert "CTEST_OUTPUT_ON_FAILURE" not in _cpp_conan.toolchain_env()
+    assert "CTEST_OUTPUT_ON_FAILURE" not in _cmake.toolchain_env()
 
 
 @pytest.mark.usefixtures("fresh_toolchain")
@@ -802,7 +865,7 @@ def test_a_chosen_compiler_is_left_alone_on_windows(
     monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
     monkeypatch.setenv("CXX", "clang-cl")
     monkeypatch.setattr(_cmake, "_asked", _never_asked)
-    env = _cpp_conan.toolchain_env()
+    env = _cmake.toolchain_env()
     assert env["CXX"] == "clang-cl"
     assert "CC" not in env or env["CC"] != "cl"
 
@@ -826,7 +889,7 @@ def test_a_developer_prompt_builds_with_cl_without_asking_vswhere(
     monkeypatch.delenv("CC", raising=False)
     monkeypatch.setenv("PATH", str(prompt))
     monkeypatch.setattr(_cmake, "_asked", _never_asked)
-    env = _cpp_conan.toolchain_env()
+    env = _cmake.toolchain_env()
     assert (env["CC"], env["CXX"]) == ("cl", "cl")
     assert env["PATH"] == str(prompt)
 
@@ -842,7 +905,7 @@ def test_entering_msvc_refuses_without_the_installer_naming_the_workload(
     with pytest.raises(
         _FAILURES, match="Visual Studio's installer is not at"
     ) as caught:
-        _cpp_conan.toolchain_env()
+        _cmake.toolchain_env()
     assert "vswhere.exe" in str(caught.value)
     assert "C++ workload" in str(caught.value)
     assert "set CXX" in str(caught.value)
@@ -852,7 +915,7 @@ def test_entering_msvc_refuses_without_the_installer_naming_the_workload(
 def test_entering_msvc_refuses_when_no_installation_has_the_cpp_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
+    vswhere = _cmake.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
     monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
@@ -868,7 +931,7 @@ def test_entering_msvc_refuses_when_no_installation_has_the_cpp_tools(
 
     monkeypatch.setattr(_cmake, "_asked", _nothing)
     with pytest.raises(_FAILURES, match="no Visual Studio installation has the"):
-        _cpp_conan.toolchain_env()
+        _cmake.toolchain_env()
     (argv,) = asked
     assert argv[0] == str(vswhere)
     assert argv[argv.index("-requires") + 1] == (
@@ -881,7 +944,7 @@ def test_entering_msvc_refuses_when_no_installation_has_the_cpp_tools(
 def test_entering_msvc_refuses_a_batch_file_that_left_no_toolset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
+    vswhere = _cmake.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
     monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
@@ -898,7 +961,7 @@ def test_entering_msvc_refuses_a_batch_file_that_left_no_toolset(
 
     monkeypatch.setattr(_cmake, "_shell_set", _no_toolset)
     with pytest.raises(_FAILURES, match="left no VCToolsInstallDir"):
-        _cpp_conan.toolchain_env()
+        _cmake.toolchain_env()
     (script,) = scripts
     # The ARM64 host enters its own tools' batch file, output hidden,
     # and reads the environment back with set.
@@ -911,7 +974,7 @@ def test_entering_msvc_refuses_a_batch_file_that_left_no_toolset(
 def test_the_entered_environment_is_read_once_and_points_cmake_at_cl(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    vswhere = _cpp_conan.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
+    vswhere = _cmake.vswhere_path({"PROGRAMFILES(X86)": str(tmp_path / "pf")})
     vswhere.parent.mkdir(parents=True)
     vswhere.write_text("")
     monkeypatch.setattr(_cmake, "_on_windows", lambda: True)
@@ -938,7 +1001,7 @@ def test_the_entered_environment_is_read_once_and_points_cmake_at_cl(
             "no equals sign here\n"
         ),
     )
-    env = _cpp_conan.toolchain_env()
+    env = _cmake.toolchain_env()
     assert env["PATH"] == "C:\\VS\\VC\\bin;C:\\Windows"
     assert env["VCTOOLSINSTALLDIR"] == "C:\\VS\\VC\\Tools\\MSVC\\14.51\\"
     assert env["INCLUDE"] == "C:\\VS\\VC\\include"
@@ -946,7 +1009,7 @@ def test_the_entered_environment_is_read_once_and_points_cmake_at_cl(
     assert not any(key.startswith("=") or key == "" for key in env)
     assert "no equals sign here" not in env
     # Entered once: the second call copies what the first read.
-    again = _cpp_conan.toolchain_env()
+    again = _cmake.toolchain_env()
     assert again == env
     assert len(asked) == 1
 
@@ -1064,7 +1127,7 @@ def _msvc_gate(
 
     package = _render_cpp(tmp_path)
     _listing_coverage(tmp_path)
-    build_dir = package.directory / _cpp_conan.GATE_BUILD_DIR
+    build_dir = package.directory / _cmake.GATE_BUILD_DIR
     compiler = build_dir / "CMakeFiles" / "4.4.2" / "CMakeCXXCompiler.cmake"
     compiler.parent.mkdir(parents=True)
     compiler.write_text(
@@ -1091,7 +1154,7 @@ def test_the_msvc_measurer_refuses_an_undeployed_engine_naming_the_requirement(
     engine = _FakeEngine(junit=_GREEN, deployed=False)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="dotnet-coverage is not on PATH") as caught:
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert "cmake's [for.coverage] table requires it on Windows" in str(caught.value)
     assert "toolroom.lock" in str(caught.value)
     assert exe.read_bytes() == b"MZ original"
@@ -1105,7 +1168,7 @@ def test_the_msvc_measurer_refuses_a_build_naming_no_test_executable(
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     exe.unlink()
     with pytest.raises(_FAILURES, match="names no test executable to instrument"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert engine.calls == []
 
 
@@ -1118,7 +1181,7 @@ def test_the_msvc_measurer_refuses_an_instrumentation_that_failed(
     with pytest.raises(
         _FAILURES, match=r"could not instrument test_native.exe \(exit 1\)"
     ) as caught:
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert "no symbols" in str(caught.value)
     assert [call[0] for call in engine.calls] == ["instrument"]
     assert exe.read_bytes() == b"MZ original"
@@ -1134,7 +1197,7 @@ def test_a_red_ctest_under_the_engine_is_read_from_ctest_s_own_report(
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     engine.report = _cobertura(package)
     with pytest.raises(_FAILURES, match=r"ctest failed \(1 of 2 test\(s\)\)") as caught:
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert "test_native ... Passed" in str(caught.value)
     # The instrumented copy ran in the original's place, and the
     # original is back whatever the verdict.
@@ -1150,7 +1213,7 @@ def test_the_msvc_measurer_refuses_a_run_that_left_no_report(
     engine = _FakeEngine(junit=None, collect_code=1)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match=r"ctest left no report at ctest\.xml"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert exe.read_bytes() == b"MZ original"
 
 
@@ -1160,12 +1223,12 @@ def test_a_selection_no_ctest_answers_to_is_a_refusal_under_the_engine(
     engine = _FakeEngine(junit=_EMPTY)
     package, _exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="no ctest is named test_missing"):
-        _cpp_conan.test(package, tmp_path, selection=("tests/test_missing.cpp",))
+        _cmake.test(package, tmp_path, selection=("tests/test_missing.cpp",))
     collect = engine.calls[-1]
     assert collect[collect.index("-R") + 1] == "^(test_missing)$"
     engine.calls.clear()
     with pytest.raises(_FAILURES, match="ctest ran no test; register one"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
     assert "-R" not in engine.calls[-1]
 
 
@@ -1175,7 +1238,7 @@ def test_the_msvc_measurer_refuses_a_collector_that_failed_after_a_green_run(
     engine = _FakeEngine(junit=_GREEN, collect_code=3)
     package, _exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="dotnet-coverage exited 3 collecting"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
 
 
 def test_the_msvc_measurer_refuses_a_green_run_without_a_report(
@@ -1184,7 +1247,7 @@ def test_the_msvc_measurer_refuses_a_green_run_without_a_report(
     engine = _FakeEngine(junit=_GREEN)
     package, _exe = _msvc_gate(tmp_path, monkeypatch, engine)
     with pytest.raises(_FAILURES, match="dotnet-coverage wrote no report at"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
 
 
 def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
@@ -1194,7 +1257,7 @@ def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
     engine = _FakeEngine(junit=_GREEN)
     package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
     engine.report = _cobertura(package)
-    _cpp_conan.test(package, tmp_path)
+    _cmake.test(package, tmp_path)
     assert _native_lines(tmp_path) == {
         "packages/native": {"packages/native/src/native.cpp": {5: 1, 6: 0}}
     }
@@ -1234,7 +1297,7 @@ def test_the_engine_s_own_runtime_is_never_an_object_to_instrument(
     lingering = exe.parent / "static_covrun32.dll"
     lingering.write_bytes(b"MZ runtime")
     (exe.parent / "acme.dll").write_bytes(b"MZ library")
-    _cpp_conan.test(package, tmp_path)
+    _cmake.test(package, tmp_path)
     instrumented = [call[-1] for call in engine.calls if call[0] == "instrument"]
     assert instrumented == [str(exe), str(exe.parent / "acme.dll")]
     # A file that was there before the run stays: the sweep takes
@@ -1251,10 +1314,10 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
 
     package = _render_cpp(tmp_path)
     _listing_coverage(tmp_path)
-    _cpp_conan.gate_build(package, tmp_path)
-    compiler_id, compiler = _cpp_conan.compiler_of(package)
+    _cmake.gate_build(package, tmp_path)
+    compiler_id, compiler = _cmake.compiler_of(package)
     assert compiler_id == "MSVC", (compiler_id, compiler)
-    _cpp_conan.test(package, tmp_path)
+    _cmake.test(package, tmp_path)
     parts = _native_lines(tmp_path)
     assert list(parts) == ["packages/native"]
     sources = [
@@ -1276,13 +1339,13 @@ def test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine(
     measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert 0.0 < measured["packages/native"] <= 100.0
     assert "measured by msvc" in capsys.readouterr().out
-    build_dir = package.directory / _cpp_conan.GATE_BUILD_DIR
+    build_dir = package.directory / _cmake.GATE_BUILD_DIR
     assert (build_dir / "test_native.exe").is_file()
     assert not list(build_dir.rglob("*instrumented*"))
     # A red test fails the run with ctest's output, read from ctest's
     # own report under the collector.
     test_file = package.directory / "tests" / "test_native.cpp"
     test_file.write_text(test_file.read_text().replace("return 0;", "return 1;"))
-    _cpp_conan.gate_build(package, tmp_path)
+    _cmake.gate_build(package, tmp_path)
     with pytest.raises(_FAILURES, match=r"ctest failed \(1 of 1 test"):
-        _cpp_conan.test(package, tmp_path)
+        _cmake.test(package, tmp_path)
