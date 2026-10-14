@@ -70,9 +70,8 @@ def _forge(monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Repository]:
     fake: FakeForge = _NoConanRegistry()
     fake.create_repo(OWNER, REPO)
     repository = fake.repository(OWNER, REPO)
-    # The conan extension reads the public name, the registry ladder the
-    # private one. The public one is patched first: its first read keeps
-    # what it finds, so it must find the real function, not the fake.
+    # Each name is patched where it is read: the conan extension reads the
+    # public name, the registry ladder the private one.
     monkeypatch.setattr("livery.workshop.this_repository", lambda _root: repository)
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repository
