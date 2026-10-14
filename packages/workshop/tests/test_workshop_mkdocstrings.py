@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from livery.extensions.docs._navblocks import GENERATED_DIR
 from livery.extensions.docs._site import (
     DOCS_PHASE,
     named_package,
@@ -33,7 +34,6 @@ from livery.extensions.mkdocstrings._pages import (
     write_reference,
 )
 from livery.footman import Failed
-from livery.workshop._docs_contract import GENERATED_DIR
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._steps import steps_by_name
 from workshop_extension_fakes import fake_extensions
@@ -294,6 +294,24 @@ def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
     assert sources(bare) == []
     assert write_reference(bare) == []
     assert "packages/bare/src" not in zensical_config(root)
+
+
+def test_a_root_with_no_init_starts_at_the_first_module_the_package_owns(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    module = root / "packages" / "core" / "src" / "acme" / "core"
+    (module / "__init__.py").unlink()
+    (module / "_steps.py").write_text('"""Steps."""\n')
+    # No __init__.py marks a root and nothing names a module: no pages.
+    assert pages(_member(root, "core")) == []
+    # The build names two modules. The first has no directory, so the
+    # reference starts at the second.
+    (root / "packages" / "core" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n\n[tool.uv.build-backend]\n'
+        'module-name = ["acme.absent", "acme.core"]\n'
+    )
+    assert pages(_member(root, "core")) == [("_steps.md", "acme.core._steps")]
 
 
 def test_api_modules_sort_public_first_and_skip_the_machinery(

@@ -33,6 +33,19 @@ types = ["str"]
 values = ["pages", "container", "ssh", "none"]
 doc = "where the site publishes; the forge's default when absent: pages on GitHub and GitLab, a container on Gitea"
 
+# How the site documents a package. The table is the extension's whole,
+# so a package's [docs] refuses, naming docs, while the workspace does
+# not list it.
+[contract.package.docs]
+types = ["table"]
+doc = "how the site documents the package"
+
+# Whether the package gets an API reference. The extension that writes
+# the reference reads it.
+[contract.package.docs.api]
+types = ["bool"]
+doc = "whether the package's modules get API reference pages; true when absent"
+
 # The verbs that write a package's pages before the site builds.
 [contract.package.docs.generators]
 types = ["list"]
@@ -47,7 +60,7 @@ requires = { types = ["strs"], doc = "the system packages the verb needs on a do
 # Where the package sits in the site's Packages tree.
 [contract.package.docs.name]
 types = ["str"]
-doc = "the package's place in the site's Packages tree, a dotted path whose last part is its label: workshop.extensions.ruff; its import path less the namespace every package shares, or its folder under packages/, when absent"
+doc = "the package's place in the site's Packages tree, a dotted path whose last part is its label: workshop.extensions.ruff; its shallowest import path less the namespace every package shares, or its folder under packages/, when absent"
 
 # A package's pages beyond the generated ones.
 [contract.package.docs.coverage]
@@ -86,7 +99,9 @@ inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = tr
 # docs verb before it assembles the config, its steps side by side. A
 # listed extension that requires docs adds a step here at its top level,
 # and any other in its [for.docs] table. The gate never runs it, and it
-# has no verb of its own.
+# has no verb of its own. Before it runs, the verb removes every
+# generated tree, docs/_generated/ at the root and in each package, so
+# a step that no longer runs leaves no page and no nav block behind.
 [phases.docs]
 level = "workspace"
 gated = false

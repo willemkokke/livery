@@ -1,4 +1,11 @@
-"""The nav blocks generators write, and the markers that place them in a package's nav.
+"""A package's generated tree, the nav blocks written into it, and their markers.
+
+The generated trees, ``docs/_generated/`` in each package and at the
+root, are the docs extension's: the steps of the docs phase and the
+site's own passes write them during a build, and they are removed
+before each run of the docs phase, so a tree holds only what the
+current build wrote. The mount merges a package's tree into its
+section and strips the tree's name from every link into it.
 
 A generator emits a block's entries into the package's generated tree,
 and the authored ``docs/nav.toml`` places the block with a marker pair,
@@ -14,6 +21,19 @@ workshop that mounts it.
 from __future__ import annotations
 
 from pathlib import Path
+
+#: A generated tree's name under ``docs/``: a name on disk, never a
+#: published path. The mount merges a package's tree into the package's
+#: section and strips the prefix from every link into it.
+GENERATED_DIR = "_generated"
+
+#: The generated tree's name with its slash, as a link into it is
+#: written: where a generator writes a package's pages, under the
+#: package's ``docs/``.
+GENERATED = GENERATED_DIR + "/"
+
+#: The package-owned nav file inside ``docs/``, which places the blocks.
+NAV_TOML = "nav.toml"
 
 #: The nav block the emitter owns; an edit between these is drift.
 NAV_BEGIN = "# docs-nav:begin (generated; the emitter owns this block)"

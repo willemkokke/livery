@@ -24,6 +24,7 @@ from livery.workshop._schema import (
     problems,
     schema_files,
 )
+from workshop_extension_fakes import fake_extensions
 
 #: How a refusal names each declared type, as the judge always has.
 _WORDS = {
@@ -42,7 +43,9 @@ _WORDS = {
 # names, a list, and the words each refusal uses.
 
 
-def test_an_unlisted_extensions_key_is_refused_naming_its_owner() -> None:
+def test_an_unlisted_extensions_key_is_refused_naming_its_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     alone = compose("root", frozenset({BASE}))
     # A table the extension owns whole refuses at the table.
     assert problems(alone, {"docs": {"title": "Site"}}) == [
@@ -53,14 +56,28 @@ def test_an_unlisted_extensions_key_is_refused_naming_its_owner() -> None:
     docs = alone["properties"]["docs"]
     assert docs["not"] == {} and docs[OWNER] == "docs"
     assert "docs" in docs["description"]
-    # The extension's key in a table the base owns refuses at the key.
+    # A package's [docs] is the extension's whole as well.
     package = compose("package", frozenset({BASE}))
-    assert problems(package, {"docs": {"extra-css": []}}) == [
-        "docs.extra-css is a key of docs, which [workspace] extensions does not"
-        " list; list the extension, or remove the key"
+    assert problems(package, {"docs": {"api": False}}) == [
+        "docs is a key of docs, which [workspace] extensions does not list;"
+        " list the extension, or remove the key"
     ]
-    extra_css = package["properties"]["docs"]["properties"]["extra-css"]
-    assert extra_css["not"] == {} and extra_css[OWNER] == "docs"
+    assert package["properties"]["docs"][OWNER] == "docs"
+    # An extension's key in a table the base owns refuses at the key.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        review='[extension]\nlevels = ["workspace"]\n\n'
+        '[contract.package.owners.squads]\ntypes = ["strs"]\n'
+        'doc = "the squads that review the package"\n',
+    )
+    package = compose("package", frozenset({BASE}))
+    assert problems(package, {"owners": {"squads": []}}) == [
+        "owners.squads is a key of acme.review, which [workspace] extensions does"
+        " not list; list the extension, or remove the key"
+    ]
+    squads = package["properties"]["owners"]["properties"]["squads"]
+    assert squads["not"] == {} and squads[OWNER] == "acme.review"
     listed = compose("root", frozenset({BASE, "docs"}))
     assert problems(listed, {"docs": {"title": "Site"}}) == []
 

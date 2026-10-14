@@ -1,8 +1,9 @@
 """The site's phases: the docs phase before a build, the deploy phase before a publish.
 
 The refusals and fallbacks first: a failing step, a step for an
-extension the workspace does not list, a dormant drawer. Then the
-steps side by side, and the publish that runs the deploy phase.
+extension the workspace does not list, a step that no longer runs, a
+dormant drawer. Then the steps side by side, and the publish that runs
+the deploy phase.
 """
 
 from __future__ import annotations
@@ -187,6 +188,59 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         "docs.held packages/core",
         "mkdocstrings packages/core",
     ]
+
+
+def test_a_step_no_longer_listed_leaves_no_pages_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from livery.extensions.docs import _taskref
+    from livery.workshop import _extensions, _points, _steps
+
+    row = {"help": "One line.", "params": []}
+    tree: dict[str, object] = {
+        "help": "",
+        "groups": {"acme": {"help": "", "tasks": {"page": row}, "groups": {}}},
+        "tasks": {},
+    }
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/fm")
+    root = _workspace(tmp_path, '["docs", "mkdocstrings"]')
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text() + "\n[phases.docs.task-reference]\nenabled = true\n"
+    )
+    generated = root / "packages" / "core" / "docs" / "_generated"
+    # A build with the API reference listed and the task reference on
+    # writes both, each with the nav block the site places.
+    _mount(root)
+    _docs._generate_all(root)
+    written = ("api/index.md", "nav.api.toml", "tasks/index.md", "nav.tasks.toml")
+    assert all((generated / name).is_file() for name in written)
+    config = (root / _docs.SITE_CONFIG).read_text()
+    assert "packages/core/api/index.md" in config
+    assert "packages/core/tasks/index.md" in config
+    # The reference unlisted and the task reference off, the next build,
+    # a process of its own, writes neither, and what the earlier build
+    # wrote is gone: no page, no block, no nav entry and no mounted page.
+    contract.write_text('[workspace]\nextensions = ["docs"]\n')
+    _steps.restore(_steps.snapshot(initial=True))
+    _points.restore(_points.snapshot(initial=True))
+    _extensions.restore(_extensions.snapshot(initial=True))
+    _mount(root)
+    assert not {"docs.mkdocstrings", "docs.task-reference"} & set(
+        _steps.steps_by_name()
+    )
+    _docs._generate_all(root)
+    assert not [name for name in written if (generated / name).exists()]
+    assert not (generated / "api").exists() and not (generated / "tasks").exists()
+    config = (root / _docs.SITE_CONFIG).read_text()
+    assert "packages/core/api/" not in config
+    assert "packages/core/tasks/" not in config
+    mounted = root / "docs" / "packages" / "core"
+    assert (mounted / "index.md").is_file()
+    assert not (mounted / "api").exists() and not (mounted / "tasks").exists()
 
 
 def test_a_dormant_coverage_draws_nothing_and_the_page_states_the_absence(

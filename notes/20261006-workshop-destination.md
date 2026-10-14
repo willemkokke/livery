@@ -318,7 +318,7 @@ every kind the check judges"). What changes:
 
 | Knowledge in the core today | Where | Seam in the destination |
 | --- | --- | --- |
-| the `[docs]` table and its keys | `_docs_contract.DECLARED`, `docs_table` | the docs extension's `[contract.<contract>.<table>]`, `api` among them; a generator's own settings are its `options`, set at `[generators.<name>]` in a package's contract as a check's are at `[checks.<tool>.<role>]` |
+| the `[docs]` table and its keys | the docs extension's `[contract.package.docs]`, `api` among them | as today; a docs step's own settings are its options, set at `[phases.docs.<step>]` in a package's contract |
 | the docs jobs' system requirements and the pages seam in the CI render | `_ci_generate` reads `docs_requirements`, `publish_seam` | `installs` (system packages the job installs before entering) and `deploy` (the seam's value), set by the contributing extension on its `[ci.jobs.<point>.<name>]` entry |
 | pages hosting asserted at `fm workflow.configure` | `_workflow_tasks` reads `publish_seam` | `[setup.<name>]`: steps an extension contributes to the repository's configuration, run by `workflow.configure` |
 | the site URL in the composed `pyproject.toml` | `_templates` reads `docs_table` for `docs_site_url` | `[docs] site-url` among the docs extension's keys; its `pre_tasks` hook sets footman's task-link template, `inv.docs_url`, and a workspace without the extension sets `[workspace] docs-url` |
@@ -329,8 +329,8 @@ every kind the check judges"). What changes:
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
 | the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in the nanobind kind's backend | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
-| the docs tree embedded into a wheel | `_docs_contract.module_docs`, read by the python backends | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
-| whether a package declines its reference, and its module root | `_docs_contract.declines_api`, `module_root` | `[docs] api` stays the docs extension's key; the handler's search paths are the `paths` option of mkdocstrings' step, set at `[phases.docs.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
+| the docs tree embedded into a wheel | the python extension's `module_docs`, read by its build and by the nanobind backend | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
+| whether a package declines its reference, and its module root | mkdocstrings reads `[docs] api` as data; the docs extension places a package at the shallowest of its module roots | `[docs] api` stays the docs extension's key; the handler's search paths are the `paths` option of mkdocstrings' step, set at `[phases.docs.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
 | the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
@@ -872,7 +872,7 @@ later reader must re-justify.
 | | `check_for`, `register_check` | go: `[checks.<tool>.<role>]` is data; a check in code reads its own table from `GateContext` |
 | `_contract` | `load_contract` | public `read_contract` |
 | `_contract_keys` | `Declared` | a `[contract.<contract>.<table>]` table |
-| `_docs_contract` | everything | moves into the docs extension; `site_reads` becomes `inputs` on the job; `module_docs`, `declines_api`, `module_root` go to the python extension |
+| `_docs_contract` | everything | gone (11c's PC2): `[docs]` and `api` are the docs extension's, `declines_api` is mkdocstrings' read of `api`, `module_docs` is the python extension's, and a package sits at the shallowest of its module roots; `site_reads` becomes `inputs` on the job |
 | `_extensions` | `workspace_root` | public already |
 | `_forge_lane` | `remote_repo_name` | public `forge_repository` |
 | `_git_ops` | `GitOps`, `GitError` | replaced by `ci_changes` |
@@ -1342,9 +1342,13 @@ alone.
   this repository and `fm new.project`'s stock list name `mkdocstrings`
   after `docs`, and the loop's plain pass leaves out docs and every
   entry whose declaration requires it.
-- PC2: the base's docs contract module leaves: `[docs]` and its `api`
-  key are the docs extension's, the docs a python wheel embeds the
-  python extension's.
+- PC2 (built, #1605): the base's docs contract module leaves: `[docs]`
+  and its `api` key are the docs extension's, so a `[docs]` table while
+  docs is unlisted refuses; mkdocstrings reads `api` as data; the docs
+  a python wheel embeds are the python extension's; a package sits at
+  the shallowest of its module roots; and every docs build first
+  removes `docs/_generated/` at the root and in each package, so a
+  step no longer listed leaves nothing behind there.
 - PD: the `docs` dependency group follows what a workspace lists, and
   `griffelib` leaves the workshop's runtime dependencies.
 
@@ -1513,7 +1517,6 @@ neither needs nor rules out).
 | `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, `register_categories`, `register_kind`, and the `[checks.<tool>.<role>]`, `[options]`, `[for]`, `tools` attributes | `extension.toml`, read at mount (phase 10, 11) |
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
-| `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
@@ -3052,6 +3055,19 @@ neither needs nor rules out).
   coverage median and 90th percentile come from the newer rows alone
   until the window refills; 257 of the window's 300 rows carried the
   old key, at about 75 runs a day.
+
+- 2026-10-14, 11c's PC2 (#1605): every docs build removes
+  `docs/_generated/`, at the root and in each package, before the docs
+  phase runs. Every step rewrites its whole output on each build, and
+  removing per step would need a record of what an unlisted step
+  wrote. Three writers put output outside that tree (the task
+  reference's alias pages under the root's `docs/tasks/`, coverage's
+  `htmlcov/`, the tool index under `docs/tools/`), so a step that stops
+  running still leaves those behind (#1611). `declines_api` is
+  mkdocstrings' data read of `[docs] api`, since the docs extension
+  has no reader of it once the extractor's absence page went. Found
+  while building: the worktree sweep removed this part's stacked
+  worktree when its parent's pull request merged (#1610).
 
 ## Open
 

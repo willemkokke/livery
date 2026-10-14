@@ -46,12 +46,16 @@ from livery import git
 from livery.extensions.docs._config import Scope, joined
 from livery.extensions.docs._contract import docs_table, publish_seam
 from livery.extensions.docs._navblocks import (
+    GENERATED,
+    GENERATED_DIR,
     NAV_BEGIN,
     NAV_END,
+    NAV_TOML,
     nav_block_file,
 )
 from livery.extensions.docs._packages_page import (
     LANDING,
+    MOUNT,
     Node,
     package_tree,
     write_packages_page,
@@ -65,12 +69,6 @@ from livery.workshop import (
     answer,
     guidance,
     read_contract,
-)
-from livery.workshop._docs_contract import (
-    GENERATED,
-    GENERATED_DIR,
-    MOUNT,
-    NAV_TOML,
 )
 from livery.workshop._packages import Package, discover_packages, release_tag
 
@@ -441,15 +439,13 @@ def check_package_nav(package: Package, entries: list[object]) -> None:
     docs = package.directory / "docs"
     leaves = _nav_leaves(entries)
     authored = {
-        page
-        for page in _pages(docs)
-        if not page.startswith(("_generated/", "includes/"))
+        page for page in _pages(docs) if not page.startswith((GENERATED, "includes/"))
     }
     nav_path = docs / NAV_TOML
     missing = [
         leaf
         for leaf in leaves
-        if not leaf.startswith(("_generated/", SENTINEL)) and leaf not in authored
+        if not leaf.startswith((GENERATED, SENTINEL)) and leaf not in authored
     ]
     if missing:
         fail(f"{nav_path} names pages that do not exist: " + ", ".join(sorted(missing)))
@@ -905,7 +901,7 @@ def _package_section(
     package with nothing to show and nothing below it.
     """
     docs = package.directory / "docs"
-    pages = [p for p in _pages(docs) if not p.startswith("_generated/")]
+    pages = [p for p in _pages(docs) if not p.startswith(GENERATED)]
     changelog = (package.directory / "CHANGELOG.md").is_file()
     authored = authored_nav(package)
     tree, blocks = authored if authored is not None else ([], {})
@@ -1637,14 +1633,36 @@ def write_site_config(root: Path) -> Path:
     return path
 
 
+def clear_generated(root: Path) -> None:
+    """Remove the generated trees an earlier build left: the root's and each package's.
+
+    Each is a ``docs/_generated/`` directory, which the docs phase's
+    steps and the site's own passes write again whole. Run before the
+    phase, so a step that no longer runs, its extension unlisted or
+    the step turned off, leaves no page and no nav block behind. What
+    a step writes outside a generated tree stays: a coverage report's
+    own directory, and the site trees under the root's ``docs/``.
+    """
+    trees = [root / "docs" / GENERATED_DIR]
+    trees += [
+        package.directory / "docs" / GENERATED_DIR
+        for package in discover_packages(root)
+    ]
+    for tree in trees:
+        if tree.is_dir():
+            shutil.rmtree(tree)
+
+
 def _generate_all(root: Path, *, full: bool = False) -> None:
     """Run the generation passes, saying what was made.
 
-    The docs phase's steps run first (`run_site_phase`), then the
-    workshop's own pages and the section nav into each package's
-    generated tree, so the mount copies everything a section holds;
-    then the config the build reads.
+    The generated trees an earlier build left go first
+    (`clear_generated`). Then the docs phase's steps run
+    (`run_site_phase`), then the workshop's own pages and the section
+    nav into each package's generated tree, so the mount copies
+    everything a section holds; then the config the build reads.
     """
+    clear_generated(root)
     run_site_phase(root, DOCS_PHASE)
     logged = generate_changelog_pages(root)
     if logged:

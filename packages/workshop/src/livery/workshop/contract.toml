@@ -372,14 +372,6 @@ doc = "the package's one-line description; one naming the package and the projec
 types = ["strs"]
 doc = "the extras the package's entry in the root's dev group installs"
 
-[contract.package.docs]
-types = ["table"]
-doc = "how the site documents the package"
-
-[contract.package.docs.api]
-types = ["bool"]
-doc = "whether the package's modules get API reference pages; true when absent"
-
 [contract.package.extensions]
 types = ["strs"]
 doc = "the package-level extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"

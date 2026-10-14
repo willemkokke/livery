@@ -10,19 +10,20 @@ from typing import Any
 import pytest
 
 from livery.extensions.docs._navblocks import NAV_BEGIN, NAV_END
+from livery.extensions.docs._packages_page import MOUNT
 from livery.extensions.docs._site import (
     mount_package_docs,
     named_package,
     scoped_config,
     zensical_config,
 )
-from livery.footman import Failed
-from livery.workshop._declaration import DeclarationError
-from livery.workshop._docs_contract import (
+from livery.extensions.python._backend import (
     materialise_module_docs,
     module_docs,
     module_docs_dir,
 )
+from livery.footman import Failed
+from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import discover_packages
 from workshop_coverage_pages import read_page
 from workshop_docs_declared import docs_jobs  # noqa: F401
@@ -150,6 +151,11 @@ def test_a_root_with_no_public_names_keeps_its_docs_where_the_wheel_ships(
     (module / "__init__.py").unlink()
     (module / "_extension.py").write_text("API_VERSION = 1\n")
     assert module_docs_dir(core) is None
+    # With nowhere to go, no copy is made, and a build carries none.
+    assert materialise_module_docs(core) is None
+    with module_docs(core) as copied:
+        assert copied is None
+    assert not list(core.directory.rglob("_docs"))
     (core.directory / "pyproject.toml").write_text(
         '[project]\nname = "acme-core"\n\n'
         '[tool.uv.build-backend]\nmodule-name = "acme.core"\n'
@@ -1832,8 +1838,6 @@ def test_the_mount_merges_the_generated_tree_and_keeps_every_link_true(
     tmp_path: Path,
 ) -> None:
     """``_generated`` is a directory on disk and never a published path."""
-    from livery.workshop._docs_contract import MOUNT
-
     root = _workspace(tmp_path)
     docs = root / "packages/core/docs"
     (docs / "guide.md").write_text("see [the api](_generated/api.md)\n")
@@ -2115,7 +2119,6 @@ def test_the_mount_keeps_an_unchanged_section_and_full_rebuilds_it(
     tmp_path: Path,
 ) -> None:
     from livery.extensions.docs._site import BUILD_DIR
-    from livery.workshop._docs_contract import MOUNT
 
     root = _workspace(tmp_path)
     assert mount_package_docs(root) == ["core"]
@@ -2364,6 +2367,28 @@ def test_the_tree_places_packages_and_orders_them_by_their_dependencies(
     assert core.package is not None and core.package.member == "core"
     bare = core.children["extras"].children["bare"]
     assert bare.package is not None and bare.package.member == "bare"
+
+
+def test_a_multi_root_package_sits_at_its_shallowest_root(tmp_path: Path) -> None:
+    from livery.extensions.docs._packages_page import package_tree
+    from livery.workshop._lifecycle import module_roots
+
+    root = _workspace(tmp_path)
+    # core's build ships two roots, and the deeper one is answered first.
+    extras = root / "packages" / "core" / "src" / "acme" / "base" / "extras"
+    extras.mkdir(parents=True)
+    (extras / "__init__.py").write_text("")
+    (root / "packages" / "core" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n\n[tool.uv.build-backend]\n'
+        'module-name = ["acme.core", "acme.base.extras"]\n'
+    )
+    core = next(p for p in discover_packages(root) if p.member == "core")
+    assert module_roots(core) == ("acme.base.extras", "acme.core")
+    # core sits at acme.core, less the shared acme, beside bare.
+    tree = package_tree(discover_packages(root))
+    assert [node.label for node in tree.ordered()] == ["bare", "core"]
+    placed = tree.children["core"].package
+    assert placed is not None and placed.member == "core"
 
 
 def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> None:

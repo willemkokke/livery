@@ -152,8 +152,8 @@ def _authored_pages(
     the build writes is not authored: a member's generated tree, and
     the root tree's mounts and generated sections.
     """
+    from livery.extensions.docs._navblocks import GENERATED_DIR
     from livery.extensions.docs._site import SITE_TREES
-    from livery.workshop._docs_contract import GENERATED_DIR
 
     trees = [("", root / "docs")]
     trees += [
@@ -186,8 +186,12 @@ def site_request(root: Path) -> dict[str, Any]:
     """
     from livery.extensions.docs._taskref import STEP, advertised_providers
     from livery.extensions.mkdocstrings._config import options as handler_options
-    from livery.extensions.mkdocstrings._pages import API_DIR, documented, pages
-    from livery.workshop._docs_contract import declines_api
+    from livery.extensions.mkdocstrings._pages import (
+        API_DIR,
+        declines_api,
+        documented,
+        pages,
+    )
     from livery.workshop._extensions import enabled_steps
     from livery.workshop._packages import discover_packages
 

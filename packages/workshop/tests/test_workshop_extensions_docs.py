@@ -11,8 +11,6 @@ import sys
 from pathlib import Path
 from typing import cast
 
-import pytest
-
 from livery.workshop._packages import (
     ReferencedName,
     SourceReferences,
@@ -162,30 +160,52 @@ def test_the_base_task_module_does_not_import_the_site() -> None:
     assert "_docs" not in source and "extensions.docs" not in source
 
 
-@pytest.mark.parametrize(
-    "module", ["_ci_generate", "_workflow_tasks", "_provenance", "_templates"]
-)
-def test_the_base_modules_read_no_docs_table(module: str) -> None:
-    # What a docs job installs, where it deploys and what it reads are
-    # declared on the job, and task names link through the extension's
-    # own hook, so none of these modules knows the [docs] table.
-    path = ROOT / f"packages/workshop/src/livery/workshop/{module}.py"
-    assert "_docs_contract" not in path.read_text()
+def _docs_table_reads(source: str) -> list[int]:
+    """The lines of *source* that read a ``[docs]`` table, by subscript or ``get``."""
+    found: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Subscript):
+            key = node.slice
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and node.args
+        ):
+            key = node.args[0]
+        else:
+            continue
+        if isinstance(key, ast.Constant) and key.value == "docs":
+            found.append(node.lineno)
+    return sorted(found)
 
 
-@pytest.mark.parametrize("name", ["declines_api", "materialise_module_docs"])
-def test_the_base_seam_carries_what_the_base_reads(name: str) -> None:
-    from livery.workshop import _docs_contract
+def test_a_docs_table_read_is_found_by_its_subscript_and_its_get() -> None:
+    source = (
+        'table = contract.get("docs") or {}\n'
+        'site = contract["docs"]\n'
+        'kinds = ("feat", "docs")\n'
+        'listed = "docs" in names\n'
+    )
+    assert _docs_table_reads(source) == [1, 2]
 
-    assert callable(getattr(_docs_contract, name))
 
+def test_the_base_modules_read_no_docs_table() -> None:
+    """No base module reads a ``[docs]`` table, the root's or a package's.
 
-def test_the_root_docs_table_is_the_extensions_to_read() -> None:
-    from livery.extensions.docs import _contract
-    from livery.workshop import _docs_contract
-
-    assert callable(_contract.docs_table)
-    assert not hasattr(_docs_contract, "docs_table")
+    The table and its keys are the docs extension's. What a docs job
+    installs, where it deploys and what it reads are declared on the
+    job, task names link through the extension's own hook, the
+    extension that writes the API reference reads ``[docs] api``, and
+    the docs a python wheel embeds are the python extension's.
+    """
+    base = ROOT / "packages/workshop/src/livery/workshop"
+    found = [
+        f"{path.relative_to(base).as_posix()}:{line}"
+        for path in sorted(base.rglob("*.py"))
+        for line in _docs_table_reads(path.read_text("utf-8"))
+    ]
+    assert found == []
 
 
 #: The workshop modules whose names the docs extension reads through

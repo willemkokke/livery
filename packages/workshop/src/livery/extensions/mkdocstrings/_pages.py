@@ -22,14 +22,14 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from livery.extensions.docs._navblocks import nav_block_file, write_nav_block
-from livery.footman import fail
-from livery.workshop._docs_contract import (
+from livery.extensions.docs._navblocks import (
     GENERATED,
     GENERATED_DIR,
-    declines_api,
-    module_root,
+    nav_block_file,
+    write_nav_block,
 )
+from livery.footman import fail
+from livery.workshop import read_contract
 from livery.workshop._packages import root_marks
 
 if TYPE_CHECKING:
@@ -106,6 +106,32 @@ def documented(package: Package) -> bool:
     return bool(set(step().extensions) & set(extension_set(package)))
 
 
+def declines_api(package: Package) -> bool:
+    """Whether *package* turns its reference off with ``[docs] api = false``.
+
+    The key is the docs extension's, read here from the package's
+    contract as data.
+    """
+    table = read_contract(package.directory).get("docs") or {}
+    return isinstance(table, dict) and table.get("api") is False
+
+
+def _owned_root(package: Package, src: Path) -> Path | None:
+    """The directory under *src* of the first module *package* owns; None for none.
+
+    Its module roots, as its extensions answer them or its kind while it
+    lists none, in their order: the first whose directory exists. A root
+    with no ``__init__.py`` starts there, at the module its wheel ships.
+    """
+    from livery.workshop._lifecycle import module_roots
+
+    for module in module_roots(package):
+        directory = src.joinpath(*module.split("."))
+        if directory.is_dir():
+            return directory
+    return None
+
+
 def pages(package: Package) -> list[tuple[str, str]]:
     """(page path, dotted import path) per module of each root, public first.
 
@@ -129,9 +155,9 @@ def pages(package: Package) -> list[tuple[str, str]]:
         for mark in root_marks(src):
             if not any(mark.parent.is_relative_to(root) for root in roots):
                 roots.append(mark.parent)
-    if not roots:
+    if not roots and src.is_dir():
         # A root with no __init__.py: the first module the package owns.
-        owned = module_root(package)
+        owned = _owned_root(package, src)
         roots = [] if owned is None else [owned]
     found: list[tuple[str, str]] = []
     for index, root in enumerate(roots):

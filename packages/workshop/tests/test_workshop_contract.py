@@ -87,13 +87,13 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
         "docs is a key of docs, which [workspace]"
         " extensions does not list; list the extension, or remove the key"
     ) in _refusal(lambda: _contract.load_contract(path))
-    # A package's key of that extension refuses against its root's list.
+    # A package's table of that extension refuses against its root's list.
     member = _workspace(
         tmp_path, "", 'kind = "python"\nname = "m"\n[docs]\nextra-css = []\n'
     )
-    assert "docs.extra-css is a key of docs" in _refusal(
-        lambda: _contract.load_contract(member)
-    )
+    assert (
+        "docs is a key of docs, which [workspace] extensions does not list"
+    ) in _refusal(lambda: _contract.load_contract(member))
     # Listed, the same keys load.
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["docs"]\n\n[docs]\ntitle = "Site"\n'
@@ -220,6 +220,27 @@ def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
         "  coverage.epsilon is a string ('wide'); it takes a number",
         "  coverage.required is a string ('no'); it takes true or false",
         "  [coverage] has no key 'ceiling': it takes epsilon, floor, required",
+    ]
+
+
+def test_a_docs_table_while_docs_is_unlisted_refuses_naming_the_extension(
+    tmp_path: Path,
+) -> None:
+    # A package's [docs] api is the docs extension's key, as every key
+    # of the table is, so the table refuses whole while docs is unlisted.
+    member = _workspace(
+        tmp_path, "", 'kind = "python"\nname = "m"\n\n[docs]\napi = false\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f"{member}:\n  docs is a key of docs, which [workspace] extensions"
+        " does not list; list the extension, or remove the key"
+    )
+    # Listed, the key loads, and its value is judged by its type.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    assert _contract.load_contract(member)["docs"] == {"api": False}
+    member.write_text('kind = "python"\nname = "m"\n\n[docs]\napi = "no"\n')
+    assert _refusal(lambda: _contract.load_contract(member)).splitlines()[1:] == [
+        "  docs.api is a string ('no'); it takes true or false"
     ]
 
 

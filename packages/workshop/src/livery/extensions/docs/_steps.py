@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from livery.extensions.docs._navblocks import GENERATED_DIR
 from livery.footman import fail
 from livery.workshop import Changes, PhaseContext, selected_files
 from livery.workshop._packages import member_depth, package_directories
@@ -54,7 +55,7 @@ def _pages(root: Path) -> list[Path]:
         pages += [
             page
             for page in sorted(tree.rglob("*.md"))
-            if "_generated" not in page.relative_to(tree).parts
+            if GENERATED_DIR not in page.relative_to(tree).parts
             and not (
                 tree == root / "docs" and page.relative_to(tree).parts[0] in SITE_TREES
             )
@@ -93,7 +94,7 @@ def link_problems(root: Path, pages: frozenset[str] | None = None) -> list[str]:
                     resolved = (
                         root.joinpath(*parts[:depth]) / "docs" / Path(*parts[depth:])
                     ).resolve()
-                elif "_generated" in path_part:
+                elif GENERATED_DIR in path_part:
                     continue
             if not resolved.is_file():
                 problems.append(
