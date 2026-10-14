@@ -865,7 +865,7 @@ docs = [
 
 [[package]]
 name = "livery-extensions-basedpyright"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/basedpyright" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -1086,7 +1086,7 @@ provides-extras = ["github-secrets", "test"]
 
 [[package]]
 name = "livery-git"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/git" }
 dependencies = [
     { name = "dulwich" },
@@ -1175,7 +1175,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "packages/workshop" }
 dependencies = [
     { name = "livery-footman" },
