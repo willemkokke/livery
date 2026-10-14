@@ -1398,8 +1398,10 @@ parts, each mergeable alone:
   compilers, until phase 14's toolchains.
 - P1e (#1620): each extension writes its own manifest's requirement on
   a sibling; a sibling no writer takes refuses.
-- P1f (#1622): one base constant names the runtime's language,
-  `python`.
+- P1f (built, #1622): one base constant names the runtime's language,
+  `python`; a member holding it carries a `pyproject.toml` and joins
+  the uv workspace, and the workspace's own tests are judged as python.
+  `is_python_kind` and `requires_pyproject` go.
 - P1g (#1623): pytest runs suites through queries python answers;
   `run_suites` and `kind_examples` leave the public names.
 - P1h (#1625): every reader of the kind reads the held set instead;
