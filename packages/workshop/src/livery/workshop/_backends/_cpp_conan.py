@@ -87,9 +87,6 @@ from livery.extensions.conan._package import (
     current_version as current_version,
 )
 from livery.extensions.conan._package import (
-    declare_requirement as declare_requirement,
-)
-from livery.extensions.conan._package import (
     declared_requirements as declared_requirements,
 )
 from livery.extensions.conan._package import (

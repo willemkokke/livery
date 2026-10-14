@@ -511,10 +511,11 @@ LANDED = {
         '+    "acme-echo>=0.1.0",',
         "+]",
     ),
-    # The library's seeded recipe declares no requires tuple to join.
+    # The library's seeded recipe declares no requirement, so conan's
+    # writer opens the tuple after the recipe class's attributes.
     ("lib", "geometry"): (
-        "refused: packages/lib/conanfile.py declares no `requires = (...)` tuple"
-        ' to add "acme-geometry/[>=0.1.0]" to; add the requirement by hand',
+        "conanfile.py:",
+        '+    requires = ("acme-geometry/[>=0.1.0]",)',
     ),
 }
 
@@ -606,8 +607,10 @@ def test_the_find_links_are_the_set_s_existing_dist_directories(
     ]
 
 
-#: Where python's backend and the nanobind kind's are defined.
+#: Where python's backend, conan's recipe code and the nanobind kind's
+#: backend are defined.
 PYTHON = "livery.extensions.python._backend"
+CONAN = "livery.extensions.conan._package"
 NANOBIND = "livery.workshop._backends._python_nanobind"
 
 #: The function each lifecycle entry ran for a nanobind member, which lists
@@ -623,7 +626,12 @@ NANOBIND_BODIES = {
     # The answer is whether the backend has an isolated test; none runs.
     "has_isolated_test": (),
     "stamp": (f"{PYTHON}:stamp_version",),
-    "declare_requirement": (f"{NANOBIND}:declare_requirement",),
+    # Every writer of what the kind stands for is called, in composition
+    # order: conan's leaves the python sibling alone, and python's takes it.
+    "declare_requirement": (
+        f"{CONAN}:declare_requirement",
+        f"{PYTHON}:declare_requirement",
+    ),
     "build": (f"{NANOBIND}:build",),
     "publish": (f"{PYTHON}:publish_artifact",),
     "isolated_test": (f"{PYTHON}:isolated_test",),
@@ -696,7 +704,9 @@ class _Bodies:
 def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.extensions.conan import _package as conan_package
     from livery.extensions.conan import _steps as conan_steps
+    from livery.extensions.python import _backend as python_backend
     from livery.workshop._backends import _python_nanobind
     from livery.workshop._registries import RegistryTarget
 
@@ -710,13 +720,16 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
         "current_version",
         "stamp_version",
         "declared_requirements",
-        "declare_requirement",
         "module_roots",
         "public_modules",
         "compile_commands",
         "references",
     ):
         bodies.record(monkeypatch, _python_nanobind, name)
+    # The requirement writers are the extensions' own, which their answers
+    # name.
+    for module in (python_backend, conan_package):
+        bodies.record(monkeypatch, module, "declare_requirement")
     stand_ins: dict[str, object] = {
         "build": native.directory / "dist",
         "publish_artifact": True,

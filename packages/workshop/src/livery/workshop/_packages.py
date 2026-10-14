@@ -621,7 +621,7 @@ def rule_problems(
 def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
     """Every violation of the graph's invariants, verbatim; empty when they hold."""
     from livery.workshop import _lifecycle
-    from livery.workshop._kinds import is_python_kind, kind_names
+    from livery.workshop._kinds import extension_set, kind_names
 
     by_path = {package.path: package for package in packages}
     names_by_path = {package.path: package.name for package in packages}
@@ -658,16 +658,15 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
             if edge.kind not in ("build", "runtime"):
                 continue  # test and tool edges have no native home yet
             dep = by_path[edge.path]
-            home = (
-                "[project.dependencies]"
-                if is_python_kind(dep.kind)
-                else f'conanfile.py (requires "{dep.name}/[>={edge.floor}]")'
-            )
             constraint = native.get(dep.name)
             if constraint is None:
+                # The sibling's set says which ecosystem's manifest the
+                # requirement belongs in: a writer takes its own alone.
+                held = ", ".join(extension_set(dep)) or "no extension"
                 problems.append(
-                    f"{package.path}: the build edge on {edge.path} is not"
-                    f" declared in {home} ({dep.name} missing)"
+                    f"{package.path}: the {edge.kind} edge on {edge.path} is not"
+                    f" declared in the package's manifests ({dep.name} missing;"
+                    f" {edge.path} holds {held})"
                 )
             elif edge.floor and f">={edge.floor}" not in constraint:
                 problems.append(
@@ -907,13 +906,21 @@ def declare_edge(
 ) -> list[str]:
     """Declare *package*'s *kind* edge on *dependency* at *floor*; the files written.
 
-    The ``[[depends]]`` edge joins the package's contract, and for a
-    build or runtime edge the package's kind writes the native
-    requirement at the same floor, so ``layering.graph`` finds the
-    two in agreement. The files are relative to the package.
+    For a build or runtime edge, the writers of the package's set first
+    write the native requirement at the same floor
+    (``_lifecycle.declare_requirement``), so ``layering.graph`` finds
+    the two in agreement; then the ``[[depends]]`` edge joins the
+    package's contract. A sibling no writer takes refuses before the
+    contract changes. The files are relative to the package, the
+    contract first.
     """
     from livery.workshop import _lifecycle
 
+    required = (
+        _lifecycle.declare_requirement(package, dependency, floor)
+        if kind in ("build", "runtime")
+        else []
+    )
     contract = package.directory / "workshop.toml"
     text = contract.read_text("utf-8")
     edge = (
@@ -921,10 +928,7 @@ def declare_edge(
         f'floor = "{floor}"\n'
     )
     contract.write_text(text.rstrip("\n") + "\n" + edge, encoding="utf-8")
-    files = ["workshop.toml"]
-    if kind in ("build", "runtime"):
-        files += _lifecycle.declare_requirement(package, dependency, floor)
-    return files
+    return ["workshop.toml", *required]
 
 
 def write_edges(root: Path) -> list[str]:
@@ -932,11 +936,11 @@ def write_edges(root: Path) -> list[str]:
 
     The fix of the layering phase's sibling-references step. For each reference
     [livery.workshop._packages.undeclared_references][] can write, the
-    ``[[depends]]`` edge joins the package's contract and the kind
-    writes the native requirement, both at the floor the graph
-    carries. A reference the graph does not reach is left for the
-    judge that follows: it is a new dependency, and a decision.
-    Idempotent: a second call writes nothing.
+    writers of the package's set write the native requirement and the
+    ``[[depends]]`` edge joins the package's contract, both at the
+    floor the graph carries. A reference the graph does not reach is
+    left for the judge that follows: it is a new dependency, and a
+    decision. Idempotent: a second call writes nothing.
     """
     packages = discover_packages(root)
     written: list[str] = []
