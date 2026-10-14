@@ -1046,6 +1046,14 @@ combine = "union"
 [queries.requirements]
 combine = "livery.workshop._queries:merged"
 
+# The writers of a requirement on a sibling into a package's native
+# manifests, each a function called with the package, the sibling and
+# the floor. Every writer of the package's set is called, and each takes
+# a sibling of its own ecosystem alone, answering None for any other; a
+# sibling no writer takes refuses, naming the sibling's set.
+[queries.requirement-writers]
+combine = "union"
+
 # The distributions a package releases, each as its ecosystem and name.
 [queries.distributions]
 combine = "union"
@@ -1054,6 +1062,12 @@ combine = "union"
 # answer refuses.
 [queries.executables]
 combine = "livery.workshop._queries:owned"
+
+# What the host must provide for a package and no store installs, such
+# as a C compiler, each by the name it resolves by on PATH: fm doctor
+# and fm env.check name each one that does not resolve.
+[queries.host-tools]
+combine = "union"
 
 # The marketplace ids of the editor extensions the listed extensions
 # recommend, which the rendered .vscode/extensions.json lists.
@@ -1101,3 +1115,12 @@ combine = "nearest"
 # step runs in, so the lock pins it in a workspace with no package too.
 [toolroom]
 requires = ["uv"]
+
+# The members a job of the release point builds before the wave, each
+# member's path to the job's name. The wave publishes what the run
+# collected for them instead of building them again, and the entry
+# installs those of them uv installs after the tools. A member two
+# answers give different jobs refuses.
+[queries.job-built-members]
+level = "workspace"
+combine = "livery.workshop._queries:merged"

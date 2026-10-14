@@ -78,7 +78,7 @@ from typing import Any, NoReturn, cast
 
 from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
-from livery.workshop._packages import discover_packages
+from livery.workshop._packages import RUNTIME_LANGUAGE, discover_packages
 
 WORKSPACE = "workspace"
 """The contract table the supported hosts live under."""
@@ -96,14 +96,6 @@ PINNED_TOOLS = ("uv",)
 
 BASE_SITE = "the base"
 """The site of the base's own requirements, the ones every workspace has."""
-
-ROOT_KIND = "python"
-"""The kind of the workspace's own files, whatever its members are.
-
-`tasks.py` and the root's tests run on the base's runtime, and the
-steps of that kind judge them, so the tools those steps run are
-required with no member of the kind present.
-"""
 
 TYPINGS = "typings"
 """The directory under the root the stubs are written into, pyright's default."""
@@ -160,7 +152,8 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     and tests run in the venv uv makes. The steps that judge a present
     package bring the tools they run, each requirement naming
     `step <name>` as its site, and so do the steps that judge the
-    root's own files, which are judged as a package of `ROOT_KIND` is.
+    root's own files, which are judged as a package holding the
+    runtime's language is.
     An extension's site is `extension <name>`, read from its
     ``extension.toml``'s ``[toolroom] requires`` and from each of its
     ``[for.<target>]`` tables that applies now: cmake's build tools
@@ -214,17 +207,15 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
 
 
 def _held(packages: tuple[Package, ...]) -> tuple[str, ...]:
-    """The extensions the *packages* hold, and those the root's own files hold.
+    """The extensions the *packages* hold, and the one the root's own files hold.
 
-    The root's are what `ROOT_KIND` stands for: its `tasks.py` and
-    tests are judged as a package of that kind is.
+    The root's is the runtime's language: its `tasks.py` and tests run
+    on the runtime, and are judged as a package holding it is.
     """
-    from livery.workshop._kinds import extension_set, kind_stands_for
+    from livery.workshop._kinds import extension_set
 
-    found = dict.fromkeys(kind_stands_for(ROOT_KIND))
-    for package in packages:
-        found.update(dict.fromkeys(extension_set(package)))
-    return tuple(found)
+    held = (name for package in packages for name in extension_set(package))
+    return tuple(dict.fromkeys((RUNTIME_LANGUAGE, *held)))
 
 
 def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:

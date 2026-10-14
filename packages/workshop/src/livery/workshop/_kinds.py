@@ -127,19 +127,6 @@ class Backend(Protocol):
         """What the package declares natively, name to constraint."""
         ...
 
-    def declare_requirement(
-        self, package: Package, dependency: Package, floor: str
-    ) -> list[str]:
-        """Write *dependency* at *floor* into the package's native manifest.
-
-        The files changed, relative to the package; empty when the
-        manifest already names the dependency. Which file that is, and
-        how a requirement is spelled there, is the kind's knowledge:
-        the fix mode of ``layering.sibling-references`` calls this for a sibling the
-        graph already reaches, at the floor the graph carries.
-        """
-        ...
-
     def module_roots(self, package: Package) -> tuple[str, ...]:
         """The names other packages reference this one's code by."""
         ...
@@ -205,9 +192,6 @@ class KindRecord:
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        wheel_identity: What a built wheel's tag must say:
-            ``pure`` refuses a platform tag, ``platform`` refuses
-            ``none-any``, empty skips the guard (no wheels).
         examples: How the kind runs a package's documentation
             examples, the files under ``docs/examples/``, given the
             package, the workspace root, the named example files (empty
@@ -240,7 +224,6 @@ class KindRecord:
     parent: str = ""
     host_tools: tuple[str, ...] = ()
     artifact: str = "python"
-    wheel_identity: str = "pure"
     examples: (
         Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
     ) = None
@@ -457,27 +440,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-def is_python_kind(kind_name: str) -> bool:
-    """Whether the kind is a Python distribution, by its chain.
-
-    True when ``python`` sits anywhere in the chain: a child kind (a
-    binary extension) is still a wheel with a ``pyproject.toml``,
-    while a kind outside the chain (``cpp-conan``) is not and never
-    joins the uv workspace.
-    """
-    return any(record.name == "python" for record in kind_chain(kind_name))
-
-
-def requires_pyproject(kind_name: str) -> bool:
-    """Whether a package of this declared kind must carry a pyproject.
-
-    An unregistered kind answers False so discovery can finish and
-    the backend refusal can name the vocabulary; a missing file
-    would otherwise mask the real problem, the typo.
-    """
-    if kind_name not in _KINDS:
-        return False
-    return is_python_kind(kind_name)
 
 
 def record_for_template(template_kind: str) -> KindRecord | None:
@@ -503,7 +465,6 @@ def _register_builtin() -> None:
             name="base",
             template=BASE_TEMPLATE,
             artifact="",
-            wheel_identity="",
             abstract=True,
         )
     )
@@ -533,7 +494,6 @@ def _register_builtin() -> None:
             template="package-python-nanobind",
             parent="python",
             host_tools=("cc", "c++"),
-            wheel_identity="platform",
             # Beside python's, the extension module's C++ sources, the
             # provider that resolves their dependencies, and nanobind's
             # wheels job: a nanobind package consumes conan and is never
@@ -560,7 +520,6 @@ def _register_builtin() -> None:
             parent="base",
             host_tools=("cc", "c++"),
             artifact="conan",
-            wheel_identity="",
             # A package that lists no extension is taken to hold the
             # three a new one lists: one category table, one conan
             # workspace and the same steps either way.

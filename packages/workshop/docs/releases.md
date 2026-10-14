@@ -177,9 +177,19 @@ the key refuses in a member that holds no nanobind. The extension
 adds a wheels job to the release workflow: before the wave, one leg
 per label builds that platform's wheels for the workspace's python
 matrix through cibuildwheel, and the publish job waits for the legs
-and ships the collected set. The publish job builds a pure member's
-one wheel itself, and a workspace whose members hold no nanobind has
-no wheels job.
+and ships the collected set. A workspace whose members hold no
+nanobind has no wheels job.
+
+Which members a job builds before the wave is the workspace's
+`job-built-members` answer. nanobind answers it with every member that
+holds nanobind and every member that releases a conan package, which
+each leg creates for its host. In CI the wave publishes what the run
+collected into those members' `dist/` and builds every other member
+itself; a job-built member whose `dist/` holds nothing refuses the
+wave, naming the job. A build refuses a wheel whose tag says the
+wrong thing: python's build refuses a wheel tagged for a platform, and
+nanobind's a pure one, so no wheel reaches the wave with a tag that
+contradicts what built it.
 
 Not covered today: attestation or signing of the built wheels, a
 non-PyPI index for the github kind, and publishing anywhere but the

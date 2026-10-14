@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.workshop._packages import Package
+    from livery.workshop._queries import RequirementWriter
 
 
 def current_version(package: Package) -> str:
@@ -26,3 +27,26 @@ def version_files(package: Package) -> tuple[Path, ...]:
 def requirements(package: Package) -> Mapping[str, str]:
     """The conan references the recipe requires, each name to its version range."""
     return _package.declared_requirements(package)
+
+
+def requirement_writers(package: Package) -> tuple[RequirementWriter, ...]:
+    """The recipe's writer of a requirement on a sibling that is a conan package."""
+    del package
+    return (_package.declare_requirement,)
+
+
+#: The ecosystem a conan package is released to, as the ``distributions``
+#: query names it.
+ECOSYSTEM = "conan"
+
+
+def distributions(package: Package) -> tuple[tuple[str, str], ...]:
+    """The conan package the recipe releases, as its ecosystem and its name.
+
+    A recipe that declares both ``name`` and ``version`` names a
+    reference and releases the package; a consumer's recipe,
+    requirements alone, releases nothing, so it answers empty.
+    """
+    if not _package.names_a_reference(package):
+        return ()
+    return ((ECOSYSTEM, package.name),)

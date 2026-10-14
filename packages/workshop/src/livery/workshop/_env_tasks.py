@@ -36,6 +36,7 @@ from livery.workshop._envfile import (
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
+    from livery.workshop._packages import Package
     from livery.workshop._tools import Receipt
 
 #: Names never emitted for an agent: the PATH family is composed per
@@ -786,21 +787,35 @@ def served_by(receipt: Receipt) -> str:
 
 
 def missing_host_tools(root: Path) -> tuple[str, ...]:
-    """The host requirements the present kinds name that do not resolve.
+    """The tools the workspace's packages need from the host that do not resolve.
 
-    Host tools (a C compiler) are never cache-installed: the machine
-    provides them or the build cannot run, so ``fm doctor`` and
-    ``fm env.check`` name an absence before a build fails midway.
+    A host tool, such as a C compiler, is one the store never installs:
+    the machine provides it or the build cannot run, so ``fm doctor``
+    and ``fm env.check`` name an absence before a build fails midway.
+    Each package's set answers the ``host-tools`` query, and a package
+    that lists no extension takes its kind's host tools instead, while
+    package kinds remain. The answers join, sorted, each tool once.
     """
-    from livery.workshop._kinds import kind_host_tools
     from livery.workshop._packages import discover_packages
 
-    types = (
-        {package.kind for package in discover_packages(root)}
-        if (root / "packages").is_dir()
-        else set()
-    )
-    return tuple(tool for tool in kind_host_tools(types) if shutil.which(tool) is None)
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    needed = {tool for package in packages for tool in _host_tools(package)}
+    return tuple(sorted(tool for tool in needed if shutil.which(tool) is None))
+
+
+def _host_tools(package: Package) -> tuple[str, ...]:
+    """What *package* needs the host to provide: its set's ``host-tools`` answer.
+
+    A package that lists no extension takes its kind's host tools
+    instead, the bridge while package kinds remain.
+    """
+    if not package.extensions:
+        from livery.workshop._kinds import kind_host_tools
+
+        return kind_host_tools({package.kind})
+    from livery.workshop._queries import HOST_TOOLS, answer
+
+    return tuple(answer(package, HOST_TOOLS))
 
 
 def _set_ci_secret(root: Path, key: str, value: str) -> None:

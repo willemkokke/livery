@@ -1398,10 +1398,32 @@ parts, each mergeable alone:
   are required by the extensions that run them. Every base mention of
   a native tool is a `TOOL_ALLOWANCE` row naming the change that
   removes it, counted exactly.
+- P1b (built, #1618): nanobind answers which members its wheels job
+  builds (`job-built-members`), and the wheel identity check moves into
+  the build steps: python's build refuses a platform-tagged wheel. A
+  package-level extension may answer a workspace query, and conan
+  answers `distributions` for a recipe that names a reference.
+- P1c (#1619): uv is the base's tool; cmake, ninja and conan are
+  required by the extensions that run them.
+- P1d (built, #1621): cpp answers a `host-tools` query naming the C
+  compilers, until phase 14's toolchains; `fm doctor` and
+  `fm env.check` union the answers of the workspace's packages.
+- P1e (#1620): each extension writes its own manifest's requirement on
+  a sibling; a sibling no writer takes refuses.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
 - P1e (#1620): each extension writes its own manifest's requirement on
   a sibling; a sibling no writer takes refuses.
+- P1f (built, #1622): one base constant names the runtime's language,
+  `python`; a member holding it carries a `pyproject.toml` and joins
+  the uv workspace, and the workspace's own tests are judged as python.
+  `is_python_kind` and `requires_pyproject` go.
+- P1e (built, #1620): each extension writes its own manifest's
+  requirement on a sibling, through the package query
+  `requirement-writers`; a sibling no writer takes refuses, naming its
+  set. Conan's writer opens a recipe's `requires` tuple when it has
+  none, and `layering.sibling-references`' fix judges the contracts it
+  wrote.
 - P1f (#1622): one base constant names the runtime's language,
   `python`.
 - P1g (#1623): pytest runs suites through queries python answers;
@@ -1583,11 +1605,12 @@ neither needs nor rules out).
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
-| the wave's decision that a member's wheels were built before the wave, read from the kind | the package's extensions (phase 11b, slice 6), or conan's per-host artifact (phase 13) |
+| the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
+| cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |

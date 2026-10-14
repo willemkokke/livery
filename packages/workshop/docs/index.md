@@ -343,8 +343,9 @@ in its own; a handle, `Query("docs.members")`, names it and types its
 answer. A package-level query is asked with a package,
 `answer(package, query)`, and each extension of the package's set that
 answers is asked in composition order; a workspace-level one is asked
-with the workspace root, `answer(root, query)`, and the listed
-extensions answer in list order. The answers combine by the query's
+with the workspace root, `answer(root, query)`, and the extensions the
+workspace mounts answer in mount order: the package-level ones its
+packages hold, then its list. The answers combine by the query's
 rule, and with nobody answering the query's declared default stands,
 or the rule's answer over nothing. The base declares:
 
@@ -356,19 +357,26 @@ or the rule's answer over nothing. The base declares:
 | `version-files` | package | the files `stamp` may write a version into | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
+| `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
+| `host-tools` | package | what the host must provide and no store installs, such as a C compiler; `fm doctor` and `fm env.check` name each one that does not resolve | the union |
 | `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
 | `python.docs-group` | workspace | the lines of the root project file's `docs` dependency group | the union |
 | `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
+| `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
 
 A name no extension declares refuses with the nearest one; an answer
-refuses when the extension's levels lack the query's, and when it is
-off the query's `values`.
+refuses when it is off the query's `values`. A package-level query is
+asked of the package's set alone, so an extension that a package may
+not list refuses to answer one. A workspace-level query is asked of
+every extension the workspace mounts, a package-level one while a
+package holds it: nanobind, a package-level extension, answers
+`job-built-members`.
 
 An extension also answers under `[for.<target>.queries]`, in the same
 grammar. That answer is asked only while the target is listed and the
@@ -814,6 +822,18 @@ or every source:
   the distribution and the `pyproject.toml` to declare it in.
 
 A step's fix runs inside the gate's rewrite, before the judges.
+
+The sibling references' fix writes each edge's requirement before the
+edge. The package's set answers `requirement-writers` with its
+writers, and every one is called. Each takes a sibling of its own
+ecosystem alone: python writes into `pyproject.toml` for a sibling that
+holds python, and conan writes into `conanfile.py` for a conan package,
+a sibling that holds conan and whose recipe names a reference. Conan
+opens the recipe's `requires` tuple when the recipe declares no
+requirement. A sibling no writer takes refuses, naming the sibling's
+set, and nothing is written. A requirement written into a member's
+`pyproject.toml` moves the uv lock, so the fix locks again, and the
+fix's judge reads the contracts as the fix left them.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into

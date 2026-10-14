@@ -15,7 +15,6 @@ from livery.extensions.python import _backend as _python
 from livery.workshop._backends import _python_nanobind
 from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
-    is_python_kind,
     kind_for,
     template_chain,
 )
@@ -153,7 +152,6 @@ def test_the_kind_chains_from_python(python_steps: object) -> None:
         "package-python",
         "package-python-nanobind",
     )
-    assert is_python_kind("python-nanobind")
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     # The native configs are rendered from the step records, so the kind
