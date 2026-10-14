@@ -282,18 +282,14 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
-    """The find-links dirs: only members whose kind builds wheels.
+    """The find-links dirs: each member's ``dist/`` that exists, in set order.
 
-    A conan member's build leaves nothing in ``dist/``, and a
-    nonexistent find-links path fails the sibling legs outright.
+    Read after the set's builds. A build that writes nothing there, a
+    conan member's, leaves no directory to name, and a find-links path
+    that does not exist fails the sibling legs outright.
     """
-    from livery.workshop._kinds import kind_for
-
-    return tuple(
-        plan.package.directory / "dist"
-        for plan in plans
-        if kind_for(plan.package.kind).wheel_identity
-    )
+    dists = (plan.package.directory / "dist" for plan in plans)
+    return tuple(dist for dist in dists if dist.is_dir())
 
 
 #: The key of `[release]` listing the resolutions a release tests at.
@@ -658,7 +654,6 @@ class ReleaseDriver:
             floor_changes = bump_set_floors(self._root, plans)
             if floor_changes:
                 print(f"  floors raised within the set: {', '.join(floor_changes)}")
-            release_dirs = _wheel_dists(plans)
             _write_manifest(self._root, plans, mined_at=mined_at)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
@@ -685,6 +680,7 @@ class ReleaseDriver:
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
+            release_dirs = _wheel_dists(plans)
             for plan in plans:
                 if plan.package.member in kept:
                     print(
@@ -888,10 +884,10 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     print("  act: local; nothing leaves this machine")
     try:
         bump_set_floors(root, plans)
-        release_dirs = _wheel_dists(plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
             _lifecycle.build(plan.package, root)
+        release_dirs = _wheel_dists(plans)
         for plan in plans:
             validate_member(root, plan, release_dirs)
         listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)
@@ -1540,7 +1536,7 @@ def workflow_release_check_fresh(
 def workflow_release_publish(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
     prebuilt: Annotated[
-        bool, doc("trust the dist/ a job of the run collected for each native member")
+        bool, doc("trust the dist/ the run collected for each member a job builds")
     ] = False,
 ) -> None:
     """Publish the squash at --ref: the wave, receipts cut per member.
@@ -1551,15 +1547,14 @@ def workflow_release_publish(
     squash before a recovery runs. Each member probes and publishes
     through its kind's artifact target: python members through the
     resolved index, conan members through the resolved conan target.
-    ``--prebuilt`` says a job of the run already built the native
-    members: a platform-wheel member's dist/ holds the wheels
-    collected from every platform, and the wave publishes them
-    instead of rebuilding one platform's. A conan member's saved
-    caches arrive the same way, one per host, and the wave attaches
-    them instead of creating the package again.
-    Inside CI the wave decides that for itself: a platform-wheel
-    member whose dist/ already holds wheels was fed by the run,
-    since a runner's checkout starts with none.
+    ``--prebuilt`` says the jobs of the run already built the members
+    they build before the wave, the workspace's ``job-built-members``
+    answer: a platform-wheel member's dist/ holds the wheels collected
+    from every platform, a conan member's the caches saved on every
+    host, and the wave publishes them instead of building on this
+    runner alone. Inside CI the wave decides that for itself: such a
+    member whose dist/ already holds a file was fed by the run, since
+    a runner's checkout starts with none.
     """
     import os
 
@@ -1624,24 +1619,29 @@ def workflow_release_publish(
 
 
 def collected_wheels(root: Path, ref: str) -> bool:
-    """Whether a job of the run collected wheels for this wave, judged inside CI alone.
+    """Whether the run collected what a job built for this wave, judged inside CI alone.
 
-    A runner's checkout starts with an empty dist/, so wheels there
-    were collected from another job's artifacts; outside CI a dist/
-    may hold a stale local build, and the wave builds as asked.
+    The members a job builds before the wave are the workspace's
+    ``job-built-members`` answer. A runner's checkout starts with no
+    dist/, so a file in such a member's dist/ was collected from that
+    job's artifact, and the wave trusts the collection; each member it
+    trusts is printed with its job. Outside CI a dist/ may hold a stale
+    local build, and the wave builds as asked.
     """
     from livery.workshop._ci_context import run_context
-    from livery.workshop._kinds import kind_for
-    from livery.workshop._publish import discover_release
+    from livery.workshop._publish import collected, discover_release
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     if run_context() is None:
         return False
-    fed = [
-        package.name
-        for package, _version in discover_release(root, ref or git.head_sha(root))
-        if kind_for(package.kind).wheel_identity == "platform"
-        and any((package.directory / "dist").glob("*.whl"))
-    ]
-    if fed:
-        print(f"  prebuilt: the run collected wheels for {', '.join(fed)}")
-    return bool(fed)
+    built = answer(root, JOB_BUILT_MEMBERS)
+    fed = False
+    for package, _version in discover_release(root, ref or git.head_sha(root)):
+        job = built.get(package.path)
+        if job is not None and collected(package):
+            print(
+                f"  prebuilt: {package.name}: the run collected what the {job} job"
+                " built"
+            )
+            fed = True
+    return fed

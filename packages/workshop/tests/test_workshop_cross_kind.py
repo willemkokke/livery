@@ -85,14 +85,20 @@ def test_disagreeing_floors_refuse_naming_both(tmp_path: Path) -> None:
     assert "acme-geometry[>=0.1.0]" in message
 
 
-def test_a_missing_conan_requirement_refuses_teaching_the_form(tmp_path: Path) -> None:
+def test_a_missing_conan_requirement_refuses_naming_the_sibling_s_set(
+    tmp_path: Path,
+) -> None:
     _library(tmp_path)
     _extension(tmp_path, conan_ref="", floor="0.1.0")
     with pytest.raises(ValueError) as caught:
         verify_workspace(tmp_path)
-    message = str(caught.value)
-    assert "not declared in conanfile.py" in message
-    assert "acme-geometry/[>=0.1.0]" in message
+    # The sibling's set says which ecosystem's manifest the requirement
+    # belongs in.
+    assert (
+        "packages/ext: the build edge on packages/geometry is not declared in the"
+        " package's manifests (acme-geometry missing; packages/geometry holds"
+        " cmake, conan, cpp)"
+    ) in str(caught.value)
 
 
 def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:

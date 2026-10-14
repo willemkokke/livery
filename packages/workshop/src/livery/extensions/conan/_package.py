@@ -20,7 +20,7 @@ import tempfile
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import livery.toolroom.tools as tools
 from livery.footman import fail
@@ -71,35 +71,105 @@ def conan_requirements(conanfile: Path) -> dict[str, str]:
     return entries
 
 
-def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
+def declare_requirement(
+    package: Package, dependency: Package, floor: str
+) -> list[str] | None:
     """Add ``<dependency>/[>=<floor>]`` to the recipe's requires; the files changed.
 
-    The reference joins the ``requires`` tuple the template seeds,
-    as text, so the recipe's own layout stays. A recipe that declares
-    its requirements another way (``self.requires`` calls, no tuple)
-    refuses naming the line to add, rather than guessing where a
-    method body wants it. Already declared means nothing to write.
+    The conan extension's requirement writer, its answer to the
+    ``requirement-writers`` query. It takes a sibling that is a conan
+    package (`is_conan_package`), and returns None for any other
+    sibling, which it leaves to another writer of the package's set.
+    The reference joins the recipe's ``requires`` tuple as text, so the
+    recipe's own layout stays, and a recipe that declares no
+    requirement gets the tuple, among the attributes of its recipe
+    class. A recipe that declares its requirements another way
+    (``self.requires`` calls, a single string) refuses naming the line
+    to add, rather than guessing where a method body wants it. Already
+    declared means nothing to write.
     """
-    import re as _re
-
-    conanfile = package.directory / "conanfile.py"
-    if dependency.name in conan_requirements(conanfile):
+    if not is_conan_package(dependency):
+        return None
+    conanfile = package.directory / RECIPE_FILE
+    declared = conan_requirements(conanfile)
+    if dependency.name in declared:
         return []
     text = conanfile.read_text("utf-8")
     reference = f'"{dependency.name}/[>={floor}]"'
-    match = _re.search(r"^(\s*)requires = \((.*?)\)$", text, flags=_re.M | _re.S)
-    if match is None:
-        fail(
-            f"{conanfile} declares no `requires = (...)` tuple to add"
-            f" {reference} to; add the requirement by hand"
+    match = re.search(r"^(\s*)requires = \((.*?)\)$", text, flags=re.M | re.S)
+    if match is not None:
+        indent, inner = match.group(1), match.group(2).strip()
+        items = [item.strip() for item in inner.split(",") if item.strip()]
+        items.append(reference)
+        body = ", ".join(items) + ("," if len(items) == 1 else "")
+        text = (
+            text[: match.start()] + f"{indent}requires = ({body})" + text[match.end() :]
         )
-    indent, inner = match.group(1), match.group(2).strip()
-    items = [item.strip() for item in inner.split(",") if item.strip()]
-    items.append(reference)
-    body = ", ".join(items) + ("," if len(items) == 1 else "")
-    text = text[: match.start()] + f"{indent}requires = ({body})" + text[match.end() :]
+    elif declared:
+        fail(
+            f"{conanfile} declares its requirements without a `requires = (...)`"
+            f" tuple to add {reference} to; add the requirement by hand"
+        )
+    else:
+        text = _opened_requires(conanfile, text, reference)
     conanfile.write_text(text, encoding="utf-8")
-    return ["conanfile.py"]
+    return [RECIPE_FILE]
+
+
+def _opened_requires(conanfile: Path, text: str, reference: str) -> str:
+    """*text*, the recipe *conanfile*, with a ``requires`` tuple holding *reference*.
+
+    The tuple goes into the recipe class, the class that derives from
+    ``ConanFile``. It follows the last statement before the class's
+    first method, which is the class's docstring or an attribute. In a
+    class whose first statement is a method, the tuple comes first,
+    with a blank line before the method.
+
+    Raises:
+        Failed: when *text* defines no recipe class with its body on
+            lines of its own, naming the requirement to add by hand.
+    """
+    import ast
+
+    recipe = next(
+        (
+            node
+            for node in ast.parse(text).body
+            if isinstance(node, ast.ClassDef)
+            and any(
+                (isinstance(base, ast.Name) and base.id == "ConanFile")
+                or (isinstance(base, ast.Attribute) and base.attr == "ConanFile")
+                for base in node.bases
+            )
+        ),
+        None,
+    )
+    if recipe is None or recipe.body[0].lineno == recipe.lineno:
+        fail(
+            f"{conanfile} defines no recipe class with its body on lines of its"
+            f" own to open a `requires = (...)` tuple in for {reference}; add the"
+            " requirement by hand"
+        )
+    methods = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    leading: list[ast.stmt] = []
+    for statement in recipe.body:
+        if isinstance(statement, methods):
+            break
+        leading.append(statement)
+    lines = text.splitlines(keepends=True)
+    first = lines[recipe.body[0].lineno - 1]
+    opened = f"{first[: len(first) - len(first.lstrip())]}requires = ({reference},)\n"
+    if leading:
+        end = leading[-1].end_lineno or leading[-1].lineno
+        lines[end - 1] = lines[end - 1].rstrip("\n") + "\n"
+        lines.insert(end, opened)
+    else:
+        method = cast(
+            "ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef", recipe.body[0]
+        )
+        top = min(node.lineno for node in (method, *method.decorator_list))
+        lines.insert(top - 1, opened + "\n")
+    return "".join(lines)
 
 
 def declared_requirements(package: Package) -> dict[str, str]:
@@ -138,6 +208,19 @@ def names_a_reference(package: Package) -> bool:
         re.search(rf'^\s*{key} = "[^"]+"$', text, re.M) is not None
         for key in ("name", "version")
     )
+
+
+def is_conan_package(member: Package) -> bool:
+    """Whether *member* holds conan and its recipe names a reference.
+
+    Such a member is a conan package: the conan workspace resolves it
+    from its source, and a sibling's recipe requires it by its
+    reference. A member that holds conan through a consumer's recipe,
+    one that names no reference, is not one.
+    """
+    from livery.workshop._kinds import extension_set
+
+    return EXTENSION in extension_set(member) and names_a_reference(member)
 
 
 def stamp_version(package: Package) -> _Stamper:
@@ -271,7 +354,6 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
             a copy beside the package it builds. False writes the
             paths relative to the root, for the file the root holds.
     """
-    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
 
     entries = [
@@ -279,7 +361,7 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
         if absolute
         else f"  - path: {member.path}"
         for member in discover_packages(root)
-        if EXTENSION in extension_set(member) and names_a_reference(member)
+        if is_conan_package(member)
     ]
     # An empty list, spelled: a bare key reads as nothing, and conan's
     # loader fails iterating it, while a workspace of consumers alone

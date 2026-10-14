@@ -1603,16 +1603,24 @@ def _register_builtin() -> None:
         return run
 
     def sibling_fix(ctx: PhaseContext) -> None:
-        from livery.workshop._packages import write_edges
+        from dataclasses import replace
+
+        from livery.workshop._packages import discover_packages, write_edges
         from livery.workshop._uv import run_uv
 
         written = write_edges(ctx.root)
         for line in written:
             print(line)
         if any("pyproject.toml" in line for line in written):
-            # A new requirement moves the lock; the fix leaves the tree
-            # consistent, as a person would after editing by hand.
+            # Each line names the files written. A requirement written
+            # into a uv member's manifest moves the uv workspace's lock,
+            # so the fix locks again and leaves the tree consistent, as
+            # a person would after editing by hand.
             run_uv("lock", root=ctx.root)
+        if written:
+            # The run read the packages before the fix wrote their
+            # contracts, and the judge reads them as the fix left them.
+            ctx = replace(ctx, packages=discover_packages(ctx.root))
         # A rewriter is not judged again under --fix, so the fix judges
         # what it leaves.
         rule_run("sibling-references")(ctx)
