@@ -6,6 +6,11 @@ learns there. livery.workshop.verify_workspace is the layering lint:
 contracts present, declared edges agreeing with the native manifests
 in both directions, the graph acyclic, the base importing no
 extension, and each reference to a sibling declared as an edge.
+
+`holds_runtime_language` says whether a package holds the language the
+workshop runs on, `RUNTIME_LANGUAGE`; a member that does is a
+distribution of that language, and discovery requires its
+``pyproject.toml``.
 """
 
 from __future__ import annotations
@@ -318,6 +323,31 @@ def workspace_suite(root: Path) -> Package | None:
     )
 
 
+#: The package-level extension of the language the workshop runs on.
+#: The workspace's own ``tasks.py`` and tests run on that runtime
+#: whatever its members are, so the steps that judge a package holding
+#: this extension judge them too. A member holding it is a distribution
+#: of that language: discovery requires its project file, and it joins
+#: the uv workspace the venv is made from.
+RUNTIME_LANGUAGE = "python"
+
+
+def holds_runtime_language(package: Package) -> bool:
+    """Whether *package* holds the runtime's language, `RUNTIME_LANGUAGE`.
+
+    A member holds it when it lists it, when an extension it lists
+    requires it, or, while it lists none, when its kind stands for it.
+    The workspace's own tests hold it always, since they run on the
+    runtime. Discovery asks this of every member, so a member that
+    lists it is answered without reading any extension's declaration.
+    """
+    if package.path == WORKSPACE_TESTS or RUNTIME_LANGUAGE in package.extensions:
+        return True
+    from livery.workshop._kinds import extension_set
+
+    return RUNTIME_LANGUAGE in extension_set(package)
+
+
 def root_marks(src: Path) -> list[Path]:
     """The files that mark an importable root under *src*, shallowest first.
 
@@ -402,15 +432,15 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     """Every package the workspace carries, by its contract, sorted by path.
 
     Raises ValueError, with every finding listed, when a directory
-    under ``packages/`` lacks its contract, or lacks the
-    ``pyproject.toml`` its declared kind requires: a half-present
-    package is a wrong state, not a lesser one. A directory holding
-    only what a removed package left behind is named as such, with
-    the ``fm sync`` that removes it. An unknown kind
-    passes discovery so the backend refusal can name the vocabulary.
+    under ``packages/`` lacks its contract, or holds the runtime's
+    language (`holds_runtime_language`) and lacks the
+    ``pyproject.toml`` a distribution of that language carries: a
+    half-present package is a wrong state, not a lesser one. A
+    directory holding only what a removed package left behind is
+    named as such, with the ``fm sync`` that removes it. A package of
+    an unknown kind that lists no extension holds nothing, so it
+    passes discovery and the backend refusal can name the vocabulary.
     """
-    from livery.workshop._kinds import requires_pyproject
-
     problems = []
     packages = []
     # A workspace born a moment ago has no members yet; zero packages
@@ -422,13 +452,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             problems.append(_no_contract(root, directory))
             continue
         contract = load_contract(contract_file)
-        kind_name = str(contract.get("kind", ""))
-        if (
-            requires_pyproject(kind_name)
-            and not (directory / "pyproject.toml").is_file()
-        ):
-            problems.append(f"{member}: no pyproject.toml")
-            continue
         depends = tuple(
             Edge(
                 path=str(edge.get("path", "")),
@@ -463,22 +486,29 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 if isinstance(nested, dict)
             )
         publish = bool(release.get("publish", True))
-        packages.append(
-            Package(
-                directory=directory,
-                path=f"{PACKAGES_DIR}/{member}",
-                name=str(contract.get("name", "")),
-                kind=kind_name,
-                depends=depends,
-                publish=publish,
-                categories=tuple(reassigned),
-                step_options=tuple(options),
-                extensions=tuple(str(name) for name in contract.get("extensions", ())),
-            )
+        package = Package(
+            directory=directory,
+            path=f"{PACKAGES_DIR}/{member}",
+            name=str(contract.get("name", "")),
+            kind=str(contract.get("kind", "")),
+            depends=depends,
+            publish=publish,
+            categories=tuple(reassigned),
+            step_options=tuple(options),
+            extensions=tuple(str(name) for name in contract.get("extensions", ())),
         )
+        if (
+            holds_runtime_language(package)
+            and not (directory / "pyproject.toml").is_file()
+        ):
+            problems.append(
+                f"{member}: holds {RUNTIME_LANGUAGE} and has no pyproject.toml"
+            )
+            continue
+        packages.append(package)
     if problems:
         raise ValueError(
-            "packages missing their contracts:\n  " + "\n  ".join(problems)
+            "packages missing a file they need:\n  " + "\n  ".join(problems)
         )
     return tuple(packages)
 

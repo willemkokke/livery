@@ -1,11 +1,10 @@
 """The kind registry: what a package kind is, in one record.
 
-A kind answers three questions through one registration: how to
-build (the backend, three callables), what a birth writes (the seed
-tree, with a parent chain written beneath it), and what the machine
-needs (the tools it contributes to the derived profile). What the gate
-runs over a package is the steps' to say: each names the kinds it
-judges, and a package of another kind skips it by name.
+A kind answers two questions through one registration: how to
+build (the backend) and what a birth writes (the seed tree, with a
+parent chain written beneath it). The extensions a package holds
+require the tools it needs, and the steps say what the gate runs over
+it: each names the extensions it judges.
 
 Adding a kind means one call: ``register_kind`` with the record.
 The workshop registers ``base`` and ``python`` at import; an extension's
@@ -17,9 +16,8 @@ is worse than a stop.
 ``base`` is abstract: the record behind the ``package-base`` template
 every package template renders first. It heads every kind's chain,
 so what it carries reaches every kind without a leaf restating it.
-It requires no tool: what a release writes beside its version is
-an extension's. A package's ``kind`` never names it: the
-vocabulary a contract may use is the concrete kinds.
+A package's ``kind`` never names it: the vocabulary a contract may
+use is the concrete kinds.
 
 ``python-nanobind`` is abstract too: the record behind the nanobind
 seed tree, which a birth writes over python's. A package born from it
@@ -159,8 +157,7 @@ class Backend(Protocol):
         """Build what the kind's tests run on, into the gate's build directory.
 
         Incremental, so a rebuild after one edit costs that edit. A
-        kind whose tests run on source does nothing here, and its
-        record says so in ``tests_need_build``.
+        kind whose tests run on source does nothing here.
         """
         ...
 
@@ -193,25 +190,13 @@ class KindRecord:
             or empty for a kind with no seeds of its own.
         parent: The kind this one extends; a birth writes the
             parent's seeds first, then this kind's over them.
-        tools: The tools the kind requires by existing in a
-            workspace, each spelled `name` or `name>=floor`; the
-            lock resolves them beside the packages' and the
-            project's own.
         host_tools: What the host must already provide and no cache
             will ever install (a C compiler); ``fm doctor`` and
             ``fm env.check`` name an absence instead of letting a
             build fail midway.
-        host_allowed: The kind's tools whose copy already on the
-            machine may serve when it satisfies the floor, so a
-            workspace of this kind installs them only where the
-            machine has none; the union along the chain joins the
-            root contract's `[toolroom] host-allowed`.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        tests_need_build: Whether the kind's tests run on a build
-            rather than on source, so a test step is preceded by the
-            backend's ``gate_build``.
         examples: How the kind runs a package's documentation
             examples, the files under ``docs/examples/``, given the
             package, the workspace root, the named example files (empty
@@ -237,11 +222,8 @@ class KindRecord:
     backend: Backend | None = None
     template: str = ""
     parent: str = ""
-    tools: tuple[str, ...] = ()
     host_tools: tuple[str, ...] = ()
-    host_allowed: tuple[str, ...] = ()
     artifact: str = "python"
-    tests_need_build: bool = False
     examples: (
         Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
     ) = None
@@ -360,15 +342,6 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     return chain
 
 
-def kind_tools(present_types: set[str]) -> tuple[str, ...]:
-    """The union of tool requirements the present kinds declare, sorted."""
-    tools: set[str] = set()
-    for kind_name in present_types:
-        for record in kind_chain(kind_name):
-            tools.update(record.tools)
-    return tuple(sorted(tools))
-
-
 def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     """The union of host requirements the present kinds name, sorted."""
     tools: set[str] = set()
@@ -466,38 +439,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
-    """The union of host allowances the present kinds grant, sorted."""
-    tools: set[str] = set()
-    for kind_name in present_types:
-        for record in kind_chain(kind_name):
-            tools.update(record.host_allowed)
-    return tuple(sorted(tools))
-
-
-def is_python_kind(kind_name: str) -> bool:
-    """Whether the kind is a Python distribution, by its chain.
-
-    True when ``python`` sits anywhere in the chain: a child kind (a
-    binary extension) is still a wheel with a ``pyproject.toml``,
-    while a kind outside the chain (``cpp-conan``) is not and never
-    joins the uv workspace.
-    """
-    return any(record.name == "python" for record in kind_chain(kind_name))
-
-
-def requires_pyproject(kind_name: str) -> bool:
-    """Whether a package of this declared kind must carry a pyproject.
-
-    An unregistered kind answers False so discovery can finish and
-    the backend refusal can name the vocabulary; a missing file
-    would otherwise mask the real problem, the typo.
-    """
-    if kind_name not in _KINDS:
-        return False
-    return is_python_kind(kind_name)
-
-
 def record_for_template(template_kind: str) -> KindRecord | None:
     """The record whose template is *template_kind*; None when unmapped.
 
@@ -515,13 +456,11 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan
 
     # The base every kind derives from: abstract, the record behind the
-    # package-base template. It requires no tool: the release notes'
-    # writer and its configuration are an extension's.
+    # package-base template.
     register_kind(
         KindRecord(
             name="base",
             template=BASE_TEMPLATE,
-            tools=(),
             artifact="",
             abstract=True,
         )
@@ -529,19 +468,12 @@ def _register_builtin() -> None:
     # Two contract kinds exist today. The extension package template
     # (package-extension) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
-    # The python kind's one tool is uv, which makes the venv the steps
-    # run in. Declared here as data, so a workspace's lock takes it
-    # from the kind like any other requirement and no branch in code
-    # knows the list.
     register_kind(
         KindRecord(
             name="python",
             backend=_python,
             template="package-python",
             parent="base",
-            # uv operates the workspace; the checkers, the formatter and
-            # the test runner ride their step records.
-            tools=("uv",),
             examples=_python.run_examples,
             suites=_python.run_test,
             # A package that lists no extension is taken to hold the
@@ -573,13 +505,8 @@ def _register_builtin() -> None:
             backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            # The build tools; the measurer of a build made with MSVC
-            # rides cmake's [for.coverage] table, required while the
-            # workspace lists coverage.
-            tools=("cmake", "conan", "ninja"),
             host_tools=("cc", "c++"),
             artifact="conan",
-            tests_need_build=True,
             # A package that lists no extension is taken to hold the
             # three a new one lists: one category table, one conan
             # workspace and the same steps either way.

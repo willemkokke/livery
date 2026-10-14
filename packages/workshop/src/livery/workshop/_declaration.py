@@ -5,12 +5,11 @@ package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, the phases it declares and the steps it
 adds to a package's lifecycle phases and to the gate's phases, the
-queries it declares and the ones it answers, the tools its verbs
-need, its CI jobs, the contract keys it owns, what it adds to
-another extension while that one is listed, and the earlier
-extensions' shipped files it replaces or deletes. The file is a
-contract, read as ``workshop.toml`` is: kebab-case keys, every key
-judged, every refusal naming the file.
+queries it declares and the ones it answers, the tools it runs, its
+CI jobs, the contract keys it owns, what it adds to another extension
+while that one is listed, and the earlier extensions' shipped files it
+replaces or deletes. The file is a contract, read as ``workshop.toml``
+is: kebab-case keys, every key judged, every refusal naming the file.
 
 A ``[phases.<phase>]`` table declares the phase when it carries
 ``level``, ``gated``, ``after``, ``verb`` or ``keys``
@@ -215,7 +214,8 @@ class Declaration:
         dormant_until: What another extension does for this one by
             declaring a ``[for.<this>]`` table, a verb; empty for an
             extension that is never dormant.
-        tools: The tools its verbs need, as requirement strings.
+        tools: The tools it runs, its verbs' and its steps', as
+            requirement strings.
         additions: What it adds whenever it is mounted.
         targets: What it adds to each target while the target is listed.
         target_tables: Each ``[for.<target>]`` table as the file holds it.

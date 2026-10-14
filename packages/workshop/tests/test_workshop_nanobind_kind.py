@@ -15,7 +15,6 @@ from livery.extensions.nanobind import _build, _ci, _container
 from livery.extensions.python import _backend as _python
 from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
-    is_python_kind,
     kind_for,
     kind_names,
     template_chain,
@@ -168,7 +167,6 @@ def test_the_seed_chain_runs_from_python_s_and_no_package_names_its_record() -> 
     assert (record.parent, record.abstract, record.backend) == ("python", True, None)
     assert record.stands_for == ()
     assert "python-nanobind" not in kind_names()
-    assert is_python_kind("python-nanobind")
 
 
 def test_a_package_listing_nanobind_holds_python_cpp_and_conan(

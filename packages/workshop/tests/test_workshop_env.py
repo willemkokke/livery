@@ -344,8 +344,8 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
 def test_the_tool_profile_derives_from_package_types(
     tmp_path: Path, python_steps: object
 ) -> None:
-    # No packages: the root's kind, python, with its own tool and the
-    # tools of the steps that judge it.
+    # No packages: the base's uv, and the tools of the steps that judge
+    # the root's own files as python.
     profile = tool_profile(tmp_path)
     assert "uv" in profile and "fake" in profile
 

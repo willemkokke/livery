@@ -9,7 +9,8 @@ scans the base's sources for each, and every extension's
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
-interpreter, the venv), each with its reason; those stay. ``ALLOWANCE``
+interpreter, the venv, the runtime's language and the project file of
+a member holding it), each with its reason; those stay. ``ALLOWANCE``
 holds what the base still knows of a kind today, one count per module
 and word. A count may only fall: a finding above it refuses, and a
 module that now finds fewer refuses until its count is lowered here,
@@ -33,6 +34,14 @@ BACKEND_IMPORT = "import a backend"
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
+    ("_packages", "python"): (
+        1,
+        "the runtime's language, the extension the root's own files hold",
+    ),
+    ("_packages", "pyproject.toml"): (
+        1,
+        "the project file a member holding the runtime's language carries",
+    ),
     ("_points", "python"): (1, "a runner's interpreter version"),
     ("_pythons", "pyproject.toml"): (1, "the root's requires-python"),
     ("_shipped_files", "pyproject.toml"): (
@@ -58,10 +67,9 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_e2e", "conan"): 4,
     ("_e2e", "pyproject.toml"): 1,
     ("_kinds", BACKEND_IMPORT): 1,
-    ("_kinds", "conan"): 2,
+    ("_kinds", "conan"): 1,
     ("_kinds", "cpp-conan"): 1,
-    ("_kinds", "python"): 5,
-    ("_packages", "pyproject.toml"): 1,
+    ("_kinds", "python"): 4,
     ("_publish", "conan"): 3,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
@@ -75,7 +83,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "python"): 2,
     ("_steps", BACKEND_IMPORT): 1,
     ("_templates", "python"): 4,
-    ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 
@@ -248,12 +255,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "a GitHub job's conan home; the CI placement review, #1534",
     ),
-    ("_kinds", "cmake"): (1, "the cpp-conan kind's tools; #1614's P1c"),
-    ("_kinds", "conan"): (
-        2,
-        "the cpp-conan kind's tools, #1614's P1c, and its artifact, #1614's P3",
-    ),
-    ("_kinds", "ninja"): (1, "the cpp-conan kind's tools; #1614's P1c"),
+    ("_kinds", "conan"): (1, "the cpp-conan kind's artifact; #1614's P3"),
     ("_packages", "cmake"): (
         2,
         "BASE_EXTENSION_IMPORTS' cmake row; #1614's P5 deletes it",
@@ -361,6 +363,13 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
     assert dict(found) == allowed
+
+
+@pytest.mark.parametrize("key", sorted(TOOL_ALLOWANCE))
+def test_every_tool_allowance_entry_states_its_reason(key: tuple[str, str]) -> None:
+    count, reason = TOOL_ALLOWANCE[key]
+    assert count > 0
+    assert reason
 
 
 #: The coverage extension's verbs the base still names:

@@ -302,23 +302,25 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 
 #: What a workspace listing nothing requires as each seed's member joins
 #: it: each requirement's name and site, each pair once, in the order
-#: first required. The nanobind member is of the python kind, and the
-#: extension it lists requires its build tools.
+#: first required. The base requires uv; each native tool is required by
+#: the extension in the member's set that runs it, in the mount's order.
+#: The nanobind member is of the python kind and lists nanobind.
 REQUIRED = {
-    "no member": (("uv", "kind python"),),
-    "package-python": (("uv", "kind python"),),
+    "no member": (("uv", "the base"),),
+    "package-python": (("uv", "the base"),),
     "package-python-nanobind": (
-        ("uv", "kind python"),
+        ("uv", "the base"),
+        ("conan", "extension conan"),
         ("cmake", "extension nanobind"),
         ("ninja", "extension nanobind"),
         ("conan", "extension nanobind"),
         ("cmake_conan", "extension nanobind"),
     ),
     "package-cpp-conan": (
-        ("cmake", "kind cpp-conan"),
-        ("conan", "kind cpp-conan"),
-        ("ninja", "kind cpp-conan"),
-        ("uv", "kind python"),
+        ("uv", "the base"),
+        ("cmake", "extension cmake"),
+        ("ninja", "extension cmake"),
+        ("conan", "extension conan"),
         ("cmake", "extension nanobind"),
         ("ninja", "extension nanobind"),
         ("conan", "extension nanobind"),
@@ -391,7 +393,11 @@ ROOT_IGNORES = (
 def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._packages import workspace_suite
+    from livery.workshop._packages import (
+        RUNTIME_LANGUAGE,
+        holds_runtime_language,
+        workspace_suite,
+    )
     from livery.workshop._phases import PhaseContext
     from livery.workshop._steps import (
         PATHS,
@@ -411,6 +417,10 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     _mounted(root)
     unit = workspace_suite(root)
     assert unit is not None
+    # The runtime's language is python, and the root's own tests hold it
+    # while the library does not.
+    assert RUNTIME_LANGUAGE == "python"
+    assert [p.path for p in (lib, unit) if holds_runtime_language(p)] == ["tests"]
     # The test phase runs the root's suite beside the library's.
     assert [package.path for package in tested((lib, unit))] == [
         "packages/lib",
@@ -421,7 +431,7 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     read = {
         name: scoped_paths(ctx, name)
         for name, record in steps_by_name().items()
-        if record.narrowing == PATHS and "python" in record.extensions
+        if record.narrowing == PATHS and RUNTIME_LANGUAGE in record.extensions
     }
     assert read == ROOT_TESTS_READ
     assert (

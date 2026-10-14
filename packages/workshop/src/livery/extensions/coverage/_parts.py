@@ -15,7 +15,8 @@ floors' preview and the coverage pages read the parts the last run
 left, both ways.
 
 `native` tells which units the reductions are asked for: every unit
-but a native kind's, whose measurer leaves its parts itself.
+that holds the runtime's language; any other is native, and its
+measurer leaves its parts itself.
 """
 
 from __future__ import annotations
@@ -121,16 +122,17 @@ def reduced(
 
 
 def native(package: Package) -> bool:
-    """Whether *package*'s suite is a native kind's, measured by its build's measurer.
+    """Whether *package*'s suite is native, measured by its build's measurer.
 
-    A native suite's measurer leaves its parts itself, so the
+    A suite is native when its package does not hold the runtime's
+    language. A native suite's measurer leaves its parts itself, so the
     reductions are never asked for it, and a package whose suite left
-    no part is not measured. The workspace's own tests carry no kind
-    and are python's.
+    no part is not measured. The workspace's own tests hold the
+    runtime's language, so they are never native.
     """
-    from livery.workshop._kinds import is_python_kind, kind_names
+    from livery.workshop._packages import holds_runtime_language
 
-    return package.kind in kind_names() and not is_python_kind(package.kind)
+    return not holds_runtime_language(package)
 
 
 def part_files(root: Path) -> list[Path]:
