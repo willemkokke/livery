@@ -1,0 +1,18 @@
+"""acme.plugin's task surface, mounted through the extensions list.
+
+The workspace contract's ``[workspace] extensions`` entry is the whole
+of discovery, and the branded App mounts the same module. The group
+below is this extension's namespace: hang the extension's own verbs on it,
+or leave it empty while the extension ships content alone.
+"""
+
+from livery.footman import group
+
+plugin = group(
+    "plugin", help="the plugin extension's verbs"
+)
+
+# @plugin.task(name="hello")
+# def hello() -> None:
+#     """Say which extension answered."""
+#     print("acme.plugin")

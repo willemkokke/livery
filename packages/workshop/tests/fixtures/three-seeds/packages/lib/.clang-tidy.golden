@@ -1,0 +1,16 @@
+# Rendered by the template channel for each C or C++ package; the gate
+# keeps it matching its render. A `.clang-tidy` deeper in the tree with
+# `InheritParentConfig: true` carries this package's own lines.
+#
+# The families a gate can hold green from the first commit: the bug
+# and portability checks, and the performance ones. readability-* is
+# left out on purpose, since its opinions collide with clang-format's
+# and with each other. A finding is an error, so the gate's verdict
+# stays its exit code.
+Checks: >
+  bugprone-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: "*"
+HeaderFilterRegex: "^$"

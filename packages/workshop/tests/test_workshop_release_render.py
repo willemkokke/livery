@@ -16,7 +16,6 @@ its golden moves with it, in the same change.
 
 from __future__ import annotations
 
-import difflib
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,12 +24,10 @@ import pytest
 import livery.footman as footman
 from livery.workshop._ci_generate import generate
 from workshop_docs_declared import jobs_restored
+from workshop_goldens import FIXTURES, match
 
 # The wheels job is nanobind's, added as the mount adds it.
 from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
-
-#: The goldens, one directory per workspace and forge.
-FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 FORGES = ("github", "gitea", "gitlab")
 
@@ -98,40 +95,6 @@ def _workflows(root: Path) -> dict[str, str]:
     }
 
 
-def _match(rendered: dict[str, str], goldens: Path, scratch: Path) -> None:
-    """Fail unless *rendered* is the files in *goldens*, name for name, byte for byte.
-
-    Each file that moved is written to *scratch*, the file a deliberate
-    render change copies over its golden, and its difference is part
-    of the failure.
-    """
-    where = goldens.relative_to(FIXTURES).as_posix()
-    moved: list[str] = []
-    for name, text in sorted(rendered.items()):
-        golden = goldens / name
-        expected = golden.read_bytes().decode("utf-8") if golden.is_file() else ""
-        if text == expected:
-            continue
-        scratch.mkdir(exist_ok=True)
-        (scratch / name).write_bytes(text.encode("utf-8"))
-        moved.append(
-            "".join(
-                difflib.unified_diff(
-                    expected.splitlines(keepends=True),
-                    text.splitlines(keepends=True),
-                    f"{where}/{name}",
-                    f"{scratch / name}",
-                )
-            )
-        )
-    assert not moved, (
-        f"the render moved under {where}; a deliberate change copies the files"
-        f" in {scratch} over the goldens in the same change:\n" + "\n".join(moved)
-    )
-    kept = sorted(path.name for path in goldens.iterdir())
-    assert kept == sorted(rendered), f"{where} holds goldens no render writes"
-
-
 @pytest.mark.parametrize("forge", FORGES)
 def test_a_pure_workspace_releases_through_the_publish_job_alone(
     tmp_path: Path, forge: str
@@ -142,7 +105,7 @@ def test_a_pure_workspace_releases_through_the_publish_job_alone(
     # GitLab's one document carries the release's jobs beside every other.
     name = ".gitlab-ci.yml" if forge == "gitlab" else "release.yml"
     rendered = {name: _workflows(root)[name]}
-    _match(rendered, FIXTURES / "release-pure" / forge, tmp_path / "render")
+    match(rendered, FIXTURES / "release-pure" / forge, tmp_path / "render")
 
 
 @pytest.mark.usefixtures("nanobind_jobs")
@@ -151,7 +114,7 @@ def test_a_native_workspace_renders_every_workflow_as_its_golden(
     tmp_path: Path, forge: str
 ) -> None:
     root = _workspace(tmp_path / "workspace", forge, NATIVE)
-    _match(_workflows(root), FIXTURES / "release-native" / forge, tmp_path / "render")
+    match(_workflows(root), FIXTURES / "release-native" / forge, tmp_path / "render")
 
 
 @pytest.mark.parametrize("forge", FORGES)
@@ -172,4 +135,4 @@ def test_a_workspace_listing_ruff_alone_renders_no_coverage_entry(
             assert not [task for task in tasks if task.startswith("coverage.")]
     rendered = _workflows(root)
     assert not [name for name, text in rendered.items() if "coverage." in text]
-    _match(rendered, FIXTURES / "ruff-alone" / forge, tmp_path / "render")
+    match(rendered, FIXTURES / "ruff-alone" / forge, tmp_path / "render")
