@@ -1298,7 +1298,9 @@ slices, each mergeable alone:
    the python extension; `fm new.package` takes a combination,
    completed from the installed package-level extensions, since the
    combinations listing goes with #1377. With it and phase 13, the
-   vocabulary test's allowance names only the runtime.
+   vocabulary test's allowance names the runtime, and beside it only
+   rows that name the later change removing them (#1534, phases 14 and
+   15).
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
@@ -1392,8 +1394,10 @@ parts, each mergeable alone:
   python and conan answer.
 - P1b (#1618): nanobind answers which members its wheels job builds,
   and the wheel identity check moves into the build steps.
-- P1c (#1619): uv is the base's tool; cmake, ninja and conan are
-  required by the extensions that run them.
+- P1c (built, #1619): uv is the base's tool; cmake, ninja and conan
+  are required by the extensions that run them. Every base mention of
+  a native tool is a `TOOL_ALLOWANCE` row naming the change that
+  removes it, counted exactly.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
 - P1e (#1620): each extension writes its own manifest's requirement on
