@@ -1,0 +1,7 @@
+# The kinds present
+
+| kind | derives from | packages | gate phases |
+| --- | --- | --- | --- |
+| cpp-conan | nothing | packages/lib | build, format, lint, test |
+| python | nothing | packages/echo | examples, format, lint, test, typecheck |
+| python-nanobind | python | packages/native | examples, format, lint, test, typecheck |

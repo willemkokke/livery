@@ -1,0 +1,94 @@
+# Composed by `fm sync` from the base's template and the tables
+# each registered step owns; the gate keeps it matching. Edit inside
+# the region at the end, which is the repository's own; an edit
+# anywhere else is drift.
+# The workspace's virtual root: never built, never published.
+[project]
+name = "acme"
+version = "0.0.1"
+description = "The acme monorepo (virtual root)."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "A", email = "a@example.com" }]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev", "docs"]
+
+[tool.uv.workspace]
+# The members, explicitly: each is a package with a contract of its
+# own, and this file is rendered from them, so a glob would only
+# re-derive the same list while letting a stray directory join
+# unnoticed. A non-python member (a cpp-conan package) is no uv project
+# and never appears.
+members = ["packages/echo", "packages/native"]
+
+[tool.uv.sources]
+acme-echo = { workspace = true }
+acme-native = { workspace = true }
+
+[dependency-groups]
+# What the site's build imports from the venv: each line is a listed
+# extension's answer to the `python.docs-group` query, so an extension
+# taken off the list takes its lines with it, and its declaration is
+# where each floor and its reason live. The group is empty while no
+# listed extension answers, and stays declared, since `default-groups`
+# above names it.
+docs = []
+dev = [
+    # uv itself, unconstrained so it tracks latest; the lockfile still
+    # resolves it to one exact version (footman's lockfile-churn lesson).
+    "uv",
+    # Typed tool handles tasks.py runs through.
+    "livery-footman>=0.52.2",
+    "livery-toolroom>=0.6.2",
+    # The workspace members, so root tests import them; an entry may
+    # carry extras the dev loop needs.
+    "acme-echo",
+    "acme-native",
+    # Every contract extension that is not already a member above, so a
+    # rendered tasks.py can always import its plugins.
+    "livery-workshop",
+    "livery-extensions-ruff",
+    "livery-extensions-basedpyright",
+    "livery-extensions-mypy",
+    "livery-extensions-pytest",
+    "livery-extensions-clang-format",
+    "livery-extensions-clang-tidy",
+    # An extension member's editor configure asks this interpreter
+    # where nanobind's cmake directory is, so the venv carries it
+    # beside the build's own isolated copy.
+    "nanobind>=2.7",
+    # What the listed extensions need in the venv: each line is an
+    # extension's answer to the `python.dev-group` query, so an extension
+    # taken off the list takes its lines with it, and its declaration is
+    # where each floor and its reason live.
+    "mypy>=1.14",
+    "pytest>=9.0",
+    "pytest-xdist>=3.6",
+]
+
+[tool.footman]
+# Every verb brings the environment current from the lock itself, and
+# `fm sync` rewrites this file before it syncs: the runner's
+# handoff enters the environment as it is, so a member deleted from
+# packages/ never fails the command that removes it from here.
+uv-handoff = "enter"
+
+[tool.footman.notes]
+# Every misuse note fails the task at its boundary: a raw spawn or
+# an ambient write is fixed or deliberately classified, never
+# ambient. Loosen a single kind here with a reason, never the star.
+"*" = "error"
+
+# The repository's own tables: whole tables and array-of-table entries
+# (a `[tool.x]` of your own), never a key inside a table the render
+# wrote; a tool with an `extend-` spelling takes that.
+# -- workshop: region tables, yours to edit; the render keeps it --
+# -- workshop: end tables --

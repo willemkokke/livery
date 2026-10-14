@@ -1,0 +1,27 @@
+# Written by `fm sync` from the pytest extension; the gate keeps it
+# matching. Edit inside the region at the end, which is the repository's
+# own; an edit anywhere else is drift.
+[pytest]
+testpaths = ["packages"]
+# Test modules are named by their path (`--import-mode=importlib`), so
+# two packages may both have a tests/test_lifecycle.py. That leaves the
+# tests directories off sys.path, so they go on pythonpath for the
+# helper modules, which carry their package's name and so never clash.
+pythonpath = ["packages/echo/tests", "packages/native/tests", ]
+# `-n auto` fans the suite across cores; `worksteal` because durations
+# are uneven (footman measured it; the choice carries until we measure
+# here).
+addopts = ["-q", "-n", "auto", "--dist=worksteal", "--import-mode=importlib"]
+# The cache lives with the workshop's state, never in the root.
+cache_dir = ".workshop/.cache/pytest"
+# A passing test's tmp_path goes at its teardown, on the worker that ran
+# it; a failing test's stays for inspection. Kept whole, every session's
+# directories stay until a later session, in any checkout on the machine,
+# deletes the oldest tree in its controller after its last test: a full
+# suite's tree runs to a hundred thousand files, a minute of deleting.
+tmp_path_retention_policy = "failed"
+
+# The repository's own settings: keys of the [pytest] table above that
+# the render does not write.
+# -- workshop: region settings, yours to edit; the render keeps it --
+# -- workshop: end settings --

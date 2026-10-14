@@ -1,0 +1,5 @@
+# The conan workspace: a conan command run inside this folder
+# resolves each package below from its source tree. Rendered from
+# the members packaged with conan; the gate keeps it matching.
+packages:
+  - path: packages/lib
