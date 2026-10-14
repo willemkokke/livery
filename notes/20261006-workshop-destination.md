@@ -754,7 +754,7 @@ arrives when an extension that requires docs needs it; none has yet:
 | --- | --- | --- | --- |
 | `rewrite_nav_block` | nothing: a generator writes `nav.<name>.toml` as data | any third-party generator | 10 |
 | `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
-| `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
+| `run_suites`, `kind_examples` | python's answers to `python.test.runner` and `python.examples.runner`, which pytest asks (step 7's P1g); `workspace_suite` stays the base's | pytest (ours) | 11 |
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
 | `CheckRecord`, `Claim`, `Fragment`, `Option` as constructed records | `[checks.<tool>.<role>]`, `claims`, `[fragments."<target>"]` and `options` tables in `extension.toml` | the eight (ours) | 10 |
@@ -1147,9 +1147,9 @@ move; `KindRecord`, `register_kind` and the kind registry go; a check's
 lists for the check to apply, and the eight tool extensions move with
 it; nanobind declares the wheels job under `[ci.jobs.<point>.<name>]` and `_ci_generate` stops
 reading the member roster;
-`[categories]` and `[root-files."<path>"]` as data; `run_suites`, `kind_examples`
-and `workspace_suite` become `livery.extensions.python`, and the
-pytest extension requires `python`; `public_modules` and
+`[categories]` and `[root-files."<path>"]` as data; `run_suites` and
+`kind_examples` become python's answers to two queries pytest asks,
+and `workspace_suite` stays the base's; `public_modules` and
 `compile_commands` become queries. The second change: the plan's sentence
 that the conan extension owns the conan cache is replaced. Since #1112
 a rendered `conanws.yml` resolves siblings from their sources and the
@@ -1220,9 +1220,10 @@ slices, each mergeable alone:
       way; 4b the private-reach rule, the extension's
       `[rules.private-reaches]` over the layering check's parse, its
       allowance the root contract's `[[python.private-reaches]]`, and
-      this repository's root test retired (issue #1365). Its seeds,
-      `run_suites`, `kind_examples` and `workspace_suite` move with
-      slice 6, and `uv` moves to the base's own declaration there.
+      this repository's root test retired (issue #1365). Its seeds move
+      with step 7's templates; the suite runners became python's
+      answers to two queries pytest asks, and `uv` the base's own
+      requirement, both in step 7.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind (ruled
    2026-10-10). `cmake` configures, builds and tests a CMake project
    and names no language: a C, Fortran or CUDA project, or any project
@@ -1298,7 +1299,9 @@ slices, each mergeable alone:
    the python extension; `fm new.package` takes a combination,
    completed from the installed package-level extensions, since the
    combinations listing goes with #1377. With it and phase 13, the
-   vocabulary test's allowance names only the runtime.
+   vocabulary test's allowance names the runtime, and beside it only
+   rows that name the later change removing them (#1534, phases 14 and
+   15).
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
@@ -1392,6 +1395,15 @@ parts, each mergeable alone:
   which python and conan answer (`registry`, combined by `agreed`); a
   member whose set answers no registry, or two, refuses the wave by
   name, and neither the train nor the loop imports the backends.
+- P1a (#1624): the release train and the loop ask a member's listed
+  extensions for its distributions and its registry's probe, which
+  python and conan answer.
+- P1b (#1618): nanobind answers which members its wheels job builds,
+  and the wheel identity check moves into the build steps.
+- P1c (built, #1619): uv is the base's tool; cmake, ninja and conan
+  are required by the extensions that run them. Every base mention of
+  a native tool is a `TOOL_ALLOWANCE` row naming the change that
+  removes it, counted exactly.
 - P1b (built, #1618): nanobind answers which members its wheels job
   builds (`job-built-members`), and the wheel identity check moves into
   the build steps: python's build refuses a platform-tagged wheel. A
@@ -1399,14 +1411,42 @@ parts, each mergeable alone:
   answers `distributions` for a recipe that names a reference.
 - P1c (#1619): uv is the base's tool; cmake, ninja and conan are
   required by the extensions that run them.
+- P1d (built, #1621): cpp answers a `host-tools` query naming the C
+  compilers, until phase 14's toolchains; `fm doctor` and
+  `fm env.check` union the answers of the workspace's packages.
+- P1e (#1620): each extension writes its own manifest's requirement on
+  a sibling; a sibling no writer takes refuses.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
 - P1e (#1620): each extension writes its own manifest's requirement on
   a sibling; a sibling no writer takes refuses.
+- P1f (built, #1622): one base constant names the runtime's language,
+  `python`; a member holding it carries a `pyproject.toml` and joins
+  the uv workspace, and the workspace's own tests are judged as python.
+  `is_python_kind` and `requires_pyproject` go.
+- P1e (built, #1620): each extension writes its own manifest's
+  requirement on a sibling, through the package query
+  `requirement-writers`; a sibling no writer takes refuses, naming its
+  set. Conan's writer opens a recipe's `requires` tuple when it has
+  none, and `layering.sibling-references`' fix judges the contracts it
+  wrote.
 - P1f (#1622): one base constant names the runtime's language,
   `python`.
 - P1g (#1623): pytest runs suites through queries python answers;
   `run_suites` and `kind_examples` leave the public names.
+- P1h (built, #1625): every reader of the kind reads the held set
+  instead: a package's categories come from its held extensions'
+  `[categories]` tables over the base's, the extension later in
+  composition order winning a tie, so python's `src/**` wins over
+  cpp's in a nanobind member; the per-file ignores and the fragments
+  read the held sets; the kinds guidance becomes
+  `compositions.present.md`; the dead kind render facts go.
+- P1g (built, #1623): pytest runs suites through queries python
+  declares and answers under `[for.pytest.queries]`,
+  `python.test.runner` and `python.examples.runner`; `run_suites` and
+  `kind_examples` leave the public names. A workspace where no package
+  holds python runs no python suite, its own `tests/` included, and
+  the step says why.
 - P1h (#1625): every reader of the kind reads the held set instead;
   the kinds guidance becomes the compositions guidance.
 - P2: nanobind holds its packages by being listed: its declaration
@@ -1584,12 +1624,13 @@ neither needs nor rules out).
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
+| cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |

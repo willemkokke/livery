@@ -134,31 +134,24 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
 
     The roster is split the way the project file splits it, ``py`` for
     the members with a dev entry and ``native`` for the rest, and the
-    per-file ignores the claims render are added for the kinds present.
-    The fragment engine reads the step records' fragments through this.
+    per-file ignores the claims render are added for the sets of
+    package-level extensions the members hold, each entry's
+    ``extensions``. A roster with no member renders the ignores of the
+    workspace's own unit alone. The fragment engine reads the step
+    records' fragments through this.
     """
-    from livery.workshop._kinds import kind_names, record_for_template
     from livery.workshop._steps import per_file_ignores
 
     roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
-    kinds = []
-    for entry in roster:
-        # A roster entry names its kind's record; a template name maps
-        # to its record, and anything else is python.
-        spelled = str(entry.get("kind", "python"))
-        record = record_for_template(spelled)
-        if spelled in kind_names():
-            name = spelled
-        else:
-            name = record.name if record is not None else "python"
-        if name not in kinds:
-            kinds.append(name)
+    held = {
+        tuple(str(name) for name in entry.get("extensions", ())) for entry in roster
+    }
     return {
         **data,
         "py": [entry for entry in roster if entry.get("dev")],
         "native": [entry for entry in roster if not entry.get("dev")],
-        # The per-file ignores the claims render, for the kinds present.
-        "per_file_ignores": per_file_ignores(tuple(kinds) or ("python",)),
+        # The per-file ignores the claims render, for the sets present.
+        "per_file_ignores": per_file_ignores(sorted(held)),
     }
 
 
@@ -403,10 +396,10 @@ def wire_member(root: Path, name: str) -> None:
 
     run_uv("lock", root=root)
     run_uv("sync", root=root)
-    # A kind brings tools of its own (a native kind's build tools and
-    # the steps that judge it), so the tool lock moves with the
-    # member and the store supplies what it names: the gate that
-    # follows finds them, as it does after a birth.
+    # A member's extensions bring tools of their own (a native
+    # member's build tools and the steps that judge it), so the tool
+    # lock moves with the member and the store supplies what it names:
+    # the gate that follows finds them, as it does after a birth.
     sync_tools(root)
     print(f"  packages/{name}: seeded, wired, and installed")
 

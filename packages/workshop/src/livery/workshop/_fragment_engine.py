@@ -470,7 +470,8 @@ def plan(
         packages: Each package's path, relative to the root, to the
             extensions it lists.
         package_data: Render data for one package's files, by its
-            path: what differs per package, its kind say.
+            path: what differs per package, such as its name and its
+            release baseline.
 
     Returns:
         One output per file, sorted by path.

@@ -139,6 +139,52 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         assert answer(package, REFERENCES) == _backend.references(package)
 
 
+def test_python_answers_its_runners_while_pytest_is_listed_and_a_package_holds_it(
+    tmp_path: Path,
+) -> None:
+    """Pytest's steps ask for the functions that run the suites and the examples."""
+    from livery.extensions.python import _backend
+    from livery.workshop import Query, answer
+    from workshop_extension_fakes import package_contract, root_contract
+
+    suites: Query[object] = Query("python.test.runner")
+    examples: Query[object] = Query("python.examples.runner")
+    # The fallbacks first: no package holds python, then a package holds
+    # it and pytest is not listed, and nothing answers either way.
+    root_contract(tmp_path, '["pytest"]')
+    package_contract(tmp_path, "lib", '["cmake"]')
+    assert answer(tmp_path, suites) is None
+    assert answer(tmp_path, examples) is None
+    package_contract(tmp_path, "core", '["python"]')
+    root_contract(tmp_path, "[]")
+    assert answer(tmp_path, suites) is None
+    assert answer(tmp_path, examples) is None
+    # Listed beside a package that holds python, pytest is answered.
+    root_contract(tmp_path, '["pytest"]')
+    assert answer(tmp_path, suites) is _backend.run_test
+    assert answer(tmp_path, examples) is _backend.run_examples
+
+
+def test_a_member_listing_nothing_takes_its_kind_s_runners(tmp_path: Path) -> None:
+    """A package that lists no extension holds what its kind stands for."""
+    from livery.extensions.python import _backend
+    from livery.workshop import Query, answer
+    from workshop_extension_fakes import root_contract
+
+    suites: Query[object] = Query("python.test.runner")
+    root_contract(tmp_path, '["pytest"]')
+    # The fallback first: the C++ library's kind stands for no python.
+    lib = tmp_path / "packages" / "lib"
+    lib.mkdir(parents=True)
+    (lib / "workshop.toml").write_text('kind = "cpp-conan"\n')
+    assert answer(tmp_path, suites) is None
+    # The binary extension's kind stands for python among others.
+    native = tmp_path / "packages" / "native"
+    native.mkdir(parents=True)
+    (native / "workshop.toml").write_text('kind = "python-nanobind"\n')
+    assert answer(tmp_path, suites) is _backend.run_test
+
+
 def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     tmp_path: Path,
 ) -> None:

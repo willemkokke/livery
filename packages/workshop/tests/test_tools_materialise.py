@@ -61,7 +61,7 @@ def _read(*versions: str) -> tuple[RecordDelta, ...]:
 
 
 def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A python workspace whose kind requires nothing, with one archive and one uv tool.
+    """A python workspace that requires nothing beyond one archive and one uv tool.
 
     The archive `tea` is served from a folder source beside the records,
     never from the network; the uv tool `ruff` through the installer seam.
@@ -84,9 +84,11 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     register_kind(
         KindRecord(name="bare", backend=python.backend, template=python.template)
     )
-    # The root's own files are of the bare kind too, so nothing beyond
-    # what the contract requires is a requirement.
-    monkeypatch.setattr("livery.workshop._tools.ROOT_KIND", "bare")
+    # The root's own files run on a language named bare, which no step
+    # judges, and the base's own requirement is left out, so nothing
+    # beyond what the contract requires is a requirement.
+    monkeypatch.setattr("livery.workshop._tools.RUNTIME_LANGUAGE", "bare")
+    monkeypatch.setattr("livery.workshop._tools.base_requirements", tuple)
     payload = _zip({"tea": b"#!/bin/sh\necho tea\n", "docs/readme": b"r"})
     digest = digest_of(payload)
     Record(

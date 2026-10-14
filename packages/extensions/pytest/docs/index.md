@@ -24,6 +24,15 @@ and `fm check` runs both with the rest of the gate:
 - `examples.pytest` runs each python package's documentation examples, the
   files under `docs/examples/`, one test per file.
 
+Both steps run through the python extension. Each asks it for the
+function that runs what the step judges: its answer to
+`python.test.runner` runs the suites, and its answer to
+`python.examples.runner` runs a package's examples. The python extension
+answers while a package holds it. In a workspace where no package holds
+python, no python suite runs, the workspace's own `tests` directory
+included, and the test step says so; the examples step names each
+package it skips.
+
 While the coverage extension is listed, this extension measures for it,
 through its `[for.coverage]` table, and coverage judges what it measures.
 A workspace that lists coverage with nothing that measures has coverage

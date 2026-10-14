@@ -1,8 +1,10 @@
 """The pytest extension: unlisted it does nothing; listed, it runs the suites.
 
-Beside coverage it measures them: the configuration, the meter and the
-ignore lines arrive with coverage, and a coverage listing nothing
-measures for is dormant and named.
+Its steps run the suites and the examples through the functions the
+python extension answers with, and run nothing, saying why, while
+nothing answers. Beside coverage it measures them: the configuration,
+the meter and the ignore lines arrive with coverage, and a coverage
+listing nothing measures for is dormant and named.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from typing import cast
 
 import pytest
 
-from livery.extensions.pytest import _steps
+from livery.extensions.python import _backend as _python
 from livery.workshop import Package, PhaseContext, Query, answer
 from livery.workshop import _steps as registry
 
@@ -45,11 +47,27 @@ def registered() -> Iterator[None]:
         registry.restore(state)
 
 
-def _member(root: Path, name: str, *, serial: bool = False) -> Package:
-    """A python member; *serial* sets its suite's ``parallel`` option off."""
+def _workspace(root: Path, extensions: str = '["pytest"]') -> None:
+    """Write *root*'s contract listing *extensions*, a TOML list as written."""
+    (root / "workshop.toml").write_text(CONTRACT + f"extensions = {extensions}\n")
+
+
+def _member(
+    root: Path,
+    name: str,
+    *,
+    serial: bool = False,
+    extensions: tuple[str, ...] = ("python",),
+) -> Package:
+    """A member listing *extensions*, its contract written as the mount reads it.
+
+    *serial* sets its suite's ``parallel`` option off.
+    """
     directory = root / "packages" / name
     (directory / "tests").mkdir(parents=True)
     (directory / "docs" / "examples").mkdir(parents=True)
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    (directory / "workshop.toml").write_text(f"extensions = [{listed}]\n")
     options: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
     if serial:
         options = (("phases.test.pytest", (("parallel", False),)),)
@@ -60,6 +78,7 @@ def _member(root: Path, name: str, *, serial: bool = False) -> Package:
         kind="python",
         depends=(),
         step_options=options,
+        extensions=extensions,
     )
 
 
@@ -76,15 +95,34 @@ Call = tuple[tuple[str, ...], dict[str, object]]
 
 
 def _watch(monkeypatch: pytest.MonkeyPatch) -> list[Call]:
-    """Each call the test step makes of the kind's suite runner."""
+    """Each call the test step makes of python's suite runner.
+
+    The python extension answers with the function it finds on its
+    module when asked, so the watcher stands in for it there.
+    """
     calls: list[Call] = []
 
-    def run_suites(kind: str, *arguments: str, **options: object) -> None:
-        assert kind == "python"
+    def run_test(*arguments: str, **options: object) -> None:
         calls.append((arguments, options))
 
-    monkeypatch.setattr(_steps, "run_suites", run_suites)
+    monkeypatch.setattr(_python, "run_test", run_test)
     return calls
+
+
+Ran = tuple[str, Path, tuple[str, ...], tuple[str, ...]]
+
+
+def _watch_examples(monkeypatch: pytest.MonkeyPatch) -> list[Ran]:
+    """Each call the examples step makes of python's examples runner."""
+    ran: list[Ran] = []
+
+    def run_examples(
+        package: Package, root: Path, files: tuple[str, ...], arguments: tuple[str, ...]
+    ) -> None:
+        ran.append((package.path, root, files, arguments))
+
+    monkeypatch.setattr(_python, "run_examples", run_examples)
+    return ran
 
 
 def _paths(call: Call) -> tuple[str, ...]:
@@ -94,7 +132,8 @@ def _paths(call: Call) -> tuple[str, ...]:
 
 
 # The refusals first: unlisted, the extension does nothing; a run with
-# nothing to collect starts no pytest.
+# nothing to collect starts no pytest, and a step that nothing answers
+# with a runner runs nothing and says why.
 
 
 def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
@@ -389,8 +428,91 @@ def test_with_no_suite_to_run_no_pytest_starts(
     )
 
 
-# The test step: one call for the suites, the workspace's own tests
-# among them, and a call of its own for a suite that is not worker-safe.
+def test_the_test_step_runs_nothing_and_says_why_while_no_package_lists_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    # A C++ library lists cmake, so no package holds python, and the
+    # workspace's own tests are the one suite the step reaches.
+    lib = _member(tmp_path, "lib", extensions=("cmake",))
+    (tmp_path / "tests").mkdir()
+    step = registry.step_for("test.pytest")
+    step.run(PhaseContext(root=tmp_path, packages=(lib,)))
+    assert calls == []
+    out = capsys.readouterr().out
+    assert "test.pytest: packages/lib skips (not a python package)" in out
+    assert (
+        "test.pytest: runs nothing; nothing answers python.test.runner, which the"
+        " python extension answers while a package holds python"
+    ) in out
+    # Once a package lists python, its suite runs beside the workspace's own.
+    one = _member(tmp_path, "one")
+    step.run(PhaseContext(root=tmp_path, packages=(lib, one)))
+    assert [_paths(call) for call in calls] == [("packages/one", "tests")]
+
+
+def test_the_examples_step_without_a_runner_skips_by_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    ran = _watch_examples(monkeypatch)
+    # The python extension answers for pytest alone, and this workspace
+    # lists nothing, so nothing answers though a package lists python.
+    _workspace(tmp_path, "[]")
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    step = registry.step_for("examples.pytest")
+    step.run(PhaseContext(root=tmp_path, packages=(one, two)))
+    assert ran == []
+    out = capsys.readouterr().out
+    for path in ("packages/one", "packages/two"):
+        assert f"examples: {path} skips (nothing answers python.examples.runner)" in (
+            out
+        )
+    # Listed, pytest is answered, and each package's examples run.
+    _workspace(tmp_path)
+    step.run(PhaseContext(root=tmp_path, packages=(one, two)))
+    assert [call[0] for call in ran] == ["packages/one", "packages/two"]
+
+
+# The test step: one call of python's runner for the suites, the
+# workspace's own tests among them, and a call of its own for a suite
+# that is not worker-safe.
+
+
+def test_pytest_hands_the_suites_to_python_s_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    tests = {"packages/one": ("packages/one/tests/test_x.py",)}
+    ctx = PhaseContext(
+        root=tmp_path,
+        packages=(one,),
+        subset=(one,),
+        tests=tests,
+        point="merge",
+        arguments=("-k", "name"),
+    )
+    registry.step_for("test.pytest").run(ctx)
+    assert calls == [
+        (
+            ("-k", "name"),
+            {
+                "packages": (one,),
+                "root": tmp_path,
+                "selection": tests,
+                "point": "merge",
+                "measured": False,
+            },
+        )
+    ]
 
 
 def test_the_suites_run_measured_while_pytest_measures_for_coverage(
@@ -417,6 +539,7 @@ def test_a_whole_run_runs_every_suite_in_one_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls = _watch(monkeypatch)
+    _workspace(tmp_path)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     (tmp_path / "tests").mkdir()
     ctx = PhaseContext(root=tmp_path, packages=(one, two), point="nightly")
@@ -433,6 +556,7 @@ def test_a_suite_that_is_not_worker_safe_runs_alone_under_one_worker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls = _watch(monkeypatch)
+    _workspace(tmp_path)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two", serial=True)
     ctx = PhaseContext(root=tmp_path, packages=(one, two))
     registry.step_for("test.pytest").run(ctx)
@@ -457,6 +581,7 @@ def test_a_scoped_run_skips_a_suite_whose_examples_alone_changed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls = _watch(monkeypatch)
+    _workspace(tmp_path)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     tests = {"packages/one": ("packages/one/tests/test_x.py",)}
     ctx = PhaseContext(
@@ -475,6 +600,7 @@ def test_a_run_over_named_files_runs_the_suites_holding_one_it_claims(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls = _watch(monkeypatch)
+    _workspace(tmp_path)
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     named = ("packages/one/src/acme/one.py", "packages/two/README.md")
     catalogue = {
@@ -492,32 +618,20 @@ def test_a_run_over_named_files_runs_the_suites_holding_one_it_claims(
     assert [_paths(call) for call in calls] == [("packages/one",)]
 
 
-# The examples step: each member's examples, by its kind's runner.
+# The examples step: each member's examples, by python's runner.
 
 
-def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    registered: None,
+def test_the_examples_run_by_python_s_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
-    ran: list[tuple[str, tuple[str, ...]]] = []
-    handed: list[tuple[str, ...]] = []
-
-    def runner(
-        package: Package, root: Path, files: tuple[str, ...], arguments: tuple[str, ...]
-    ) -> None:
-        assert root == tmp_path
-        ran.append((package.path, files))
-        handed.append(arguments)
-
-    monkeypatch.setattr(_steps, "kind_examples", lambda kind: runner)
+    ran = _watch_examples(monkeypatch)
+    _workspace(tmp_path)
     one = _member(tmp_path, "one")
     record = registry.step_for("examples.pytest")
     assert record.phase == "examples" and record.extensions == ("python",)
     assert [claim.category for claim in record.claims] == ["example"]
     record.run(PhaseContext(root=tmp_path, packages=(one,)))
-    assert ran == [("packages/one", ())]
+    assert ran == [("packages/one", tmp_path, (), ())]
     # A scoped run whose change is the package's tests alone runs none;
     # one whose change is its examples alone runs them.
     ran.clear()
@@ -528,7 +642,7 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
     record.run(
         PhaseContext(root=tmp_path, packages=(one,), subset=(one,), examples=alone)
     )
-    assert ran == [("packages/one", ())]
+    assert ran == [("packages/one", tmp_path, (), ())]
     ran.clear()
     # A run over named files runs the named examples alone.
     example = "packages/one/docs/examples/first.py"
@@ -540,14 +654,7 @@ def test_the_examples_run_by_the_kind_s_runner_and_a_kind_with_none_skips(
         catalogue={"packages/one": (("docs/examples/first.py", "example"),)},
     )
     record.run(ctx)
-    assert ran == [("packages/one", (str(tmp_path / example),))]
+    assert ran == [("packages/one", tmp_path, (str(tmp_path / example),), ())]
     # The words after -- on the step's own verb reach the runner.
-    assert set(handed) == {()}
     record.run(PhaseContext(root=tmp_path, packages=(one,), arguments=("-x",)))
-    assert handed[-1] == ("-x",)
-    monkeypatch.setattr(_steps, "kind_examples", lambda kind: None)
-
-    record.run(PhaseContext(root=tmp_path, packages=(one,)))
-    assert "examples: packages/one skips (python kind runs none)" in (
-        capsys.readouterr().out
-    )
+    assert ran[-1][3] == ("-x",)

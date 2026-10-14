@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import cwd, prog
-from livery.workshop._composition import OrderCycle, order, package_set
+from livery.workshop._composition import OrderCycle, order_or_sorted, package_set
 from livery.workshop._declaration import (
     API_VERSION,
     FILE,
@@ -317,11 +317,9 @@ def package_extensions(start: Path | None = None) -> tuple[str, ...]:
     held: list[str] = []
     for _contract, kind, names in _package_lists(root):
         held += [listing(name).name for name in names] or kind_stands_for(kind)
-    members = package_set(held, installed_declaration)
-    try:
-        return order(members, installed_declaration)
-    except OrderCycle:
-        return tuple(sorted(members))
+    return order_or_sorted(
+        package_set(held, installed_declaration), installed_declaration
+    )
 
 
 def composed_set(listed: tuple[str, ...] | list[str]) -> tuple[str, ...]:
@@ -881,12 +879,14 @@ def extension_dependencies(start: Path | None = None) -> dict[str, tuple[str, ..
 def extension_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each listed extension's ``[toolroom] requires``, name to requirement strings.
 
-    The tools the extension's own verbs need, such as ``docker>=27``,
-    then the tools each of its ``[for.<target>]`` tables requires while
-    the table applies, as [livery.workshop.contributions_for][] decides
-    it: a measurer's tool is required while the workspace lists what it
-    measures for, and never otherwise. The base and an extension no
-    installed distribution declares declare none here.
+    The tools the extension runs, such as cmake's ``cmake`` and
+    ``ninja`` or a verb's ``docker>=27``, then the tools each of its
+    ``[for.<target>]`` tables requires while the table applies, as
+    [livery.workshop.contributions_for][] decides it: a measurer's tool
+    is required while the workspace lists what it measures for, and
+    never otherwise. An extension no installed distribution declares
+    declares none here, and the base declares its own in its contract
+    file, which the tool requirements read at a site of its own.
     """
     active = resolved_targets(start)
     applies = _contributing(active)
