@@ -754,7 +754,7 @@ arrives when an extension that requires docs needs it; none has yet:
 | --- | --- | --- | --- |
 | `rewrite_nav_block` | nothing: a generator writes `nav.<name>.toml` as data | any third-party generator | 10 |
 | `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
-| `run_suites`, `kind_examples`, `workspace_suite` | `livery.extensions.python` | pytest (ours), which then requires `python` | 11 |
+| `run_suites`, `kind_examples` | python's answers to `python.test.runner` and `python.examples.runner`, which pytest asks (step 7's P1g); `workspace_suite` stays the base's | pytest (ours) | 11 |
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
 | `CheckRecord`, `Claim`, `Fragment`, `Option` as constructed records | `[checks.<tool>.<role>]`, `claims`, `[fragments."<target>"]` and `options` tables in `extension.toml` | the eight (ours) | 10 |
@@ -1147,9 +1147,9 @@ move; `KindRecord`, `register_kind` and the kind registry go; a check's
 lists for the check to apply, and the eight tool extensions move with
 it; nanobind declares the wheels job under `[ci.jobs.<point>.<name>]` and `_ci_generate` stops
 reading the member roster;
-`[categories]` and `[root-files."<path>"]` as data; `run_suites`, `kind_examples`
-and `workspace_suite` become `livery.extensions.python`, and the
-pytest extension requires `python`; `public_modules` and
+`[categories]` and `[root-files."<path>"]` as data; `run_suites` and
+`kind_examples` become python's answers to two queries pytest asks,
+and `workspace_suite` stays the base's; `public_modules` and
 `compile_commands` become queries. The second change: the plan's sentence
 that the conan extension owns the conan cache is replaced. Since #1112
 a rendered `conanws.yml` resolves siblings from their sources and the
@@ -1220,9 +1220,10 @@ slices, each mergeable alone:
       way; 4b the private-reach rule, the extension's
       `[rules.private-reaches]` over the layering check's parse, its
       allowance the root contract's `[[python.private-reaches]]`, and
-      this repository's root test retired (issue #1365). Its seeds,
-      `run_suites`, `kind_examples` and `workspace_suite` move with
-      slice 6, and `uv` moves to the base's own declaration there.
+      this repository's root test retired (issue #1365). Its seeds move
+      with step 7's templates; the suite runners became python's
+      answers to two queries pytest asks, and `uv` the base's own
+      requirement, both in step 7.
 3. **cpp, cmake and conan**, from the `cpp-conan` kind (ruled
    2026-10-10). `cmake` configures, builds and tests a CMake project
    and names no language: a C, Fortran or CUDA project, or any project
@@ -1426,8 +1427,12 @@ parts, each mergeable alone:
   wrote.
 - P1f (#1622): one base constant names the runtime's language,
   `python`.
-- P1g (#1623): pytest runs suites through queries python answers;
-  `run_suites` and `kind_examples` leave the public names.
+- P1g (built, #1623): pytest runs suites through queries python
+  declares and answers under `[for.pytest.queries]`,
+  `python.test.runner` and `python.examples.runner`; `run_suites` and
+  `kind_examples` leave the public names. A workspace where no package
+  holds python runs no python suite, its own `tests/` included, and
+  the step says why.
 - P1h (#1625): every reader of the kind reads the held set instead;
   the kinds guidance becomes the compositions guidance.
 - P2: nanobind holds its packages by being listed: its declaration

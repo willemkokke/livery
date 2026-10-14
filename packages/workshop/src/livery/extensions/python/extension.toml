@@ -26,6 +26,19 @@ references = "livery.extensions.python._answers:references"
 level = "workspace"
 combine = "nearest"
 
+# How the python packages' suites run, several packages in one call,
+# and how one package's documentation examples run: two questions
+# about the workspace, each answered with the function that runs them,
+# the nearest answer. pytest's test and examples steps ask them, and
+# with no answer they run nothing and say so.
+[queries."python.test.runner"]
+level = "workspace"
+combine = "nearest"
+
+[queries."python.examples.runner"]
+level = "workspace"
+combine = "nearest"
+
 # The steps this extension adds to a package's lifecycle phases, one
 # per phase, each named for the extension, and the test phase's
 # isolated side, which the release train runs once per resolution it
@@ -110,3 +123,12 @@ doc = "one allowed reach: the distribution that reaches, the private it reaches,
 from = { types = ["str"], doc = "the distribution whose source reaches" }
 reaches = { types = ["str"], doc = "the private it reaches, by its dotted path" }
 reason = { types = ["str"], doc = "why the reach stays, and the public seam that will replace it" }
+
+# While pytest is listed, its steps run the suites and the examples
+# through this extension's functions, which call pytest from the
+# workspace's environment. The answers sit in this table, not under
+# [queries]: there each name already holds its declaration's table, and
+# one key cannot hold both.
+[for.pytest.queries]
+"python.test.runner" = "livery.extensions.python._answers:suite_runner"
+"python.examples.runner" = "livery.extensions.python._answers:examples_runner"

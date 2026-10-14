@@ -36,10 +36,9 @@ turns it on at the step's address. A package's
 public modules are its kind's answer,
 [livery.workshop.public_modules][], and so is where its build
 writes a compilation database, [livery.workshop.compile_commands][].
-A kind also runs tests: the suites of several packages in one call,
-[livery.workshop.run_suites][], the workspace's own tests among
-them as [livery.workshop.workspace_suite][], and a package's
-documentation examples, [livery.workshop.kind_examples][].
+The workspace's own tests, the ``tests`` directory at its root, are a
+unit of their own, [livery.workshop.workspace_suite][], which a test
+step runs beside the packages it judges.
 
 An extension reads the workspace through the names the engine reads
 it by: a contract's judged keys, [livery.workshop.read_contract][];
@@ -101,8 +100,6 @@ if TYPE_CHECKING:
     from livery.workshop._forge_lane import this_repository as this_repository
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
-    from livery.workshop._kinds import kind_examples as kind_examples
-    from livery.workshop._kinds import run_suites as run_suites
     from livery.workshop._lifecycle import compile_commands as compile_commands
     from livery.workshop._lifecycle import public_modules as public_modules
     from livery.workshop._packages import Edge as Edge
@@ -185,14 +182,12 @@ __all__ = [
     "forge_token",
     "generated_header",
     "guidance",
-    "kind_examples",
     "public_modules",
     "read_contract",
     "registry",
     "release_notes",
     "run_batched",
     "run_phase_over",
-    "run_suites",
     "scoped_files",
     "scoped_packages",
     "scoped_paths",
@@ -248,14 +243,12 @@ _EXPORTS: dict[str, str] = {
     "shipped_content": "livery.workshop._extensions",
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
-    "kind_examples": "livery.workshop._kinds",
     "public_modules": "livery.workshop._lifecycle",
     "read_contract": "livery.workshop._contract",
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",
     "run_batched": "livery.workshop._invoke",
     "run_phase_over": "livery.workshop._quality",
-    "run_suites": "livery.workshop._kinds",
     "scoped_files": "livery.workshop._steps",
     "scoped_packages": "livery.workshop._steps",
     "scoped_paths": "livery.workshop._steps",

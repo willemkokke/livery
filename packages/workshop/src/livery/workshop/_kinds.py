@@ -22,7 +22,7 @@ use is the concrete kinds.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -68,22 +68,6 @@ class Stamper(Protocol):
 
     def homes(self) -> list[Path]:
         """Every file `stamp` may write, so a caller can snapshot and restore them."""
-        ...
-
-
-class SuiteRunner(Protocol):
-    """How a kind runs the test suites of several packages in one call."""
-
-    def __call__(
-        self,
-        *arguments: str,
-        packages: tuple[Package, ...],
-        root: Path,
-        selection: Mapping[str, tuple[str, ...]] | None = None,
-        point: str = "",
-        measured: bool = False,
-    ) -> None:
-        """Run *packages*' suites, metered when *measured*; a refusal is the verdict."""
         ...
 
 
@@ -192,17 +176,6 @@ class KindRecord:
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        examples: How the kind runs a package's documentation
-            examples, the files under ``docs/examples/``, given the
-            package, the workspace root, the named example files (empty
-            for all of them) and the arguments for its tool; None for a
-            kind that runs
-            none, which the examples step says by name. A child kind
-            takes the nearest ancestor's.
-        suites: How the kind runs the test suites of several packages
-            in one call ([livery.workshop.run_suites][]); None for
-            a kind that runs none that way. A child kind takes the
-            nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its seed tree, builds nothing,
             and is never a package's ``kind``. A concrete
@@ -224,10 +197,6 @@ class KindRecord:
     parent: str = ""
     host_tools: tuple[str, ...] = ()
     artifact: str = "python"
-    examples: (
-        Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
-    ) = None
-    suites: SuiteRunner | None = None
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
     host_build: Callable[[Path], None] | None = None
@@ -352,59 +321,6 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     return tuple(sorted(tools))
 
 
-def kind_examples(
-    kind_name: str,
-) -> Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None:
-    """The examples runner *kind_name* uses: its own, else its nearest ancestor's.
-
-    The runner takes the package, the workspace root, the example
-    files a run names (empty for all of them) and the arguments for its
-    tool. None for a kind that runs no examples.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.examples is not None:
-            return record.examples
-    return None
-
-
-def run_suites(
-    kind_name: str,
-    *arguments: str,
-    packages: tuple[Package, ...],
-    root: Path,
-    selection: Mapping[str, tuple[str, ...]] | None = None,
-    point: str = "",
-    measured: bool = False,
-) -> None:
-    """Run the test suites of *packages* in one call of *kind_name*'s runner.
-
-    The kind's own runner, else its nearest ancestor's. *arguments* go
-    to the runner unchanged. The call collects each package's own
-    tests and nothing else, the workspace's own among them when
-    [livery.workshop.workspace_suite][] is in *packages*.
-    *selection* names, per package path, the test files that stand for
-    the package's suite, and *point* selects that CI point's tests.
-    *measured* runs the suites metered, which the test extension asks
-    for while a listed extension judges what it measures; unmeasured,
-    the suites run with no meter.
-
-    Raises:
-        Failed: when the kind runs no suites, or when a suite fails.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.suites is not None:
-            record.suites(
-                *arguments,
-                packages=packages,
-                root=root,
-                selection=selection,
-                point=point,
-                measured=measured,
-            )
-            return
-    fail(f"kind {kind_name!r} runs no test suites")
-
-
 def kind_stands_for(kind_name: str) -> tuple[str, ...]:
     """The extensions *kind_name*'s packages are taken to hold while they list none.
 
@@ -475,8 +391,6 @@ def _register_builtin() -> None:
             backend=_python,
             template="package-python",
             parent="base",
-            examples=_python.run_examples,
-            suites=_python.run_test,
             # A package that lists no extension is taken to hold the
             # python extension: its categories and steps are the same.
             stands_for=("python",),
