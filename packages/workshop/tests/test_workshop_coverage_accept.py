@@ -49,8 +49,10 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
             )
         )
     monkeypatch.setattr(coverage_tasks, "workspace_root", lambda: tmp_path)
-    monkeypatch.setattr("livery.workshop._quality._packages", lambda: tuple(members))
-    monkeypatch.setattr("livery.workshop._quality._git_identity", lambda root: "willem")
+    monkeypatch.setattr(
+        coverage_tasks, "discover_packages", lambda root: tuple(members)
+    )
+    monkeypatch.setattr("livery.git.config_get", lambda root, key: "willem")
     return members[0], members[1]
 
 

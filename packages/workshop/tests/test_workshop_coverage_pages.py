@@ -50,7 +50,7 @@ def _workspace(
     )
     (core / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
     (root / MODULE).write_text(SOURCE)
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     return root
 
 
@@ -108,7 +108,7 @@ def test_a_measured_file_the_checkout_lacks_is_named_on_a_desk_and_red_in_ci(
         Part(".", COVERAGE_PY, {MODULE: _entry(root), gone: Entry(digest="")}),
     )
     # Inside CI the data is the record of the tree being built: red.
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: object())
     with pytest.raises(
         _FAILURES,
         match=f"the measured data names {gone}, which the checkout does not have",
@@ -116,7 +116,7 @@ def test_a_measured_file_the_checkout_lacks_is_named_on_a_desk_and_red_in_ci(
         _render_pages(root)
     # On a desk the data outlived a move: the index names the file, and
     # the rest is drawn.
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     assert _render_pages(root) == ["core"]
     out = capsys.readouterr().out
     assert (
@@ -671,7 +671,7 @@ def test_the_store_is_read_only_where_the_pages_draw_main_s_record(
     # The docs phase's step draws this machine's data, inside CI as on a
     # desk, and pulls nothing.
     assert _render_pages(root) == []
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: object())
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: object())
     assert _render_pages(root) == []
     assert calls == []
     # The deploy phase's step reads main's record on every check leg,

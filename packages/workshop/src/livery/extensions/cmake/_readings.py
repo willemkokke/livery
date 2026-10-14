@@ -34,7 +34,7 @@ from xml.etree import ElementTree
 from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
 
 
 #: Where a measured test run leaves each package's part, under a

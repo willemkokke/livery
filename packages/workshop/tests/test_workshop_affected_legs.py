@@ -534,6 +534,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     monkeypatch.setattr(
         "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
     )
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: _run("pull_request", "main"))
     _stepping(monkeypatch, "packages/x/a.py")
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: (x,))
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
@@ -662,6 +663,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     monkeypatch.setattr(
         "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
     )
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: _run("pull_request", "main"))
     _stepping(monkeypatch, "tests/test_it.py")
     monkeypatch.setattr(
         "livery.workshop._quality._affected", lambda root, step: (unit,)
@@ -723,6 +725,7 @@ def _proved(
     monkeypatch.setattr(
         "livery.workshop._ci_context.run_context", lambda: _run("push", "", "check-a")
     )
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: _run("push", "", "check-a"))
     proved = _verified.Verified(
         "t", "5", "a" * 40, "full", ("check-a",), branch="feat/x"
     )

@@ -23,10 +23,14 @@ from pathlib import Path
 from typing import Any
 
 from livery.footman import fail
-from livery.workshop import DISTRIBUTIONS, answer
+from livery.workshop import (
+    DISTRIBUTIONS,
+    Package,
+    answer,
+    discover_packages,
+    read_contract,
+)
 from livery.workshop._composition import extension_set
-from livery.workshop._contract import load_contract
-from livery.workshop._packages import Package, discover_packages
 
 #: The extension whose packages build platform wheels.
 EXTENSION = "nanobind"
@@ -90,7 +94,7 @@ def declared_wheel_platforms(package: Package) -> list[str]:
             the key, since no leg builds its wheel. The labels are the
             package's own fact, never guessed from the check runners.
     """
-    contract = load_contract(package.directory / "workshop.toml")
+    contract = read_contract(package.directory)
     table = contract.get(EXTENSION) or {}
     declared: Any = table.get(WHEEL_PLATFORMS_KEY) if isinstance(table, dict) else None
     where = f"{package.path}: [{EXTENSION}] {WHEEL_PLATFORMS_KEY}"

@@ -37,7 +37,7 @@ from livery.extensions.docs._navblocks import (
     write_nav_block,
 )
 from livery.footman import fail
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop import Package, discover_packages
 
 if TYPE_CHECKING:
     from livery.workshop import PhaseContext

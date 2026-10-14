@@ -40,10 +40,9 @@ from livery.workshop import selected_files
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from livery.workshop import PhaseContext
+    from livery.workshop import Package, PhaseContext
     from livery.workshop._packages import (
         Neighbours,
-        Package,
         ReferencedName,
         RuleContext,
         SourceReferences,

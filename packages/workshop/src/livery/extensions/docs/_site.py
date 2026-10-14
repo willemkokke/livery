@@ -64,13 +64,15 @@ from livery.extensions.docs._theme import THEME
 from livery.footman import doc, fail, group
 from livery.workshop import (
     HUMAN,
+    Package,
     PhaseContext,
-    _extensions,
     answer,
+    discover_packages,
     guidance,
     read_contract,
+    shipped_content,
 )
-from livery.workshop._packages import Package, discover_packages, release_tag
+from livery.workshop._packages import release_tag
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
 SITE_CONFIG = "zensical.toml"
@@ -597,10 +599,7 @@ def extension_assets(root: Path) -> list[tuple[str, Path]]:
     directory, or not installed, ships none and is not listed.
     """
     found: list[tuple[str, Path]] = []
-    for extension in _extensions.stack_names(root):
-        content = _extensions.extension_content(extension)
-        if content is None:
-            continue
+    for extension, content in shipped_content(root):
         assets = content / CONTENT_ASSETS
         if assets.is_dir():
             found.append((extension, assets))
@@ -1577,7 +1576,7 @@ docs_group = group("docs", help="The workspace's documentation site")
 
 
 def _root() -> Path:
-    from livery.workshop._extensions import workspace_root
+    from livery.workshop import workspace_root
 
     root = workspace_root()
     if root is None:

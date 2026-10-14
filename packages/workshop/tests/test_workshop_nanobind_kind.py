@@ -761,9 +761,7 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     fake.create_tag("acme", "ws", tag)
     repository.release.create(tag, name="acme-geometry 0.1.0")
     repository.release.upload_asset(tag, saved.name, saved.read_bytes())
-    monkeypatch.setattr(
-        "livery.workshop._forge_lane.this_repository", lambda _root: repository
-    )
+    monkeypatch.setattr("livery.workshop.this_repository", lambda _root: repository)
 
     with pytest.raises(_FAILURES) as caught:
         _ci.floor_legs(package, tmp_path, {"packages/geometry": "0.2.0"})

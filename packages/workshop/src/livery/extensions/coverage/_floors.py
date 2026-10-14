@@ -43,13 +43,13 @@ from livery.extensions.coverage._parts import (
     reduced,
 )
 from livery.footman import fail
-from livery.workshop._contract import load_contract
+from livery.workshop import read_contract
 from livery.workshop._packages import WORKSPACE_TESTS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
 
 #: The floor a package with tests is judged at when its contract names none.
 DEFAULT_FLOOR = 100.0
@@ -89,7 +89,7 @@ def coverage_policy(package: Package) -> FloorPolicy | None:
     on purpose, and a floor beside it refuses. ``epsilon`` is a number of
     percentage points, 0.5 when absent; a negative one refuses.
     """
-    table = load_contract(package.directory / "workshop.toml").get("coverage") or {}
+    table = read_contract(package.directory).get("coverage") or {}
     raw = table.get("floor")
     # The contract's judge holds the epsilon to a number and required
     # to a boolean.
@@ -354,7 +354,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
     no mark, and its line says so. Every verdict prints with its
     numbers, so the numbers on screen are the numbers enforced.
     """
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
 
     measured = measured_coverage(root, packages)
     policies = {package.path: coverage_policy(package) for package in packages}
@@ -365,7 +365,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
     marks_why = ""
     if ratcheted:
         current, marks_why = _marks.marks(root)
-    run = run_context()
+    run = ci_run()
     problems: list[str] = []
     for package in packages:
         policy = policies[package.path]

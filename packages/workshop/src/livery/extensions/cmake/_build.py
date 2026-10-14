@@ -50,7 +50,7 @@ from livery.footman import fail
 
 if TYPE_CHECKING:
     from livery.toolroom.tools import Result
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
 
 
 #: Where the gate's cmake configure lands, under the package.

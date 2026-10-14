@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated
 
 from livery.footman import doc, fail, group
-from livery.workshop import workspace_root
+from livery.workshop import discover_packages, workspace_root
 
 coverage_group = group("coverage", help="The measured union and its floors")
 
@@ -44,11 +44,10 @@ def coverage_leg() -> None:
     so a leg that measured is never judged as an empty union.
     """
     from livery.extensions.coverage._leg import gather_leg, top_up
-    from livery.workshop._quality import _packages
     from livery.workshop._verified import read_marker
 
     root = _root()
-    packages = _packages()
+    packages = discover_packages(root)
     gather_leg(root, packages, marker=top_up(root, packages, read_marker(root)))
 
 
@@ -73,12 +72,12 @@ def coverage_union() -> None:
     from livery.extensions.coverage._floors import enforce_coverage
     from livery.extensions.coverage._union import combine_union
     from livery.git import remote_snapshot
-    from livery.workshop._ci_context import run_context, state_store
+    from livery.workshop import ci_run
+    from livery.workshop._ci_context import state_store
     from livery.workshop._metrics import leave_section
-    from livery.workshop._quality import _packages
 
     root = _root()
-    run = run_context()
+    run = ci_run()
     # The legs' per-run refs and every record the union may carry
     # from: one listing and one fetch.
     scope = (
@@ -87,7 +86,7 @@ def coverage_union() -> None:
         else nullcontext()
     )
     with scope:
-        judged = combine_union(root, _packages())
+        judged = combine_union(root, discover_packages(root))
     if judged:
         measured = enforce_coverage(root, judged)
         rounded = {path: round(value, 2) for path, value in measured.items()}
@@ -104,9 +103,9 @@ def coverage_enforce() -> None:
     judged on the cross-platform union.
     """
     from livery.extensions.coverage._floors import enforce_coverage
-    from livery.workshop._quality import _packages
 
-    enforce_coverage(_root(), _packages())
+    root = _root()
+    enforce_coverage(root, discover_packages(root))
 
 
 @coverage_group.task(name="accept")
@@ -123,9 +122,11 @@ def coverage_accept(
     a package not under auto-ratchet, at or above the current mark,
     or when the marks cannot be read.
     """
+    import os
+
     from livery.extensions.coverage import _marks
     from livery.extensions.coverage._floors import coverage_policy
-    from livery.workshop._quality import _git_identity, _packages
+    from livery.git import config_get
 
     root = _root()
     if not reason.strip():
@@ -133,7 +134,7 @@ def coverage_accept(
             "a reason is required: --reason=<why the mark comes down> goes on the"
             " record beside the new mark"
         )
-    packages = _packages()
+    packages = discover_packages(root)
     found = next((item for item in packages if item.path == package), None)
     if found is None:
         fail(
@@ -162,7 +163,7 @@ def coverage_accept(
             f"{package}'s mark is {mark.value:.2f}%; {value:.2f}% does not lower"
             " it. Raising is the ratchet's own move, when a run clears the mark."
         )
-    who = _git_identity(root)
+    who = config_get(root, "user.name") or os.environ.get("USER", "unknown")
     written = _marks.write_mark(
         root,
         package=package,

@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.forge import Registry
-    from livery.workshop._packages import Package, SourceReferences
+    from livery.workshop import Package
+    from livery.workshop._packages import SourceReferences
     from livery.workshop._queries import RequirementWriter
 
 

@@ -22,8 +22,7 @@ from typing import TYPE_CHECKING, cast
 from livery.workshop._packages import ReferencedName
 
 if TYPE_CHECKING:
-    from livery.workshop import Changes
-    from livery.workshop._packages import Package
+    from livery.workshop import Changes, Package
 
 
 @dataclass(frozen=True)

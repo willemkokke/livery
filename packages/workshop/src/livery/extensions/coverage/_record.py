@@ -69,8 +69,9 @@ from livery.extensions.coverage._format import (
     numbered,
     numbering,
 )
-from livery.workshop._ci_context import RunContext, state_store
-from livery.workshop._packages import WORKSPACE_TESTS, Package
+from livery.workshop import Package, RunContext
+from livery.workshop._ci_context import state_store
+from livery.workshop._packages import WORKSPACE_TESTS
 
 #: The rows' shape: 4 holds a unit's parts in the line format's stored
 #: form, a python suite's naming the tests that reached each line. A

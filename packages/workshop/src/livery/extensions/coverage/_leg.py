@@ -33,12 +33,12 @@ from livery.extensions.coverage._format import (
     stored,
 )
 from livery.footman import fail
-from livery.workshop._packages import WORKSPACE_TESTS, workspace_suite
+from livery.workshop import workspace_suite
+from livery.workshop._packages import WORKSPACE_TESTS
 
 if TYPE_CHECKING:
     from livery.extensions.coverage._record import Unit
-    from livery.workshop._ci_context import RunContext
-    from livery.workshop._packages import Package
+    from livery.workshop import Package, RunContext
 
 
 #: The scope a leg's file names when the gate proved the tree or
@@ -194,9 +194,9 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
     once, then each unit's row and the fixed facts it names.
     """
     from livery.extensions.coverage._record import leave_run, unit_fields, units_facts
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
 
-    run = run_context()
+    run = ci_run()
     leg = marker["leg"]
     if run is None:
         print(
@@ -349,13 +349,13 @@ def gather_leg(
     """
     from livery.extensions.coverage._parts import native
     from livery.extensions.coverage._record import Unit, closure_id
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
     from livery.workshop._verified import read_marker
 
     marker = read_marker(root) if marker is None else marker
     scope = marker["scope"]
     ran = suites_that_ran(marker, root, packages)
-    run = run_context()
+    run = ci_run()
     if not ran:
         print(f"  coverage: the gate ran {scope!r}; no suite ran, nothing to gather")
         _leave_leg(root, marker, {})
@@ -531,10 +531,11 @@ def top_up(
     a skipped leg's scope becomes ``measured``, naming them. A leg with
     nothing to run keeps its scope.
     """
-    from livery.workshop._ci_context import run_context, state_store
+    from livery.workshop import ci_run
+    from livery.workshop._ci_context import state_store
     from livery.workshop._verified import AFFECTED, NOTHING, VERIFIED
 
-    run = run_context()
+    run = ci_run()
     scope = marker["scope"]
     if run is None or scope not in (AFFECTED, NOTHING, VERIFIED):
         return marker

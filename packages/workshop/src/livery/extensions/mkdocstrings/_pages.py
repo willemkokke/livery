@@ -123,9 +123,9 @@ def _owned_root(package: Package, src: Path) -> Path | None:
     the first whose directory exists. A root
     with no ``__init__.py`` starts there, at the module its wheel ships.
     """
-    from livery.workshop._lifecycle import module_roots
+    from livery.workshop import MODULE_ROOTS, answer
 
-    for module in module_roots(package):
+    for module in answer(package, MODULE_ROOTS):
         directory = src.joinpath(*module.split("."))
         if directory.is_dir():
             return directory

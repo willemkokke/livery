@@ -46,8 +46,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
-    from livery.workshop import PhaseContext
-    from livery.workshop._packages import Package
+    from livery.workshop import Package, PhaseContext
 
 #: A cross-reference: a dotted path of at least two names, in the
 #: empty-title form ``[path][]``.
@@ -192,8 +191,8 @@ def site_request(root: Path) -> dict[str, Any]:
         documented,
         pages,
     )
+    from livery.workshop import discover_packages
     from livery.workshop._extensions import enabled_steps
-    from livery.workshop._packages import discover_packages
 
     packages = discover_packages(root)
     directives: list[tuple[str, str]] = []
@@ -238,7 +237,7 @@ def reference_problems(root: Path) -> list[str]:
     renders on. When no docstring holds a reference under a member's
     namespace, nothing is started.
     """
-    from livery.workshop._packages import discover_packages
+    from livery.workshop import discover_packages
 
     sources = [
         package.directory / "src"

@@ -15,7 +15,7 @@ from livery.footman import fail
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
 
 
 def verify(

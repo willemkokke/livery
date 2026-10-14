@@ -20,8 +20,7 @@ from livery.footman import fail
 if TYPE_CHECKING:
     from livery.extensions.coverage._format import Part
     from livery.extensions.coverage._record import Record, Unit
-    from livery.workshop._ci_context import RunContext
-    from livery.workshop._packages import Package
+    from livery.workshop import Package, RunContext
 
 
 #: The scope of a leg a pull request did not run: every suite carried.
@@ -105,12 +104,12 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         run_contexts,
         run_legs,
     )
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
     from livery.workshop._verified import AFFECTED, FULL, NOTHING, VERIFIED
 
     # The floors read the union file this run writes, and no other.
     (root / UNION).unlink(missing_ok=True)
-    run = run_context()
+    run = ci_run()
     if run is None:
         fail(
             "the union reads the run's per-run refs, and outside CI there is no"
