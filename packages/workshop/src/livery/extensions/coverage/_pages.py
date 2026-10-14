@@ -132,7 +132,7 @@ def render_coverage_pages(
     members drawn.
     """
     from livery.extensions.coverage._floors import floor_status
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
 
     prefixes = tuple(f"{package.path}/" for package in packages)
     measured = _measured(root, prefixes, merged=merged)
@@ -148,7 +148,7 @@ def render_coverage_pages(
     for line in combined.left_out:
         print(f"  coverage: {line}")
     gone = sorted(name for name in combined.files if name not in digests)
-    if gone and run_context() is not None:
+    if gone and ci_run() is not None:
         fail(
             f"coverage: the measured data names {', '.join(gone)}, which the"
             " checkout does not have; inside CI the data is the record of the"

@@ -28,8 +28,7 @@ from livery.footman import fail
 if TYPE_CHECKING:
     from livery.forge import Repository
     from livery.toolroom.tools import Result
-    from livery.workshop._packages import Package
-    from livery.workshop._registries import RegistryTarget
+    from livery.workshop import Package, RegistryTarget
 
 
 def conan_requirements(conanfile: Path) -> dict[str, str]:
@@ -354,7 +353,7 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
             a copy beside the package it builds. False writes the
             paths relative to the root, for the file the root holds.
     """
-    from livery.workshop._packages import discover_packages
+    from livery.workshop import discover_packages
 
     entries = [
         f"  - path: {(root / member.path).as_posix()}"
@@ -495,7 +494,7 @@ def publish_to_releases(package: Package, root: Path, *, version: str) -> bool:
             one stopped.
     """
     from livery.forge import ForgeError
-    from livery.workshop._forge_lane import this_repository
+    from livery.workshop import this_repository
 
     tag = f"{package.path}/v{version}"
     caches = sorted(
@@ -706,7 +705,7 @@ class ConanRegistry:
         # One connection for the probe's whole life: the wave polls
         # this in a loop until the artifact is served.
         if self._repository is None:
-            from livery.workshop._forge_lane import this_repository
+            from livery.workshop import this_repository
 
             self._repository = this_repository(self._root)
         repository = self._repository
@@ -731,7 +730,7 @@ def member_path(root: Path, name: str) -> str:
     Names the member whose releases carry a conan package, so a
     consumer turns a requirement's name into the tag that holds it.
     """
-    from livery.workshop._packages import discover_packages
+    from livery.workshop import discover_packages
 
     for package in discover_packages(root):
         if package.name == name:
@@ -752,7 +751,7 @@ def restore_from_releases(root: Path, name: str, version: str, *, cwd: Path) -> 
             no cache for this host, or the bytes do not match the
             digest.
     """
-    from livery.workshop._forge_lane import this_repository
+    from livery.workshop import this_repository
 
     path = member_path(root, name)
     if not path:

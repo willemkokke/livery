@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.extensions.python._parse import ParsedModule
-    from livery.workshop import PhaseContext
-    from livery.workshop._packages import Package, RuleContext
+    from livery.workshop import Package, PhaseContext
+    from livery.workshop._packages import RuleContext
 
 #: Where the allowance lives in the root contract.
 ALLOWANCE = "[[python.private-reaches]]"
@@ -108,9 +108,9 @@ def scan(
 
 def allowance(root: Path) -> dict[tuple[str, str], str]:
     """The root contract's allowed reaches: each distribution and private, to why."""
-    from livery.workshop._contract import load_contract
+    from livery.workshop import read_contract
 
-    table = load_contract(root / "workshop.toml").get("python", {})
+    table = read_contract(root).get("python", {})
     entries = table.get("private-reaches", []) if isinstance(table, dict) else []
     return {
         (str(entry["from"]), str(entry["reaches"])): str(entry.get("reason", ""))
@@ -121,12 +121,12 @@ def allowance(root: Path) -> dict[tuple[str, str], str]:
 
 def _owners(packages: tuple[Package, ...]) -> dict[str, str]:
     """Each module root a distribution ships, to the distribution."""
-    from livery.workshop import _lifecycle
+    from livery.workshop import MODULE_ROOTS, answer
 
     return {
         root: package.name
         for package in packages
-        for root in _lifecycle.module_roots(package)
+        for root in answer(package, MODULE_ROOTS)
     }
 
 

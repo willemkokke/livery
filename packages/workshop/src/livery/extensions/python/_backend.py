@@ -27,11 +27,11 @@ import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
 from livery.toolroom.tools import pytest
-from livery.workshop import Query
-from livery.workshop._packages import Neighbours, Package, SourceReferences
+from livery.workshop import Package, Query
+from livery.workshop._packages import Neighbours, SourceReferences
 
 if TYPE_CHECKING:
-    from livery.workshop._registries import RegistryTarget
+    from livery.workshop import RegistryTarget
 
 #: The python suffixes a python step's claims admit; a foreign file
 #: an explicit path names passes through untouched.
@@ -307,10 +307,10 @@ def run_test(
         names = ", ".join(package.path for package in packages)
         print(f"  tests: no test directory in {names}; nothing to collect")
         return
-    from livery.workshop._ci_context import run_context
+    from livery.workshop import ci_run
     from livery.workshop._pytest_speed import FILE_VARIABLE
 
-    run = run_context()
+    run = ci_run()
     with tempfile.TemporaryDirectory() as scratch:
         # The workshop's speed plugin sums each package's test time
         # into this file; the sums print beside the marks afterwards,
@@ -630,7 +630,8 @@ def _extra_siblings(package: Package) -> tuple[Neighbours, frozenset[str]]:
     longest member prefix it matches is one of their roots. Empty for a
     package that declares no extra, which then reads no other member.
     """
-    from livery.workshop._packages import discover_packages, neighbours, root_of
+    from livery.workshop import discover_packages
+    from livery.workshop._packages import neighbours, root_of
 
     extras = _extra_distributions(package)
     if not extras:

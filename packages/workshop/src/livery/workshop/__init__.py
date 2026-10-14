@@ -85,7 +85,7 @@ from __future__ import annotations
 
 # The literal-False spelling the checkers honour without importing
 # `typing`: the names below are what a checker sees, and at runtime
-# `__getattr__` serves each from its module on first use, so importing
+# `__getattr__` serves each from its module when it is read, so importing
 # one private module of the workshop never loads the rest.
 TYPE_CHECKING = False
 if TYPE_CHECKING:
@@ -260,7 +260,13 @@ _PACKAGES = ("testing",)
 
 
 def __getattr__(name: str) -> object:
-    """Serve a public name from its module on first use, then keep it."""
+    """Serve a public name from its module, each time it is read.
+
+    The value is never kept here. A kept value would be whatever the
+    module held at the first read, so a test that patched the module's
+    name before that read would leave its fake in this module for the
+    rest of the process.
+    """
     import importlib
 
     if name in _PACKAGES:
@@ -270,5 +276,4 @@ def __getattr__(name: str) -> object:
         if module is None:
             raise AttributeError(f"module 'livery.workshop' has no attribute {name!r}")
         value = getattr(importlib.import_module(module), name)
-    globals()[name] = value
     return value

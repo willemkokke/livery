@@ -41,7 +41,7 @@ from livery.footman import fail
 from livery.workshop import Query
 
 if TYPE_CHECKING:
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
 
 #: Where a measurer leaves the parts it read inside its own step, one
 #: file per unit, under a directory named after the measurer.

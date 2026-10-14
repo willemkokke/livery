@@ -405,7 +405,7 @@ def test_the_pages_show_what_coverage_py_shows(
 
     root = _workspace(tmp_path / "ws")
     measure(root)
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     monkeypatch.chdir(root)
     reference, report = _reference(root)
     assert _pages.draw(root, merged=False) == ["core"]
@@ -475,7 +475,7 @@ def test_pages_drawn_from_stored_parts_equal_the_pages_drawn_at_render_time(
     root = _workspace(tmp_path / "ws")
     tests = "packages/core/tests/test_shapes.py::"
     measure(root, contexts=(f"{tests}test_a", f"{tests}test_b"))
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
     monkeypatch.chdir(root)
     assert _pages.draw(root, merged=False) == ["core"]
     tree = root / "packages" / "core" / "htmlcov"

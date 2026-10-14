@@ -532,7 +532,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y, z))
     monkeypatch.setattr(
-        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
+        "livery.workshop._ci_context.run_context",
+        lambda environ=None: _run("pull_request", "main"),
     )
     _stepping(monkeypatch, "packages/x/a.py")
     monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: (x,))
@@ -660,7 +661,8 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
     monkeypatch.setattr(
-        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
+        "livery.workshop._ci_context.run_context",
+        lambda environ=None: _run("pull_request", "main"),
     )
     _stepping(monkeypatch, "tests/test_it.py")
     monkeypatch.setattr(
@@ -721,7 +723,8 @@ def _proved(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
     monkeypatch.setattr(
-        "livery.workshop._ci_context.run_context", lambda: _run("push", "", "check-a")
+        "livery.workshop._ci_context.run_context",
+        lambda environ=None: _run("push", "", "check-a"),
     )
     proved = _verified.Verified(
         "t", "5", "a" * 40, "full", ("check-a",), branch="feat/x"

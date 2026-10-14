@@ -1305,6 +1305,12 @@ slices, each mergeable alone:
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
    base's public API in the same move (decision record, 2026-10-13).
+   Ruled 2026-10-14, on the plan (#1664): a requirer leaves before its
+   targets, one extension per part, and each part is two pull requests
+   under one issue, the names it needs made public and then the move.
+   P0 (built, #1665) rewrites the reads of private names that already
+   have a public one; then cmake, mkdocstrings, docs, coverage,
+   nanobind, conan, cpp and python, in that order.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -3241,6 +3247,23 @@ neither needs nor rules out).
   than its 0.1.0 floor (#1626), so the next release names git with the
   workshop and the train raises the floor. 11c is complete with this
   part.
+- 2026-10-14, Willem, on step 8's plan (#1664): the extensions leave
+  in the order their requirements force, a requirer before its
+  targets, because a requirer's wheel depends on its target's
+  distribution and the workshop cannot depend on its own extension.
+  Building and uploading wheels is the python extension's, the upload
+  the dev release act calls included. Pygments and its stubs move with
+  the coverage extension, their only importer; the 2026-10-13 entry put
+  them on the workshop because coverage shipped in its wheel. One
+  release wave at the end of the step publishes the workshop, the eight
+  extensions and the tool extensions together. Three choices wait on
+  him (Open, 7).
+- 2026-10-15, step 8's P0 (#1665): `livery.workshop` serves each public
+  name from its defining module on every read and keeps none, so a test
+  that patches a defining module before the first read leaves no fake
+  behind; a test patches a name where the code under test reads it. The
+  in-wheel extensions read 57 private names of the base at 97 places
+  after P0, from 71 at 158; cpp reads none.
 
 ## Open
 
@@ -3271,3 +3294,13 @@ recommendation. Owner: Willem, unless named.
    govern carries the admin token and the gate job the run's own, so
    one job would hold both, against the rule that a job takes the
    run's token alone (#1280). Owner: Willem.
+7. **Step 8's three open choices** (#1664). (a) The workshop's tests
+   that mount a moved extension as data: they skip where it is not
+   installed (recommended), since a `test` extra naming the extension
+   is a dependency edge back to the workshop, which the cycle check
+   refuses. (b) A package born from a template whose extension no
+   package lists yet: an `--extension` option on `fm new.package`
+   (recommended), or template names that carry their extension. (c)
+   nanobind's reads of python and conan: entry modules exporting the
+   names it uses (recommended; conan's until phase 13), or queries
+   python and conan answer. Owner: Willem.

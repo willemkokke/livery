@@ -20,9 +20,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from livery.footman import fail
-from livery.workshop import Package, discover_packages, read_contract
+from livery.workshop import (
+    MODULE_ROOTS,
+    Package,
+    answer,
+    discover_packages,
+    read_contract,
+)
 from livery.workshop._graph import order_topologically
-from livery.workshop._lifecycle import module_roots
 
 #: Where package docs mount inside the site's tree, per package
 #: directory name. Gitignored; rebuilt on every docs verb.
@@ -85,7 +90,7 @@ def imported_place(package: Package) -> tuple[str, ...] | None:
     wins; of two with as many, the one answered first. None for a
     package no import path reaches.
     """
-    roots = module_roots(package)
+    roots = answer(package, MODULE_ROOTS)
     if not roots:
         return None
     return tuple(min(roots, key=lambda root: root.count(".")).split("."))

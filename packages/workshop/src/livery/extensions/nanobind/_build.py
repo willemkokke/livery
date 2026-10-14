@@ -26,8 +26,7 @@ from livery.extensions.python import _backend as _python
 from livery.footman import fail
 
 if TYPE_CHECKING:
-    from livery.workshop import PhaseContext
-    from livery.workshop._packages import Package
+    from livery.workshop import Package, PhaseContext
 
 #: What ``uv tool run`` resolves for the build. A floor and a cap,
 #: not an exact pin: the run has no lockfile to consult, and a major

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from livery.workshop._packages import Package
+    from livery.workshop import Package
     from livery.workshop._queries import RequirementWriter
 
 

@@ -413,9 +413,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     fake.create_repo("acme", "ws")
     repository = fake.repository("acme", "ws")
     target = RegistryTarget(kind="conan", url="fake://acme/ws", releases=True)
-    monkeypatch.setattr(
-        "livery.workshop._forge_lane.this_repository", lambda _root: repository
-    )
+    monkeypatch.setattr("livery.workshop.this_repository", lambda _root: repository)
     monkeypatch.setattr(
         "livery.workshop._registries.resolve_registry", lambda _root, _kind: target
     )
@@ -470,9 +468,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
 
     # The re-run finishes it: the tag is not read as a receipt.
     monkeypatch.undo()
-    monkeypatch.setattr(
-        "livery.workshop._forge_lane.this_repository", lambda _root: repository
-    )
+    monkeypatch.setattr("livery.workshop.this_repository", lambda _root: repository)
     monkeypatch.setattr(
         "livery.workshop._registries.resolve_registry", lambda _root, _kind: target
     )

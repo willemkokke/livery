@@ -1210,36 +1210,36 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
 @pytest.fixture
 def extensioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A workspace listing the base and a theme extension whose content is faked."""
-    from livery.workshop import _extensions
+    from livery.extensions.docs import _site
 
     root = _workspace(tmp_path, docs_table='extensions = ["acme.theme"]\n')
     content = tmp_path / "acme-theme-content"
     (content / "docs" / "assets").mkdir(parents=True)
     (content / "docs" / "assets" / "theme.css").write_text("body { color: red }\n")
-    real = _extensions.extension_content
+    real = _site.shipped_content
 
-    def faked(extension: str) -> Path | None:
-        return content if extension == "acme.theme" else real(extension)
+    def faked(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
+        return (*real(start), ("acme.theme", content))
 
-    monkeypatch.setattr(_extensions, "extension_content", faked)
+    monkeypatch.setattr(_site, "shipped_content", faked)
     return root
 
 
 def test_a_extension_without_site_assets_stages_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.extensions.docs import _site
     from livery.extensions.docs._site import extension_assets, stage_extension_assets
-    from livery.workshop import _extensions
 
     root = _workspace(tmp_path, docs_table='extensions = ["acme.bare"]\n')
     monkeypatch.setattr(
-        _extensions, "extension_content", lambda extension: tmp_path / "none"
+        _site, "shipped_content", lambda start=None: (("acme.bare", tmp_path / "none"),)
     )
     assert extension_assets(root) == []
     assert stage_extension_assets(root) == []
     assert not (root / "docs" / "_extensions").exists()
     # An uninstalled extension ships nothing either.
-    monkeypatch.setattr(_extensions, "extension_content", lambda extension: None)
+    monkeypatch.setattr(_site, "shipped_content", lambda start=None: ())
     assert extension_assets(root) == []
     assert "extra_css" not in zensical_config(root)
 
