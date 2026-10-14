@@ -19,7 +19,6 @@ from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     KindRecord,
     is_python_kind,
-    kind_for,
     record_for_template,
     register_kind,
     template_chain,
@@ -396,9 +395,6 @@ def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
     assert category("include/acme/native.hpp") == SOURCE
     assert category("CMakeLists.txt") == CONFIGURATION
     assert category("conanfile.py") == CONFIGURATION
-    # The kind's tests run on a build; python's run on source.
-    assert kind_for("cpp-conan").tests_need_build
-    assert not kind_for("python").tests_need_build
 
 
 @needs_toolchain
@@ -752,11 +748,10 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-extension") is None
-    # The build tools are the kind's; a native tool an extension brings
-    # rides its step record, which is where the profile reads it, and
-    # the measurer of a build made with MSVC rides cmake's [for.coverage]
-    # table.
-    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
+    # The build tools come from the [toolroom] tables of the extensions
+    # the kind stands for, cmake's and conan's, and the measurer of a
+    # build made with MSVC from cmake's [for.coverage] table; the steps
+    # those extensions hold run no tool of their own.
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._steps import tools_for
 

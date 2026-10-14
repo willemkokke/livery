@@ -2,8 +2,9 @@
 # python through nanobind and built into one wheel per platform. A
 # package of the python-nanobind kind lists no extension and holds
 # nanobind, python, cpp and conan through its kind, whose backend
-# builds, tests and releases it. What nanobind adds is the release's
-# wheels job and the key that names the runners its legs run on.
+# builds, tests and releases it. What nanobind adds is the tools the
+# extension module builds with, the release's wheels job and the key
+# that names the runners its legs run on.
 
 [extension]
 api-version = 1
@@ -11,6 +12,14 @@ api-version = 1
 levels = ["package"]
 # The footman plugin that carries the verb the wheels job runs.
 plugin = "livery.extensions.nanobind"
+
+# The tools the extension module builds with: cmake, the Ninja
+# generator, and the cmake-conan provider, which installs its C++
+# dependencies through conan. The lock pins them while a package's set
+# holds nanobind; nanobind and scikit-build-core arrive through the
+# package's own build-system requires, never the machine.
+[toolroom]
+requires = ["cmake", "ninja", "conan", "cmake_conan"]
 
 # Where a package's platform wheels build.
 [contract.package.nanobind]

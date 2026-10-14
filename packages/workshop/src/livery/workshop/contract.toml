@@ -13,9 +13,10 @@
 # again but [extension], [for] and [contract]: the composer repeats them
 # under for.*, so they are written once, below.
 #
-# The base's phases are declared at the end, under [phases.<phase>], and
-# its queries under [queries.<name>], each in the grammar an extension
-# declares one in under the same table of its extension.toml.
+# The base's phases are declared at the end, under [phases.<phase>], its
+# queries under [queries.<name>] and the tools it runs under [toolroom],
+# each in the grammar an extension declares one in under the same table
+# of its extension.toml.
 
 # workshop.toml at a workspace's root.
 
@@ -1095,3 +1096,8 @@ combine = "union"
 [queries.release-notes]
 level = "workspace"
 combine = "nearest"
+
+# The tools the base runs in every workspace: uv makes the venv every
+# step runs in, so the lock pins it in a workspace with no package too.
+[toolroom]
+requires = ["uv"]

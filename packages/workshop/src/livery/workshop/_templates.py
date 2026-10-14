@@ -403,10 +403,10 @@ def wire_member(root: Path, name: str) -> None:
 
     run_uv("lock", root=root)
     run_uv("sync", root=root)
-    # A kind brings tools of its own (a native kind's build tools and
-    # the steps that judge it), so the tool lock moves with the
-    # member and the store supplies what it names: the gate that
-    # follows finds them, as it does after a birth.
+    # A member's extensions bring tools of their own (a native
+    # member's build tools and the steps that judge it), so the tool
+    # lock moves with the member and the store supplies what it names:
+    # the gate that follows finds them, as it does after a birth.
     sync_tools(root)
     print(f"  packages/{name}: seeded, wired, and installed")
 

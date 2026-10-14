@@ -765,13 +765,13 @@ def _uv_drift(root: Path) -> str:
 
 
 def tool_profile(root: Path) -> tuple[str, ...]:
-    """The tools the three declaration sites require on this host, each once.
+    """The tools the declaration sites require on this host, each once.
 
-    The kinds the present packages declare, the packages' own
-    contracts and the project's, as `livery.workshop._tools` reads
-    them; a workspace with no package requires what the python kind
-    does, since its `tasks.py` runs on python. A requirement scoped to
-    other hosts alone is none here.
+    The base's, the steps', the extensions', the plugins', the
+    packages' own contracts' and the project's, as
+    `livery.workshop._tools` reads them; a workspace with no package
+    requires the base's uv, since its `tasks.py` runs in the venv uv
+    makes. A requirement scoped to other hosts alone is none here.
     """
     from livery.workshop._tools import this_host, tool_names
 
@@ -923,12 +923,16 @@ def env_check() -> int:
     if unsupplied:
         # Nothing is locked, so `sync` would supply nothing: the remedy
         # is the declaration and the lock, in that order.
-        print("  The tools are what the kinds, the packages and the project require.")
+        print(
+            "  The tools are what the base, the extensions, the plugins, the"
+            " packages and the project require."
+        )
         for line in unsupplied.splitlines():
             print(f"  {line}" if line else "")
     else:
         print(
-            "  The tools are what the kinds, the packages and the project require."
+            "  The tools are what the base, the extensions, the plugins, the"
+            " packages and the project require."
             f" Run `{footman.prog()} sync` to materialise them, or enter the"
             f" environment with `{footman.prog()} shell`."
         )

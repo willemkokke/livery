@@ -9,6 +9,11 @@ levels = ["package"]
 # package.
 requires = ["cpp"]
 
+# The sync, build and publish steps below run conan, so the lock pins it
+# while a package's set holds conan.
+[toolroom]
+requires = ["conan"]
+
 # The questions about a package this extension answers, from its recipe.
 [queries]
 current-version = "livery.extensions.conan._answers:current_version"
