@@ -2,8 +2,9 @@
 
 The refusals and fallbacks first: listed without docs, the old paths
 key, a package that declines, a package of another language, a
-workspace that does not list it. Then the pages, the handler's tables
-and the members policy.
+workspace that does not list it and what that workspace installs, and
+the workshop wheel's runtime requirements. Then the pages, the
+handler's tables and the members policy.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from livery.extensions.mkdocstrings._pages import (
 from livery.footman import Failed
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._steps import steps_by_name
+from workshop_composed import composed_groups
 from workshop_extension_fakes import fake_extensions
 
 _FAILURES = (SystemExit, Failed)
@@ -279,6 +281,53 @@ def test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_bl
     config = zensical_config(root)
     assert _api_labels(config, "core") == ["acme.core"]
     assert list(_handlers(config)) == ["python"]
+
+
+def test_a_workspace_without_mkdocstrings_installs_no_mkdocstrings(
+    tmp_path: Path,
+) -> None:
+    # The python handler reaches the venv through the extension's line in
+    # the docs group alone: no other line of the project file names it, and
+    # the workshop wheel, which the dev group installs for the extensions it
+    # ships, requires none of it.
+    from importlib.metadata import requires
+
+    root = _workspace(tmp_path, listed='["docs"]')
+    contract = root / "workshop.toml"
+    contract.write_text('[workspace]\nname = "acme"\nextensions = ["docs"]\n')
+    groups = composed_groups(root)
+    assert groups["docs"] == ["zensical>=0.0.50"]
+    lines = [line for group in groups.values() for line in group]
+    assert [line for line in lines if "mkdocstrings" in line] == []
+    required = requires("livery-workshop") or []
+    assert [line for line in required if "mkdocstrings" in line] == []
+    # Listed after docs, its line follows the builder's.
+    contract.write_text(
+        '[workspace]\nname = "acme"\nextensions = ["docs", "mkdocstrings"]\n'
+    )
+    assert composed_groups(root)["docs"] == [
+        "zensical>=0.0.50",
+        "mkdocstrings-python>=1.11",
+    ]
+
+
+def test_the_workshop_wheel_requires_no_griffelib_at_runtime() -> None:
+    # The reference check imports griffe inside the function that reads the
+    # sources, and a workspace that lists mkdocstrings gets griffe through
+    # mkdocstrings-python. So the wheel names griffelib in its test extra
+    # alone, which the release's isolated legs install to run this suite.
+    from importlib.metadata import requires
+
+    from livery.extensions.python._installed import requirement_name
+
+    markers = [
+        marker.strip().replace('"', "'")
+        for spec, _, marker in (
+            line.partition(";") for line in requires("livery-workshop") or ()
+        )
+        if requirement_name(spec) == "griffelib"
+    ]
+    assert markers == ["extra == 'test'"]
 
 
 # Then the pages, fallbacks first.

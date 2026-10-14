@@ -1178,7 +1178,6 @@ name = "livery-workshop"
 version = "0.9.0"
 source = { editable = "packages/workshop" }
 dependencies = [
-    { name = "griffelib" },
     { name = "livery-footman" },
     { name = "livery-forge" },
     { name = "livery-git" },
@@ -1195,10 +1194,13 @@ dev = [
     { name = "types-pygments" },
     { name = "types-pyyaml" },
 ]
+test = [
+    { name = "griffelib" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "griffelib", specifier = ">=2.2.0" },
+    { name = "griffelib", marker = "extra == 'test'", specifier = ">=2.2.0" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1211,7 +1213,7 @@ requires-dist = [
     { name = "types-pygments", marker = "extra == 'dev'" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "markdown"

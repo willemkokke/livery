@@ -95,9 +95,9 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # an extension's src may hold data alone.
         "python_dirs": python_dirs(root),
         # The workspace-level queries' answers, by name, each answered
-        # when a template reads it: the dev group's tool lines, pytest's
-        # addopts. A listed extension's answer lands here, and an
-        # unlisted one's leaves with it.
+        # when a template reads it: the dev group's tool lines, the docs
+        # group's lines, pytest's addopts. A listed extension's answer
+        # lands here, and an unlisted one's leaves with it.
         "queries": workspace_answers(root),
         "extension_imports": [import_path for import_path, _ in entries],
         # One line per distribution: a wheel may ship several extensions.

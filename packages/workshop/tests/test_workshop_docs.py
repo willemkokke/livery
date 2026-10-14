@@ -25,6 +25,7 @@ from livery.extensions.python._backend import (
 from livery.footman import Failed
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import discover_packages
+from workshop_composed import composed_groups
 from workshop_coverage_pages import read_page
 from workshop_docs_declared import docs_jobs  # noqa: F401
 from workshop_extension_fakes import fake_extensions
@@ -106,7 +107,25 @@ def _referenced(root: Path) -> list[str]:
     ]
 
 
-# The fallbacks first: an undeclared table, a package without docs.
+# The fallbacks first: a workspace without docs, an undeclared table, a
+# package without docs.
+
+
+def test_a_workspace_without_docs_composes_an_empty_docs_group(
+    tmp_path: Path,
+) -> None:
+    # The docs group holds what the listed extensions' site build imports,
+    # so a workspace that lists no such extension installs none of it. The
+    # group stays declared, since the project file's `default-groups` names
+    # it.
+    root = tmp_path / "ws"
+    root.mkdir()
+    contract = root / "workshop.toml"
+    contract.write_text('[workspace]\nname = "acme"\nextensions = []\n')
+    assert composed_groups(root)["docs"] == []
+    # Listed, docs adds the site's builder and nothing else.
+    contract.write_text('[workspace]\nname = "acme"\nextensions = ["docs"]\n')
+    assert composed_groups(root)["docs"] == ["zensical>=0.0.50"]
 
 
 def test_the_config_defaults_without_a_docs_table(tmp_path: Path) -> None:

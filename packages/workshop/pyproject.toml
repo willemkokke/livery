@@ -43,12 +43,6 @@ dependencies = [
     # The fragment engine's renderer: one compiled template per
     # fragment content, over the subset the engine declares.
     "minijinja>=2.24",
-    # The docs extension rides in this wheel, and its reference check
-    # imports griffe, which griffelib ships. The floor is the lock's,
-    # so the release's lowest-direct leg runs the version the gate
-    # runs. The dependency belongs to the docs extension, and moves
-    # with it when it ships as a wheel of its own.
-    "griffelib>=2.2.0",
     # The coverage extension rides in this wheel, and highlights each
     # file's source on its pages with Pygments, imported when the pages
     # are drawn. The floor is the lock's.
@@ -63,6 +57,14 @@ dependencies = [
 # under a current Cython. The workspace's dev group installs the member
 # as `livery-workshop[dev]`.
 dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
+# The mkdocstrings extension rides in this wheel, and its reference
+# check reads the sources with griffe, which griffelib ships, imported
+# inside the function that reads them. A workspace that lists
+# mkdocstrings gets griffe through mkdocstrings-python, the extension's
+# line in the docs dependency group, so the wheel's runtime needs none.
+# This package's suite runs the check, so the release's isolated legs
+# install the wheel with this extra. The floor is the lock's.
+test = ["griffelib>=2.2.0"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
