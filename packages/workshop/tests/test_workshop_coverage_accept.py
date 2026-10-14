@@ -44,7 +44,6 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
                 directory=directory,
                 path=f"packages/{name}",
                 name=f"livery-{name}",
-                kind="python",
                 depends=(),
                 extensions=("python",),
             )

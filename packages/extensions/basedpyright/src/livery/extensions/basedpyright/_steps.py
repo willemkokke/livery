@@ -5,9 +5,9 @@ the extension's ``extension.toml``. ``typecomplete.basedpyright`` runs
 one call per public module and reads the verifier's verdict for each,
 so it is code: it narrows by packages
 ([livery.workshop.scoped_packages][]) and verifies the modules each
-one declares public ([livery.workshop.public_modules][]); declared
-off, it registers while the root contract turns it on at
-``[phases.typecomplete.basedpyright]``.
+one declares public, its extensions' answer to
+[livery.workshop.PUBLIC_MODULES][]; declared off, it registers while
+the root contract turns it on at ``[phases.typecomplete.basedpyright]``.
 It hands basedpyright the words after ``--`` on its own verb
 (``fm typecomplete.basedpyright -- --outputjson``). The body resolves
 its runner on this module when it runs, so a test that replaces
@@ -17,7 +17,7 @@ its runner on this module when it runs, so a test that replaces
 from __future__ import annotations
 
 import livery.toolroom.tools as tools
-from livery.workshop import PhaseContext, public_modules, scoped_packages
+from livery.workshop import PUBLIC_MODULES, PhaseContext, answer, scoped_packages
 
 
 def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) -> None:
@@ -36,4 +36,4 @@ def run_typecomplete(modules: tuple[str, ...], arguments: tuple[str, ...] = ()) 
 def judge_typecomplete(ctx: PhaseContext) -> None:
     """Verify the public modules of each package the run reaches."""
     for package in scoped_packages(ctx, "typecomplete.basedpyright"):
-        run_typecomplete(public_modules(package), ctx.arguments)
+        run_typecomplete(answer(package, PUBLIC_MODULES), ctx.arguments)

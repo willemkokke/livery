@@ -997,7 +997,6 @@ def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
         directory=member,
         path="packages/plain",
         name="livery-plain",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -1022,7 +1021,6 @@ def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
         directory=member,
         path="packages/hosted",
         name="livery-hosted",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -1345,7 +1343,6 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
         directory=root / "packages" / "native",
         path="packages/native",
         name="livery-native",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -1475,7 +1472,6 @@ def test_the_publish_verb_asks_each_member_s_probe_once_through_its_extensions(
             directory=tmp_path / "packages" / name,
             path=f"packages/{name}",
             name=f"livery-{name}",
-            kind="python",
             depends=(),
             extensions=("python",),
         )

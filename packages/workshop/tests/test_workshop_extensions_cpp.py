@@ -28,7 +28,6 @@ def _member(directory: Path, extensions: tuple[str, ...]) -> Package:
         directory=directory,
         path=f"packages/{directory.name}",
         name="acme-lib",
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -243,7 +242,7 @@ def test_the_extensions_answer_a_cpp_conan_package_from_its_recipe(
     assert dict(requirements) == _lifecycle.declared_requirements(listing)
     assert dict(requirements) == {"acme-base": "[>=0.1 <1]"}
     assert answer(listing, MODULE_ROOTS) == _lifecycle.module_roots(listing) == ()
-    assert answer(listing, PUBLIC_MODULES) == _lifecycle.public_modules(listing) == ()
+    assert answer(listing, PUBLIC_MODULES) == ()
 
 
 def test_the_conan_steps_stamp_build_and_publish(

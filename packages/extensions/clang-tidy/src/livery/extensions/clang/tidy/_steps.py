@@ -4,9 +4,9 @@ The extension's ``extension.toml`` declares it and names the body here.
 ``lint.clang-tidy`` judges one package at a time, after the package's
 build is configured: the files its claims reach in the package, or the
 files a run names ([livery.workshop.scoped_files][]), against the
-compilation database the package's build writes
-([livery.workshop.compile_commands][]); a package whose build writes
-none skips, saying so. The checks are the
+compilation database the package's build writes, its extensions'
+answer to [livery.workshop.COMPILE_COMMANDS][]; a package whose build
+writes none skips, saying so. The checks are the
 package's own ``.clang-tidy``, which the extension writes. The step
 hands clang-tidy the words after ``--`` on its own verb
 (``fm lint.clang-tidy -- --checks=-*,bugprone-*``). A body resolves its
@@ -22,7 +22,13 @@ from pathlib import Path
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
-from livery.workshop import Package, PhaseContext, compile_commands, scoped_files
+from livery.workshop import (
+    COMPILE_COMMANDS,
+    Package,
+    PhaseContext,
+    answer,
+    scoped_files,
+)
 
 
 def _asked(argv: list[str]) -> str:
@@ -96,7 +102,7 @@ def run_lint(
 def judge_lint(ctx: PhaseContext) -> None:
     """Run clang-tidy over the package's files the run reaches, against its database."""
     package = ctx.member
-    database = compile_commands(package)
+    database = answer(package, COMPILE_COMMANDS)
     if database is None or not database.is_file():
         print(
             f"  {package.name}: clang-tidy skips, its build writes no"

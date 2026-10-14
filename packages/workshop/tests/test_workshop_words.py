@@ -85,16 +85,17 @@ def _one_file(ctx: PhaseContext, name: str) -> tuple[Path, ...]:
     return (ctx.package.directory / "a.cpp",)
 
 
-def _member(root: Path, name: str) -> Package:
+def _member(
+    root: Path, name: str, extensions: tuple[str, ...] = ("python",)
+) -> Package:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="python",
         depends=(),
-        extensions=("python",),
+        extensions=extensions,
     )
 
 
@@ -180,22 +181,23 @@ def test_a_package_without_a_compilation_database_is_not_run_and_says_so(
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     monkeypatch.setattr(_steps, "scoped_files", _one_file)
-    monkeypatch.setattr(
-        "livery.workshop._lifecycle.compile_commands", lambda package: None
-    )
-    member = _member(tmp_path, "one")
     record = _step(
         Words(("acme", "-p", "{compile-commands}")),
         scope="package",
-        extensions=("python",),
+        extensions=("python", "cmake"),
     )
-    ctx = PhaseContext(root=tmp_path, packages=(member,), step=record.name)
-    record.run(ctx.for_package(member))
+    # python answers no compilation database, and cmake answers one its
+    # build has not written yet: neither package runs.
+    for member in (
+        _member(tmp_path, "one"),
+        _member(tmp_path, "two", ("cmake",)),
+    ):
+        ctx = PhaseContext(root=tmp_path, packages=(member,), step=record.name)
+        record.run(ctx.for_package(member))
     assert tool.calls == []
-    assert (
-        "lint.acme: packages/one has no compilation database; not run"
-        in capsys.readouterr().out
-    )
+    out = capsys.readouterr().out
+    assert "lint.acme: packages/one has no compilation database; not run" in out
+    assert "lint.acme: packages/two has no compilation database; not run" in out
 
 
 def test_a_run_that_reaches_nothing_the_step_reads_calls_nothing(
@@ -329,18 +331,16 @@ def test_a_package_step_calls_from_the_package_with_its_files(
 ) -> None:
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
-    member = _member(tmp_path, "one")
-    database = member.directory / "build" / "compile_commands.json"
-    database.parent.mkdir()
+    # cmake answers where its gate build writes the database.
+    member = _member(tmp_path, "one", ("cmake",))
+    database = member.directory / "build" / "gate" / "compile_commands.json"
+    database.parent.mkdir(parents=True)
     database.write_text("[]\n")
     monkeypatch.setattr(_steps, "scoped_files", _one_file)
-    monkeypatch.setattr(
-        "livery.workshop._lifecycle.compile_commands", lambda package: database
-    )
     record = _step(
         Words(("acme", "-p", "{compile-commands}", "--root={package}", "{paths}")),
         scope="package",
-        extensions=("python",),
+        extensions=("cmake",),
     )
     ctx = PhaseContext(root=tmp_path, packages=(member,), step=record.name)
     record.run(ctx.for_package(member))

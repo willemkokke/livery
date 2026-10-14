@@ -32,13 +32,15 @@ reference receives the run's [livery.workshop.Changes][]. A step
 declares the options a package may set on it under its ``options``
 and reads a package's value with [livery.workshop.step_option][]; a
 step declared ``enabled = false`` registers once the root contract
-turns it on at the step's address. A package's
-public modules are its extensions' answer,
-[livery.workshop.public_modules][], and so is where its build
-writes a compilation database, [livery.workshop.compile_commands][].
-The workspace's own tests, the ``tests`` directory at its root, are a
-unit of their own, [livery.workshop.workspace_suite][], which a test
-step runs beside the packages it judges.
+turns it on at the step's address. A step asks a package's extensions
+what it needs of the package with [livery.workshop.answer][]: the
+modules a type-completeness step verifies,
+[livery.workshop.PUBLIC_MODULES][], or where the package's build
+writes the compilation database a linter reads,
+[livery.workshop.COMPILE_COMMANDS][]. The workspace's own tests, the
+``tests`` directory at its root, are a unit of their own,
+[livery.workshop.workspace_suite][], which a test step runs beside
+the packages it judges.
 
 An extension reads the workspace through the names the engine reads
 it by: a contract's judged keys, [livery.workshop.read_contract][];
@@ -100,8 +102,6 @@ if TYPE_CHECKING:
     from livery.workshop._forge_lane import this_repository as this_repository
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
-    from livery.workshop._lifecycle import compile_commands as compile_commands
-    from livery.workshop._lifecycle import public_modules as public_modules
     from livery.workshop._packages import Edge as Edge
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
@@ -173,7 +173,6 @@ __all__ = [
     "answer",
     "ci_changes",
     "ci_run",
-    "compile_commands",
     "contributions_for",
     "discover_packages",
     "extension_names",
@@ -182,7 +181,6 @@ __all__ = [
     "forge_token",
     "generated_header",
     "guidance",
-    "public_modules",
     "read_contract",
     "registry",
     "release_notes",
@@ -231,7 +229,6 @@ _EXPORTS: dict[str, str] = {
     "WHOLE": "livery.workshop._steps",
     "ci_changes": "livery.workshop._quality",
     "ci_run": "livery.workshop._ci_context",
-    "compile_commands": "livery.workshop._lifecycle",
     "contributions_for": "livery.workshop._extensions",
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
@@ -243,7 +240,6 @@ _EXPORTS: dict[str, str] = {
     "shipped_content": "livery.workshop._extensions",
     "generated_header": "livery.workshop._provenance",
     "guidance": "livery.workshop._prose",
-    "public_modules": "livery.workshop._lifecycle",
     "read_contract": "livery.workshop._contract",
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",

@@ -45,7 +45,6 @@ def _package(root: Path, name: str, depends: tuple[str, ...] = ()) -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"livery-{name}",
-        kind="python",
         depends=tuple(
             Edge(path=f"packages/{dep}", kind="build", floor="0") for dep in depends
         ),
@@ -429,7 +428,6 @@ def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
         directory=work / "packages" / "ghost",
         path="packages/ghost",
         name="livery-ghost",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

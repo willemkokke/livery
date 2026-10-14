@@ -50,7 +50,6 @@ def _native(root: Path) -> Package:
         root / "packages" / "cpp",
         "packages/cpp",
         "acme-cpp",
-        "cpp-conan",
         (),
         extensions=("cmake", "conan"),
     )
@@ -90,7 +89,6 @@ def test_a_step_judges_the_files_its_claims_reach_and_no_other(
         tmp_path / "packages" / "py",
         "packages/py",
         "livery-py",
-        "python",
         (),
         extensions=("python",),
     )
@@ -161,7 +159,6 @@ def test_a_scoped_run_hands_a_native_member_the_files_its_claims_reach(
         directory=tmp_path / "packages" / "py",
         path="packages/py",
         name="acme-py",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

@@ -59,9 +59,6 @@ class Package:
             (``packages/forge``, or ``packages/extensions/widgets`` for a
             package in a group directory).
         name: The distribution name (``livery-forge``).
-        kind: Empty for a package discovery reads, since a contract
-            names no kind; the workspace's own tests unit carries
-            ``workspace``.
         depends: The declared edges, in contract order.
         step_options: The options the package sets on its steps, by
             the table that sets them: ``phases.<phase>`` (every step of
@@ -85,7 +82,6 @@ class Package:
     directory: Path
     path: str
     name: str
-    kind: str
     depends: tuple[Edge, ...]
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
@@ -319,9 +315,10 @@ WORKSPACE_TESTS = "tests"
 def workspace_suite(root: Path) -> Package | None:
     """The workspace's own tests, the ``tests`` directory at its root, as a unit.
 
-    ``None`` when the workspace has none. The unit's kind is
-    ``workspace`` and it lists no extension, so no package step judges
-    it; a test step runs it beside the members it judges.
+    ``None`` when the workspace has none. The unit lists no extension,
+    so no package step judges it; a test step runs it beside the
+    members it judges, and the workspace's category table answers for
+    its files (`is_workspace_unit`).
     """
     directory = root / WORKSPACE_TESTS
     if not directory.is_dir():
@@ -330,9 +327,18 @@ def workspace_suite(root: Path) -> Package | None:
         directory=directory,
         path=WORKSPACE_TESTS,
         name="workspace-tests",
-        kind="workspace",
         depends=(),
     )
+
+
+def is_workspace_unit(package: Package) -> bool:
+    """Whether *package* is the workspace's own unit rather than a member.
+
+    The workspace's tests (`workspace_suite`) are its unit, and a root
+    without them is its own unit, for the files under no package. A
+    member's path is under ``packages/``, and a unit's is not.
+    """
+    return not package.path.startswith(f"{PACKAGES_DIR}/")
 
 
 #: The package-level extension of the language the workshop runs on.
@@ -510,7 +516,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             directory=directory,
             path=f"{PACKAGES_DIR}/{member}",
             name=str(contract.get("name", "")),
-            kind="",
             depends=depends,
             publish=publish,
             categories=tuple(reassigned),

@@ -45,7 +45,6 @@ def _package(tmp_path: Path, name: str, *extensions: str) -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="",
         depends=(),
         extensions=extensions,
     )

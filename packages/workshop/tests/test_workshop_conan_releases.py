@@ -47,7 +47,6 @@ def _member(root: Path) -> Package:
         directory=root / "packages" / "geometry",
         path="packages/geometry",
         name="acme-geometry",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -290,7 +289,6 @@ def test_the_waves_floor_check_reads_the_attached_caches(
         directory=root / "packages" / "ext",
         path="packages/ext",
         name="acme-ext",
-        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
         extensions=("nanobind",),
     )

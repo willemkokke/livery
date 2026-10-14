@@ -497,7 +497,6 @@ def test_the_closure_holds_each_dependency_once_however_it_is_reached() -> None:
             directory=Path(name),
             path=f"packages/{name}",
             name=name,
-            kind="python",
             depends=tuple(
                 Edge(path=f"packages/{need}", kind="build", floor="") for need in needs
             ),

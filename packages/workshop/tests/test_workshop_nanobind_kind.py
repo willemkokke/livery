@@ -64,7 +64,6 @@ def _package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -606,7 +605,6 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
         directory=extension,
         path="packages/ext",
         name="acme-ext",
-        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
         extensions=("nanobind",),
     )
@@ -755,7 +753,6 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
         directory=extension.directory,
         path="packages/ext",
         name="acme-ext",
-        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
         extensions=("nanobind",),
     )

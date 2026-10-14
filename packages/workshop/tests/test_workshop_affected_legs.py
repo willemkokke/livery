@@ -51,7 +51,6 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"livery-{name}",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

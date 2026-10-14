@@ -1060,7 +1060,6 @@ def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -
         directory=tmp_path,
         path="packages/x",
         name="livery-x",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

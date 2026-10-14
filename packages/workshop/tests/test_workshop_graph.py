@@ -221,7 +221,6 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
         Path("packages/x"),
         "packages/x",
         "livery-x",
-        "python",
         (),
         extensions=("python",),
     )

@@ -101,7 +101,6 @@ def _package(root: Path, *extensions: str) -> Package:
         directory=root / "packages" / "core",
         path="packages/core",
         name="core",
-        kind="python",
         depends=(),
         extensions=extensions,
     )

@@ -64,7 +64,6 @@ def _member(root: Path, name: str, *, off_at: str = "") -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="python",
         depends=(),
         step_options=((off_at, turned_off),) if off_at else (),
         extensions=("python",),

@@ -216,7 +216,6 @@ def _category_table(subject: Subject) -> list[Violation]:
             Path("."),
             "packages/probe",
             "probe",
-            "",
             (),
             extensions=listed,
         )
@@ -879,7 +878,6 @@ def _probe_packages(
             root / "packages" / f"probe-{index}",
             f"packages/probe-{index}",
             f"probe-{index}",
-            "",
             (),
             extensions=listed,
         )

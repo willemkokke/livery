@@ -246,7 +246,7 @@ def _answers(
         Failed: when the words name a package's placeholder in a call
             that judges no package.
     """
-    from livery.workshop._lifecycle import compile_commands
+    from livery.workshop._queries import COMPILE_COMMANDS, answer
 
     named = words.placeholders()
     answers = {"cache": _relative(root / ".workshop" / ".cache" / record.step, cwd)}
@@ -259,7 +259,7 @@ def _answers(
     if package is not None:
         answers["package"] = str(package.directory)
     if "compile-commands" in named and package is not None:
-        database = compile_commands(package)
+        database = answer(package, COMPILE_COMMANDS)
         if database is None or not database.is_file():
             print(
                 f"  {record.name}: {package.path} has no compilation database; not run"

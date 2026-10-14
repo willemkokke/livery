@@ -126,7 +126,6 @@ def test_each_step_hands_ruff_its_words_in_each_mode(
         directory=tmp_path / "packages" / "one",
         path="packages/one",
         name="acme-one",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

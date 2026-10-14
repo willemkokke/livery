@@ -57,7 +57,6 @@ def _members(root: Path, count: int) -> tuple[Package, ...]:
                 directory=directory,
                 path=f"packages/{directory.name}",
                 name=f"acme-m{index:03d}",
-                kind="python",
                 depends=(),
                 extensions=("python",),
             )
