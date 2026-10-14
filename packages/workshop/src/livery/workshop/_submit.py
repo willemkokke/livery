@@ -1211,13 +1211,27 @@ def merged_pull_request(
     By head branch first, then by the branch's head sha: a forge that
     deletes the head branch on merge may clear the merged pull
     request's head ref, and the sha persists after the branch is
-    gone. A forge that cannot be asked raises.
+    gone. A pull request found by the sha is the branch's own only
+    when its head branch is *branch* or empty, and never while
+    *branch* is a stacked branch still at the commit it started from:
+    that commit is the parent's head, so the pull request found is the
+    parent's. A forge that cannot be asked raises.
     """
     pr = repo.pr.find_by_head(branch, state="all")
     if pr is None:
         sha = git.any_head(root, branch)
         pr = repo.pr.find_by_head_sha(sha) if sha else None
+        if pr is not None and not _proposed_at(pr, root, branch, sha):
+            pr = None
     return pr if pr is not None and pr.merged else None
+
+
+def _proposed_at(pr: PullRequest, root: Path, branch: str, sha: str) -> bool:
+    """Whether *pr*, found by *branch*'s head *sha*, is *branch*'s own pull request."""
+    if pr.head_branch and pr.head_branch != branch:
+        return False
+    _parent, start = _stack.stack(root, branch)
+    return start != sha
 
 
 def _tidy_after_merge(

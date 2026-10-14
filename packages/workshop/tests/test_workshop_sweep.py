@@ -50,9 +50,15 @@ def _forge(
     closed: frozenset[int] = frozenset(),
     merged: frozenset[str] = frozenset(),
     heads: dict[str, str] | None = None,
+    cleared: frozenset[str] = frozenset(),
     broken: bool = False,
 ) -> Any:
-    """A forge knowing closed issues and merged branches, and the merged heads."""
+    """A forge knowing closed issues and merged branches, and the merged heads.
+
+    A merged branch in *cleared* is one whose pull request the forge
+    no longer files under its head branch: only its head sha finds it,
+    and its head branch reads empty.
+    """
     merged_heads: dict[str, str] = heads or {}
 
     class _Issues:
@@ -65,9 +71,12 @@ def _forge(
         def find_by_head(self, branch: str, *, state: str = "open") -> Any:
             if broken:
                 raise RuntimeError("the forge is down")
-            if branch in merged:
+            if branch in merged and branch not in cleared:
                 return SimpleNamespace(
-                    number=9, merged=True, head_sha=merged_heads.get(branch, "")
+                    number=9,
+                    merged=True,
+                    head_sha=merged_heads.get(branch, ""),
+                    head_branch=branch,
                 )
             return None
 
@@ -76,7 +85,12 @@ def _forge(
                 raise RuntimeError("the forge is down")
             for branch, head in merged_heads.items():
                 if head == sha and branch in merged:
-                    return SimpleNamespace(number=9, merged=True, head_sha=head)
+                    return SimpleNamespace(
+                        number=9,
+                        merged=True,
+                        head_sha=head,
+                        head_branch="" if branch in cleared else branch,
+                    )
             return None
 
     return SimpleNamespace(issue=_Issues(), pr=_Pulls())
@@ -238,6 +252,75 @@ def _squash_onto_main(checkout: Path, branch: str) -> None:
     _git(checkout, "commit", "-qm", f"squash of {branch}")
     _git(checkout, "push", "-q", "origin", "main")
     _git(checkout, "push", "-q", "origin", "--delete", branch)
+
+
+def test_a_stacked_tree_at_its_parents_tip_stays_when_the_parent_merges(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A branch started on another with no commit of its own has the
+    # parent's head, so the parent's merged pull request answers its
+    # sha; it is not the child's, whether the forge keeps the parent's
+    # head branch on it or cleared it.
+    from livery.workshop import _stack
+
+    home = tmp_path / "home" / "worktrees"
+    parent = _worktree(checkout, home, 1)
+    tip = _git(parent, "rev-parse", "HEAD")
+    child = home / checkout.name / "2-thing"
+    _git(
+        checkout,
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "feat/2-thing",
+        str(child),
+        "feat/1-thing",
+    )
+    _stack.record_stack(checkout, "feat/2-thing", "feat/1-thing", tip)
+    _squash_onto_main(checkout, "feat/1-thing")
+    kept = _forge(
+        closed=frozenset({1}),
+        merged=frozenset({"feat/1-thing"}),
+        heads={"feat/1-thing": tip},
+    )
+    monkeypatch.setattr(_sweep, "_repository", lambda _tree: kept)
+    lines = _sweep.sweep_worktrees(home, dry_run=True)
+    assert "worktree livery/2-thing: issue #2 is open; kept" in lines
+    cleared = _forge(
+        closed=frozenset({1}),
+        merged=frozenset({"feat/1-thing"}),
+        heads={"feat/1-thing": tip},
+        cleared=frozenset({"feat/1-thing"}),
+    )
+    monkeypatch.setattr(_sweep, "_repository", lambda _tree: cleared)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
+    assert "worktree livery/2-thing: issue #2 is open; kept" in lines
+    assert child.is_dir()
+    # Its own commit makes the head its own: still open, still kept.
+    (child / "2.txt").write_text("work\n")
+    _git(child, "add", ".")
+    _git(child, "commit", "-qm", "feat: 2")
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
+    assert "worktree livery/2-thing: issue #2 is open; kept" in lines
+
+
+def test_a_tree_whose_merged_pull_request_lost_its_head_branch_goes_by_its_head(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home" / "worktrees"
+    tree = _worktree(checkout, home, 5)
+    tip = _git(tree, "rev-parse", "HEAD")
+    _squash_onto_main(checkout, "feat/5-thing")
+    forge = _forge(
+        merged=frozenset({"feat/5-thing"}),
+        heads={"feat/5-thing": tip},
+        cleared=frozenset({"feat/5-thing"}),
+    )
+    monkeypatch.setattr(_sweep, "_repository", lambda _tree: forge)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
+    assert "worktree livery/5-thing: PR #9 merged, nothing only here; removed" in lines
+    assert not tree.exists()
 
 
 def test_a_squash_merged_tree_is_judged_by_its_merged_head(
