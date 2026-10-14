@@ -10,7 +10,6 @@ from livery import git
 from livery.workshop import _categories
 from livery.workshop._categories import (
     BASE_TABLE,
-    WORKSPACE,
     CategoryError,
     CategoryRule,
     ChannelRule,
