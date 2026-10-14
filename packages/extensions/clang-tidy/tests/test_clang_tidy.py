@@ -37,7 +37,7 @@ def registered() -> Iterator[None]:
 
 
 def _native(root: Path) -> Package:
-    """A cpp-conan member in a git checkout, one source in it."""
+    """A member listing cmake and conan in a git checkout, one source in it."""
     directory = root / "packages" / "native"
     (directory / "src").mkdir(parents=True)
     (directory / "workshop.toml").write_text(
@@ -49,7 +49,6 @@ def _native(root: Path) -> Package:
         directory=directory,
         path="packages/native",
         name="acme-native",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -75,8 +74,8 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     )
     state = registry.snapshot()
     try:
-        # The member lists nothing and holds what its kind stands for, so
-        # cmake, cpp and conan mount; clang-tidy, which no list names, does not.
+        # The member lists cmake and conan, which requires cpp, so the three
+        # mount; clang-tidy, which no list names, does not.
         with footman_registry.capture():
             assert mount_extensions(root) == ("cmake", "cpp", "conan")
         assert "lint.clang-tidy" not in steps_by_name()
@@ -175,7 +174,7 @@ def test_a_finding_refuses_with_clang_tidy_s_own_words(
     ]
 
 
-# The step: the package's files against the database its kind's build writes.
+# The step: the package's files against the database its build writes.
 
 
 def test_the_step_waits_for_the_database_then_reads_the_package_s_sources(

@@ -464,7 +464,8 @@ def _check_files(
     packages = _packages()
     holders = {unit_of(root, packages, name)[0] for name in files}
     # The packages holding a named file, and the workspace's tests unit
-    # when a root file is named; the bare root is a unit of no kind.
+    # when a root file is named; the unit of a root without tests is no
+    # package, and joins no subset.
     subset = [package for package in packages if package in holders]
     suite = workspace_suite(root)
     if suite is not None and suite in holders:

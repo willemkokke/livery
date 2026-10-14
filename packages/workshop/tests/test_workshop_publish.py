@@ -176,7 +176,6 @@ def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -205,7 +204,6 @@ def test_an_empty_publish_token_variable_never_reaches_uv(
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -252,7 +250,6 @@ def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

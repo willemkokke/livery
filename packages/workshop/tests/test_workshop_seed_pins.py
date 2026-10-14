@@ -627,7 +627,9 @@ CPP = "livery.extensions.cpp._language"
 NANOBIND = "livery.extensions.nanobind._build"
 
 #: The function each lifecycle entry ran for a nanobind member, which lists
-#: nanobind, by the entry's name: the module and name that define it. The
+#: nanobind, by the entry's name: the module and name that define it.
+#: ``public_modules`` and ``compile_commands`` are the queries of those
+#: names, asked through ``answer``, since no lifecycle entry fronts them. The
 #: set answers in composition order, cpp, conan, python, then nanobind.
 #: conan answers no version and no version file for the member's recipe, a
 #: consumer's, and nanobind deletes conan's stamp, build and publish and
@@ -737,6 +739,7 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
     from livery.extensions.cpp import _language as cpp_language
     from livery.extensions.nanobind import _build as nanobind_build
     from livery.extensions.python import _backend as python_backend
+    from livery.workshop._queries import COMPILE_COMMANDS, PUBLIC_MODULES, answer
     from livery.workshop._registries import RegistryTarget
 
     root = _workspace(tmp_path / "acme")
@@ -776,8 +779,8 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
         "isolated_test": {"acme-native": "0.1.0"},
         "verify": 0,
     }
-    for name, answer in stand_ins.items():
-        bodies.record(monkeypatch, python_backend, name, answer, runs=False)
+    for name, stand_in in stand_ins.items():
+        bodies.record(monkeypatch, python_backend, name, stand_in, runs=False)
     for module, name in (
         (conan_package, "build"),
         (conan_package, "publish_artifact"),
@@ -807,10 +810,10 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
             "module_roots", lambda: _lifecycle.module_roots(native)
         ),
         "public_modules": bodies.entry(
-            "public_modules", lambda: _lifecycle.public_modules(native)
+            "public_modules", lambda: answer(native, PUBLIC_MODULES)
         ),
         "compile_commands": bodies.entry(
-            "compile_commands", lambda: _lifecycle.compile_commands(native)
+            "compile_commands", lambda: answer(native, COMPILE_COMMANDS)
         ),
         "references": tuple(
             sorted(

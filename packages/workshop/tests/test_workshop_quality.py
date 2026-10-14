@@ -46,7 +46,6 @@ def _package(tmp_path: Path) -> Package:
         directory=member,
         path="packages/one",
         name="livery-one",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -239,7 +238,6 @@ def test_the_module_derives_from_the_src_tree_not_the_dist_name(
         directory=member,
         path="packages/loop-echo",
         name="ci-e2e-loop-loop-echo",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -257,7 +255,6 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
         directory=member,
         path="packages/plain",
         name="livery-loop-echo",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -274,7 +271,6 @@ def _python_member(tmp_path: Path, name: str, manifest: str = "") -> Package:
         directory=member,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -294,19 +290,19 @@ def _root(member: Path, name: str) -> Path:
 
 
 def test_the_public_modules_are_what_each_root_declares(tmp_path: Path) -> None:
-    from livery.workshop import public_modules
+    from livery.workshop import PUBLIC_MODULES, answer
 
     # A root with nothing public, an extension's, declares nothing.
     bare = _python_member(
         tmp_path, "ext", '[tool.uv.build-backend]\nmodule-name = "acme.ext"\n'
     )
     (bare.directory / "src" / "acme" / "ext").mkdir(parents=True)
-    assert public_modules(bare) == ()
+    assert answer(bare, PUBLIC_MODULES) == ()
     # A root's __init__ declares its public packages too, so a verifier
     # reaches them through it: one module.
     package = _python_member(tmp_path, "one")
     _root(package.directory, "one")
-    assert public_modules(package) == ("acme.one",)
+    assert answer(package, PUBLIC_MODULES) == ("acme.one",)
 
 
 def test_a_root_with_nothing_public_verifies_nothing(tmp_path: Path) -> None:

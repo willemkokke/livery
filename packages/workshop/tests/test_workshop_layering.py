@@ -500,7 +500,6 @@ def _member(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -692,7 +691,6 @@ def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_projec
             directory=directory,
             path=f"packages/{name}",
             name=f"livery-{name}",
-            kind="python",
             depends=(),
             extensions=("python",),
         )

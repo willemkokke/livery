@@ -86,7 +86,6 @@ def _package(directory: Path, name: str, *extensions: str) -> Package:
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind="",
         depends=(),
         extensions=extensions,
     )

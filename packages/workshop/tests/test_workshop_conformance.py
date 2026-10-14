@@ -671,7 +671,7 @@ def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
 
 
 def _checks_package(*extensions: str) -> Package:
-    return Package(Path("."), "packages/probe", "probe", "", (), extensions=extensions)
+    return Package(Path("."), "packages/probe", "probe", (), extensions=extensions)
 
 
 # Then the builtins, and the kit's own shape.

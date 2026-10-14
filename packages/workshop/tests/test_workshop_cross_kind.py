@@ -182,7 +182,6 @@ def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
         directory=directory,
         path="packages/ext",
         name="acme-ext",
-        kind="python",
         depends=(),
         extensions=("nanobind",),
     )

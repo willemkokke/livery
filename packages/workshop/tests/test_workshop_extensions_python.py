@@ -27,7 +27,6 @@ def test_python_s_build_refuses_a_platform_wheel(
         directory=directory,
         path="packages/core",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -168,7 +167,6 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
         directory=directory,
         path="packages/core",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -224,7 +222,6 @@ def test_the_python_steps_stamp_and_publish_as_its_code_does(
         directory=_member("listing"),
         path="packages/listing",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -281,7 +278,6 @@ def test_the_python_isolated_test_runs_the_release_leg(
         directory=tmp_path / "listing",
         path="packages/listing",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -307,7 +303,6 @@ def _verified_package(directory: Path) -> object:
         directory=directory,
         path="packages/core",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -369,7 +364,6 @@ def test_a_red_verification_install_runs_no_test(
         directory=tree / "packages" / "core",
         path="packages/core",
         name="acme-core",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

@@ -35,7 +35,6 @@ def _package(tmp_path: Path, *extensions: str) -> Package:
         directory=directory,
         path="packages/thing",
         name="acme-thing",
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -104,11 +103,13 @@ def test_a_package_nothing_answers_the_version_for_refuses_naming_the_query(
 def test_a_package_whose_set_answers_nothing_takes_each_empty_answer(
     tmp_path: Path,
 ) -> None:
+    from livery.workshop._queries import COMPILE_COMMANDS, PUBLIC_MODULES, answer
+
     for package in (_package(tmp_path, "cpp"), _package(tmp_path)):
         assert _lifecycle.version_files(package) == ()
         assert _lifecycle.declared_requirements(package) == {}
-        assert _lifecycle.public_modules(package) == ()
-        assert _lifecycle.compile_commands(package) is None
+        assert answer(package, PUBLIC_MODULES) == ()
+        assert answer(package, COMPILE_COMMANDS) is None
         assert _lifecycle.references(package) == ()
         assert _lifecycle.distributions(package) == ()
         assert _lifecycle.has_isolated_test(package) is False
@@ -123,14 +124,12 @@ def test_layering_graph_names_each_edge_of_a_package_whose_set_reads_no_manifest
         directory=tmp_path / "packages" / "other",
         path="packages/other",
         name="acme-other",
-        kind="",
         depends=(),
     )
     thing = Package(
         directory=tmp_path / "packages" / "thing",
         path="packages/thing",
         name="acme-thing",
-        kind="",
         depends=(Edge(path="packages/other", kind="runtime", floor="0.1.0"),),
     )
     assert graph_problems(tmp_path, (other, thing)) == [
@@ -158,7 +157,6 @@ def _listing(tmp_path: Path, *extensions: str) -> Package:
         directory=directory,
         path="packages/core",
         name="acme-core",
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -207,6 +205,8 @@ def test_an_extension_that_answers_no_query_answers_each_empty(
 def test_a_package_whose_extensions_answer_takes_their_answers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._queries import PUBLIC_MODULES, answer
+
     queries = "\n".join(
         f'{query} = "{{package}}._steps:{function}"'
         for query, function in (
@@ -233,7 +233,7 @@ def test_a_package_whose_extensions_answer_takes_their_answers(
     assert _lifecycle.version_files(package) == (package.directory / "VERSION",)
     assert _lifecycle.declared_requirements(package) == {"acme-other": ">=1"}
     assert _lifecycle.module_roots(package) == ("acme.answered",)
-    assert _lifecycle.public_modules(package) == ("acme.answered",)
+    assert answer(package, PUBLIC_MODULES) == ("acme.answered",)
 
 
 # What a package's sources reference: its extensions' answers, every
@@ -307,7 +307,6 @@ def test_a_package_whose_extensions_read_no_source_references_nothing(
             directory=directory,
             path="packages/native",
             name="acme-native",
-            kind="",
             depends=(),
             extensions=extensions,
         )
@@ -395,7 +394,6 @@ def _member_listing(tmp_path: Path, name: str, *extensions: str) -> Package:
         directory=tmp_path / "packages" / name,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="python",
         depends=(),
         extensions=extensions,
     )
@@ -465,7 +463,6 @@ def test_a_package_whose_set_tests_nothing_isolated_refuses_a_leg(
         directory=tmp_path / "packages" / "native",
         path="packages/native",
         name="acme-native",
-        kind="",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -564,7 +561,6 @@ def _releasing(root: Path, member: str, *extensions: str, recipe: str = "") -> P
         directory=directory,
         path=f"packages/{member}",
         name=f"acme-{member}",
-        kind="",
         depends=(),
         extensions=extensions,
     )

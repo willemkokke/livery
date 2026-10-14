@@ -41,7 +41,7 @@ def registered() -> Iterator[None]:
 
 
 def _native(root: Path) -> Package:
-    """A cpp-conan member in a git checkout, one source in it."""
+    """A member listing cmake and conan in a git checkout, one source in it."""
     directory = root / "packages" / "native"
     (directory / "src").mkdir(parents=True)
     (directory / "workshop.toml").write_text(
@@ -53,7 +53,6 @@ def _native(root: Path) -> Package:
         directory=directory,
         path="packages/native",
         name="acme-native",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -88,8 +87,8 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
     )
     state = registry.snapshot()
     try:
-        # The member lists nothing and holds what its kind stands for, so
-        # cmake, cpp and conan mount; clang-format, which no list names, does not.
+        # The member lists cmake and conan, which requires cpp, so the three
+        # mount; clang-format, which no list names, does not.
         with footman_registry.capture():
             assert mount_extensions(root) == ("cmake", "cpp", "conan")
         assert "format.clang-format" not in steps_by_name()

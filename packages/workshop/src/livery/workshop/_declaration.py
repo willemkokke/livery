@@ -1678,6 +1678,8 @@ _REMOVED: dict[str, str] = {
     "pre": "goes: a step is named, and a step that runs after it names it in after",
     "post": "goes: a step is named, runs after the steps it names in after, and"
     " does its own cleanup on failure",
+    "kinds": "is extensions: the package-level extensions whose packages the step"
+    " judges, each package whose set holds one",
 }
 
 

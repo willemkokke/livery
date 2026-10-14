@@ -49,7 +49,6 @@ def _member(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -105,8 +104,8 @@ def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
     )
     state = registry.snapshot()
     try:
-        # The member lists nothing and holds python through its kind, so
-        # python mounts; changelog, which no list names, does not.
+        # The member lists python, so python mounts; changelog, which no
+        # list names, does not.
         with footman_registry.capture():
             assert mount_extensions(root) == ("python",)
         assert release_notes(root) is None
@@ -143,7 +142,6 @@ def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
         directory=directory,
         path="packages/thing",
         name="livery-thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

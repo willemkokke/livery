@@ -277,7 +277,6 @@ def test_a_member_without_a_manifest_declares_nothing(tmp_path: Path) -> None:
         directory=tmp_path / "packages" / "bare",
         path="packages/bare",
         name="acme-bare",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

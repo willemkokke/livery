@@ -341,28 +341,6 @@ def module_roots(package: Package) -> tuple[str, ...]:
     return tuple(answer(package, MODULE_ROOTS))
 
 
-def public_modules(package: Package) -> tuple[str, ...]:
-    """The modules that declare *package*'s public API, by import path.
-
-    What a type-completeness step verifies. A package whose set names
-    no importable API answers nothing.
-    """
-    from livery.workshop._queries import PUBLIC_MODULES, answer
-
-    return tuple(answer(package, PUBLIC_MODULES))
-
-
-def compile_commands(package: Package) -> Path | None:
-    """Where *package*'s gate build writes its compilation database.
-
-    None for a package whose set's build writes none. The file exists
-    once the build is configured.
-    """
-    from livery.workshop._queries import COMPILE_COMMANDS, answer
-
-    return answer(package, COMPILE_COMMANDS)
-
-
 def references(package: Package) -> tuple[SourceReferences, ...]:
     """What each of *package*'s sources references, one record per source.
 

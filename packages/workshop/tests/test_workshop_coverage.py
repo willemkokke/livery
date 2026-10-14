@@ -56,7 +56,6 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"livery-{name}",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
@@ -96,7 +95,6 @@ def test_a_package_with_coverage_not_required_is_never_judged(
         directory=native_directory,
         path="packages/native",
         name="acme-native",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
@@ -229,7 +227,6 @@ def _ratchet(
             directory=directory,
             path="packages/thing",
             name="livery-thing",
-            kind="python",
             depends=(),
             extensions=("python",),
         )
@@ -948,7 +945,6 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
         directory=top.directory,
         path=top.path,
         name=top.name,
-        kind="python",
         depends=(Edge(path="packages/base", kind="build", floor="0"),),
         extensions=("python",),
     )
@@ -2039,7 +2035,6 @@ def _native_suite(tmp_path: Path, name: str) -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )
