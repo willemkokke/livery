@@ -353,8 +353,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-
-
 def _register_builtin() -> None:
     from livery.extensions.python import _backend as _python
     from livery.workshop._backends import _cpp_conan, _python_nanobind
