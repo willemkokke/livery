@@ -9,7 +9,7 @@ doc = "the tools the workspace pins: the catalogue, the requirements, the host a
 
 [contract.root.toolroom.host-allowed]
 types = ["strs"]
-doc = "the tools whose copy already installed on a machine is used instead of the store's; the kinds' allowances alone when absent"
+doc = "the tools whose copy already installed on a machine is used instead of the store's; none when absent"
 
 [contract.root.toolroom.index]
 types = ["str"]
@@ -26,7 +26,7 @@ values = ["link", "path", "none"]
 
 [contract.root.toolroom.requires]
 types = ["strs"]
-doc = "the tools the repository needs beyond its kinds', extensions' and members', each a name with an optional floor and host scope: git>=2.40, dotnet_coverage@windows"
+doc = "the tools the repository needs beyond those the workshop, its extensions and its members require, each a name with an optional floor and host scope: git>=2.40, dotnet_coverage@windows"
 
 [contract.root.toolroom.sources]
 types = ["strs"]
@@ -34,7 +34,7 @@ doc = "the mirrors the store tries before a tool's origin: folders relative to t
 
 [contract.package.toolroom]
 types = ["table"]
-doc = "the tools the package needs beyond its kind's and its checks'"
+doc = "the tools the package needs beyond those its extensions and their steps require"
 
 [contract.package.toolroom.requires]
 types = ["strs"]
@@ -42,8 +42,8 @@ doc = "the tools the package requires, each a name with an optional floor and ho
 
 [contract.extension.toolroom]
 types = ["table"]
-doc = "the tools the extension's own verbs need"
+doc = "the tools the extension runs"
 
 [contract.extension.toolroom.requires]
 types = ["strs"]
-doc = "the tools the extension's verbs need, as requirement strings: docker>=27"
+doc = "the tools the extension runs, its verbs' and its steps', as requirement strings: docker>=27"

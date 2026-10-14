@@ -12,12 +12,10 @@ from livery.workshop._kinds import (
     kind_chain,
     kind_for,
     kind_names,
-    kind_tools,
     register_kind,
 )
 from livery.workshop._packages import Package
 from livery.workshop._registries import RegistryTarget
-from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -137,11 +135,10 @@ def test_a_concrete_kind_without_a_backend_refuses(restored_registry) -> None:
 
 
 def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None:
-    """Every chain starts at the base, which builds nothing and requires no tool."""
+    """Every chain starts at the base, which builds nothing."""
     assert "base" not in kind_names()
     for name in ("python", "python-nanobind", "cpp-conan"):
         assert kind_chain(name)[0].name == "base", name
-    assert kind_chain("python")[0].tools == ()
     with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
         backend_for(_package(tmp_path, "base"))
 
@@ -177,7 +174,6 @@ def test_a_registered_kind_dispatches_and_chains(
             backend=fake,
             template="package-python-fake",
             parent="python",
-            tools=("faketool",),
         )
     )
     assert "python-fake" in kind_names()
@@ -186,55 +182,6 @@ def test_a_registered_kind_dispatches_and_chains(
     assert fake.built == ["acme-thing"]
     chain = kind_chain("python-fake")
     assert [record.name for record in chain] == ["base", "python", "python-fake"]
-
-
-def test_tools_union_along_the_chain_only_when_present(
-    restored_registry, python_steps: object
-) -> None:
-    fake = _FakeBackend()
-    register_kind(KindRecord(name="cpp-fake", backend=fake, tools=("cmake", "ninja")))
-    register_kind(
-        KindRecord(
-            name="cpp-fake-child", backend=fake, parent="cpp-fake", tools=("conan",)
-        )
-    )
-    # The kinds carry what operates them; the checkers, the formatter
-    # and the test runner ride their step records.
-    assert kind_tools({"python"}) == ("uv",)
-    from livery.workshop._kinds import kind_stands_for
-    from livery.workshop._steps import tools_for
-
-    assert {tool for tool, _ in tools_for(kind_stands_for("python"))} == {"fake"}
-    # A kind registered without the base as its parent gets none of it.
-    assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
-
-
-def test_the_workspace_profile_grows_only_with_the_kind(
-    restored_registry, tmp_path: Path
-) -> None:
-    from livery.workshop._env_tasks import tool_profile
-
-    root = tmp_path / "ws"
-    (root / "packages" / "member").mkdir(parents=True)
-    (root / "workshop.toml").write_text("[workspace]\n")
-    (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n'
-    )
-    (root / "packages" / "member" / "pyproject.toml").write_text(
-        '[project]\nname = "acme-member"\n'
-    )
-    baseline = tool_profile(root)
-    assert "cmake" not in baseline
-    register_kind(KindRecord(name="cpp-fake", backend=_FakeBackend(), tools=("cmake",)))
-    (root / "packages" / "native").mkdir(parents=True)
-    (root / "packages" / "native" / "workshop.toml").write_text(
-        'kind = "cpp-fake"\nname = "acme-native"\n'
-    )
-    (root / "packages" / "native" / "pyproject.toml").write_text(
-        '[project]\nname = "acme-native"\n'
-    )
-    grown = tool_profile(root)
-    assert "cmake" in grown and set(baseline) <= set(grown)
 
 
 def test_template_chain_orders_parent_first(restored_registry) -> None:

@@ -1,16 +1,18 @@
 """The workshop's doctors, registered under footman's ``footman.doctors`` group.
 
-Three: the forge doctor, which reaches the forge and says who you are
+Four: the forge doctor, which reaches the forge and says who you are
 there, which server it is, what it grants, whether every declared owner
-exists and which admin token ladder is set; and the host doctor, which
-reads the machine, the compilers the present kinds need, the tools the
-host serves, the listed extensions that are dormant, and the installed
-extensions the contract does not list;
-and the ssh doctor, which says whether the git plugin shares one
-connection per host and names a `ControlMaster` entry of the person's
-own. Each returns findings ([livery.footman.Finding][]); every fix here is
-a person's, so none carries a repair. `fm doctor` prints them, footman's
-own first.
+exists and which admin token ladder is set; the host doctor, which
+reads the machine, the compilers the workspace's packages need, the
+tools the host serves, the listed extensions that are dormant, and the
+installed extensions the contract does not list; the uv cache doctor,
+which measures uv's cache against the workspace's limit; and the ssh
+doctor, which says whether the git plugin shares one connection per
+host and names a `ControlMaster` entry of the person's own. Each
+returns findings ([livery.footman.Finding][]). Only the finding of a
+cache over its limit carries a repair, the prune `fm doctor --fix`
+runs; every other fix is a person's. `fm doctor` prints them,
+footman's own first.
 """
 
 from __future__ import annotations
@@ -130,13 +132,13 @@ def host(**facts: Any) -> list[Finding]:
         findings.append(
             Finding(
                 f"host: {tool}",
-                "MISSING, a compiler the present package kinds need",
+                "MISSING, a compiler the workspace's packages need",
                 "install the platform toolchain",
             )
         )
     if not missing:
         findings.append(
-            Finding("host: every compiler the present kinds need is present")
+            Finding("host: every compiler the workspace's packages need is present")
         )
     hosted = [
         f"{name} ({served_by(receipt)})"

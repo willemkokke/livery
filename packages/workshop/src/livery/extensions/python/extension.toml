@@ -7,11 +7,13 @@ api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
 
-# The questions about a package this extension answers.
+# The questions about a package this extension answers. Its requirement
+# writer writes into the pyproject for a sibling that holds python.
 [queries]
 current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
 requirements = "livery.extensions.python._answers:requirements"
+requirement-writers = "livery.extensions.python._answers:requirement_writers"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"

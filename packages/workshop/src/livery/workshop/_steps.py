@@ -1411,21 +1411,20 @@ def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
 
     The files the run names, when it names any. Otherwise the whole
     tree, ``.``, when the run reaches every member the step judges;
-    else the reached python members' ``src`` and ``tests``
-    directories, the workspace's own tests when the run judges them,
-    and the files the step's claims give it in the reached native
-    members.
+    else the ``src`` and ``tests`` directories of the reached members
+    holding the runtime's language, the workspace's own tests when the
+    run judges them, and the files the step's claims give it in the
+    other reached members.
     """
-    from livery.workshop._kinds import is_python_kind
-    from livery.workshop._packages import package_paths
+    from livery.workshop._packages import holds_runtime_language, package_paths
 
     record = step_for(name)
     if ctx.files:
         return claimed_files(record, ctx)
     gated_members = judged_by(record, members(ctx))
     chosen_members = enabled(name, gated_members)
-    pythons = tuple(p for p in chosen_members if is_python_kind(p.kind))
-    natives = tuple(p for p in chosen_members if not is_python_kind(p.kind))
+    pythons = tuple(p for p in chosen_members if holds_runtime_language(p))
+    natives = tuple(p for p in chosen_members if not holds_runtime_language(p))
     unit = _workspace_unit(ctx)
 
     def holding(packages: tuple[Package, ...]) -> tuple[str, ...]:
@@ -1514,16 +1513,13 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered step of the test phase runs.
 
     A package by the extensions it holds. The workspace's own tests
-    are the root's suite, run when a test step names an extension the
-    root's kind stands for ([livery.workshop._tools.ROOT_KIND][]).
+    are the root's suite, run when a test step names the runtime's
+    language, which the root's own files hold whatever the members are.
     """
-    from livery.workshop._kinds import kind_stands_for
-    from livery.workshop._packages import WORKSPACE_TESTS
-    from livery.workshop._tools import ROOT_KIND
+    from livery.workshop._packages import RUNTIME_LANGUAGE, WORKSPACE_TESTS
 
     tests = [record for record in _STEPS.values() if record.phase == "test"]
-    root = set(kind_stands_for(ROOT_KIND))
-    workspace = any(root & set(record.extensions) for record in tests)
+    workspace = any(RUNTIME_LANGUAGE in record.extensions for record in tests)
 
     def runs(unit: Package) -> bool:
         if unit.path == WORKSPACE_TESTS:
@@ -1607,16 +1603,24 @@ def _register_builtin() -> None:
         return run
 
     def sibling_fix(ctx: PhaseContext) -> None:
-        from livery.workshop._packages import write_edges
+        from dataclasses import replace
+
+        from livery.workshop._packages import discover_packages, write_edges
         from livery.workshop._uv import run_uv
 
         written = write_edges(ctx.root)
         for line in written:
             print(line)
         if any("pyproject.toml" in line for line in written):
-            # A new requirement moves the lock; the fix leaves the tree
-            # consistent, as a person would after editing by hand.
+            # Each line names the files written. A requirement written
+            # into a uv member's manifest moves the uv workspace's lock,
+            # so the fix locks again and leaves the tree consistent, as
+            # a person would after editing by hand.
             run_uv("lock", root=ctx.root)
+        if written:
+            # The run read the packages before the fix wrote their
+            # contracts, and the judge reads them as the fix left them.
+            ctx = replace(ctx, packages=discover_packages(ctx.root))
         # A rewriter is not judged again under --fix, so the fix judges
         # what it leaves.
         rule_run("sibling-references")(ctx)

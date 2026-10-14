@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.workshop._packages import Package, SourceReferences
+    from livery.workshop._queries import RequirementWriter
 
 
 def current_version(package: Package) -> str:
@@ -33,6 +34,12 @@ def version_files(package: Package) -> tuple[Path, ...]:
 def requirements(package: Package) -> Mapping[str, str]:
     """The package's ``[project.dependencies]``, each name to its constraint."""
     return _backend.declared_requirements(package)
+
+
+def requirement_writers(package: Package) -> tuple[RequirementWriter, ...]:
+    """The pyproject's writer of a requirement on a sibling that holds python."""
+    del package
+    return (_backend.declare_requirement,)
 
 
 def module_roots(package: Package) -> tuple[str, ...]:
