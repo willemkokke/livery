@@ -99,8 +99,22 @@ def _as_a_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_site_files, "_FILES", {})
 
 
+def _skip_unless_installed(listed: tuple[str, ...]) -> None:
+    """Skip the test while an extension *listed* names is not installed.
+
+    The tool extensions are distributions of their own: a run of the
+    workshop's wheel alone, as a release leg makes, has none of them.
+    """
+    from livery.workshop._extensions import installed_declaration
+
+    missing = [name for name in listed if installed_declaration(name) is None]
+    if missing:
+        pytest.skip(f"not installed here: {', '.join(missing)}")
+
+
 def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:
     """A workspace named acme at *root* that lists *listed* and has no member."""
+    _skip_unless_installed(listed)
     root.mkdir(parents=True)
     spelled = ", ".join(f'"{name}"' for name in listed)
     (root / "workshop.toml").write_text(CONTRACT.format(listed=spelled), "utf-8")
