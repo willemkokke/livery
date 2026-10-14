@@ -10,11 +10,15 @@ levels = ["package"]
 requires = ["cpp"]
 
 # The questions about a package this extension answers, from its recipe.
+# A recipe that names a reference releases the conan package, and the
+# release train probes the conan target the registry ladder resolves for
+# it; a consumer's recipe releases nothing and answers neither.
 [queries]
 current-version = "livery.extensions.conan._answers:current_version"
 version-files = "livery.extensions.conan._answers:version_files"
 requirements = "livery.extensions.conan._answers:requirements"
 distributions = "livery.extensions.conan._answers:distributions"
+registry = "livery.extensions.conan._answers:registry"
 
 # The steps this extension adds to a package's lifecycle phases, one
 # per phase, each named for the extension. The sync step runs before

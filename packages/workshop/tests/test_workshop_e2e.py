@@ -436,64 +436,107 @@ def test_the_tree_reset_keeps_what_sync_materialises(
     assert "cleaned: dist/" in capsys.readouterr().out
 
 
-def test_the_serving_probe_asks_each_member_s_own_registry(
+def _loop_member(
+    root: Path, member: str, contract: str, *, pyproject: bool = False, recipe: str = ""
+) -> None:
+    """Write the loop member *member* of *root*: its *contract* lines and its files.
+
+    With *pyproject*, a ``pyproject.toml``, which discovery asks of a
+    python member; *recipe* is its ``conanfile.py`` when one is given.
+    """
+    directory = root / "packages" / member
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text(
+        f'{contract}name = "ci_e2e_loop-{member}"\n'
+    )
+    if pyproject:
+        (directory / "pyproject.toml").write_text(
+            f'[project]\nname = "ci_e2e_loop-{member}"\nversion = "0.1.0"\n'
+        )
+    if recipe:
+        (directory / "conanfile.py").write_text(recipe)
+
+
+def test_the_loop_probes_each_member_through_its_extensions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A python member is probed on the simple index, the conan member on its target."""
-    from types import SimpleNamespace
+    """Each member's probe is its extensions' answer, asked by its contract's name.
 
+    The python index normalises the name, and a conan registry matches
+    it exactly, so the name the wave publishes a member under finds it
+    on either. Each probe is built once, at the target the loop's
+    workspace resolves, and polled through the wave's wait.
+    """
     import livery.forge as forge_package
-    from livery.workshop import _registries
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as conan_package
+    from livery.workshop._registries import RegistryTarget
 
+    index, remote = "http://gitea:3000/pypi/simple", "http://gitea:3000/conan"
     asked: list[tuple[str, str]] = []
-    built: list[tuple[object, Path]] = []
+    built: list[tuple[str, str]] = []
 
     class _Simple:
-        def __init__(self, url: str, *, token: str) -> None:
-            assert (url, token) == ("http://gitea:3000/simple", "lane-token")
+        def __init__(self, url: str, *, token: str = "") -> None:
+            built.append(("python", f"{url} {token}"))
 
         def versions(self, name: str) -> tuple[str, ...]:
             asked.append(("python", name))
             return ("0.1.0",)
 
     class _Conan:
-        def __init__(self, target: object, *, root: Path) -> None:
-            built.append((target, root))
+        def __init__(self, target: RegistryTarget, *, root: Path) -> None:
+            built.append(("conan", f"{target.url} {root.name}"))
 
         def versions(self, name: str) -> tuple[str, ...]:
             asked.append(("conan", name))
             return ()
 
     monkeypatch.setattr(forge_package, "SimpleRegistry", _Simple)
-    monkeypatch.setattr(_cpp_conan, "ConanRegistry", _Conan)
-    monkeypatch.setattr(
-        _registries, "resolve_registry", lambda root, kind: f"target:{kind}"
+    monkeypatch.setattr(conan_package, "ConanRegistry", _Conan)
+    monkeypatch.setenv("PYTHON_REGISTRY_URL", index)
+    monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", "lane-token")
+    monkeypatch.setenv("CONAN_REMOTE_URL", remote)
+    root = tmp_path / "loop"
+    root.mkdir()
+    (root / "workshop.toml").write_text("[workspace]\n")
+    # The three members as their seeds write them: the echo lists python,
+    # the native member lists nothing and consumes conan, and the library
+    # lists cmake and conan and names its reference.
+    _loop_member(
+        root,
+        "loop-echo",
+        'kind = "python"\nextensions = ["python"]\n',
+        pyproject=True,
     )
-    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "lane-token"))
-    monkeypatch.setattr(
-        _e2e,
-        "_lane",
-        lambda kind: SimpleNamespace(index=lambda: "http://gitea:3000/simple"),
+    _loop_member(
+        root,
+        "loop-native",
+        'kind = "python-nanobind"\n',
+        pyproject=True,
+        recipe='class N:\n    requires = ("fmt/[>=11.0]",)\n',
     )
-    # New members are named by the namespace, which keeps its
-    # underscores; a conan registry matches that name exactly.
-    contract = tmp_path / "packages" / "loop-cpp" / "workshop.toml"
-    contract.parent.mkdir(parents=True)
-    contract.write_text('kind = "cpp-conan"\nname = "ci_e2e_loop-loop-cpp"\n')
-    served = _e2e._serving_probe(tmp_path, "gitea")
+    _loop_member(
+        root,
+        "loop-cpp",
+        'kind = "cpp-conan"\nextensions = ["cmake", "conan"]\n',
+        recipe='class L:\n    name = "ci_e2e_loop-loop-cpp"\n    version = "0.1.0"\n',
+    )
+    served = _e2e._serving_probe(root)
     assert served("loop-echo") == ("0.1.0",)
     assert served("loop-native") == ("0.1.0",)
     assert served("loop-cpp") == ()
     assert served("loop-cpp") == ()
     assert asked == [
-        ("python", "ci-e2e-loop-loop-echo"),
-        ("python", "ci-e2e-loop-loop-native"),
+        ("python", "ci_e2e_loop-loop-echo"),
+        ("python", "ci_e2e_loop-loop-native"),
         ("conan", "ci_e2e_loop-loop-cpp"),
         ("conan", "ci_e2e_loop-loop-cpp"),
     ]
-    # The conan target resolves once, for the wave's whole wait.
-    assert built == [("target:conan", tmp_path)]
+    assert built == [
+        ("python", f"{index} lane-token"),
+        ("python", f"{index} lane-token"),
+        ("conan", f"{remote} loop"),
+    ]
 
 
 # --- the dev-wheel pins: refusals first, then the read -----------------------

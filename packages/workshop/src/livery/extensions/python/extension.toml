@@ -7,7 +7,9 @@ api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
 
-# The questions about a package this extension answers.
+# The questions about a package this extension answers. The package
+# releases its python distribution, and the release train probes the
+# python index the registry ladder resolves for it.
 [queries]
 current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
@@ -15,6 +17,8 @@ requirements = "livery.extensions.python._answers:requirements"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"
+distributions = "livery.extensions.python._answers:distributions"
+registry = "livery.extensions.python._answers:registry"
 
 # Who prints a machine's coverage preview after its suites ran, a query
 # a listed extension answers with the function that prints it, given

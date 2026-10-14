@@ -286,9 +286,9 @@ def floor_probe(
             continue
         if f"{edge.path}/v{floor}" in coreleased:
             continue  # the wave itself serves this floor, receipts first
-        # The dependency's own registry: a cross-kind floor (the
-        # extension on the library) lives in the conan target, not
-        # the python index.
+        # The dependency's own registry: a floor across ecosystems (the
+        # extension on the library) lives in the conan target, not the
+        # python index.
         served = registry_for(dependency).versions(dependency.name)
         floor_key = tuple(int(x) for x in floor.split("."))
         satisfied = any(
@@ -338,10 +338,14 @@ def publish_release(
     dependency's receipt exists, independent members run abreast, a
     failure stops only its dependents. Every read is *ref*-scoped.
     Each member builds through its lifecycle's build, which judges the
-    tags of the wheels it writes, and publishes to its kind's artifact
-    target. With *prebuilt*, a member a job of the run builds before
-    the wave (the workspace's ``job-built-members`` answer) is not
-    built here: the wave publishes what the run collected into its
+    tags of the wheels it writes, and publishes to the target of the
+    ecosystem its extensions release it to: the python target the
+    caller resolved, *index_url* with *token*, or the one the registry
+    ladder resolves for any other ecosystem. A member whose extensions
+    answer no registry, or more than one, refuses the wave before
+    anything uploads. With *prebuilt*, a member a job of the run builds
+    before the wave (the workspace's ``job-built-members`` answer) is
+    not built here: the wave publishes what the run collected into its
     ``dist/``, and refuses one whose ``dist/`` holds nothing, naming
     the job.
     """
@@ -358,21 +362,22 @@ def publish_release(
 
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
-    from livery.workshop._kinds import kind_for as _kind_for
-    from livery.workshop._registries import RegistryTarget
+    from livery.workshop._registries import RegistryTarget, resolve_registry
 
+    # Each member goes to the target of the ecosystem its extensions
+    # release it to, and each target is resolved once, before anything
+    # uploads: a member with no registry or more than one, and a ladder
+    # that resolves no target, stop the wave while there is still nothing
+    # to undo. The python target is the one the caller resolved. A member
+    # that opts out of publishing needs no target and asks for none.
     python_target = RegistryTarget(
         kind="python", url=index_url, publish_url=index_url, token=token
     )
-    conan_target = None
-    if any(_kind_for(p.kind).artifact == "conan" for p in ordered if p.publish):
-        # Resolved once, before anything uploads: a ladder refusal
-        # (no conan target anywhere) must stop the wave while there
-        # is still nothing to undo. A member that opts out of
-        # publishing needs no target and asks for none.
-        from livery.workshop._registries import resolve_registry
-
-        conan_target = resolve_registry(root, "conan")
+    targets = {python_target.kind: python_target}
+    releases_to = {p.path: _lifecycle.ecosystem(p) for p in ordered if p.publish}
+    for ecosystem in releases_to.values():
+        if ecosystem not in targets:
+            targets[ecosystem] = resolve_registry(root, ecosystem)
     for package in ordered:
         tag = f"{package.path}/v{manifest[package.name]}"
         verify_release(root, tag, coreleased=coreleased)
@@ -453,7 +458,7 @@ def publish_release(
             # built and tagged by the train and never uploaded: the
             # registry is neither probed nor written for it, and a
             # re-run walks past its tag the way it walks past a
-            # served version. The kind's backend never learns of it.
+            # served version. Its publish phase never runs.
             if not package.publish:
                 if tag in git.tags(root):
                     print(
@@ -486,17 +491,10 @@ def publish_release(
                         package, version, tag, published=False
                     )
                 return
-            from livery.workshop._kinds import kind_for
-
-            record = kind_for(package.kind)
             _build_member(package)
-            # The kind's backend owns the upload; the wave only picks
-            # the resolved target for the kind's artifact.
-            if record.artifact == "conan":
-                assert conan_target is not None
-                target = conan_target
-            else:
-                target = python_target
+            # The member's publish phase owns the upload; the wave only
+            # hands it the target of the ecosystem it releases to.
+            target = targets[releases_to[package.path]]
             if served:
                 print(
                     f"  {package.name} v{version}: already served; walking"

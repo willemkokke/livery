@@ -122,6 +122,19 @@ names appear; without one the entry is written without them and says
 so. CI already carries the variable, so a release run credits
 authors whether the repository is public or private.
 
+Each member publishes to the registry of the one ecosystem its
+extensions release it to, the ecosystem their answer to the
+`distributions` query names: python answers it for a python package,
+and conan for a recipe that names a reference, while a consumer's
+recipe, requirements alone, answers nothing. The wave reads what the
+registry serves through the probe the same extension answers to the
+`registry` query: python's reads the simple index the ladder below
+resolves, with its credential, and conan's reads the conan target. A
+member whose extensions release it to no registry, or to more than
+one, refuses the wave before anything uploads, naming the member; a
+member that lists no extension is answered by what its kind stands
+for.
+
 Where the built wheel goes depends on the forge kind the workspace
 renders:
 

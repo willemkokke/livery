@@ -40,7 +40,7 @@ from livery.workshop._series import LOOP
 from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
-    from livery.forge import Forge, Job, Repository, Run
+    from livery.forge import Forge, Job, Registry, Repository, Run
     from livery.workshop._devenv import Environment
     from livery.workshop._packages import Package
 
@@ -583,11 +583,6 @@ def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str
 #: general form, and this name serves the Gitea-only callers.
 ALIAS_URL = "http://gitea:3000"
 
-#: The member's distribution name: new.package prefixes the
-#: project's namespace (ci_e2e_loop), so the dist is never
-#: "livery-loop-echo".
-LOOP_MEMBER_DIST = "ci-e2e-loop-loop-echo"
-
 #: The loop's members, name and template kind (empty for the default
 #: python kind). The nanobind member forces the wheels path on
 #: every pass: its wheel is built on the runner through cibuildwheel,
@@ -611,11 +606,6 @@ CONTRIBUTED_POINT = "echo-audit"
 VERIFY_TASK = "release.verify"
 
 
-def _member_dist(name: str) -> str:
-    """The distribution name ``new.package`` gives the loop member *name*."""
-    return f"ci-e2e-loop-{name}"
-
-
 def _contract_name(root: Path, member: str) -> str:
     """The name the loop member *member*'s contract declares, as the verbs print it."""
     import tomllib
@@ -624,44 +614,27 @@ def _contract_name(root: Path, member: str) -> str:
     return str(tomllib.loads(contract.read_text("utf-8"))["name"])
 
 
-def _served_name(root: Path, member: str) -> str:
-    """The name a registry serves the loop member *member* under.
-
-    The python index normalises a name, so the distribution name finds
-    a python member there. A conan registry matches the name exactly,
-    so a conan member is asked for by the name its contract declares.
-    """
-    if dict(LOOP_MEMBERS).get(member) != "package-cpp-conan":
-        return _member_dist(member)
-    return _contract_name(root, member)
-
-
-def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
+def _serving_probe(root: Path) -> Callable[[str], tuple[str, ...]]:
     """What the loop's registries serve of a member, by name: its versions.
 
-    A python member is probed on the lane's simple index, a conan
-    member through the conan target the loop's workspace resolves,
-    the forge's own conan registry, each by the name it is served under
-    ([livery.workshop._e2e._served_name][]); each registry is built
-    once and polled through the wave's wait.
+    Each member is probed where its extensions release it, through the
+    probe they answer for that registry, under the name its contract
+    declares, which the wave publishes it under: the python index
+    normalises a name, and a conan registry matches it exactly. Each
+    probe is built once and polled through the wave's wait.
     """
-    from livery.forge import SimpleRegistry
-    from livery.workshop._backends import _cpp_conan
+    from livery.workshop import _lifecycle
+    from livery.workshop._packages import discover_packages
 
-    _, token = _dev_forge(kind)
-    python = SimpleRegistry(_lane(kind).index(), token=token)
-    conan: dict[str, _cpp_conan.ConanRegistry] = {}
-    kinds = dict(LOOP_MEMBERS)
+    members = {package.member: package for package in discover_packages(root)}
+    probes: dict[str, Registry] = {}
 
     def versions(name: str) -> tuple[str, ...]:
-        if kinds.get(name) != "package-cpp-conan":
-            return python.versions(_served_name(root, name))
-        if "conan" not in conan:
-            from livery.workshop._registries import resolve_registry
-
-            target = resolve_registry(root, "conan")
-            conan["conan"] = _cpp_conan.ConanRegistry(target, root=root)
-        return conan["conan"].versions(_served_name(root, name))
+        package = members[name]
+        probe = probes.get(name)
+        if probe is None:
+            probe = probes[name] = _lifecycle.registry(package)
+        return probe.versions(package.name)
 
     return versions
 
@@ -2938,14 +2911,14 @@ def _release_act(root: Path, kind: str) -> None:
     for name in names:
         if dict(LOOP_MEMBERS)[name] == "package-python-nanobind":
             _require_prebuilt(repo, wave, _contract_name(root, name))
-    served_versions = _serving_probe(root, kind)
+    served_versions = _serving_probe(root)
     deadline = time.monotonic() + 300
     for name in names:
         while "0.1.0" not in served_versions(name):
             if time.monotonic() >= deadline:
                 fail(
                     f"the wave is green but the registry never served"
-                    f" {_served_name(root, name)} 0.1.0"
+                    f" {_contract_name(root, name)} 0.1.0"
                 )
             time.sleep(5)
     # The receipt push follows the publish inside the wave, so the
@@ -2960,7 +2933,7 @@ def _release_act(root: Path, kind: str) -> None:
                 fail(f"served, but the receipt tag {tag} is not on the loop")
             time.sleep(5)
         _require_receipt_protected(root, tag, kind)
-    served = ", ".join(f"{_served_name(root, name)} 0.1.0" for name in names)
+    served = ", ".join(f"{_contract_name(root, name)} 0.1.0" for name in names)
     print(f"  release: {served} served, receipts {', '.join(tags.values())} cut")
 
 

@@ -4,9 +4,10 @@ The release train, the layering phase and the docs reach a package's
 artifacts and manifests through these functions alone: its build, the
 version its manifest declares, the files a version is written into,
 writing a version, testing the built artifact in isolation, publishing
-what it built, verifying a released version, its declared
-requirements, writing one, the names other packages reference its code
-by, and what its sources reference. A question that is a query
+what it built and the registry it goes to, verifying a released
+version, its declared requirements, writing one, the names other
+packages reference its code by, and what its sources reference. A
+question that is a query
 ([livery.workshop._queries.Query][]) is answered by the package's
 extensions when one of them answers it, and a build, a stamp, an
 isolated test, a publish or a verification runs as the package's phase
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from pathlib import Path
 
+    from livery.forge import Registry
     from livery.workshop._packages import Package, SourceReferences
     from livery.workshop._phases import PhaseContext
     from livery.workshop._queries import Query
@@ -48,15 +50,8 @@ def sync(packages: Iterable[Package], root: Path) -> None:
     package, which consumes conan and is never a recipe, gets conan's
     profile and none of its stamp, build or publish.
     """
-    from dataclasses import replace
-
-    from livery.workshop._kinds import kind_names, kind_stands_for
-
     for package in packages:
-        held = package
-        if not package.extensions and package.kind in kind_names():
-            held = replace(package, extensions=kind_stands_for(package.kind))
-        _run_steps(held, "sync", root, {})
+        _run_steps(_held(package), "sync", root, {})
 
 
 #: What the release train's build gives the build phase beside the
@@ -143,6 +138,82 @@ def publish(
     return backend_for(package).publish_artifact(
         package, root, version=version, target=target
     )
+
+
+def distributions(package: Package) -> tuple[tuple[str, str], ...]:
+    """The distributions *package* releases, each as its ecosystem and its name.
+
+    Its set's answers to the ``distributions`` query, combined; a
+    package that lists no extension is asked as holding what its kind
+    stands for, the bridge while package kinds remain.
+    """
+    from livery.workshop._queries import DISTRIBUTIONS, answer
+
+    return answer(_held(package), DISTRIBUTIONS)
+
+
+def ecosystem(package: Package) -> str:
+    """The one ecosystem *package* releases to, which its registry resolves by.
+
+    The ecosystem its distributions name (``distributions``): the release
+    train publishes the package to that ecosystem's registry and probes
+    it there.
+
+    Raises:
+        Failed: naming the package and its set when no extension of the
+            set releases a distribution of it, and naming the ecosystems
+            when its distributions name more than one, since a package
+            releases to one registry.
+    """
+    from livery.footman import fail
+
+    # A list, not a tuple: basedpyright narrows a tuple by the length
+    # checks below and then reads the last line's index as out of range.
+    named = list(dict.fromkeys(found for found, _name in distributions(package)))
+    if not named:
+        held = ", ".join(_set_of(package)) or "none"
+        fail(
+            f"{package.path}: its extensions ({held}) answer no registry: none of"
+            " them releases a distribution of it, so the release train has nowhere"
+            " to publish it. List the extension that releases it, or set [release]"
+            " publish = false to version and tag it without an upload"
+        )
+    if len(named) > 1:
+        fail(
+            f"{package.path}: its extensions answer more than one registry,"
+            f" {', '.join(named[:-1])} and {named[-1]}: each releases a"
+            " distribution of it, and a package releases to one registry. List"
+            " the extensions that release it to one of them"
+        )
+    return named[0]
+
+
+def registry(package: Package) -> Registry:
+    """The registry *package* releases to, as a probe of the versions it serves.
+
+    Its set's answer to the ``registry`` query, from the extension that
+    releases its distribution; a package that lists no extension is
+    asked as holding what its kind stands for. The release train polls
+    the probe until a version it uploaded is served.
+
+    Raises:
+        Failed: naming the package when its extensions answer no
+            registry or more than one (``ecosystem``), before any probe is
+            built, and naming the ecosystem when the extensions that
+            release it answer no probe of its registry.
+    """
+    from livery.footman import fail
+    from livery.workshop._queries import REGISTRY, answer
+
+    released = ecosystem(package)
+    probe = answer(_held(package), REGISTRY)
+    if not probe:
+        fail(
+            f"{package.path}: its extensions release it to {released} and answer"
+            " no probe of that registry, so the release train cannot see what it"
+            " serves"
+        )
+    return probe
 
 
 def has_isolated_test(package: Package) -> bool:
@@ -444,6 +515,30 @@ def _answered(package: Package, query: Query[T]) -> bool:
         if declared is not None and answered_at(package, name, declared, query.name):
             return True
     return False
+
+
+def _held(package: Package) -> Package:
+    """*package* as its set is asked: what its kind stands for while it lists none.
+
+    The bridge while package kinds remain, which the sync phase and the
+    queries about what a package releases take. A kind the registry does
+    not know stands for nothing.
+    """
+    if package.extensions:
+        return package
+    from dataclasses import replace
+
+    from livery.workshop._kinds import kind_stands_for
+
+    return replace(package, extensions=kind_stands_for(package.kind))
+
+
+def _set_of(package: Package) -> tuple[str, ...]:
+    """The package-level extensions *package*'s set holds, as its queries ask them."""
+    from livery.workshop._composition import package_set
+    from livery.workshop._extensions import installed_declaration
+
+    return package_set(_held(package).extensions, installed_declaration)
 
 
 def _optional(package: Package, name: str) -> Any:

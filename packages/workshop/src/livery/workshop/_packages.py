@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from itertools import takewhile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from livery.workshop._contract import load_contract
@@ -291,6 +291,16 @@ def member_of(relative: str, members: Iterable[str]) -> str:
         ):
             found = member
     return found
+
+
+def root_of(package: Package) -> Path:
+    """The root of the workspace *package* is a member of.
+
+    The package's directory with its path's parts taken off: the root
+    is two directories above ``packages/forge``, and three above
+    ``packages/extensions/widgets``.
+    """
+    return package.directory.parents[len(PurePosixPath(package.path).parts) - 1]
 
 
 #: The workspace's own test directory, a unit of the gate like a
