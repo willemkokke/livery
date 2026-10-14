@@ -1396,8 +1396,12 @@ parts, each mergeable alone:
   required by the extensions that run them.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
-- P1e (#1620): each extension writes its own manifest's requirement on
-  a sibling; a sibling no writer takes refuses.
+- P1e (built, #1620): each extension writes its own manifest's
+  requirement on a sibling, through the package query
+  `requirement-writers`; a sibling no writer takes refuses, naming its
+  set. Conan's writer opens a recipe's `requires` tuple when it has
+  none, and `layering.sibling-references`' fix judges the contracts it
+  wrote.
 - P1f (#1622): one base constant names the runtime's language,
   `python`.
 - P1g (#1623): pytest runs suites through queries python answers;
@@ -1579,7 +1583,7 @@ neither needs nor rules out).
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the wave's decision that a member's wheels were built before the wave, read from the kind | the package's extensions (phase 11b, slice 6), or conan's per-host artifact (phase 13) |
