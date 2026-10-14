@@ -115,9 +115,10 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
         KindRecord(name="bare", backend=python.backend, template=python.template)
     )
     # The root's own files run on a language named bare, which no step
-    # judges and whose kind requires nothing, so nothing beyond what the
-    # contract requires is a requirement.
+    # judges, and the base's own requirement is left out, so nothing
+    # beyond what the contract requires is a requirement.
     monkeypatch.setattr("livery.workshop._tools.RUNTIME_LANGUAGE", "bare")
+    monkeypatch.setattr("livery.workshop._tools.base_requirements", tuple)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )

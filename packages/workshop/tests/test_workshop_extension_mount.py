@@ -496,7 +496,7 @@ def test_an_unlisted_extensions_tools_never_enter_the_profile(
     root_contract(tmp_path, "[]")
     assert "extension acme.tooled" not in {r.site for r in requirements(tmp_path)}
     assert "docker" not in tool_names(tmp_path)
-    # Listed, the extension is the fourth site, named as the kinds are.
+    # Listed, the extension is a site, named as a step is.
     root_contract(tmp_path, '["acme.tooled"]')
     found = [r for r in requirements(tmp_path) if r.site == "extension acme.tooled"]
     assert [(r.name, r.floor) for r in found] == [("docker", "27")]

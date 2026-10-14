@@ -1,14 +1,16 @@
 """The tools a workspace requires: six declaration sites, one lock, receipts.
 
 A tool requirement is a name with a floor, `git` or `git>=2.40`, and
-six sites declare them: a package kind, in its record, for what
-operates it; the steps that judge a present package, each naming its
-tools; a listed extension, under `[toolroom] requires` in its
-`extension.toml`, for what its own verbs need, and in a
-`[for.<target>]` table, for what it needs while that table applies; a
-plugin the project mounts, through its `workshop.tools` entry point; a
-package instance, in its `workshop.toml` under `[toolroom] requires`,
-for what its kind cannot know; and the project, in the root contract's
+six sites declare them: the base, under `[toolroom] requires` in its
+contract file, for uv, which makes the venv every step runs in; the
+steps that judge a present package, each naming its tools; a listed
+extension, the workspace's or one a package's set holds, under
+`[toolroom] requires` in its `extension.toml`, for the tools it runs
+(cmake's cmake and ninja, conan's conan), and in a `[for.<target>]`
+table, for what it needs while that table applies; a plugin the
+project mounts, through its `workshop.tools` entry point; a package
+instance, in its `workshop.toml` under `[toolroom] requires`, for what
+its extensions cannot know; and the project, in the root contract's
 `[toolroom] requires`, for what belongs to the repository. The sites'
 requirements union, and `toolroom.lock` at the root holds one version
 per tool for the whole repository, the newest the catalogue lists that
@@ -46,6 +48,7 @@ and every lock verb.
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -75,7 +78,6 @@ from typing import Any, NoReturn, cast
 
 from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
-from livery.workshop._kinds import kind_chain
 from livery.workshop._packages import RUNTIME_LANGUAGE, discover_packages
 
 WORKSPACE = "workspace"
@@ -91,6 +93,9 @@ VERDICT_PHASES = ("format", "lint", "typecheck", "typecomplete", "test")
 
 PINNED_TOOLS = ("uv",)
 """The tools no allowance reaches by name: the entry pins uv."""
+
+BASE_SITE = "the base"
+"""The site of the base's own requirements, the ones every workspace has."""
 
 TYPINGS = "typings"
 """The directory under the root the stubs are written into, pyright's default."""
@@ -118,36 +123,53 @@ def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
         fail(str(error))
 
 
+@functools.cache
+def base_requirements() -> tuple[Requirement, ...]:
+    """The tools the base requires in every workspace, at the site `BASE_SITE`.
+
+    Read from the `[toolroom] requires` of the base's contract file,
+    which spells them as an extension's `extension.toml` does: uv,
+    which makes the venv every step runs in, so a workspace with no
+    package requires it too.
+
+    Raises:
+        Failed: when an entry is not a requirement, naming it.
+    """
+    import tomllib
+
+    from livery.toolroom.store import TABLE
+    from livery.workshop._contract_keys import BASE_FILE
+
+    data = tomllib.loads(BASE_FILE.read_text("utf-8"))
+    return tuple(_requires(dict(data.get(TABLE, {})), site=BASE_SITE))
+
+
 def requirements(root: Path) -> tuple[Requirement, ...]:
     """Every requirement the six sites declare, in site order.
 
-    A workspace requires what the kind named for the runtime's
-    language does with or without a member of it: its own `tasks.py`
-    and tests run on the runtime and list no extension, so they take
-    that kind's record as a package listing none takes its own. The
-    steps that judge a package holding the runtime's language judge
-    them too. A step brings the tools it runs, each requirement naming
-    `step <name>` as its site. An
-    extension's site is `extension <name>`, read from its
+    The base's come first, at the site `BASE_SITE`: a workspace
+    requires uv with or without a package, since its own `tasks.py`
+    and tests run in the venv uv makes. The steps that judge a present
+    package bring the tools they run, each requirement naming
+    `step <name>` as its site, and so do the steps that judge the
+    root's own files, which are judged as a package holding the
+    runtime's language is.
+    An extension's site is `extension <name>`, read from its
     ``extension.toml``'s ``[toolroom] requires`` and from each of its
-    ``[for.<target>]`` tables that applies now, so a measurer's tool is
-    required while the workspace lists what it measures for; an
-    unlisted extension declares nothing here, since listing is the only
-    activation channel. A plugin the
-    project mounts through its direct dependencies is `plugin <name>`,
-    read from its entry module
+    ``[for.<target>]`` tables that applies now: cmake's build tools
+    are required while a package's set holds cmake, and a measurer's
+    tool while the workspace lists what it measures for. An extension
+    that neither the workspace lists nor a package's set holds
+    declares nothing here, since listing is the only activation
+    channel. A plugin the project mounts through its direct
+    dependencies is `plugin <name>`, read from its entry module
     ([livery.workshop._tools.plugin_tools][]).
     """
     from livery.toolroom.store import LockError, Requirement
     from livery.workshop._extensions import extension_tools
 
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    kinds = {package.kind for package in packages} | {RUNTIME_LANGUAGE}
-    found: list[Requirement] = []
-    for kind_name in sorted(kinds):
-        for record in kind_chain(kind_name):
-            for text in record.tools:
-                found.append(Requirement.parse(text, site=f"kind {record.name}"))
+    found: list[Requirement] = list(base_requirements())
     # The steps that judge a present package bring their tools, each
     # naming its step: unregistering a step removes its tool.
     from livery.workshop._steps import tools_for
@@ -233,17 +255,15 @@ def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
 
 
 def host_allowed(root: Path) -> tuple[str, ...]:
-    """The tools whose copy on the machine may serve: the contract's and the kinds'.
+    """The tools whose copy on the machine may serve: the root contract's.
 
-    The root contract's list and the present kinds' `host_allowed`
-    union, the kind named for the runtime's language always among
-    them, sorted. A name no site
-    requires yet is kept and named by the lock as an allowance ahead
-    of its requirement: a workspace may allow `cmake` before its first
-    C++ package arrives, and the lock's line is where a misspelling
-    shows. A tool a step reads its verdict
-    from refuses, naming the steps that read it: a linter that varies
-    by machine makes the gate disagree with CI. `uv` refuses by name,
+    The root contract's `[toolroom] host-allowed`, each name once,
+    sorted. A name no site requires yet is kept and named by the lock
+    as an allowance ahead of its requirement: a workspace may allow
+    `cmake` before its first C++ package arrives, and the lock's line
+    is where a misspelling shows. A tool a step reads its verdict from
+    refuses, naming the steps that read it: a linter that varies by
+    machine makes the gate disagree with CI. `uv` refuses by name,
     since the entry pins it. A tool an extension that writes release
     notes requires refuses, naming the extension: a release's entries
     must not depend on the machine. A download whose executable is
@@ -252,17 +272,15 @@ def host_allowed(root: Path) -> tuple[str, ...]:
     """
     from livery.toolroom.store import LockError, Requirement
     from livery.workshop._extensions import notes_tools
-    from livery.workshop._kinds import kind_host_allowed
     from livery.workshop._steps import step_for, tools_for
 
     declared = cast(
         "list[str]", tools_table(root / "workshop.toml").get("host-allowed", [])
     )
-    packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    kinds = {package.kind for package in packages} | {RUNTIME_LANGUAGE}
-    names = tuple(sorted({*declared, *kind_host_allowed(kinds)}))
+    names = tuple(sorted(set(declared)))
     if not names:
         return ()
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
     verdicts: dict[str, set[str]] = {}
     for tool, step in tools_for(_held(packages)):
         if step_for(step).phase in VERDICT_PHASES:
@@ -457,12 +475,12 @@ def _entry_point_runs(name: str, receipt: Receipt, bin_dir: Path) -> bool:
 def store_cannot_supply(root: Path) -> str:
     """Why the store supplies nothing here; empty when it can.
 
-    The sites require tools whatever a contract says, because a kind
-    brings its own: a workspace with no packages still runs on the
-    python kind, whose gate checkers come from the store. Nothing is
-    supplied until a lock names versions, and nothing can be locked
-    until the contract names a catalogue to resolve against, so the
-    two are one question with one answer a reader can act on.
+    The sites require tools whatever a contract says, because the
+    base requires uv: a workspace with no package still runs in the
+    venv uv makes. Nothing is supplied until a lock names versions,
+    and nothing can be locked until the contract names a catalogue to
+    resolve against, so the two are one question with one answer a
+    reader can act on.
 
     Empty when a lock is present, and empty for a workspace that
     requires no tool at all.

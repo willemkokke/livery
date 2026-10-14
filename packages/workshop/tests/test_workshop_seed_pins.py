@@ -301,26 +301,28 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 
 #: What a workspace listing nothing requires as each seed's member joins
 #: it: each requirement's name and site, each pair once, in the order
-#: first required.
+#: first required. The base requires uv; each native tool is required by
+#: the extension in the member's set that runs it, in the mount's order.
 REQUIRED = {
-    "no member": (("uv", "kind python"),),
-    "package-python": (("uv", "kind python"),),
+    "no member": (("uv", "the base"),),
+    "package-python": (("uv", "the base"),),
     "package-python-nanobind": (
-        ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("uv", "the base"),
+        ("conan", "extension conan"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
     "package-cpp-conan": (
-        ("cmake", "kind cpp-conan"),
-        ("conan", "kind cpp-conan"),
-        ("ninja", "kind cpp-conan"),
-        ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("uv", "the base"),
+        ("cmake", "extension cmake"),
+        ("ninja", "extension cmake"),
+        ("conan", "extension conan"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
 }
 
