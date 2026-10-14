@@ -215,6 +215,12 @@ def test_a_contract_writing_kind_refuses_naming_the_list_to_write(
     )
     # Nothing rewrites it.
     assert member.read_text().startswith('kind = "rust"\n')
+    # A value that is no string is spelled as the contract holds it.
+    member.write_text('kind = 3\nname = "m"\n')
+    assert _refusal(lambda: _contract.load_contract(member)).startswith(
+        f"{member}:\n  kind = 3 is not a key: a package lists the extensions it is"
+        " made of, from the installed ones a package may list,"
+    )
 
 
 def test_a_contract_writing_kind_beside_extensions_refuses_naming_its_list(
@@ -236,6 +242,12 @@ def test_a_contract_writing_kind_beside_extensions_refuses_naming_its_list(
     assert _refusal(lambda: _contract.load_contract(member)) == (
         f'{member}:\n  kind = "python" is not a key: the package lists its'
         " extensions already, extensions = []; delete kind"
+    )
+    # An extensions that is no list is named as the contract spells it.
+    member.write_text('kind = "python"\nname = "m"\nextensions = "python"\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f'{member}:\n  kind = "python" is not a key: the package lists its'
+        " extensions already, extensions = 'python'; delete kind"
     )
     # Deleted, the contract loads.
     member.write_text('name = "m"\nextensions = ["nanobind"]\n')
