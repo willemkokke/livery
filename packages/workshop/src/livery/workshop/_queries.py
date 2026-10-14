@@ -163,8 +163,8 @@ def _nearest(answers: Mapping[str, Any], lookup: Lookup) -> Any:
 def merged(answers: Mapping[str, Any], lookup: Lookup) -> Mapping[str, str]:
     """Every name any answer holds, to its one value; a name valued twice refuses.
 
-    The ``requirements`` query's rule, which the base's contract file
-    names.
+    The rule of the ``requirements`` and ``job-built-members`` queries,
+    which the base's contract file names.
     """
     del lookup
     found: dict[str, str] = {}
@@ -271,6 +271,12 @@ EDITOR_EXTENSIONS: Query[tuple[str, ...]] = Query("editor-extensions")
 #: The state store's series the listed extensions keep beside the
 #: base's own, which the janitor bounds and ``fm store.ls`` lists.
 STORE_SERIES: Query[tuple[Series | Keyed, ...]] = Query("store.series")
+
+#: The members a job of the release point builds before the wave, each
+#: member's path (``packages/<member>``) to the job's name: the wave
+#: publishes what the run collected for them, and the entry installs
+#: those of them uv installs after the tools.
+JOB_BUILT_MEMBERS: Query[Mapping[str, str]] = Query("job-built-members")
 
 
 @functools.cache

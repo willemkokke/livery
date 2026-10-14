@@ -1390,8 +1390,11 @@ parts, each mergeable alone:
 - P1a (#1624): the release train and the loop ask a member's listed
   extensions for its distributions and its registry's probe, which
   python and conan answer.
-- P1b (#1618): nanobind answers which members its wheels job builds,
-  and the wheel identity check moves into the build steps.
+- P1b (built, #1618): nanobind answers which members its wheels job
+  builds (`job-built-members`), and the wheel identity check moves into
+  the build steps: python's build refuses a platform-tagged wheel. A
+  package-level extension may answer a workspace query, and conan
+  answers `distributions` for a recipe that names a reference.
 - P1c (#1619): uv is the base's tool; cmake, ninja and conan are
   required by the extensions that run them.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
@@ -1586,7 +1589,7 @@ neither needs nor rules out).
 | `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
 | the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
-| the wave's decision that a member's wheels were built before the wave, read from the kind | the package's extensions (phase 11b, slice 6), or conan's per-host artifact (phase 13) |
+| the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |

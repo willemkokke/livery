@@ -343,8 +343,9 @@ in its own; a handle, `Query("docs.members")`, names it and types its
 answer. A package-level query is asked with a package,
 `answer(package, query)`, and each extension of the package's set that
 answers is asked in composition order; a workspace-level one is asked
-with the workspace root, `answer(root, query)`, and the listed
-extensions answer in list order. The answers combine by the query's
+with the workspace root, `answer(root, query)`, and the extensions the
+workspace mounts answer in mount order: the package-level ones its
+packages hold, then its list. The answers combine by the query's
 rule, and with nobody answering the query's declared default stands,
 or the rule's answer over nothing. The base declares:
 
@@ -366,10 +367,15 @@ or the rule's answer over nothing. The base declares:
 | `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
+| `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
 
 A name no extension declares refuses with the nearest one; an answer
-refuses when the extension's levels lack the query's, and when it is
-off the query's `values`.
+refuses when it is off the query's `values`. A package-level query is
+asked of the package's set alone, so an extension that a package may
+not list refuses to answer one. A workspace-level query is asked of
+every extension the workspace mounts, a package-level one while a
+package holds it: nanobind, a package-level extension, answers
+`job-built-members`.
 
 An extension also answers under `[for.<target>.queries]`, in the same
 grammar. That answer is asked only while the target is listed and the

@@ -12,6 +12,54 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_python_s_build_refuses_a_platform_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A platform tag is compiled code no leg built for any other platform."""
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _backend
+    from livery.footman import Failed
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    directory.mkdir(parents=True)
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        kind="python",
+        depends=(),
+        extensions=("python",),
+    )
+    # What uv build writes into the directory it is handed, by file name.
+    wrote = ["acme_core-1.0.0-cp314-cp314-macosx_11_0_arm64.whl"]
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            out = Path(args[args.index("--out-dir") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            for name in wrote:
+                (out / name).write_bytes(b"")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    with pytest.raises(Failed) as refused:
+        _backend.build(package, tmp_path)
+    assert str(refused.value) == (
+        "acme-core: the build produced a wheel tagged for a platform,"
+        " acme_core-1.0.0-cp314-cp314-macosx_11_0_arm64.whl; python's build ships"
+        " a pure wheel, tagged none-any, so a package with compiled code lists the"
+        " extension that builds its platform wheels"
+    )
+    # A pure wheel beside the sdist is the build's answer.
+    wrote[:] = ["acme_core-1.0.0-py3-none-any.whl", "acme_core-1.0.0.tar.gz"]
+    assert _backend.build(package, tmp_path) == directory / "dist"
+
+
 def test_the_python_extension_imported_before_the_base_registers_the_kind() -> None:
     """The extension loads first and the kind still registers with its code.
 

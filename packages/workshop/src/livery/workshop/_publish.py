@@ -170,36 +170,15 @@ def movement_check(root: Path, package: Package, ref: str) -> None:
         )
 
 
-def assert_wheel_identity(package: Package) -> None:
-    """Refuse a wheel whose tag contradicts its kind, naming both.
+def collected(package: Package) -> bool:
+    """Whether *package*'s ``dist/`` holds a file.
 
-    A native kind's ``none-any`` wheel was built without its
-    extension; a pure kind's platform-tagged wheel smuggled native
-    code past every leg that never compiled it. A kind with no
-    wheel identity (conan) skips.
+    Inside CI a runner's checkout starts with no ``dist/``, so a file
+    there was collected from the artifact of a job that built the
+    member before the wave.
     """
-    from livery.workshop._kinds import kind_for
-
-    identity = kind_for(package.kind).wheel_identity
-    if not identity:
-        return
-    wheels = sorted((package.directory / "dist").glob("*.whl"))
-    if not wheels:
-        fail(f"{package.name}: no wheel in dist/ to publish")
-    for wheel in wheels:
-        pure = "none-any" in wheel.name
-        if identity == "platform" and pure:
-            fail(
-                f"{package.name} is a {package.kind} package and"
-                f" {wheel.name} is pure-tagged: the extension did not"
-                " compile into the wheel"
-            )
-        if identity == "pure" and not pure:
-            fail(
-                f"{package.name} is a {package.kind} package and"
-                f" {wheel.name} carries a platform tag: a pure kind"
-                " must ship none-any, or its declared kind is wrong"
-            )
+    dist = package.directory / "dist"
+    return dist.is_dir() and any(path.is_file() for path in dist.iterdir())
 
 
 def publish_wheels(package: Package, *, index_url: str = "", token: str = "") -> bool:
@@ -358,13 +337,15 @@ def publish_release(
     Eligibility is dependency tags: a member starts when every in-set
     dependency's receipt exists, independent members run abreast, a
     failure stops only its dependents. Every read is *ref*-scoped.
-    Each member builds through its kind's backend and publishes to
-    its kind's artifact target; the wheel identity guard runs both
-    ways before anything uploads. *prebuilt* trusts a ``dist/`` a
-    job of the run already filled, for members whose kind builds
-    platform wheels and for conan members' saved caches, and refuses
-    an empty one naming the collection.
+    Each member builds through its lifecycle's build, which judges the
+    tags of the wheels it writes, and publishes to its kind's artifact
+    target. With *prebuilt*, a member a job of the run builds before
+    the wave (the workspace's ``job-built-members`` answer) is not
+    built here: the wave publishes what the run collected into its
+    ``dist/``, and refuses one whose ``dist/`` holds nothing, naming
+    the job.
     """
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
     from livery.workshop._release import verify_release
 
     resolved_ref = ref or git.head_sha(root)
@@ -372,6 +353,8 @@ def publish_release(
     ordered = tuple(package for package, _version in discovered)
     manifest = {package.name: version for package, version in discovered}
     epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    # Each member a job of the run builds before the wave, to the job.
+    built = answer(root, JOB_BUILT_MEMBERS) if prebuilt else {}
 
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
@@ -411,35 +394,21 @@ def publish_release(
     first_upload = threading.Lock()
     refused_new: list[str] = []
 
-    def _build_member(package: Package, version: str) -> None:
-        """Build the member's artifact, or trust what a job of the run collected."""
-        from livery.workshop._kinds import kind_for
-
-        record = kind_for(package.kind)
-        if prebuilt and record.wheel_identity == "platform":
-            # A job of the run already built and collected this
-            # member's wheels; a rebuild here would clobber them with
-            # one platform's.
-            if not list((package.directory / "dist").glob("*.whl")):
-                fail(
-                    f"{package.name}: --prebuilt, and dist/ holds"
-                    " no collected wheels; no job of the run fed"
-                    " this wave"
-                )
-        elif prebuilt and record.artifact == "conan":
-            # A job of the run created this member once per host and
-            # saved each cache; building again here would cost minutes
-            # and publish nothing the collection lacks.
-            saved = (package.directory / "dist").glob(f"{package.name}-{version}-*.tgz")
-            if not list(saved):
-                fail(
-                    f"{package.name}: --prebuilt, and dist/ holds no"
-                    " saved conan cache; no job of the run fed this"
-                    " wave"
-                )
-        else:
+    def _build_member(package: Package) -> None:
+        """Build the member, or trust what the job that builds it collected."""
+        job = built.get(package.path)
+        if job is None:
             _lifecycle.build(package, root, epoch=epoch)
-        assert_wheel_identity(package)
+            return
+        # The job built this member on each of its legs and the run
+        # collected what every leg made; a build here would replace
+        # that with what this runner's host alone can make.
+        if not collected(package):
+            fail(
+                f"{package.name}: --prebuilt, and dist/ holds nothing the {job}"
+                " job collected; re-run the release so that job builds it before"
+                " the wave"
+            )
 
     def _first_upload(package: Package, version: str, target: RegistryTarget) -> bool:
         """Upload a new project's first version, or name the limit that stops it."""
@@ -492,7 +461,7 @@ def publish_release(
                         " publish = false, done"
                     )
                 else:
-                    _build_member(package, version)
+                    _build_member(package)
                     cut_tag(root, tag, resolved_ref)
                     print(
                         f"  {package.name} v{version}: publish = false; the"
@@ -520,7 +489,7 @@ def publish_release(
             from livery.workshop._kinds import kind_for
 
             record = kind_for(package.kind)
-            _build_member(package, version)
+            _build_member(package)
             # The kind's backend owns the upload; the wave only picks
             # the resolved target for the kind's artifact.
             if record.artifact == "conan":

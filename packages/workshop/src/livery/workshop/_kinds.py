@@ -204,9 +204,6 @@ class KindRecord:
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        wheel_identity: What a built wheel's tag must say:
-            ``pure`` refuses a platform tag, ``platform`` refuses
-            ``none-any``, empty skips the guard (no wheels).
         tests_need_build: Whether the kind's tests run on a build
             rather than on source, so a test step is preceded by the
             backend's ``gate_build``.
@@ -244,7 +241,6 @@ class KindRecord:
     host_tools: tuple[str, ...] = ()
     host_allowed: tuple[str, ...] = ()
     artifact: str = "python"
-    wheel_identity: str = "pure"
     tests_need_build: bool = False
     examples: (
         Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
@@ -528,7 +524,6 @@ def _register_builtin() -> None:
             template=BASE_TEMPLATE,
             tools=(),
             artifact="",
-            wheel_identity="",
             abstract=True,
         )
     )
@@ -571,7 +566,6 @@ def _register_builtin() -> None:
             # their step records.
             tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
-            wheel_identity="platform",
             # Beside python's, the extension module's C++ sources, the
             # provider that resolves their dependencies, and nanobind's
             # wheels job: a nanobind package consumes conan and is never
@@ -602,7 +596,6 @@ def _register_builtin() -> None:
             tools=("cmake", "conan", "ninja"),
             host_tools=("cc", "c++"),
             artifact="conan",
-            wheel_identity="",
             tests_need_build=True,
             # A package that lists no extension is taken to hold the
             # three a new one lists: one category table, one conan
