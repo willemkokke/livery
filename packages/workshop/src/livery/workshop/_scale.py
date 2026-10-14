@@ -54,18 +54,18 @@ from livery import git
 from livery.footman import doc, fail
 from livery.workshop._ci_tasks import ci
 
-#: The members a fixture holds by default, per template kind.
+#: The members a fixture holds by default, per template.
 DEFAULT_COUNTS: dict[str, int] = {
-    "package-python": 240,
-    "package-cpp-conan": 40,
-    "package-python-nanobind": 20,
+    "python-library": 240,
+    "cpp-library": 40,
+    "nanobind-module": 20,
 }
 
-#: The short tag a generated member's name carries, per template kind.
+#: The short tag a generated member's name carries, per template.
 _TAGS = {
-    "package-python": "p",
-    "package-cpp-conan": "c",
-    "package-python-nanobind": "n",
+    "python-library": "p",
+    "cpp-library": "c",
+    "nanobind-module": "n",
 }
 
 #: The verbs timed, in the order each state runs them.
@@ -95,17 +95,19 @@ class Timing:
 
 
 def member_names(counts: dict[str, int]) -> list[tuple[str, str]]:
-    """The generated members, as ``(directory name, template kind)`` pairs.
+    """The generated members, as ``(directory name, template)`` pairs.
 
-    Names sort by kind tag, then by a zero-padded index, so the
+    Names sort by template tag, then by a zero-padded index, so the
     python members' tree order is their name order.
     """
     out: list[tuple[str, str]] = []
-    for kind, count in counts.items():
-        tag = _TAGS.get(kind)
+    for template, count in counts.items():
+        tag = _TAGS.get(template)
         if tag is None:
-            fail(f"no scale tag for kind {kind!r}: use one of {', '.join(_TAGS)}")
-        out.extend((f"scale-{tag}{index:03d}", kind) for index in range(count))
+            fail(
+                f"no scale tag for template {template!r}: use one of {', '.join(_TAGS)}"
+            )
+        out.extend((f"scale-{tag}{index:03d}", template) for index in range(count))
     return out
 
 
@@ -160,7 +162,9 @@ def strip_own_suites(root: Path) -> list[str]:
     and their time is not the fixture's. Each such member loses its
     ``test_*.py`` modules and keeps its helpers, since the rendered
     checker configuration names its ``tests`` directory; a directory
-    left with no module gets one, named after the package. Its
+    left with no module gets one, named with the prefix the test
+    layout rule wants of a helper: the package's path under
+    ``packages/``, a group directory's name included. Its
     ``[coverage]`` floor gives way to ``required = false``, so nothing
     judges its coverage. The root ``tests`` directory is the project
     render's and stays as it is.
@@ -174,7 +178,7 @@ def strip_own_suites(root: Path) -> list[str]:
             for module in tests.rglob("test_*.py"):
                 module.unlink()
             if not any(tests.rglob("*.py")):
-                name = package.directory.name.replace("-", "_")
+                name = package.member.replace("-", "_").replace("/", "_")
                 (tests / f"{name}_copy.py").write_text(
                     '"""The scale fixture\'s copy keeps no suite of this member."""\n',
                     encoding="utf-8",
@@ -202,9 +206,9 @@ def generate(root: Path, counts: dict[str, int]) -> list[tuple[str, str]]:
     from livery.workshop._templates import apply_project, render_member
 
     members = member_names(counts)
-    python = [name for name, kind in members if kind == "package-python"]
-    for name, kind in members:
-        render_member(root, name, kind=kind)
+    python = [name for name, template in members if template == "python-library"]
+    for name, template in members:
+        render_member(root, name, template)
     by_path = {package.path: package for package in discover_packages(root)}
     for index, name in enumerate(python):
         parent = parent_of(index)
@@ -222,7 +226,7 @@ def generate(root: Path, counts: dict[str, int]) -> list[tuple[str, str]]:
 
 def leaf(members: list[tuple[str, str]]) -> str:
     """The python member the edit touches: the last, which no member depends on."""
-    python = [name for name, kind in members if kind == "package-python"]
+    python = [name for name, template in members if template == "python-library"]
     if not python:
         fail("the fixture has no python member to edit")
     return python[-1]
@@ -293,8 +297,8 @@ def row(
 ) -> dict[str, Any]:
     """The ``scale`` job's row: the timings as tasks, exits and members."""
     counts: dict[str, int] = {}
-    for _name, kind in members:
-        counts[kind] = counts.get(kind, 0) + 1
+    for _name, template in members:
+        counts[template] = counts.get(template, 0) + 1
     return {
         "job": job,
         "total_ms": round(sum(timing.ms for timing in timings), 1),
@@ -341,11 +345,11 @@ def record(root: Path, job_row: dict[str, Any], *, sha: str) -> str:
 
 def _counts(python: int, cpp: int, nanobind: int) -> dict[str, int]:
     return {
-        kind: count
-        for kind, count in (
-            ("package-python", python),
-            ("package-cpp-conan", cpp),
-            ("package-python-nanobind", nanobind),
+        template: count
+        for template, count in (
+            ("python-library", python),
+            ("cpp-library", cpp),
+            ("nanobind-module", nanobind),
         )
         if count > 0
     }
@@ -354,14 +358,14 @@ def _counts(python: int, cpp: int, nanobind: int) -> dict[str, int]:
 @ci.task(name="scale")
 @git.unsigned
 def ci_scale(
-    python: Annotated[int, doc("generated python members")] = DEFAULT_COUNTS[
-        "package-python"
+    python: Annotated[int, doc("members born from python-library")] = DEFAULT_COUNTS[
+        "python-library"
     ],
-    cpp: Annotated[int, doc("generated cpp-conan members")] = DEFAULT_COUNTS[
-        "package-cpp-conan"
+    cpp: Annotated[int, doc("members born from cpp-library")] = DEFAULT_COUNTS[
+        "cpp-library"
     ],
-    nanobind: Annotated[int, doc("generated nanobind members")] = DEFAULT_COUNTS[
-        "package-python-nanobind"
+    nanobind: Annotated[int, doc("members born from nanobind-module")] = DEFAULT_COUNTS[
+        "nanobind-module"
     ],
     keep: Annotated[
         str, doc("build the fixture in this new directory and keep it")

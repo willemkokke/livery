@@ -68,6 +68,11 @@ def distributions(package: Package) -> tuple[tuple[str, str], ...]:
     return ((ECOSYSTEM, package.name),)
 
 
+def executables(package: Package) -> tuple[str, ...]:
+    """The scripts the package's ``pyproject.toml`` names in ``[project.scripts]``."""
+    return _backend.scripts(package)
+
+
 def registry(package: Package) -> Registry:
     """The simple index the package is released to, as a probe of its versions.
 

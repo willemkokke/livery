@@ -621,9 +621,10 @@ def content_lint(
     templates under `content/root/` and `content/package/`, and under
     `content/for/<target>/root/` and `content/for/<target>/package/`,
     whose composed files carry headers of their own, and the seeds under
-    `content/seeds/`, which become the workspace's own files.
+    `content/seeds/` and the templates' files under `content/templates/`,
+    which become the workspace's own files.
     """
-    from livery.workshop._seeds import SEEDS
+    from livery.workshop._seeds import SEEDS, TEMPLATES
     from livery.workshop._shipped_files import (
         FOR_CONTENT,
         PACKAGE_CONTENT,
@@ -640,7 +641,7 @@ def content_lint(
             # A template the fragment engine composes into a workspace file
             # carries that file's own header; this one would land in it.
             parts = path.relative_to(content).parts
-            if parts[0] in (ROOT_CONTENT, PACKAGE_CONTENT, SEEDS):
+            if parts[0] in (ROOT_CONTENT, PACKAGE_CONTENT, SEEDS, TEMPLATES):
                 continue
             if (
                 parts[0] == FOR_CONTENT

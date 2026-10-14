@@ -601,12 +601,12 @@ def _chain(
         "CONAN_HOME": str(tmp_path / "conan-home"),
     }
     if not resumed:
-        for member_name, kind in (
-            ("geometry", "package-cpp-conan"),
-            ("ext", "package-python-nanobind"),
+        for member_name, template in (
+            ("geometry", "cpp-library"),
+            ("ext", "nanobind-module"),
         ):
             _run(
-                [str(brand_cli), "new.package", member_name, f"--kind={kind}"],
+                [str(brand_cli), "new.package", member_name, template],
                 child,
                 _hermetic(env, tool),
             )
@@ -641,7 +641,7 @@ def _chain(
         # The wiring is idempotent by refusal: the resumed pass
         # names the existing directory and changes nothing.
         again = _run(
-            [str(brand_cli), "new.package", "geometry", "--kind=package-cpp-conan"],
+            [str(brand_cli), "new.package", "geometry", "cpp-library"],
             child,
             _hermetic(env, tool),
             check=False,

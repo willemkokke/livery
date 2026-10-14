@@ -41,9 +41,12 @@ def _member(root: Path, name: str) -> Path:
 # --- refusals -----------------------------------------------------------------
 
 
-def test_a_kind_with_no_tag_refuses_naming_the_kinds() -> None:
-    with pytest.raises(_FAILURES, match="no scale tag for kind 'package-rust'"):
-        _scale.member_names({"package-rust": 1})
+def test_a_template_with_no_tag_refuses_naming_the_templates() -> None:
+    with pytest.raises(
+        _FAILURES,
+        match="no scale tag for template 'rust-library': use one of python-library,",
+    ):
+        _scale.member_names({"rust-library": 1})
 
 
 def test_an_edit_of_a_member_with_no_module_refuses(tmp_path: Path) -> None:
@@ -54,7 +57,7 @@ def test_an_edit_of_a_member_with_no_module_refuses(tmp_path: Path) -> None:
 
 def test_a_fixture_with_no_python_member_has_no_leaf() -> None:
     with pytest.raises(_FAILURES, match="no python member to edit"):
-        _scale.leaf([("scale-c000", "package-cpp-conan")])
+        _scale.leaf([("scale-c000", "cpp-library")])
 
 
 def test_outside_ci_nothing_is_recorded(
@@ -102,24 +105,24 @@ def test_the_fixture_fails_naming_every_verb_that_exited_non_zero(
     monkeypatch.setattr(_templates, "_root", lambda: tmp_path)
     with pytest.raises(_FAILURES, match="exited non-zero: check cold, check warm"):
         _scale.ci_scale(python=2, cpp=0, nanobind=0, keep=str(tmp_path / "kept"))
-    # A kind counted zero is no kind of the fixture.
-    assert seen == [(tmp_path / "kept", {"package-python": 2})]
+    # A template counted zero is no template of the fixture.
+    assert seen == [(tmp_path / "kept", {"python-library": 2})]
 
 
 # --- members ------------------------------------------------------------------
 
 
-def test_members_are_named_by_kind_tag_and_index() -> None:
-    assert _scale.member_names({"package-python": 2, "package-cpp-conan": 1}) == [
-        ("scale-p000", "package-python"),
-        ("scale-p001", "package-python"),
-        ("scale-c000", "package-cpp-conan"),
+def test_members_are_named_by_template_tag_and_index() -> None:
+    assert _scale.member_names({"python-library": 2, "cpp-library": 1}) == [
+        ("scale-p000", "python-library"),
+        ("scale-p001", "python-library"),
+        ("scale-c000", "cpp-library"),
     ]
 
 
 def test_the_python_members_form_a_binary_tree() -> None:
     assert [_scale.parent_of(i) for i in range(7)] == [None, 0, 0, 1, 1, 2, 2]
-    members = _scale.member_names({"package-python": 7})
+    members = _scale.member_names({"python-library": 7})
     # The last member has no child, so the edit to it changes one member.
     assert _scale.leaf(members) == "scale-p006"
     assert all(_scale.parent_of(i) != 6 for i in range(7))
@@ -133,9 +136,9 @@ def test_generate_renders_each_member_then_the_project_once(
     rendered: list[tuple[str, str]] = []
     applied: list[Path] = []
 
-    def render(root: Path, name: str, *, kind: str) -> str:
-        rendered.append((name, kind))
-        if kind == "package-python":
+    def render(root: Path, name: str, template: str) -> str:
+        rendered.append((name, template))
+        if template == "python-library":
             _member(root, name)
         return name
 
@@ -145,7 +148,7 @@ def test_generate_renders_each_member_then_the_project_once(
     monkeypatch.setattr(
         _scale, "_commit", lambda root, subject: committed.append(subject)
     )
-    members = _scale.generate(tmp_path, {"package-python": 3, "package-cpp-conan": 1})
+    members = _scale.generate(tmp_path, {"python-library": 3, "cpp-library": 1})
     assert rendered == members and len(members) == 4
     assert applied == [tmp_path]
     assert committed == ["chore: 4 generated members"]
@@ -196,11 +199,21 @@ def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
     bare = _member(tmp_path, "bare-one")
     (bare / "tests").mkdir()
     (bare / "tests" / "test_bare.py").write_text("def test_x() -> None: ...\n")
+    grouped = _member(tmp_path, "extensions/widgets")
+    for manifest in ("pyproject.toml", "workshop.toml"):
+        named = (grouped / manifest).read_text()
+        (grouped / manifest).write_text(named.replace("/", "-"))
+    (grouped / "tests").mkdir()
+    (grouped / "tests" / "test_widgets.py").write_text("def test_x() -> None: ...\n")
     # The root suite is the project render's: it stays.
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_workspace.py").write_text("")
     stripped = _scale.strip_own_suites(tmp_path)
-    assert stripped == ["packages/bare-one", "packages/helped"]
+    assert stripped == [
+        "packages/bare-one",
+        "packages/extensions/widgets",
+        "packages/helped",
+    ]
     assert [p.name for p in (helped / "tests").iterdir()] == ["helped_seeds.py"]
     # The coverage floor gives way; the edge's version floor stays.
     assert (
@@ -210,6 +223,10 @@ def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
     )
     # A directory left with no module keeps one for the checkers to read.
     assert [p.name for p in (bare / "tests").iterdir()] == ["bare_one_copy.py"]
+    # The name the test layout rule wants: a group directory's name first.
+    assert [p.name for p in (grouped / "tests").iterdir()] == [
+        "extensions_widgets_copy.py"
+    ]
     assert (tmp_path / "tests" / "test_workspace.py").exists()
     assert _git(tmp_path, "status", "--porcelain") == ""
 
@@ -228,7 +245,7 @@ def test_every_verb_is_timed_in_every_state_the_cold_gate_whole(
         return _scale.Timing(name=name, ms=1.0, code=0)
 
     monkeypatch.setattr(_scale, "run_verb", run)
-    timings = _scale.measure(tmp_path, [("scale-p000", "package-python")])
+    timings = _scale.measure(tmp_path, [("scale-p000", "python-library")])
     assert not (tmp_path / ".venv").exists()
     assert [t.name for t in timings] == [
         f"{verb} {state}"
@@ -244,10 +261,10 @@ def test_the_row_reads_back_as_ci_timings_metrics() -> None:
         _scale.Timing(name="sync cold", ms=1500.0, code=0),
         _scale.Timing(name="check warm", ms=500.0, code=1),
     ]
-    members = [("scale-p000", "package-python"), ("scale-c000", "package-cpp-conan")]
+    members = [("scale-p000", "python-library"), ("scale-c000", "cpp-library")]
     row = _scale.row(timings, members)
     assert row["codes"] == {"sync cold": 0, "check warm": 1}
-    assert row["members"] == {"package-cpp-conan": 1, "package-python": 1}
+    assert row["members"] == {"cpp-library": 1, "python-library": 1}
     entry: dict[str, Any] = {"jobs": {"scale": row}}
     assert _metrics(entry)["scale"] == {
         "total_ms": 2000.0,

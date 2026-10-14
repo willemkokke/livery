@@ -5,8 +5,9 @@ The listed extensions' files are composed by the fragment engine
 are generated from the contract. `drift_check` judges both against the
 repository as the gate's `fm drift.check`; `apply_project` writes both,
 and `fm sync` runs it, which is the recovery for drift. ``fm
-new.package`` writes a member's seeds (`livery.workshop._seeds`) into
-``packages/<name>``, and a fresh runner adds it to the project files.
+new.package <name> <template>`` writes a member born from an installed
+template into ``packages/<name>`` (`livery.workshop._seeds`), and a
+fresh runner adds it to the project files.
 """
 
 from __future__ import annotations
@@ -16,16 +17,28 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman as footman
-from livery.footman import doc, fail, group, hidden
+from livery.footman import Arg, doc, fail, group, hidden, suggest
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
     stack_entries,
     workspace_root,
 )
-from livery.workshop._identity import identity, python_dirs
+from livery.workshop._identity import default_description, identity, python_dirs
 from livery.workshop._pythons import python_floor, runner_script
 
-new = group("new", help="Create a project or a package from the extensions' seeds")
+new = group(
+    "new",
+    help="Create a project from the extensions' seeds, or a package from a template",
+)
+
+#: Each seed tree ``--kind`` named, to the template a package takes in
+#: its place, for the refusal that names it.
+REMOVED_TREES = {
+    "package-python": "python-library",
+    "package-extension": "workshop-extension",
+    "package-python-nanobind": "nanobind-module",
+    "package-cpp-conan": "cpp-library",
+}
 
 
 def _root() -> Path:
@@ -326,36 +339,69 @@ def drift_check(files: frozenset[str] | None = None) -> None:
     )
 
 
+def template_names() -> list[str]:
+    """The installed templates' names, which completion offers."""
+    from livery.workshop._seeds import installed_templates
+
+    return list(installed_templates())
+
+
+def _installed() -> str:
+    """The installed templates, each on a line with its doc, for a refusal."""
+    from livery.workshop._seeds import described, installed_templates
+
+    return described(installed_templates())
+
+
 @new.task(name="package")
 def new_package(
     name: Annotated[str, doc("directory name under packages/ (e.g. scratch)")],
-    kind: Annotated[
-        str, doc("seed tree (package-python, package-cpp-conan, ...)")
-    ] = "package-python",
+    template: Annotated[
+        Arg[str],
+        doc("the template the package is born from (python-library, ...)"),
+        suggest(template_names, strict=False),
+    ] = "",
+    kind: Annotated[str, hidden] = "",
     resume: Annotated[bool, hidden] = False,
 ) -> None:
-    """Create a package from *kind*'s seeds and wire it into the workspace.
+    """Create a package from an installed template and wire it into the workspace.
 
-    Writes the seeds of the tree's chain, ``package-base`` first, into
+    Writes the ``package-base`` seeds, then the files of the template
+    and of each template it extends, the one extended first, into
     ``packages/<name>``, with the distribution named
-    ``<namespace>-<name>``. Then the runner the workspace's environment
-    holds wires the member, run as ``new.package <name> --resume``
-    ([livery.workshop._templates.wire_member][]): it writes the project
-    files again so every per-package list picks the member up, and
-    locks and syncs the environment and the tools. A process mounts the
-    extensions the packages hold when it starts, and the project files
-    and the tool lock read that mount, so a process started after the
-    member exists writes them. ``--resume`` wires a member that exists,
-    which is also the recovery after a wiring that stopped part way. A
-    non-python kind joins the roster without a dev-group entry: there
-    is no distribution to install.
+    ``<namespace>-<name>`` and the contract listing the template's
+    extensions. Without a template it refuses, naming each installed
+    one with its doc. Then the runner the workspace's environment holds
+    wires the member, run as ``new.package <name> --resume``: it writes
+    the project files again so every per-package list picks the member
+    up, and locks and syncs the environment and the tools. A process
+    mounts the extensions the packages hold when it starts, and the
+    project files and the tool lock read that mount, so a process
+    started after the member exists writes them. ``--resume`` wires a
+    member that exists, which is also the recovery after a wiring that
+    stopped part way. A member that does not hold python joins the
+    roster without a dev-group entry: there is no distribution to
+    install.
     """
     root = _root()
     if resume:
         wire_member(root, name)
         return
-    render_member(root, name, kind=kind)
     prog = footman.prog()
+    if kind:
+        wanted = REMOVED_TREES.get(kind, "<template>")
+        fail(
+            "--kind is not an option: a package is born from a template, the word"
+            f" after its name; write `{prog} new.package {name} {wanted}`. The"
+            f" installed templates are:\n{_installed()}"
+        )
+    if not template:
+        fail(
+            f"name the template packages/{name} is born from:"
+            f" `{prog} new.package {name} <template>`; the installed templates"
+            f" are:\n{_installed()}"
+        )
+    render_member(root, name, template)
     runner = runner_script(root / ".venv")
     if not runner.is_file():
         fail(
@@ -413,17 +459,18 @@ def _check_member_name(name: str) -> None:
         )
 
 
-def render_member(root: Path, name: str, *, kind: str = "package-python") -> str:
-    """Write the seeds of the tree *kind* into ``packages/<name>``; the import path.
+def render_member(root: Path, name: str, template: str) -> str:
+    """Write a member born from *template* into ``packages/<name>``; the import path.
 
-    Writes the seeds of the tree's chain, ``package-base`` first
-    (`livery.workshop._seeds.chain`), and the files the records compose
-    for the member. The member's own contract is one of the seeds, and
-    discovery finds the member through it, so the roster needs no
-    write. The project files, the lock and the install are the
-    caller's: `wire_member` runs them for one member, and a caller
-    adding many members runs them once after the last. Refuses an
-    existing directory, naming it.
+    Writes the ``package-base`` seeds and the files of the template's
+    chain (`livery.workshop._seeds.create_package`), and the files the
+    records compose for the member. The member's own contract is one of
+    the template's files, and discovery finds the member through it,
+    so the roster needs no write. The project files, the lock and the
+    install are the caller's: `wire_member` runs them for one member,
+    and a caller adding many members runs them once after the last.
+    Refuses an existing directory, naming it, and a template the birth
+    cannot take, before anything is written.
     """
     _check_member_name(name)
     destination = root / "packages" / name
@@ -444,14 +491,14 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
         **package_injections(root),
         "package_dir": name,
         "package_name": package_name,
-        "package_description": (
-            f"{package_name}: a {facts.get('project_name', '')} workspace package."
+        "package_description": default_description(
+            package_name, str(facts.get("project_name", ""))
         ),
     }
-    from livery.workshop._seeds import chain, create, derived
+    from livery.workshop._seeds import create_package, derived
 
     data.update(derived(data))
-    create(root, destination, chain(kind), data)
+    create_package(root, destination, template, data)
     from livery.workshop._shipped_files import deliver
 
     deliver(root)

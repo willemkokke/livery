@@ -88,3 +88,12 @@ publish job through artifacts, so one release ships the complete set."""
 [ci.jobs.release.publish]
 collects = "wheels"
 needs = ["wheels"]
+
+# The template fm new.package creates a nanobind package from: python's
+# library with the extension module, its build and the conan recipe
+# that names its C++ requirements. Its files live under
+# content/templates/nanobind-module/ beside this file.
+[templates.nanobind-module]
+doc = "a python package whose extension module is C++, bound through nanobind and built into platform wheels"
+extensions = ["nanobind"]
+extends = "python-library"

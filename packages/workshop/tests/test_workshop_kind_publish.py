@@ -697,7 +697,7 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
     answers = project_facts(ROOT)
     seed_into(
         destination,
-        "package-cpp-conan",
+        "cpp-library",
         {
             "package_name": "acme-geometry",
             "package_description": "acme-geometry: a native library.",

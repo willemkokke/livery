@@ -50,6 +50,12 @@ def isolated_test(ctx: PhaseContext) -> None:
     ctx.provide("resolved", dict(resolved))
 
 
+def run(ctx: PhaseContext) -> None:
+    """Start the script the engine names with the words after the dashes; its code."""
+    name = cast("str", ctx.read("executable"))
+    ctx.exit(_backend.run_script(ctx.member, ctx.root, name, ctx.arguments))
+
+
 def verify(ctx: PhaseContext) -> None:
     """Install the released version alone and run its tests at the engine's tree."""
     from pathlib import Path

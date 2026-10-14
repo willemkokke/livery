@@ -1,0 +1,12 @@
+// Seeded from the cpp-executable template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+// acme-tool: the program.
+#include <cstdio>
+
+#include "tool.hpp"
+
+int main() {
+    std::printf("acme-tool %s\n", tool::version());
+    return 0;
+}

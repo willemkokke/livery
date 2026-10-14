@@ -1,0 +1,37 @@
+# Seeded from the python-cli template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+"""The command line prints the greeting and the words it was given."""
+
+from __future__ import annotations
+
+import runpy
+import sys
+
+import pytest
+
+from {{ import_path }}.__main__ import main
+
+#: The package's distribution and its import path.
+NAME = "{{ package_name }}"
+MODULE = "{{ import_path }}"
+
+
+def test_main_prints_the_greeting_and_the_words(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["one", "two"]) == 0
+    assert capsys.readouterr().out == f"hello from {NAME} one two\n"
+
+
+def test_the_module_run_as_a_script_exits_with_main_s_code(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The import above loaded the module; a run as __main__ executes it
+    # afresh, as `python -m` does.
+    monkeypatch.setattr(sys, "argv", ["{{ project_slug }}", "three"])
+    monkeypatch.delitem(sys.modules, f"{MODULE}.__main__", raising=False)
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_module(MODULE, run_name="__main__")
+    assert exited.value.code == 0
+    assert capsys.readouterr().out == f"hello from {NAME} three\n"

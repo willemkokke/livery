@@ -476,6 +476,43 @@ PLUGIN_GROUPS: Mapping[str, str] = {
 }
 
 
+def scripts(package: Package) -> tuple[str, ...]:
+    """The scripts *package*'s ``pyproject.toml`` names under ``[project.scripts]``.
+
+    Each by the name its installation puts on PATH, in the file's
+    order; empty for a package without the file or the table.
+    """
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    return tuple(str(name) for name in data.get("project", {}).get("scripts", {}))
+
+
+def run_script(
+    package: Package, root: Path, name: str, arguments: tuple[str, ...]
+) -> int:
+    """Start the script *name* from the workspace's environment; its exit code.
+
+    The script is the one ``fm sync`` installs into the ``.venv`` at
+    *root*, started with *arguments* and the console shared.
+
+    Raises:
+        Failed: when the environment holds no script of that name,
+            naming the directory and the verb that installs it.
+    """
+    from livery.workshop._pythons import scripts_dir
+
+    directory = scripts_dir(root / ".venv")
+    script = directory / (f"{name}.exe" if sys.platform == "win32" else name)
+    if not script.is_file():
+        fail(
+            f"{package.path}: {directory} holds no script {name};"
+            f" `{footman.prog()} sync` installs the workspace's packages there"
+        )
+    return footman.run([str(script), *arguments], capture=False, nofail=True).code
+
+
 def plugin_hosts(package: Package) -> dict[str, frozenset[str]]:
     """Each module *package* names in a plugin group, to the programs that load it.
 

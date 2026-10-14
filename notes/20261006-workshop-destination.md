@@ -1296,9 +1296,8 @@ slices, each mergeable alone:
    declares.
 7. **The kinds go**: the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
-   the python extension; `fm new.package` takes a combination,
-   completed from the installed package-level extensions, since the
-   combinations listing goes with #1377. With it and phase 13, the
+   the python extension; `fm new.package` takes a template an
+   extension declares (ruled 2026-10-14, step 7's P7). With it and phase 13, the
    vocabulary test's allowance names the runtime, and beside it only
    rows that name the later change removing them (#1534, phases 14 and
    15).
@@ -1482,14 +1481,19 @@ parts, each mergeable alone:
   the vocabulary test's words are the installed package-level
   extensions and the registry kinds, each allowance row naming the
   change that removes it.
-- P7: templates. An extension declares `[templates.<name>]`: the
-  extension list a package born from it writes, the template it
-  extends, and its seed files, which carry the native settings
+- P7 (built, #1652): templates. An extension, or the base, declares
+  `[templates.<name>]`: a `doc`, the extension list a package born
+  from it writes, and the template it extends; its files live in its
+  declarer's `content/templates/<name>/` and carry the native settings
   (CMake's target type, conan's `package_type`, `[project.scripts]`).
   `fm new.package <name> <template>` births a package from one, and
-  today's five seed trees become the first templates; conan adds
-  `cpp-executable` and python `python-cli`. A template is used at
-  birth alone.
+  refuses without one, listing the installed templates with their
+  `doc`; `--kind` and a contract's `template` refuse. The seed trees
+  became python's `python-library`, the base's `workshop-extension`,
+  nanobind's `nanobind-module` and conan's `cpp-library`; conan adds
+  `cpp-executable` and python `python-cli`, whose scripts python
+  answers as `executables`, so `fm run` starts them. A template is
+  used at birth alone.
 
 Order: P0; then P1a to P1h, P1b before P1a; then P2; P3; P4, P5 and P6;
 P7.

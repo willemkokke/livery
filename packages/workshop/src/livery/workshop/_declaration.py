@@ -33,6 +33,13 @@ declares no ``[for.<target>]`` table for refuses, naming both. A
 ``[for.<target>.toolroom]`` table's ``requires`` names the tools the
 workspace requires while the table applies.
 
+A ``[templates.<name>]`` table declares a template ``fm new.package``
+creates a package from: its ``doc``, the ``extensions`` such a package
+lists, and ``extends``, the template whose files come first
+(``DeclaredTemplate``). The base declares its own in the same grammar,
+and a ``[for.<target>]`` table declares none: a template is read while
+it is installed, listed or not.
+
 ``[extension] dormant-until`` names, as a verb, what another extension
 does for this one by declaring a ``[for.<this>]`` table: until a listed
 extension does, this one is dormant
@@ -71,6 +78,7 @@ import ast
 import difflib
 import importlib
 import importlib.util
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -462,6 +470,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         for target, table in data.get("for", {}).items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
+    template_specs_of(data, path, extension=extension)  # and so are these
     queries = reader.answers(data, (), identity)
     answered = {
         str(target): reader.answers(table, ("for", str(target)), identity)
@@ -1619,6 +1628,139 @@ def query_declarations(extension: str, package: str) -> tuple[QuerySpec, ...]:
     return tuple(
         query_specs_of(data, path, extension=extension, package=package).values()
     )
+
+
+#: A template's name: the word ``fm new.package`` takes after the package's.
+_TEMPLATE_NAME = re.compile(r"[a-z][a-z0-9-]*")
+
+#: The keys a ``[templates.<name>]`` table takes.
+_TEMPLATE_KEYS = ("doc", "extensions", "extends")
+
+
+@dataclass(frozen=True)
+class DeclaredTemplate:
+    """A template a declaration file declares under ``[templates.<name>]``.
+
+    ``fm new.package <name> <template>`` creates a package from it: the
+    files of the template it extends first, then its own, which live
+    under ``content/templates/<name>/`` beside the file that declares it.
+
+    Attributes:
+        name: The name ``fm new.package`` takes it by.
+        extension: The extension that declares it, or the base.
+        doc: One line saying what a package born from it is.
+        extensions: The package-level extensions a package born from it
+            lists.
+        extends: The template whose files a birth writes first; empty
+            for none.
+        path: The file that declares it.
+    """
+
+    name: str
+    extension: str
+    doc: str
+    extensions: tuple[str, ...]
+    extends: str
+    path: Path
+
+
+def template_specs_of(
+    data: dict[str, Any], path: Path, *, extension: str
+) -> dict[str, DeclaredTemplate]:
+    """The templates *data*'s ``[templates.<name>]`` tables declare, judged, by name.
+
+    The same reader serves the base's contract file and an extension's
+    declaration file, *extension* naming the declarer. ``doc`` and
+    ``extensions`` are required, ``extends`` is optional, and a table
+    takes nothing else.
+
+    Raises:
+        DeclarationError: when a template is off its shape: a name that
+            is not lower-case letters, digits and hyphens, a key it does
+            not take, a missing ``doc`` or ``extensions``, or a value of
+            the wrong type.
+    """
+    reader = _Reader(extension, extension, path)
+    found: dict[str, DeclaredTemplate] = {}
+    templates = data.get("templates")
+    if templates is None:
+        return found
+    if not isinstance(templates, dict):
+        raise reader.refuse(
+            ("templates",), "is a table of templates, each [templates.<name>]"
+        )
+    for name, table in cast("dict[str, Any]", templates).items():
+        where = ("templates", name)
+        if not _TEMPLATE_NAME.fullmatch(name):
+            raise reader.refuse(
+                where,
+                "is no template name: lower-case letters, digits and hyphens,"
+                " starting with a letter, the word fm new.package takes",
+            )
+        if not isinstance(table, dict):
+            raise reader.refuse(where, "is a table: doc, extensions and extends")
+        entry = cast("dict[str, Any]", table)
+        for key in entry:
+            if key not in _TEMPLATE_KEYS:
+                raise reader.refuse(
+                    (*where, key),
+                    "is not a key of a template: it takes doc, extensions and extends",
+                )
+        doc = entry.get("doc")
+        if doc is None:
+            raise reader.refuse(
+                (*where, "doc"),
+                "is missing: one line saying what a package born from the"
+                " template is, which fm new.package names",
+            )
+        if not isinstance(doc, str) or not doc.strip():
+            raise reader.refuse(
+                (*where, "doc"),
+                "is one line of text saying what a package born from the template is",
+            )
+        listed = entry.get("extensions")
+        if listed is None:
+            raise reader.refuse(
+                (*where, "extensions"),
+                "is missing: the package-level extensions a package born from"
+                " the template lists, [] for none",
+            )
+        if not isinstance(listed, list) or not all(
+            isinstance(item, str) for item in cast("list[object]", listed)
+        ):
+            raise reader.refuse(
+                (*where, "extensions"), "is a list of package-level extensions"
+            )
+        extends = entry.get("extends", "")
+        if not isinstance(extends, str):
+            raise reader.refuse((*where, "extends"), "is a template's name")
+        found[name] = DeclaredTemplate(
+            name,
+            extension,
+            doc.strip(),
+            tuple(cast("list[str]", listed)),
+            extends,
+            path,
+        )
+    return found
+
+
+def template_declarations(extension: str, package: str) -> tuple[DeclaredTemplate, ...]:
+    """The templates the declaration beside *package* declares, for *extension*.
+
+    Empty without a declaration file. Read without judging the rest of
+    the file, and without importing anything, so an installed
+    extension's templates are known whether a workspace lists it or not.
+
+    Raises:
+        DeclarationError: when the file does not parse or a template is
+            off its shape.
+    """
+    path = declaration_file(package)
+    if path is None:
+        return ()
+    data = _parsed(path, path.read_text("utf-8"))
+    return tuple(template_specs_of(data, path, extension=extension).values())
 
 
 def _known_queries(own: dict[str, QuerySpec], path: Path) -> dict[str, QuerySpec]:

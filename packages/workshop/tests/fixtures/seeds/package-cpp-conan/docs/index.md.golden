@@ -1,7 +1,0 @@
-<!-- Seeded from the package-base seeds at
-     birth; this file is the workspace's own. Edit it directly:
-     nothing rewrites it.
--->
-# acme-lib
-
-acme-lib: a acme workspace package.

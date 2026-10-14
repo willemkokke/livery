@@ -1,9 +1,10 @@
-"""What each package seed births, composes and runs, pinned as data.
+"""What each package template births, composes and runs, pinned as data.
 
-Four seed trees birth a member: python's, nanobind's (a python package
-whose extension module is C++), the C++ library's with conan, and the
-extension package's. Each test states one thing the workshop does with
-such a member: the files its birth writes, the package-level extensions
+The installed templates birth a member: python's library and command
+line, nanobind's module (a python package whose extension module is
+C++), conan's C++ library and executable, and the base's workshop
+extension. Each test states one thing the workshop does with such a
+member: the files its birth writes, the package-level extensions
 it holds, the files a sync composes for a workspace of one python, one
 nanobind and one C++ member, the tools a workspace requires, the members
 each step judges, where a requirement on a sibling lands, what the
@@ -12,7 +13,7 @@ and what each file of a nanobind member is to it. A change that moves
 one of these on purpose restates it here in the same change, so the
 diff says what moved.
 
-The goldens live under ``fixtures/seeds/<tree>/``,
+The goldens live under ``fixtures/templates/<template>/``,
 ``fixtures/three-seeds/`` and ``fixtures/three-seeds-guidance/``, each
 file at its path in the workspace with ``.golden`` appended: without
 the suffix, pytest would collect a seeded test module, the type
@@ -45,17 +46,20 @@ _T = TypeVar("_T")
 #: The suffix every golden here carries, which no tool reads.
 GOLDEN = ".golden"
 
-#: The seed trees a member is born from, each to its member's directory
-#: here: the three package seeds, then the extension package's.
+#: The templates a member is born from, each to its member's directory
+#: here: the three the composing workspace holds, the base's extension
+#: package, then the two that extend another.
 TREES = {
-    "package-python": "echo",
-    "package-python-nanobind": "native",
-    "package-cpp-conan": "lib",
-    "package-extension": "plugin",
+    "python-library": "echo",
+    "nanobind-module": "native",
+    "cpp-library": "lib",
+    "workshop-extension": "plugin",
+    "python-cli": "cli",
+    "cpp-executable": "tool",
 }
 
-#: The three package seeds, whose members one workspace composes.
-THREE = ("package-python", "package-python-nanobind", "package-cpp-conan")
+#: The three templates whose members one workspace composes.
+THREE = ("python-library", "nanobind-module", "cpp-library")
 
 #: What the composing workspace lists: the python formatter, linter, two
 #: type checkers and test runner, and the C and C++ formatter and linter.
@@ -121,15 +125,15 @@ def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:
     return root
 
 
-def _born(root: Path, *trees: str) -> dict[str, Package]:
-    """Birth one member of each of *trees* in *root*, as ``fm new.package`` does.
+def _born(root: Path, *templates: str) -> dict[str, Package]:
+    """Birth one member of each of *templates* in *root*, as ``fm new.package`` does.
 
-    The members discovered, each by its tree.
+    The members discovered, each by its template.
     """
-    for tree in trees:
-        render_member(root, TREES[tree], kind=tree)
+    for template in templates:
+        render_member(root, TREES[template], template)
     found = {package.member: package for package in discover_packages(root)}
-    return {tree: found[TREES[tree]] for tree in trees}
+    return {template: found[TREES[template]] for template in templates}
 
 
 def _mounted(root: Path) -> tuple[str, ...]:
@@ -151,14 +155,16 @@ def _files(directory: Path) -> dict[str, str]:
 
 # The births.
 
-#: The package-level extensions each tree's member holds, in composition
-#: order: its list and what the list requires. nanobind requires python,
-#: cpp and conan, so it comes after all three.
+#: The package-level extensions each template's member holds, in
+#: composition order: its list and what the list requires. nanobind
+#: requires python, cpp and conan, so it comes after all three.
 HELD = {
-    "package-python": ("python",),
-    "package-python-nanobind": ("cpp", "conan", "python", "nanobind"),
-    "package-cpp-conan": ("cmake", "cpp", "conan"),
-    "package-extension": ("python",),
+    "python-library": ("python",),
+    "nanobind-module": ("cpp", "conan", "python", "nanobind"),
+    "cpp-library": ("cmake", "cpp", "conan"),
+    "workshop-extension": ("python",),
+    "python-cli": ("python",),
+    "cpp-executable": ("cmake", "cpp", "conan"),
 }
 
 
@@ -169,43 +175,44 @@ def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
     root = _workspace(tmp_path / "acme")
     members = _born(root, *TREES)
     held = {
-        tree: order(extension_set(package), installed_declaration)
-        for tree, package in members.items()
+        template: order(extension_set(package), installed_declaration)
+        for template, package in members.items()
     }
     assert held == HELD
     # The mount takes the union of the members' sets, in composition order.
     assert package_extensions(root) == ("cmake", "cpp", "conan", "python", "nanobind")
 
 
-#: The lines of each tree's contract that say what its member is, by key.
-#: The golden holds ``<key> = ...`` in their place. A contract writes no
-#: kind: its list says what the member holds.
+#: The lines of each template's contract that say what its member is, by
+#: key. The golden holds ``<key> = ...`` in their place. A contract writes
+#: no kind and no template: its list says what the member holds.
 IDENTIFYING = {
-    "package-python": {"extensions": '["python"]'},
-    "package-python-nanobind": {"extensions": '["nanobind"]'},
-    "package-cpp-conan": {"extensions": '["cmake", "conan"]'},
-    "package-extension": {
-        "extensions": '["python"]',
-        "template": '"package-extension"',
-    },
+    "python-library": {"extensions": '["python"]'},
+    "nanobind-module": {"extensions": '["nanobind"]'},
+    "cpp-library": {"extensions": '["cmake", "conan"]'},
+    "workshop-extension": {"extensions": '["python"]'},
+    "python-cli": {"extensions": '["python"]'},
+    "cpp-executable": {"extensions": '["cmake", "conan"]'},
 }
 
 _IDENTIFYING_LINE = re.compile(r"^(kind|extensions|template) = (.*)$", re.MULTILINE)
 
 
-def test_each_seed_births_these_files(tmp_path: Path) -> None:
+def test_each_template_births_what_its_tree_did(tmp_path: Path) -> None:
+    # Each template births its own files over those of the template it
+    # extends, after the package-base seeds.
     root = _workspace(tmp_path / "acme")
     _born(root, *TREES)
     born: dict[str, str] = {}
     identifying: dict[str, dict[str, str]] = {}
-    for tree, member in TREES.items():
+    for template, member in TREES.items():
         files = _files(root / "packages" / member)
         contract = files["workshop.toml"]
-        identifying[tree] = dict(_IDENTIFYING_LINE.findall(contract))
+        identifying[template] = dict(_IDENTIFYING_LINE.findall(contract))
         files["workshop.toml"] = _IDENTIFYING_LINE.sub(r"\1 = ...", contract)
-        born.update({f"{tree}/{path}": text for path, text in files.items()})
+        born.update({f"{template}/{path}": text for path, text in files.items()})
     assert identifying == IDENTIFYING
-    match(born, FIXTURES / "seeds", tmp_path / "render", suffix=GOLDEN)
+    match(born, FIXTURES / "templates", tmp_path / "render", suffix=GOLDEN)
 
 
 # The workspace of the three package seeds.
@@ -214,7 +221,7 @@ def test_each_seed_births_these_files(tmp_path: Path) -> None:
 def _three_seeds(root: Path) -> tuple[dict[str, Package], tuple[str, ...]]:
     """A workspace listing `STACK` with a member of each of `THREE`, synced.
 
-    The members by their trees, and the extensions the mount took, in
+    The members by their templates, and the extensions the mount took, in
     its order. The members are born first, and a process started after
     them mounts and composes, as ``fm new.package`` hands the wiring to
     a runner started after the birth.
@@ -321,8 +328,8 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 #: member is of the python kind and lists nanobind.
 REQUIRED = {
     "no member": (("uv", "the base"),),
-    "package-python": (("uv", "the base"),),
-    "package-python-nanobind": (
+    "python-library": (("uv", "the base"),),
+    "nanobind-module": (
         ("uv", "the base"),
         ("conan", "extension conan"),
         ("cmake", "extension nanobind"),
@@ -330,7 +337,7 @@ REQUIRED = {
         ("conan", "extension nanobind"),
         ("cmake_conan", "extension nanobind"),
     ),
-    "package-cpp-conan": (
+    "cpp-library": (
         ("uv", "the base"),
         ("cmake", "step build.configure"),
         ("cmake", "step build.compile"),
@@ -348,9 +355,9 @@ REQUIRED = {
 #: host that provides none of them.
 HOST_TOOLS = {
     "no member": (),
-    "package-python": (),
-    "package-python-nanobind": ("c++", "cc"),
-    "package-cpp-conan": ("c++", "cc"),
+    "python-library": (),
+    "nanobind-module": ("c++", "cc"),
+    "cpp-library": ("c++", "cc"),
 }
 
 
@@ -429,7 +436,7 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     from livery.workshop._tools import requirements
 
     root = _workspace(tmp_path / "acme", STACK)
-    lib = _born(root, "package-cpp-conan")["package-cpp-conan"]
+    lib = _born(root, "cpp-library")["cpp-library"]
     (root / "tests").mkdir()
     (root / "tests" / "test_workspace.py").write_text(
         "def test_the_workspace() -> None:\n    pass\n", "utf-8"
@@ -557,14 +564,14 @@ def test_the_sibling_requirement_lands_in_its_ecosystem_s_manifest(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path / "acme")
-    for name, tree in (
-        ("echo", "package-python"),
-        ("core", "package-python"),
-        ("native", "package-python-nanobind"),
-        ("lib", "package-cpp-conan"),
-        ("geometry", "package-cpp-conan"),
+    for name, template in (
+        ("echo", "python-library"),
+        ("core", "python-library"),
+        ("native", "nanobind-module"),
+        ("lib", "cpp-library"),
+        ("geometry", "cpp-library"),
     ):
-        render_member(root, name, kind=tree)
+        render_member(root, name, template)
     packages = {package.member: package for package in discover_packages(root)}
     landed = {
         (dependent, sibling): _declared(packages[dependent], packages[sibling])
@@ -632,8 +639,8 @@ def test_the_find_links_are_the_set_s_existing_dist_directories(
     # Before any build, no member has a dist/ to name.
     assert _wheel_dists(plans) == ()
     # The python and nanobind builds write theirs; conan's writes none.
-    for tree in ("package-python", "package-python-nanobind"):
-        (members[tree].directory / "dist").mkdir()
+    for template in ("python-library", "nanobind-module"):
+        (members[template].directory / "dist").mkdir()
     assert [path.relative_to(root).as_posix() for path in _wheel_dists(plans)] == [
         "packages/echo/dist",
         "packages/native/dist",
@@ -764,8 +771,8 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
     from livery.workshop._registries import RegistryTarget
 
     root = _workspace(tmp_path / "acme")
-    members = _born(root, "package-python", "package-python-nanobind")
-    echo, native = members["package-python"], members["package-python-nanobind"]
+    members = _born(root, "python-library", "nanobind-module")
+    echo, native = members["python-library"], members["nanobind-module"]
     bodies = _Bodies()
     # A function that reads or writes the member's files runs; one that
     # builds, uploads, installs or calls conan answers in its place.
@@ -946,7 +953,7 @@ def test_a_nanobind_member_s_files_take_these_categories(tmp_path: Path) -> None
     from livery.workshop._categories import category_of
 
     root = _workspace(tmp_path / "acme")
-    native = _born(root, "package-python-nanobind")["package-python-nanobind"]
+    native = _born(root, "nanobind-module")["nanobind-module"]
     found: dict[str, tuple[str, str]] = {}
     for path in _files(native.directory):
         category = category_of(native, path)

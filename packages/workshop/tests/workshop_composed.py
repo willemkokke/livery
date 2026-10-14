@@ -57,30 +57,35 @@ SEED_DEFAULTS: dict[str, Any] = {
 }
 
 
-def seed_into(destination: Path, tree: str, data: Mapping[str, Any]) -> Path:
-    """Write the seeds of *tree* into *destination*, as a birth would.
+def seed_into(destination: Path, seeded: str, data: Mapping[str, Any]) -> Path:
+    """Write a birth's files into *destination*: the project's seeds or a template's.
 
-    A package tree (`package-python`, ...) writes its whole chain,
-    `package-base` first. The seeds come from the base alone, through a
-    scratch workspace listing no extensions; *data* overrides
-    `SEED_DEFAULTS`, and the derived names follow the package's name.
+    ``project`` is the workspace's seed tree. Any other name is a
+    template (`python-library`, ...), whose birth writes the
+    `package-base` seeds, then the files of its chain. The seeds come
+    from the base alone, through a scratch workspace listing no
+    extensions; *data* overrides `SEED_DEFAULTS`, and the derived names
+    follow the package's name.
     """
-    from livery.workshop._seeds import chain, create, derived
+    from livery.workshop._identity import default_description
+    from livery.workshop._seeds import PROJECT, create, create_package, derived
 
     full = {**SEED_DEFAULTS, **data}
     if "package_name" in full:
         full.setdefault(
             "package_description",
-            f"{full['package_name']}: a {full['project_name']} workspace package.",
+            default_description(full["package_name"], full["project_name"]),
         )
         full.update(derived(full))
-    trees = chain(tree)
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         (root / "workshop.toml").write_text(
             "[workspace]\n" + IDENTITY + "extensions = []\n", encoding="utf-8"
         )
-        create(root, destination, trees, full)
+        if seeded == PROJECT:
+            create(root, destination, PROJECT, full)
+        else:
+            create_package(root, destination, seeded, full)
     return destination
 
 

@@ -587,38 +587,30 @@ ALIAS_URL = "http://gitea:3000"
 
 @dataclass(frozen=True)
 class LoopMember:
-    """One member of the loop: its directory and the seed tree it is born from.
+    """One member of the loop: its directory and the template it is born from.
 
     Attributes:
         name: The member's directory under ``packages/``.
-        seed: The seed tree ``fm new.package`` births it from, whose
-            contract lists the member's package-level extensions.
+        template: The template ``fm new.package`` births it from, whose
+            ``extensions`` the member's contract lists.
     """
 
     name: str
-    seed: str
+    template: str
 
     def listed(self) -> tuple[str, ...]:
-        """The package-level extensions the member's contract lists, from its seed.
+        """The package-level extensions the member's contract lists, from its template.
 
-        Read from the seed tree's own ``workshop.toml``, the file a
-        birth writes, so the loop and the seed name one list. The
-        seed's placeholders stand inside strings, so the file reads as
-        TOML before it renders.
+        The installed template's ``extensions`` in their canonical form,
+        which a birth writes into the contract, so the loop and the
+        birth name one list.
         """
-        import tomllib
+        from livery.workshop._composition import canonical
+        from livery.workshop._extensions import installed_declaration
+        from livery.workshop._seeds import installed_templates
 
-        from livery.workshop._seeds import SEEDS, TEMPLATE
-
-        contract = (
-            Path(__file__).resolve().parent
-            / "content"
-            / SEEDS
-            / self.seed
-            / f"workshop.toml{TEMPLATE}"
-        )
-        data = tomllib.loads(contract.read_text("utf-8"))
-        return tuple(str(name) for name in data.get("extensions", ()))
+        declared = installed_templates()[self.template]
+        return canonical(declared.extensions, installed_declaration)
 
     def holds(self) -> tuple[str, ...]:
         """The installed package-level extensions the member's set holds."""
@@ -635,9 +627,9 @@ class LoopMember:
 #: join the union, the release leg creates it into conan's cache, and
 #: the wave publishes it through the forge's conan registry.
 LOOP_MEMBERS: tuple[LoopMember, ...] = (
-    LoopMember("loop-echo", "package-python"),
-    LoopMember("loop-native", "package-python-nanobind"),
-    LoopMember("loop-cpp", "package-cpp-conan"),
+    LoopMember("loop-echo", "python-library"),
+    LoopMember("loop-native", "nanobind-module"),
+    LoopMember("loop-cpp", "cpp-library"),
 )
 
 
@@ -1999,18 +1991,18 @@ def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
         if (root / "packages" / wanted.name / "workshop.toml").is_file():
             print(f"  member {wanted.name}: already landed")
         else:
-            missing.append((wanted.name, wanted.seed))
+            missing.append((wanted.name, wanted.template))
     if not missing:
         return
     _fresh_branch(root, "feat/members")
-    for name, seed in missing:
-        _loop_fm(root, "new.package", name, f"--kind={seed}")
+    for name, template in missing:
+        _loop_fm(root, "new.package", name, template)
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
-        # A native seed names the hosted runners under [nanobind]
-        # wheel-platforms; the loop's fleet is its one runner, and the
-        # leg must be schedulable. Another seed names none, and nothing
-        # changes.
+        # The nanobind template names the hosted runners under
+        # [nanobind] wheel-platforms; the loop's fleet is its one runner,
+        # and the leg must be schedulable. Another template names none,
+        # and nothing changes.
         body = body.replace(
             'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
             f'wheel-platforms = ["{CURRENT.label}"]',
@@ -2038,7 +2030,7 @@ def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
     # the append, so it must settle again or the gate names it as
     # drift.
     _loop_fm(root, "drift.check", "--fix")
-    names = ", ".join(name for name, _kind in missing)
+    names = ", ".join(name for name, _template in missing)
     git.commit_all(
         root,
         f"feat: the loop's members\n\n{names}: born through new.package on"
@@ -2274,7 +2266,7 @@ RATCHET_MEMBER = "loop-native"
 def _prepare_ratchet(root: Path, kind: str) -> None:
     """Put the ratchet member under auto-ratchet, then lower its mark for the proof.
 
-    The member's seed names no floor, so it is judged at the default
+    The member's template names no floor, so it is judged at the default
     floor until its contract gains ``[coverage] floor = "auto-ratchet"``,
     which lands through the loop's own gate: that pull request's run
     records the first mark, and main's run after the squash judges it;
@@ -2291,7 +2283,7 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     if 'floor = "auto-ratchet"' not in body:
         if "[coverage]" in body:
             fail(
-                f"{contract}: a [coverage] table the seed does not write; the"
+                f"{contract}: a [coverage] table the template does not write; the"
                 " loop adds the member's own, with its floor the mark"
             )
         _fresh_branch(root, "chore/ratchet-member")

@@ -82,8 +82,10 @@ BASE_FILE = Path(__file__).with_name("contract.toml")
 
 #: The top-level tables of ``extension.toml`` that ``[for.<target>]``
 #: does not take again: the extension's identity, the targets table
-#: itself, and the contract keys it owns, which no target changes.
-_UNMIRRORED = ("extension", "for", "contract")
+#: itself, and the contract keys it owns, which no target changes, and
+#: the templates it declares, which a birth reads whether a workspace
+#: lists the extension or not.
+_UNMIRRORED = ("extension", "for", "contract", "templates")
 
 
 @functools.cache
@@ -140,8 +142,8 @@ def _mirrored(found: tuple[Declared, ...]) -> tuple[Declared, ...]:
     """*found*'s ``extension.toml`` keys again under ``for.*``, their docs unchanged.
 
     Every key of the file's top-level tables but those of
-    ``[extension]``, ``[for]`` and ``[contract]``, which no target
-    changes.
+    ``[extension]``, ``[for]``, ``[contract]`` and ``[templates]``,
+    which no target changes.
     """
     return tuple(
         replace(item, path=f"for.*.{item.path}")

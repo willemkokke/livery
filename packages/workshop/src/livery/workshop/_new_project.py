@@ -385,7 +385,7 @@ def _prepare(root: Path) -> None:
     from livery.workshop._uv import run_uv
 
     seeded = create(
-        root, root, (PROJECT,), {**project_facts(root), **package_injections(root)}
+        root, root, PROJECT, {**project_facts(root), **package_injections(root)}
     )
     print(f"  seeds: {len(seeded)} written" if seeded else "  seeds: already written")
     for line in deliver(root):
@@ -526,8 +526,8 @@ def _finish(
 def _add_extension(root: Path, extension: str) -> None:
     """Scaffold *extension* and self-host it: contract 19's home shape.
 
-    The extension package renders from the ``package-extension``
-    kind; the contract's stack gains its import path last, so the
+    The extension package is born from the ``workshop-extension``
+    template; the contract's stack gains its import path last, so the
     home composes with its own overlay at HEAD from the first
     commit. Idempotent: an already-listed extension walks past.
     """
@@ -537,10 +537,10 @@ def _add_extension(root: Path, extension: str) -> None:
     if (root / "packages" / extension).exists():
         print(f"  extension: packages/{extension} already scaffolded")
         return
-    import_path = render_member(root, extension, kind="package-extension")
+    import_path = render_member(root, extension, "workshop-extension")
     # Wired in the birth's own process, whose mount predates the member.
     # The member holds python alone, and mounting python changes none of
-    # the files the wiring writes; a seed that holds more needs the
+    # the files the wiring writes; a template that holds more needs the
     # fresh runner new.package wires its member with.
     wire_member(root, extension)
     contract = root / "workshop.toml"
