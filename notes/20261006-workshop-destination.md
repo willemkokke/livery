@@ -1373,6 +1373,54 @@ Acceptance, refusals first:
   list in `_new_project` and the refusal of `[docs] python-paths` in
   `_contract`.
 
+**Step 7, the kinds go** (issue #1614). Ruled 2026-10-14, on the plan:
+every package lists its extensions, and a contract that writes `kind`
+refuses, naming the list to write, with no rewrite by `--fix`. The
+parts, each mergeable alone:
+
+- P0 (#1615): pins of what each of the three seeds births, composes,
+  requires and runs, and a golden of a workspace holding one member of
+  each, which every later part keeps.
+- P1a (#1624): the release train and the loop ask a member's listed
+  extensions for its distributions and its registry's probe, which
+  python and conan answer.
+- P1b (#1618): nanobind answers which members its wheels job builds,
+  and the wheel identity check moves into the build steps.
+- P1c (#1619): uv is the base's tool; cmake, ninja and conan are
+  required by the extensions that run them.
+- P1d (#1621): cpp answers a `host-tools` query naming the C
+  compilers, until phase 14's toolchains.
+- P1e (#1620): each extension writes its own manifest's requirement on
+  a sibling; a sibling no writer takes refuses.
+- P1f (#1622): one base constant names the runtime's language,
+  `python`.
+- P1g (#1623): pytest runs suites through queries python answers;
+  `run_suites` and `kind_examples` leave the public names.
+- P1h (#1625): every reader of the kind reads the held set instead;
+  the kinds guidance becomes the compositions guidance.
+- P2: nanobind holds its packages by being listed: its declaration
+  deletes python's build and conan's recipe steps within the sets that
+  hold it, and the nanobind backend moves into the extension.
+- P3: the fallbacks through the kind go (#1550), and a contract that
+  writes `kind` refuses. This repository's packages already list their
+  extensions (#1616), so P3 drops their `kind` lines.
+- P4: `Package.kind` goes, and `public_modules` and
+  `compile_commands` leave the public names.
+- P5: cmake's build and test steps are cmake's; `_backends` goes, and
+  the base imports no extension.
+- P6: the registry goes, and the category tables become data.
+- P7: templates. An extension declares `[templates.<name>]`: the
+  extension list a package born from it writes, the template it
+  extends, and its seed files, which carry the native settings
+  (CMake's target type, conan's `package_type`, `[project.scripts]`).
+  `fm new.package <name> <template>` births a package from one, and
+  today's five seed trees become the first templates; conan adds
+  `cpp-executable` and python `python-cli`. A template is used at
+  birth alone.
+
+Order: P0; then P1a to P1h, P1b before P1a; then P2; P3; P4, P5 and P6;
+P7.
+
 ### Phase 12: docs and housekeeping ship apart
 
 **12a, docs.** `livery-extensions-docs`: everything under
@@ -3068,6 +3116,41 @@ neither needs nor rules out).
   has no reader of it once the extractor's absence page went. Found
   while building: the worktree sweep removed this part's stacked
   worktree when its parent's pull request merged (#1610).
+
+- 2026-10-14, Willem, on step 7's plan (#1614): the `kind` key goes,
+  every package lists its extensions, and a contract that still writes
+  `kind` refuses, naming the list to write, with no rewrite by
+  `--fix`. The plan's recommendations on its flagged choices are taken
+  while he is away and listed here for his review: nanobind's
+  declaration deletes python's build and conan's recipe steps within
+  the sets that hold it, rather than each package turning them off;
+  pytest asks queries python answers for the suite runners, rather than
+  taking the runners or reaching into python's private code; one base
+  constant names the runtime's language, rather than a key every
+  workspace writes; cpp answers a `host-tools` query until phase 14,
+  rather than the check going; a member's registry probe is a query
+  python and conan answer until phase 13 makes ecosystems
+  registrations; and the acceptance line on the vocabulary allowance is
+  restated so each remaining row names the change that removes it.
+
+- 2026-10-14, Willem, on package templates (step 7's P7): an
+  extension says which tools a package uses, and nothing said what a
+  package is, a C++ library or an executable, a python library or a
+  CLI; the kinds tied a seed tree to a language stack instead. A
+  template, declared by an extension as `[templates.<name>]`, names
+  the extension list a package born from it writes, the template it
+  extends and its seed files, and `fm new.package <name> <template>`
+  uses it at birth alone. After birth a package is its extensions and
+  its native files: an extension that needs a package's role reads it
+  from the native manifest (conan's `package_type`, CMake's target
+  type, `[project.scripts]`) through a query, and a role the workshop
+  acts on (a binary release, CLI reference pages, an install test) is
+  an extension of its own, which the template lists. Not a persisted
+  `role` key: a package is often several things at once (footman is a
+  library, a CLI, footman plugins and a pytest plugin), and the key
+  would be a second truth beside the native manifest. A CMake-only
+  package's target type needs a configure to read, so the workshop
+  reads it only where it builds.
 
 ## Open
 
