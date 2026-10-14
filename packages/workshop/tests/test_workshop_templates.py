@@ -559,6 +559,9 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
     assert [name for name in data if ignored(name)] == []
     assert [name for name in held if not ignored(name)] == []
+    # The pytest extension is a distribution of its own: a run of this
+    # wheel alone has none, and the rest of the test skips.
+    pytest.importorskip("livery.extensions.pytest")
     # Listed alone, pytest runs no meter and leaves no data to ignore.
     (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", ("pytest",)))
     assert [name for name in data if ignored(name)] == []

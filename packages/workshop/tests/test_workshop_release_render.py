@@ -122,6 +122,9 @@ def test_a_native_workspace_renders_every_workflow_as_its_golden(
 def test_a_workspace_listing_ruff_alone_renders_no_coverage_entry(
     tmp_path: Path, forge: str
 ) -> None:
+    # The ruff extension is a distribution of its own: a run of this
+    # wheel alone has none, and the test skips.
+    pytest.importorskip("livery.extensions.ruff")
     from livery.workshop import _points
     from livery.workshop._extensions import declaration, register_jobs
 
