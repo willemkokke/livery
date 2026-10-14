@@ -246,10 +246,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
     ),
-    ("_e2e", "conan"): (
-        5,
-        "the loop's registry probe, #1624 (P1a), and its conan home, phase 15",
-    ),
+    ("_e2e", "conan"): (1, "the loop's conan home; phase 15"),
     ("_e2e", "ninja"): (
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
@@ -272,15 +269,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         2,
         "BASE_EXTENSION_IMPORTS' conan row; #1614's P5 deletes it",
     ),
-    ("_publish", "conan"): (
-        3,
-        "the wave's conan target; #1624 (P1a), then the registries, phase 13",
-    ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
-    ("_release_driver", "conan"): (
-        2,
-        "the wave's conan registry probe; #1624 (P1a)",
-    ),
     ("_steps", "cmake"): (
         3,
         "the base's cmake build and test steps; #1614's P5 moves them",
