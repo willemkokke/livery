@@ -11,17 +11,25 @@ and [livery.workshop._categories.category_of][],
 [livery.workshop._categories.register_channels][] and
 [livery.workshop._categories.channel_of][].
 
-A category rule is a pattern table a kind or an extension registers, since
-nothing a category needs reads state, and the table renders into the
-documentation. A channel rule is a callable with a rank, since it
-reads the delivery manifest, the emitted set and the template source.
-Rules order by specificity, the most specific claim first, and two
-rules of one specificity claiming one path refuse naming both, so two
-checkouts of one commit answer alike and nothing is settled by
-registration order in silence. A package's contract may reassign its
-own paths among the categories, ``[categories] vendored =
-["docs/assets/vendor/**"]``, and that table wins over every kind's
-rule, since the package is the innermost extension over its kind.
+A category rule is a pattern in a table, since nothing a category
+needs reads state: an extension declares its own table under
+``[categories]`` in its ``extension.toml``, and the base registers
+two, the one beneath every package's extensions and the one for the
+workspace's own unit. A channel rule is a callable with a rank, since
+it reads the delivery manifest, the emitted set and the template
+source.
+
+The most specific category rule wins. Between rules of one
+specificity from two tables, the nearer table wins: of the extensions
+a package holds, the one later in composition order, where an
+extension comes after the extensions it requires and the others go
+alphabetically, and the base's table last. Two rules of one table and
+one specificity that claim one path for different categories, or from
+different extensions, refuse naming both, so two checkouts of one
+commit answer alike and nothing is settled by registration order in
+silence. A package's contract may reassign its own paths among the
+categories, ``[categories] vendored = ["docs/assets/vendor/**"]``,
+and that table wins over every rule of its extensions and the base.
 """
 
 from __future__ import annotations
@@ -35,7 +43,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
-#: What a path is to its kind: a change to a test runs that test
+#: What a path is to its package: a change to a test runs that test
 #: alone; a change to anything else runs the package's suite and its
 #: dependents'. An extension adds labels beside these.
 SOURCE = "source"
@@ -46,20 +54,28 @@ CONFIGURATION = "configuration"
 #: page shows by snippet, run by the examples step and no suite.
 EXAMPLE = "example"
 
-#: The kind name of the workspace's own unit, the root's tests and the
-#: files beside them; the base registers its category rules.
+#: The workspace's own unit, the root's tests and the files beside
+#: them: its kind, and the name of the table the base registers for it.
 WORKSPACE = "workspace"
 
-#: The kind every chain starts at, whose rules (the documentation's
-#: paths, and configuration for the rest) answer for every package.
-BASE_KIND = "base"
+#: The base's table, whose rules (the documentation's paths, and
+#: configuration for the rest) answer for every package, beneath the
+#: tables of the extensions it holds.
+BASE_TABLE = "base"
+
+#: The tables the base registers rules into.
+TABLES = (BASE_TABLE, WORKSPACE)
 
 #: The extension the builtin rules belong to.
 _BASE = "livery.workshop"
 
 
 class CategoryError(ValueError):
-    """A registry cannot answer: two rules of one specificity claim one path."""
+    """A registry refuses a claim, naming what it refuses.
+
+    Two rules of one specificity claim one path, or a rule names a
+    table no package reads.
+    """
 
 
 @dataclass(frozen=True)
@@ -67,16 +83,17 @@ class CategoryRule:
     """One pattern's claim on a category.
 
     Attributes:
-        kind: The package kind the rule is registered for; a derived
-            kind inherits it through the kind chain.
+        table: The table the rule belongs to: the extension that
+            declares it, or ``base`` or ``workspace``, the two the base
+            registers.
         pattern: A path pattern relative to the package, ``src/**``,
             ``tests/**/test_*.py``, ``**``.
         category: The label the pattern claims.
-        extension: The extension that registered the rule; the base's own is
+        extension: The extension that supplied the rule; the base's own is
             ``livery.workshop``.
     """
 
-    kind: str
+    table: str
     pattern: str
     category: str
     extension: str
@@ -195,58 +212,69 @@ def matches(pattern: str, path: str) -> bool:
 
 
 def register_categories(
-    kind: str, rules: Iterable[tuple[str, str]], *, extension: str = _BASE
+    table: str, rules: Iterable[tuple[str, str]], *, extension: str = _BASE
 ) -> None:
-    """Register *rules*, ``(pattern, category)`` pairs, for *kind*.
+    """Register *rules*, ``(pattern, category)`` pairs, into *table*.
 
-    A derived kind inherits them through the kind chain, its own rules
-    winning a tie. Registering the same pattern for the same kind from
-    the same extension replaces the earlier claim.
+    *table* is ``base``, the table beneath every package's extensions,
+    or ``workspace``, the workspace's own unit's. Registering the same
+    pattern into the same table from the same extension replaces the
+    earlier claim.
+
+    Raises:
+        CategoryError: when *table* is neither, naming the two: no
+            package reads another, and an extension's own rules are the
+            ``[categories]`` its ``extension.toml`` declares.
     """
-    table = _CATEGORIES.setdefault(kind, [])
+    if table not in TABLES:
+        raise CategoryError(
+            f"{extension} registers category rules into {table!r}, which no"
+            f" package reads: the tables are {', '.join(TABLES)}, and an"
+            " extension declares its own under [categories] in its"
+            " extension.toml"
+        )
+    found = _CATEGORIES.setdefault(table, [])
     for pattern, category in rules:
-        table[:] = [
+        found[:] = [
             rule
-            for rule in table
+            for rule in found
             if not (rule.pattern == pattern and rule.extension == extension)
         ]
-        table.append(CategoryRule(kind, pattern, category, extension))
+        found.append(CategoryRule(table, pattern, category, extension))
 
 
-def unregister_categories(kind: str, *, extension: str) -> None:
-    """Withdraw every rule *extension* registered for *kind*."""
-    table = _CATEGORIES.get(kind, [])
-    table[:] = [rule for rule in table if rule.extension != extension]
+def unregister_categories(table: str, *, extension: str) -> None:
+    """Withdraw every rule *extension* registered into *table*."""
+    found = _CATEGORIES.get(table, [])
+    found[:] = [rule for rule in found if rule.extension != extension]
 
 
-def category_rules(kind: str) -> tuple[CategoryRule, ...]:
-    """The rules that answer for *kind*: its own, then each ancestor's.
+def category_rules(extensions: Iterable[str]) -> tuple[CategoryRule, ...]:
+    """The rules that answer for a package holding *extensions*, the nearest first.
 
-    A kind takes the categories the extensions it stands for declare
-    ([livery.workshop._kinds.kind_stands_for][]), beside any table
-    registered for it in code. A kind the registry does not know
-    contributes its own table alone, which is how the workspace's unit
-    answers.
+    Each extension's declared table, the one later in composition
+    order first, then the base's table. While the extensions' declared
+    order has no start, they come in alphabetical order. An extension
+    nothing installed declares adds no rule.
     """
-    from livery.workshop._kinds import kind_chain, kind_for, kind_names
+    from livery.workshop._composition import order_or_sorted
+    from livery.workshop._extensions import installed_declaration
 
-    names = [kind]
-    if kind in kind_names():
-        names = [record.name for record in reversed(kind_chain(kind))]
     found: list[CategoryRule] = []
-    for name in names:
-        found.extend(_CATEGORIES.get(name, []))
-        stands_for = kind_for(name).stands_for if name in kind_names() else ()
-        for extension in stands_for:
-            found.extend(extension_rules(extension, kind=name))
+    for name in reversed(order_or_sorted(extensions, installed_declaration)):
+        found.extend(extension_rules(name))
+    found.extend(_CATEGORIES.get(BASE_TABLE, ()))
     return tuple(found)
 
 
-def extension_rules(extension: str, *, kind: str = "") -> tuple[CategoryRule, ...]:
-    """The category rules *extension* declares, as rules of *kind*.
+def workspace_rules() -> tuple[CategoryRule, ...]:
+    """The rules that answer for the workspace's own unit: its table alone."""
+    return tuple(_CATEGORIES.get(WORKSPACE, ()))
 
-    *kind* is the extension's own name when empty; a kind that takes its
-    table from the extension names itself, so the kind chain orders it.
+
+def extension_rules(extension: str) -> tuple[CategoryRule, ...]:
+    """The category rules *extension* declares, in a table named after it.
+
     Empty for an extension nothing installed declares.
     """
     from livery.workshop._extensions import installed_declaration
@@ -255,47 +283,38 @@ def extension_rules(extension: str, *, kind: str = "") -> tuple[CategoryRule, ..
     if declared is None:
         return ()
     return tuple(
-        CategoryRule(kind or extension, pattern, category, extension)
+        CategoryRule(extension, pattern, category, extension)
         for category, patterns in declared.categories
         for pattern in patterns
     )
 
 
 def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
-    """The rules that answer for *package*.
+    """The rules that answer for *package*, the nearest first.
 
-    Its extensions' declared rules, the last one composed nearest, then
-    the base kind's, when any of its extensions declares categories;
-    its kind chain's otherwise.
+    The workspace's own unit takes its table alone. Every other package
+    takes the tables of the package-level extensions it holds, over the
+    base's.
     """
-    from livery.workshop._composition import package_set
-    from livery.workshop._extensions import installed_declaration
+    if package.kind == WORKSPACE:
+        return workspace_rules()
+    from livery.workshop._kinds import extension_set
 
-    declaring = [
-        name
-        for name in package_set(package.extensions, installed_declaration)
-        if (declared := installed_declaration(name)) is not None and declared.categories
-    ]
-    if not declaring:
-        return category_rules(package.kind)
-    found: list[CategoryRule] = []
-    for name in reversed(declaring):
-        found.extend(extension_rules(name))
-    found.extend(category_rules(BASE_KIND))
-    return tuple(found)
+    return category_rules(extension_set(package))
 
 
 def category_of(package: Package, path: str) -> Category:
     """What *path*, relative to *package*, is to it.
 
-    The package's own ``[categories]`` exception answers first; then
-    the most specific rule of its extensions' ``[categories]`` and the
-    base kind's, or of its kind chain when no extension of its declares
-    categories, the nearer one winning a tie. Nothing matching is configuration, which
-    every builtin table also says last.
+    The package's own ``[categories]`` exception answers first. Then
+    the most specific rule of the tables that answer for the package
+    wins, and between rules of one specificity the nearer table's: the
+    extension later in composition order, the base's table last.
+    Nothing matching is configuration, which the base's table also says
+    last.
 
     Raises:
-        CategoryError: when two rules of one specificity and one kind
+        CategoryError: when two rules of one specificity and one table
             claim *path* for different categories or from different
             extensions.
     """
@@ -305,20 +324,20 @@ def category_of(package: Package, path: str) -> Category:
                 return Category(category, "the package", pattern)
     rules = _package_rules(package)
     best: list[tuple[int, CategoryRule]] = []
-    kinds_order = {
-        name: index for index, name in enumerate(dict.fromkeys(r.kind for r in rules))
+    tables = {
+        name: index for index, name in enumerate(dict.fromkeys(r.table for r in rules))
     }
     for rule in rules:
         if not matches(rule.pattern, path):
             continue
         if not best:
-            best = [(kinds_order[rule.kind], rule)]
+            best = [(tables[rule.table], rule)]
             continue
         _, current = best[0]
         if rule.specificity > current.specificity:
-            best = [(kinds_order[rule.kind], rule)]
+            best = [(tables[rule.table], rule)]
         elif rule.specificity == current.specificity:
-            best.append((kinds_order[rule.kind], rule))
+            best.append((tables[rule.table], rule))
     if not best:
         return Category(CONFIGURATION, _BASE, "")
     nearest = min(depth for depth, _ in best)
@@ -395,9 +414,34 @@ def known_categories() -> frozenset[str]:
     return frozenset(found)
 
 
-def table(kind: str) -> list[str]:
-    """The category table for *kind* as lines, one rule each, for documentation."""
-    return [
-        f"{rule.pattern}: {rule.category} ({rule.extension})"
-        for rule in category_rules(kind)
-    ]
+def _register_builtin() -> None:
+    """The base's two tables: the one beneath every package's, and the root's."""
+    register_categories(
+        BASE_TABLE,
+        [
+            ("docs/**/*.md", "prose"),
+            ("docs/nav.toml", "nav"),
+            ("docs/assets/**", "asset"),
+            ("docs/examples/**/*.py", EXAMPLE),
+            ("docs/_generated/**", "generated"),
+            ("**", CONFIGURATION),
+        ],
+    )
+    # The workspace's own unit: its tests as python's table reads them,
+    # and the files beside them that only the site or nobody reads.
+    register_categories(
+        WORKSPACE,
+        [
+            ("tests/**/test_*.py", TEST),
+            ("tests/**/*_test.py", TEST),
+            ("tests/**", TEST_SUPPORT),
+            ("notes/**", "notes"),
+            ("docs/**", "site"),
+            ("zensical.toml", "site"),
+            ("README.md", "readme"),
+            ("**", CONFIGURATION),
+        ],
+    )
+
+
+_register_builtin()

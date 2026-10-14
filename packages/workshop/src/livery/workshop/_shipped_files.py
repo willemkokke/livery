@@ -313,7 +313,6 @@ def _packaged(
             **package_facts(root, package.directory),
             **injected,
             "release_baseline": _release_baseline(package.directory),
-            "kind": package.kind,
         }
         for package in packages
     }

@@ -37,8 +37,7 @@ def acme() -> Iterator[None]:
     _kinds._KINDS.clear()  # pyright: ignore[reportPrivateUsage]
     _kinds._KINDS.update(kinds)  # pyright: ignore[reportPrivateUsage]
     _steps.restore(steps)
-    for kind in ("acme-parent", "acme-child"):
-        _categories.unregister_categories(kind, extension=EXTENSION)
+    _categories.unregister_categories(_categories.BASE_TABLE, extension=EXTENSION)
 
 
 def _idle(ctx: PhaseContext) -> None:
@@ -138,19 +137,19 @@ def test_two_steps_carrying_one_file_for_one_extension_break_the_fragment_owner(
     ]
 
 
-def test_two_rules_of_one_kind_at_one_specificity_break_the_category_table(
+def test_two_rules_of_one_table_at_one_specificity_break_the_category_table(
     acme: None,
 ) -> None:
     _parent, child = _family()
     _categories.register_categories(
-        "acme-child",
+        _categories.BASE_TABLE,
         [("lib/*.py", "source"), ("lib/x*.p*", "test")],
         extension=EXTENSION,
     )
     found = _names(Subject(EXTENSION, kinds=(child,)), "category-table")
     assert any(
         "kind acme-child lib/x.py: 'lib/*.py' (source, acme.extension) and 'lib/x*.p*'"
-        " (test, acme.extension) claim it at one specificity for one kind" in line
+        " (test, acme.extension) claim it at one specificity in one table" in line
         for line in found
     )
 
@@ -656,7 +655,8 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
     ]
 
 
-# A package fragment goes by extension; the nearest kind wins a category tie.
+# A package fragment goes by extension; the later composed extension wins a
+# category tie.
 
 
 def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
@@ -692,23 +692,32 @@ def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
     assert _names(Subject(EXTENSION, steps=steps), "fragment-owner") == []
 
 
-def test_the_nearer_kinds_rule_wins_a_tie_between_kinds(acme: None) -> None:
-    parent, child = _family()
-    _categories.register_categories(
-        "acme-parent", [("gen/**", "generated")], extension=EXTENSION
+def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
+    acme: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_package_extensions
+
+    declared = '[extension]\nlevels = ["package"]\n\n[categories]\n{} = ["gen/**"]\n'
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        early=declared.format("generated"),
+        late=declared.format("source"),
     )
-    _categories.register_categories(
-        "acme-child", [("gen/**", "source")], extension=EXTENSION
+    child = replace(
+        kind_for("python"),
+        name="acme-child",
+        parent="python",
+        template="",
+        stands_for=("acme.early", "acme.late"),
     )
-    probe = _checks_package("acme-child")
-    assert _categories.category_of(probe, "gen/a").name == "source"
-    assert _categories.category_of(_checks_package("acme-parent"), "gen/a").name == (
-        "generated"
-    )
-    assert _names(Subject(EXTENSION, kinds=(parent, child)), "category-table") == []
-    # The table lists the kind's own rules first, then each ancestor's.
-    rules = _categories.category_rules("acme-child")
-    assert rules[0].kind == "acme-child"
+    register_kind(child)
+    found = _categories.category_of(_checks_package("acme-child"), "gen/a")
+    assert (found.name, found.supplier) == ("source", "acme.late")
+    assert _names(Subject(EXTENSION, kinds=(child,)), "category-table") == []
+    # The rules come nearest table first: the later composed extension's.
+    rules = _categories.category_rules(("acme.early", "acme.late"))
+    assert rules[0].table == "acme.late"
 
 
 def _checks_package(kind: str) -> Package:

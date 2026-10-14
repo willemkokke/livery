@@ -161,6 +161,23 @@ def test_a_scoped_run_hands_a_native_member_the_files_its_claims_reach(
     assert calls == [{"check": True, "paths": ("packages/cpp/conanfile.py",)}]
 
 
+def test_a_roster_with_no_member_renders_the_workspace_s_own_ignores_alone(
+    restored_steps, python_steps: object
+) -> None:
+    from livery.workshop._templates import fragment_data
+
+    rendered = fragment_data({"packages": []})["per_file_ignores"]
+    assert rendered == per_file_ignores(())
+    assert rendered
+    assert not any(pattern.startswith("packages/") for pattern, _ in rendered)
+    # A member's set adds its tables' patterns under packages/**/.
+    held = fragment_data(
+        {"packages": [{"dir": "x", "name": "acme-x", "extensions": ["python"]}]}
+    )["per_file_ignores"]
+    assert held == per_file_ignores([("python",)])
+    assert ("packages/**/tests/**", ("D1",)) in held
+
+
 def test_two_steps_claiming_one_category_under_different_rules_share_one_entry(
     restored_steps, python_steps: object
 ) -> None:
@@ -174,16 +191,16 @@ def test_two_steps_claiming_one_category_under_different_rules_share_one_entry(
             claims=(Claim("test", ignore=("E501",)),),
         )
     )
-    first = per_file_ignores(("python",))
-    assert first == per_file_ignores(("python",))  # stable across renders
+    first = per_file_ignores([("python",)])
+    assert first == per_file_ignores([("python",)])  # stable across renders
     entries = dict(first)
     # A package's patterns reach a member in a group directory too.
     assert entries["packages/**/tests/**/test_*.py"] == ("D1", "E501")
     assert entries["packages/**/tests/**"] == ("D1",)
     assert entries["tests/**/test_*.py"] == ("D1", "E501")  # the workspace's own unit
-    # The native kind's test patterns name C++ files a python claim
-    # never reads, so they render no ignore; its tests directory does,
-    # in the one entry the python kind's shares.
-    native = per_file_ignores(("cpp-conan",))
+    # cpp's test patterns name C++ files a python claim never reads, so
+    # they render no ignore; its tests directory does, in the one entry
+    # python's shares.
+    native = per_file_ignores([("cmake", "cpp", "conan")])
     assert not any(pattern.endswith(".cpp") for pattern, _ in native)
     assert dict(native)["packages/**/tests/**"] == ("D1",)

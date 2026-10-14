@@ -83,7 +83,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "pyproject.toml"): 2,
     ("_release_driver", "python"): 2,
     ("_steps", BACKEND_IMPORT): 1,
-    ("_templates", "python"): 4,
+    ("_templates", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 

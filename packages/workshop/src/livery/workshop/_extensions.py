@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import cwd, prog
-from livery.workshop._composition import OrderCycle, order, package_set
+from livery.workshop._composition import OrderCycle, order_or_sorted, package_set
 from livery.workshop._declaration import (
     API_VERSION,
     FILE,
@@ -317,11 +317,9 @@ def package_extensions(start: Path | None = None) -> tuple[str, ...]:
     held: list[str] = []
     for _contract, kind, names in _package_lists(root):
         held += [listing(name).name for name in names] or kind_stands_for(kind)
-    members = package_set(held, installed_declaration)
-    try:
-        return order(members, installed_declaration)
-    except OrderCycle:
-        return tuple(sorted(members))
+    return order_or_sorted(
+        package_set(held, installed_declaration), installed_declaration
+    )
 
 
 def composed_set(listed: tuple[str, ...] | list[str]) -> tuple[str, ...]:

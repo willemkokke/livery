@@ -1427,6 +1427,15 @@ parts, each mergeable alone:
   wrote.
 - P1f (#1622): one base constant names the runtime's language,
   `python`.
+- P1g (#1623): pytest runs suites through queries python answers;
+  `run_suites` and `kind_examples` leave the public names.
+- P1h (built, #1625): every reader of the kind reads the held set
+  instead: a package's categories come from its held extensions'
+  `[categories]` tables over the base's, the extension later in
+  composition order winning a tie, so python's `src/**` wins over
+  cpp's in a nanobind member; the per-file ignores and the fragments
+  read the held sets; the kinds guidance becomes
+  `compositions.present.md`; the dead kind render facts go.
 - P1g (built, #1623): pytest runs suites through queries python
   declares and answers under `[for.pytest.queries]`,
   `python.test.runner` and `python.examples.runner`; `run_suites` and
