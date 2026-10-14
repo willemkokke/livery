@@ -34,12 +34,13 @@ acme-echo = { workspace = true }
 acme-native = { workspace = true }
 
 [dependency-groups]
-# The docs toolchain, workshop-rendered so one extension release moves
-# every project's generator together.
-docs = [
-    "zensical>=0.0.50",
-    "mkdocstrings-python>=1.11",
-]
+# What the site's build imports from the venv: each line is a listed
+# extension's answer to the `python.docs-group` query, so an extension
+# taken off the list takes its lines with it, and its declaration is
+# where each floor and its reason live. The group is empty while no
+# listed extension answers, and stays declared, since `default-groups`
+# above names it.
+docs = []
 dev = [
     # uv itself, unconstrained so it tracks latest; the lockfile still
     # resolves it to one exact version (footman's lockfile-churn lesson).
