@@ -492,7 +492,11 @@ def _member(
     """The member ``acme-<name>`` at ``packages/<name>``, holding *files*."""
     directory = root / "packages" / name
     directory.mkdir(parents=True)
-    (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "acme-{name}"\n')
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    held = f"extensions = [{listed}]\n" if extensions else ""
+    (directory / "workshop.toml").write_text(
+        f'kind = "{kind}"\nname = "acme-{name}"\n{held}'
+    )
     for relative, text in files.items():
         (directory / relative).write_text(text)
     return Package(
@@ -508,9 +512,8 @@ def _member(
 def _three_ecosystems(root: Path) -> tuple[Package, Package, Package]:
     """A python package, a C++ library with conan, and a nanobind module.
 
-    The python package and the library list their extensions; the
-    nanobind module lists none, so it holds what its kind stands for:
-    python and conan among them, through a consumer's recipe.
+    Each lists its extensions; the nanobind module's set holds python
+    and conan beside nanobind, conan through a consumer's recipe.
     """
     echo = _member(
         root,
@@ -525,11 +528,12 @@ def _three_ecosystems(root: Path) -> tuple[Package, Package, Package]:
     native = _member(
         root,
         "native",
-        "python-nanobind",
+        "python",
         {
             "pyproject.toml": '[project]\nname = "acme-native"\n',
             "conanfile.py": CONSUMER_RECIPE,
         },
+        ("nanobind",),
     )
     return echo, lib, native
 
@@ -572,8 +576,8 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
         Failed,
         match=re.escape(
             "packages/bare holds cmake, conan, cpp, and no writer of its set takes"
-            " a requirement on packages/native, which holds python, cpp, conan,"
-            " nanobind:"
+            " a requirement on packages/native, which holds nanobind, python, cpp,"
+            " conan:"
         ),
     ):
         _lifecycle.declare_requirement(bare, native, "0.1.0")

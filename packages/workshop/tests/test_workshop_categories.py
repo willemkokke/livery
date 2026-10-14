@@ -170,8 +170,11 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
     assert category_of(own, "lua/vendor/json.lua").name == "vendored"
 
 
-def test_a_derived_kind_inherits_the_tables_up_its_chain() -> None:
-    package = _package(kind="python-nanobind")
+def test_a_package_listing_nanobind_takes_the_tables_of_its_set() -> None:
+    from dataclasses import replace
+
+    # nanobind requires python and cpp, whose tables answer with the base's.
+    package = replace(_package(), extensions=("nanobind",))
     assert category_of(package, "src/acme/ext.cpp").name == "source"
     assert category_of(package, "tests/test_ext.py").name == "test"
     assert category_of(package, "docs/examples/first.py").name == "example"

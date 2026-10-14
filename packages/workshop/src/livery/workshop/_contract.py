@@ -159,6 +159,27 @@ def other_spellings(data: dict[str, Any]) -> list[str]:
     return found
 
 
+#: Each kind a package's contract no longer names, to the line refusing
+#: it: a package of that kind lists what it holds instead.
+REMOVED_KINDS: dict[str, str] = {
+    "python-nanobind": (
+        'kind = "python-nanobind" is not a kind a package names: a package'
+        ' holds nanobind by listing it, kind = "python" and extensions ='
+        ' ["nanobind"]'
+    ),
+}
+
+
+def removed_kinds(data: dict[str, Any]) -> list[str]:
+    """The line refusing the kind package contract *data* names, when it is removed.
+
+    Read before the judge, which would call the package's own keys
+    unknown without naming the list to write (`REMOVED_KINDS`).
+    """
+    line = REMOVED_KINDS.get(str(data.get("kind", "")))
+    return [line] if line is not None else []
+
+
 #: The contracts this process loaded and judged, by path and the stamps
 #: of every file the judgement read: one parse serves the process, and a
 #: contract edited since is parsed and judged again. Package discovery
@@ -241,6 +262,7 @@ def load_contract(path: Path) -> dict[str, Any]:
         problems = (
             removed_option_tables(data)
             or other_spellings(data)
+            or removed_kinds(data)
             or judge(data, contract="package", where=str(path), listed=listed)
         )
     else:

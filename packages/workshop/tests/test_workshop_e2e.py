@@ -620,9 +620,15 @@ def _declared(
 def _fake_declarations(
     monkeypatch: pytest.MonkeyPatch, declared: dict[str, Declaration]
 ) -> None:
-    monkeypatch.setattr(
-        "livery.workshop._extensions.declaration", lambda name: declared.get(name)
-    )
+    """Install *declared* beside the real extensions, which the members' sets read."""
+    from livery.workshop import _extensions
+
+    real = _extensions.declaration
+
+    def found(name: str) -> Declaration | None:
+        return declared[name] if name in declared else real(name)
+
+    monkeypatch.setattr("livery.workshop._extensions.declaration", found)
     monkeypatch.setattr(
         "livery.workshop._extensions.installed_extensions",
         lambda: tuple(sorted(declared)),
@@ -660,9 +666,9 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "base": _declared("cmake"),
         },
     )
-    stack, kinds = _e2e.extension_under_test("top")
+    stack, members = _e2e.extension_under_test("top")
     assert stack == ("base", "mid", "top")
-    assert kinds == ("cpp-conan",)
+    assert members == ("loop-cpp",)
     # An extension that runs the tests installed beside it rides along no
     # more: a gate that meters no suite runs no coverage leg, so the pass
     # lands the members the steps name alone.
@@ -675,9 +681,9 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "pytest": _declared("python", phase="test"),
         },
     )
-    stack, kinds = _e2e.extension_under_test("top")
+    stack, members = _e2e.extension_under_test("top")
     assert stack == ("base", "mid", "top")
-    assert kinds == ("cpp-conan",)
+    assert members == ("loop-cpp",)
 
 
 def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
@@ -715,22 +721,23 @@ def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
     assert _e2e._enable_steps(text, ()) == text  # pyright: ignore[reportPrivateUsage]
 
 
-def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_steps_name(
+def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _fake_declarations(
         monkeypatch,
         {"typed": _declared("python"), "both": _declared("python", "conan")},
     )
-    stack, kinds = _e2e.extension_under_test("typed")
+    stack, members = _e2e.extension_under_test("typed")
     assert stack == ("typed",)
-    # A kind standing for an extension a step names, not every kind
-    # deriving from it.
-    assert [name for name, _seed in _e2e.members_for(kinds)] == ["loop-echo"]
-    _stack, kinds = _e2e.extension_under_test("both")
-    # The nanobind kind stands for conan beside cpp, as a consumer of
-    # its packages, so a step naming conan lands that member too.
-    assert kinds == ("python", "python-nanobind", "cpp-conan")
+    # loop-native's set holds loop-echo's, so a step naming python lands
+    # the smaller member alone.
+    assert [member.name for member in _e2e.members_for(members)] == ["loop-echo"]
+    _stack, members = _e2e.extension_under_test("both")
+    # loop-native's set holds conan beside cpp, as a consumer of its
+    # packages, and loop-echo's does not, so a step naming conan lands
+    # that member too.
+    assert members == ("loop-echo", "loop-native", "loop-cpp")
     # The test extension is listed as any other: once, as the extension
     # under test, or where a requirement puts it, and never beside an
     # extension that does not require it.
@@ -744,13 +751,36 @@ def test_the_members_are_the_loop_s_whose_kinds_stand_for_what_the_steps_name(
     )
     assert _e2e.extension_under_test("pytest")[0] == ("pytest",)
     assert _e2e.extension_under_test("wrap")[0] == ("pytest", "wrap")
-    assert _e2e.extension_under_test("typed") == (("typed",), ("python",))
-    assert [name for name, _seed in _e2e.members_for(kinds)] == [
+    assert _e2e.extension_under_test("typed") == (("typed",), ("loop-echo",))
+    assert [member.name for member in _e2e.members_for(members)] == [
         "loop-echo",
         "loop-native",
         "loop-cpp",
     ]
     assert _e2e.members_for(()) == _e2e.LOOP_MEMBERS
+
+
+def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) -> None:
+    import tomllib
+
+    from livery.workshop._templates import render_member
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nname = "acme"\nnamespace = "acme"\nextensions = []\n'
+        'authors = [{ name = "A", email = "a@example.com" }]\n'
+        '\n[forge]\nkind = "github"\nowner = "acme"\n'
+    )
+    for member in _e2e.LOOP_MEMBERS:
+        render_member(tmp_path, member.name, kind=member.seed)
+        contract = tmp_path / "packages" / member.name / "workshop.toml"
+        born = tomllib.loads(contract.read_text("utf-8"))["extensions"]
+        assert member.listed() == tuple(born)
+    # Each member's set, as a pass reads it.
+    assert {member.name: member.holds() for member in _e2e.LOOP_MEMBERS} == {
+        "loop-echo": ("python",),
+        "loop-native": ("nanobind", "python", "cpp", "conan"),
+        "loop-cpp": ("cmake", "conan", "cpp"),
+    }
 
 
 def test_the_birth_lists_the_stack_of_the_pass(
@@ -2007,9 +2037,9 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
         calls.append(("commit", message.splitlines()[0]))
 
     monkeypatch.setattr(git, "commit_all", commit_all)
-    for name, _kind in _e2e.LOOP_MEMBERS:
-        (tmp_path / "packages" / name).mkdir(parents=True)
-        (tmp_path / "packages" / name / "workshop.toml").write_text("", "utf-8")
+    for member in _e2e.LOOP_MEMBERS:
+        (tmp_path / "packages" / member.name).mkdir(parents=True)
+        (tmp_path / "packages" / member.name / "workshop.toml").write_text("", "utf-8")
     _e2e._ensure_members(tmp_path)  # pyright: ignore[reportPrivateUsage]
     assert calls == [("align",)]
     assert "member loop-echo: already landed" in capsys.readouterr().out

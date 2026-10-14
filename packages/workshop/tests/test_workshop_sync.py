@@ -184,11 +184,11 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
             extensions=extensions,
         )
 
-    # The bridge: a kind standing for the fake, as nanobind stands for conan.
+    # The bridge: a kind standing for the fake, as cpp-conan stands for conan.
     monkeypatch.setattr(
         _kinds,
         "kind_stands_for",
-        lambda kind: ("acme.prof",) if kind == "python-nanobind" else (),
+        lambda kind: ("acme.prof",) if kind == "cpp-conan" else (),
     )
     # Nothing first: a package listing nothing of a kind standing for
     # nothing, and a package of a kind nothing registers, run no step.
@@ -197,7 +197,7 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
     )
     assert capsys.readouterr().out == ""
     _lifecycle.sync(
-        (member("listed", "python", "acme.prof"), member("native", "python-nanobind")),
+        (member("listed", "python", "acme.prof"), member("lib", "cpp-conan")),
         tmp_path,
     )
     # The step's own lines; the walk's and footman's receipts are its.
@@ -208,7 +208,7 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
     ]
     assert said == [
         "prof.main for packages/listed",
-        "prof.main for packages/native",
+        "prof.main for packages/lib",
     ]
 
 

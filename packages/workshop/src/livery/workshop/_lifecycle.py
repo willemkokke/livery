@@ -42,14 +42,13 @@ T = TypeVar("T")
 def sync(packages: Iterable[Package], root: Path) -> None:
     """Run the sync phase over *packages*: what a member needs before ``uv sync``.
 
-    The steps are the listed extensions' (conan's profile step among
-    them), and a package that lists no extension runs the phase over
-    what its kind stands for ([livery.workshop._kinds.kind_stands_for][]),
-    the bridge while package kinds remain. The sync phase alone takes
-    that bridge: the lifecycle phases read the listed extensions, so
-    the kind's backend still builds such a package, and a nanobind
-    package, which consumes conan and is never a recipe, gets conan's
-    profile and none of its stamp, build or publish.
+    The steps are the set's: conan's profile step among them, which a
+    package that lists nanobind runs too, since its set holds conan.
+    A package that lists no extension runs the phase over what its
+    kind stands for ([livery.workshop._kinds.kind_stands_for][]), the
+    bridge while package kinds remain. The sync phase alone takes that
+    bridge: the lifecycle phases read the listed extensions, so the
+    kind's backend still builds such a package.
     """
     from dataclasses import replace
 
@@ -396,7 +395,8 @@ def _run_steps(
 
     None when no extension of the package's set adds steps to the phase,
     which leaves the call to the package's kind backend: the bridge
-    while package kinds remain. The steps run through the one walk
+    while package kinds remain. A step an extension of the set deletes
+    is none of them. The steps run through the one walk
     ([livery.workshop._phases.run_phase][]), the context naming the
     package and the phase.
     """
@@ -421,7 +421,10 @@ def _isolated_tests(package: Package) -> tuple[StepRecord, ...]:
 
 
 def _phase_steps(package: Package, phase: str) -> tuple[StepRecord, ...]:
-    """The steps *package*'s set adds to *phase*; empty for a package listing none."""
+    """The steps *package*'s set adds to *phase*, less those the set deletes.
+
+    Empty for a package listing none.
+    """
     if not package.extensions:
         return ()
     from livery.workshop._composition import package_set

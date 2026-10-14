@@ -5,6 +5,9 @@
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
 kind = ...
+# The package-level extensions this package is composed of; nanobind
+# requires python, cpp and conan, so the set is the four.
+extensions = ...
 name = "acme-native"
 description = "acme-native: a acme workspace package."
 

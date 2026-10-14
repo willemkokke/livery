@@ -24,6 +24,13 @@ through it ([livery.workshop._lifecycle][]), the steps those of the
 package's set ([livery.workshop._phases.phase_steps][]). Each step
 receives the one context, [livery.workshop.PhaseContext][].
 
+A step table's ``deletes`` names steps of other extensions, each
+``<owner>:<phase>.<step>`` with its reason, that never run for a
+package whose set holds the deleting extension: the set's steps leave
+them out, and the walk skips such a package for a registered step it
+deletes, saying why. A package whose set does not hold the deleting
+extension runs them.
+
 The engine running a walk gives each phase its keys, by phase. The
 train builds on the isolated side in the ``release`` configuration and
 tests on the isolated side once per resolution it proves; the gate
@@ -489,14 +496,53 @@ def phase_steps(
     """The steps the extensions *members* add to *phase*, in their order.
 
     Each member's steps in declaration order, the members in the order
-    given, which for a package's set is its composition order.
+    given, which for a package's set is its composition order. A step
+    one of *members* deletes is left out, so it never runs for the set
+    (`deletions`).
     """
+    deleted = deletions(members, lookup)
     found: list[StepRecord] = []
     for name in members:
         declared = lookup(name)
         if declared is not None:
-            found += declared.phases.get(phase, ())
+            found += [
+                record
+                for record in declared.phases.get(phase, ())
+                if step_address(record) not in deleted
+            ]
     return tuple(found)
+
+
+def step_address(record: StepRecord) -> str:
+    """*record*'s address among every extension's steps: ``<owner>:<phase>.<step>``."""
+    return f"{record.extension}:{record.name}"
+
+
+def deletions(members: Iterable[str], lookup: Lookup) -> dict[str, tuple[str, str]]:
+    """The steps the extensions *members* delete, by address, to the deleter and why.
+
+    An address is ``<owner>:<phase>.<step>``, as a step table's
+    ``deletes`` names it; the first of *members* to delete a step is
+    its deleter.
+    """
+    found: dict[str, tuple[str, str]] = {}
+    for name in members:
+        declared = lookup(name)
+        if declared is None:
+            continue
+        for records in declared.phases.values():
+            for record in records:
+                for address, reason in record.deletes:
+                    found.setdefault(address, (name, reason))
+    return found
+
+
+def set_deletions(package: Package) -> dict[str, tuple[str, str]]:
+    """The steps *package*'s set deletes, by address, to the deleter and why."""
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._kinds import extension_set
+
+    return deletions(extension_set(package), installed_declaration)
 
 
 #: The engine key that names a phase's side: true for the isolated one.
@@ -694,10 +740,11 @@ def run_phase(
     ([livery.workshop._phases.serves][]), and a step serving the other
     side is not run. A workspace step runs once. A package step runs
     once per package in scope (the context's ``judged``) it judges:
-    one whose set holds an extension the step names, that has not
-    turned the step off, that has a file the step's claims reach, and
-    whose change is not confined to its tests unless the step is
-    tests-only; each other package is said and not run. Independent
+    one whose set holds an extension the step names and none that
+    deletes the step, that has not turned the step off, that has a
+    file the step's claims reach, and whose change is not confined to
+    its tests unless the step is tests-only; each other package is
+    said and not run. Independent
     steps run concurrently, and a step starts once the steps it names
     in ``after`` and the providers of the keys it reads have run, for
     the same package. A step whose earlier step failed is not run and
@@ -751,6 +798,7 @@ def run_phase(
         ctx, _steps={record.name: record for record in records}, _given=given
     )
     units: list[_Unit] = []
+    removed: dict[str, dict[str, tuple[str, str]]] = {}
     for record in ordered:
         if (record.fix if fixing else record.run) is None:
             continue
@@ -761,6 +809,16 @@ def run_phase(
             continue
         for package in members(held):
             if not judges_package(record, held, package):
+                continue
+            if package.path not in removed:
+                removed[package.path] = set_deletions(package)
+            deleted = removed[package.path].get(step_address(record))
+            if deleted is not None:
+                deleter, reason = deleted
+                print(
+                    f"  {record.name}: {package.path} skips ({deleter} deletes it:"
+                    f" {reason})"
+                )
                 continue
             if not reads_files(record, held, (package.path,)):
                 print(f"  {record.name}: {package.path} has no file it reads; not run")

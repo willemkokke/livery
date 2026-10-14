@@ -93,7 +93,9 @@ spelling. Every key is optional:
   `"module:function"` in its own package or the tool's words; `after`,
   the steps it runs after; and the context keys it `provides`, each
   with its type, and `reads`. The step runs once per package whose set
-  holds the extension, so it names no `scope` and no `extensions`;
+  holds the extension, so it names no `scope` and no `extensions`. Its
+  `deletes` names the steps of other extensions that never run for
+  such a package, each `"<owner>:<phase>.<step>"` to the reason;
 - `[queries.<name>]`, a query the extension declares, in the grammar
   the base declares its own in: `combine`, how the answers make one,
   `union`, `nearest`, `agreed` or a `"module:function"`; `level`,
@@ -275,6 +277,31 @@ main = "acme.native._build:compile"
 after = ["build.configure"]
 provides = { wheel = "path" }
 ```
+
+An extension whose packages must not run a step another extension of
+their set adds deletes it, with the reason. nanobind builds a package's
+platform wheels, so in a set that holds nanobind python's `uv build`
+never runs, and neither do the conan steps that would stamp, build and
+publish the recipe the package consumes:
+
+```toml
+[phases.build.nanobind]
+main = "livery.extensions.nanobind._build:build"
+isolated = true
+reads = ["epoch"]
+provides = { dist = "path" }
+
+[phases.build.nanobind.deletes]
+"python:build.python" = "uv build writes a pure wheel"
+"conan:stamp.conan" = "the package's recipe declares no version to stamp"
+```
+
+A package whose set does not hold the deleting extension runs the
+deleted step as before. A deletion names a step an installed extension
+or the base declares that runs once per package, and states its
+reason; any other refuses, naming the file and the step. The walk
+names each package a registered step skips for a deletion, with the
+deleting extension and its reason.
 
 Every phase runs through one walk, the gate's phases included: each
 step is a footman step inside one `parallel()` block, so footman owns

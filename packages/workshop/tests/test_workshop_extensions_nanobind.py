@@ -37,10 +37,14 @@ def _member(root: Path, name: str, contract: str) -> None:
     )
 
 
+#: The lines a member listing nanobind opens its contract with.
+NATIVE = 'kind = "python"\nextensions = ["nanobind"]\n'
+
+
 def _native(root: Path, name: str, labels: str = "") -> None:
-    """A python-nanobind member listing nothing, with ``[nanobind]`` *labels*."""
+    """A member listing nanobind, with ``[nanobind]`` *labels*."""
     table = f"\n[nanobind]\nwheel-platforms = {labels}\n" if labels else ""
-    _member(root, name, f'kind = "python-nanobind"\nname = "{name}"\n{table}')
+    _member(root, name, f'{NATIVE}name = "{name}"\n{table}')
 
 
 def _context(**env: str) -> Context:
@@ -76,10 +80,10 @@ def _leg(
     the conan workspace was aside while it ran, and a platform-wheel
     member's build leaves a wheel in its ``dist/``.
     """
-    from livery.workshop._backends import _cpp_conan, _python_nanobind
+    from livery.extensions.conan import _package as _conan
 
     calls: list[str] = []
-    workspace = root / _cpp_conan.WORKSPACE_FILE
+    workspace = root / _conan.WORKSPACE_FILE
 
     def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
         del root
@@ -88,7 +92,7 @@ def _leg(
         assert epoch > 0
         dist = package.directory / "dist"
         dist.mkdir(exist_ok=True)
-        if package.kind == "python-nanobind":
+        if "nanobind" in package.extensions:
             wheel = f"{package.name}-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl"
             (dist / wheel).write_text("")
         return dist
@@ -109,8 +113,8 @@ def _leg(
         return released
 
     monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
-    monkeypatch.setattr(_cpp_conan, "save_cache", _save)
-    monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
+    monkeypatch.setattr(_conan, "save_cache", _save)
+    monkeypatch.setattr(_ci, "floor_legs", _floors)
     monkeypatch.setattr("livery.workshop._publish.discover_release", _discover)
     monkeypatch.chdir(root)
     return calls
@@ -173,7 +177,7 @@ def test_an_empty_list_or_a_blank_label_refuses(tmp_path: Path) -> None:
     )
     contract = tmp_path / "packages" / "ext" / "workshop.toml"
     contract.write_text(
-        'kind = "python-nanobind"\nname = "ext"\n\n[nanobind]\n'
+        f'{NATIVE}name = "ext"\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest", " "]\n'
     )
     assert _refusal(lambda: _ci.wheel_runners(tmp_path)) == (
@@ -181,39 +185,22 @@ def test_an_empty_list_or_a_blank_label_refuses(tmp_path: Path) -> None:
     )
     # The contract's judge holds the key to a list of strings.
     contract.write_text(
-        'kind = "python-nanobind"\nname = "ext"\n\n[nanobind]\n'
-        'wheel-platforms = "ubuntu-latest"\n'
+        f'{NATIVE}name = "ext"\n\n[nanobind]\nwheel-platforms = "ubuntu-latest"\n'
     )
     assert "nanobind.wheel-platforms is a string ('ubuntu-latest')" in _refusal(
         lambda: _ci.wheel_runners(tmp_path)
     )
 
 
-def test_the_verb_refuses_outside_a_workspace_and_without_a_host_build(
+def test_the_verb_refuses_outside_a_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from dataclasses import replace
-
-    from livery.workshop import _kinds
-
     outside = tmp_path / "outside"
     outside.mkdir()
     monkeypatch.chdir(outside)
     ctx = _context()
     assert _refusal(lambda: _tasks.nanobind_wheels(ctx)) == (
         "no workspace: no workshop.toml above the working directory"
-    )
-    root = tmp_path / "root"
-    root.mkdir()
-    _release_root(root)
-    monkeypatch.chdir(root)
-    record = _kinds.kind_for("python-nanobind")
-    monkeypatch.setitem(
-        _kinds._KINDS, "python-nanobind", replace(record, host_build=None)
-    )
-    assert _refusal(lambda: _tasks.nanobind_wheels(ctx)) == (
-        "kind 'python-nanobind' names no host build, so the wheels job's leg has"
-        " nothing to run; the kind's registration names one"
     )
 
 
@@ -237,7 +224,7 @@ def test_a_workspace_without_nanobind_names_no_job_built_member(
 
 def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> None:
     from livery.workshop._contract_keys import declarations
-    from livery.workshop._declaration import Reference, defined_tasks
+    from livery.workshop._declaration import DeclaredValue, Reference, defined_tasks
     from livery.workshop._extensions import declaration
 
     found = {
@@ -253,14 +240,33 @@ def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> No
     declared = declaration("nanobind")
     assert declared is not None
     assert declared.levels == ("package",)
-    assert declared.requires == ()
+    # The distribution, the extension module's language and its provider.
+    assert declared.requires == ("python", "cpp", "conan")
     assert declared.plugin == "livery.extensions.nanobind"
+    assert declared.tools == ("cmake", "ninja", "conan", "cmake_conan")
+    # Its one step builds a package's release, which the gate never runs.
     assert declared.additions.steps == ()
-    # The members its wheels job builds, a question about the workspace.
+    (build,) = declared.phases["build"]
+    assert (build.name, str(build.run), build.isolated) == (
+        "build.nanobind",
+        "livery.extensions.nanobind._build:build",
+        True,
+    )
+    assert (build.reads, build.provides) == (("epoch",), (("dist", "path"),))
+    assert [address for address, _reason in build.deletes] == [
+        "python:build.python",
+        "conan:stamp.conan",
+        "conan:build.conan",
+        "conan:publish.conan",
+    ]
+    assert list(declared.phases) == ["build"]
+    # The members its wheels job builds, a question about the workspace,
+    # and the venv's line an editor's configure of the module reads.
     assert declared.queries == {
         "job-built-members": Reference(
             "livery.extensions.nanobind._ci", "job_built_members"
-        )
+        ),
+        "python.dev-group": DeclaredValue(["nanobind>=2.7"]),
     }
     # The key a package that holds nanobind names its runners under.
     owned = declarations()[("package", "nanobind.wheel-platforms")]
@@ -303,6 +309,69 @@ def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> No
     )
 
 
+def test_a_package_listing_nanobind_releases_through_its_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Python's version, stamp and publish, nanobind's build, and none of conan's.
+
+    The member's recipe is a consumer's, so conan answers no version for
+    it, and nanobind deletes conan's stamp, build and publish and
+    python's build in every set that holds it: any of them running would
+    fail here.
+    """
+    from livery.extensions.conan import _package as conan_package
+    from livery.extensions.nanobind import _build
+    from livery.extensions.python import _backend as python_backend
+    from livery.workshop import _lifecycle
+    from livery.workshop._registries import RegistryTarget
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
+    directory = tmp_path / "packages" / "ext"
+    (directory / "conanfile.py").write_text(
+        'class Ext:\n    requires = ("fmt/[>=11.0]",)\n'
+    )
+    (package,) = discover_packages(tmp_path)
+
+    def _never(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("a step the set deletes ran")
+
+    for module, name in (
+        (conan_package, "stamp_version"),
+        (conan_package, "build"),
+        (conan_package, "publish_artifact"),
+        (python_backend, "build"),
+    ):
+        monkeypatch.setattr(module, name, _never)
+    built: list[int] = []
+
+    def _build_dist(member: Package, root: Path, *, epoch: int = 0) -> Path:
+        del root
+        built.append(epoch)
+        return member.directory / "dist"
+
+    published: list[tuple[str, str]] = []
+
+    def _publish(
+        member: Package, root: Path, *, version: str, target: RegistryTarget
+    ) -> bool:
+        del member, root
+        published.append((version, target.url))
+        return True
+
+    monkeypatch.setattr(_build, "build_dist", _build_dist)
+    monkeypatch.setattr(python_backend, "publish_artifact", _publish)
+    assert _lifecycle.current_version(package) == "0.1.0"
+    assert _lifecycle.version_files(package) == (directory / "pyproject.toml",)
+    assert _lifecycle.stamp(package, tmp_path, "0.2.0") == ["pyproject.toml"]
+    assert _lifecycle.current_version(package) == "0.2.0"
+    assert _lifecycle.build(package, tmp_path, epoch=7) == directory / "dist"
+    assert built == [7]
+    target = RegistryTarget(kind="python", url="https://idx.example/simple")
+    assert _lifecycle.publish(package, tmp_path, version="0.2.0", target=target)
+    assert published == [("0.2.0", "https://idx.example/simple")]
+
+
 def test_a_pure_workspace_names_no_wheel_runners(tmp_path: Path) -> None:
     _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
     assert _ci.wheel_runners(tmp_path) == []
@@ -315,13 +384,7 @@ def test_the_labels_are_the_union_in_declaration_order(tmp_path: Path) -> None:
     _native(tmp_path, "alpha", '["ubuntu-latest", "macos-latest"]')
     _native(tmp_path, "beta", '["windows-latest", "ubuntu-latest"]')
     _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
-    # A package that lists nanobind holds it as one of the kind does.
-    _member(
-        tmp_path,
-        "listed",
-        'kind = "python-nanobind"\nname = "listed"\nextensions = ["nanobind"]\n\n'
-        '[nanobind]\nwheel-platforms = ["linux-arm"]\n',
-    )
+    _native(tmp_path, "listed", '["linux-arm"]')
     assert _ci.wheel_runners(tmp_path) == [
         "ubuntu-latest",
         "macos-latest",
@@ -412,7 +475,7 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
     # The fallback first: a workspace whose packages hold no nanobind
     # mounts none, and its release is the publish job alone.
     assert "nanobind" not in package_extensions(pure)
-    # A package that lists nothing holds what its kind stands for.
+    # A package that lists nanobind holds it.
     assert "nanobind" in package_extensions(native)
     state = _steps.snapshot()
     try:
@@ -459,7 +522,7 @@ def test_a_release_of_conan_members_alone_creates_and_saves_each_with_no_floor_l
     No member builds a platform wheel, so no floor leg runs: a floor
     leg builds a wheel against a conan member's floor.
     """
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as _conan
 
     _release_root(tmp_path)
     for name in ("geometry", "mesh"):
@@ -468,7 +531,7 @@ def test_a_release_of_conan_members_alone_creates_and_saves_each_with_no_floor_l
     # this release ships none of it.
     _native(tmp_path, "ext", '["ubuntu-latest"]')
     listed = "packages:\n  - path: packages/geometry\n  - path: packages/mesh\n"
-    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
+    workspace = tmp_path / _conan.WORKSPACE_FILE
     workspace.write_text(listed)
     members = {package.name: package for package in discover_packages(tmp_path)}
     geometry, mesh = members["geometry"], members["mesh"]
@@ -514,13 +577,13 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     the wave to attach; and the floors are proved once the wheels
     the release ships are built.
     """
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as _conan
 
     _release_root(tmp_path)
     _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
     _native(tmp_path, "ext", '["ubuntu-latest"]')
     members = {p.name: p for p in discover_packages(tmp_path)}
-    workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
+    workspace = tmp_path / _conan.WORKSPACE_FILE
     workspace.write_text("packages:\n  - path: packages/geometry\n")
     calls = _leg(
         monkeypatch,

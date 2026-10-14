@@ -253,14 +253,19 @@ def _language_words() -> set[str]:
     """The words of a language the docs extension never names outside prose.
 
     The language the API reference renders and the tools that read it,
-    and each part of every concrete kind's name.
+    each part of every concrete kind's name, and the name of every
+    installed extension a package lists.
     """
+    from livery.workshop._extensions import installed_extensions, levels_of
     from livery.workshop._kinds import all_kinds
 
     words = {"python", "griffe", "mkdocstrings"}
     for record in all_kinds():
         if not record.abstract:
             words.update(record.name.split("-"))
+    words.update(
+        name for name in installed_extensions() if "package" in levels_of(name)
+    )
     return words
 
 

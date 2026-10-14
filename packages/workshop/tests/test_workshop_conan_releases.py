@@ -289,8 +289,9 @@ def test_the_waves_floor_check_reads_the_attached_caches(
         directory=root / "packages" / "ext",
         path="packages/ext",
         name="acme-ext",
-        kind="python-nanobind",
+        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
+        extensions=("nanobind",),
     )
     target = RegistryTarget(kind="conan", url="fake://acme", releases=True)
     by_path = {library.path: library}

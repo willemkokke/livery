@@ -3,5 +3,4 @@
 A package's kind, declared in its workshop.toml, decides its template, its tools and the gate phases that apply to it:
 
 - cpp-conan (packages/lib): derives from nothing; gate phases build, format, lint, test
-- python (packages/echo): derives from nothing; gate phases examples, format, lint, test, typecheck
-- python-nanobind (packages/native): derives from python; gate phases examples, format, lint, test, typecheck
+- python (packages/echo, packages/native): derives from nothing; gate phases examples, format, lint, test, typecheck

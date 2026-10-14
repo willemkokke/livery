@@ -3,9 +3,9 @@
 Importing this module registers the ``nanobind`` group and its hidden
 ``wheels`` verb, which each leg of the release point's wheels job runs.
 The job, the key that names its legs and the publish job's wait on it
-are declared in the extension's ``extension.toml``; the labels are read
-by [livery.extensions.nanobind._ci][]. The base's plugin never imports
-this module.
+are declared in the extension's ``extension.toml``; the labels and the
+build each leg runs are the extension's ``_ci`` module's. The base's
+plugin never imports this module.
 """
 
 from __future__ import annotations
@@ -14,9 +14,6 @@ from livery.footman import Context, fail, group
 from livery.workshop import workspace_root
 
 nanobind = group("nanobind", help="The platform wheels of nanobind's packages")
-
-#: The kind whose backend builds a release's native artifacts on one host.
-KIND = "python-nanobind"
 
 
 def cibw_build_set(pythons: list[str]) -> str:
@@ -43,16 +40,15 @@ def nanobind_wheels(ctx: Context) -> None:
 
     The wheels job's one entry, on each of its legs. The job checks out
     the release squash the wave publishes, so HEAD is the release. The
-    build is the kind's host build
-    ([livery.workshop._kinds.KindRecord][]) over the workspace's whole
+    build is the extension's host build over the workspace's whole
     python matrix. A release that holds no native package builds
     nothing and says so, so the leg stays green on a pure release.
 
     Raises:
         Failed: when no workspace contract is above the working
-            directory, or when the kind names no host build.
+            directory.
     """
-    from livery.workshop._kinds import kind_for
+    from livery.extensions.nanobind._ci import host_build
     from livery.workshop._pythons import python_matrix
 
     root = workspace_root()
@@ -66,10 +62,4 @@ def nanobind_wheels(ctx: Context) -> None:
     # refused as an environment write meant to travel sideways.
     ctx.env.setdefault("CIBW_BUILD", cibw_build_set(python_matrix(root)))
     ctx.env.setdefault("CIBW_SKIP", "")
-    build = kind_for(KIND).host_build
-    if build is None:
-        fail(
-            f"kind {KIND!r} names no host build, so the wheels job's leg has"
-            " nothing to run; the kind's registration names one"
-        )
-    build(root)
+    host_build(root)

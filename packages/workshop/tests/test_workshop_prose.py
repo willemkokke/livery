@@ -64,10 +64,14 @@ def _extension(tmp_path: Path, name: str, **files: str) -> Path:
     return content
 
 
-def _member(root: Path, name: str, kind: str) -> None:
+def _member(root: Path, name: str, kind: str, *extensions: str) -> None:
     member = root / "packages" / name
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text(f'kind = "{kind}"\nname = "acme-{name}"\n')
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    held = f"extensions = [{listed}]\n" if extensions else ""
+    (member / "workshop.toml").write_text(
+        f'kind = "{kind}"\nname = "acme-{name}"\n{held}'
+    )
     if kind != "cpp-conan":
         (member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-{name}"\nversion = "0.1.0"\n'
@@ -273,8 +277,8 @@ def test_a_kind_gated_fragment_is_delivered_only_while_the_kind_is_present(
         "rules.cpp-conan.native.md",
         "rules.everyone.md",
     ]
-    # A derived kind counts as its parent: a nanobind package is a python one.
-    _member(root, "nb", "python-nanobind")
+    # A nanobind package is of the python kind, and lists nanobind.
+    _member(root, "nb", "python", "nanobind")
     assert _names(root, listed, AGENT) == [
         "rules.cpp-conan.native.md",
         "rules.everyone.md",
@@ -454,14 +458,15 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
     root = _workspace(tmp_path)
     assert render_kinds(root, AGENT) == ""
     _member(root, "cpp", "cpp-conan")
-    _member(root, "nb", "python-nanobind")
+    _member(root, "nb", "python", "nanobind")
     agent = render_kinds(root, AGENT)
     assert (
         "- cpp-conan (packages/cpp): derives from nothing;"
         " gate phases build, test" in agent
     )
-    assert "- python-nanobind (packages/nb): derives from python; gate phases" in agent
-    assert "| python-nanobind | python | packages/nb |" in render_kinds(root, HUMAN)
+    # A nanobind package is of the python kind.
+    assert "- python (packages/nb): derives from nothing; gate phases" in agent
+    assert "| python | nothing | packages/nb |" in render_kinds(root, HUMAN)
     # A step of a phase the gate never runs is no gate phase of a kind,
     # whatever extensions it names.
     register_step(

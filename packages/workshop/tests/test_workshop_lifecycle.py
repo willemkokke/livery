@@ -351,6 +351,75 @@ def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
     assert _lifecycle.publish(package, tmp_path, version="2", target=target) is True
 
 
+def _member_listing(tmp_path: Path, name: str, *extensions: str) -> Package:
+    """A python package at ``packages/<name>`` listing *extensions*."""
+    return Package(
+        directory=tmp_path / "packages" / name,
+        path=f"packages/{name}",
+        name=f"acme-{name}",
+        kind="python",
+        depends=(),
+        extensions=extensions,
+    )
+
+
+def test_a_step_deleted_in_a_set_never_runs_there_and_runs_elsewhere(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._extensions import declaration
+    from livery.workshop._phases import PhaseContext, run_phase
+
+    build = (
+        '\nmain = "{package}._steps:build"\nreads = ["epoch"]\n'
+        'provides = { dist = "path" }\n'
+    )
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        base=PACKAGE + "\n[phases.build.base]" + build,
+        over=PACKAGE
+        + 'requires = ["acme.base"]\n'
+        + "\n[phases.build.over]"
+        + build
+        + "\n[phases.build.over.deletes]\n"
+        + '"acme.base:build.base" = "it builds the dist this one builds"\n',
+    )
+    for name in ("base", "over"):
+        fake_steps(
+            tmp_path,
+            name,
+            "from pathlib import Path\n\n\n"
+            "def build(ctx):\n"
+            f"    print('{name} built ' + ctx.member.path)\n"
+            f"    ctx.provide('dist', Path('dist-{name}'))\n",
+        )
+    plain = _member_listing(tmp_path, "plain", "acme.base")
+    over = _member_listing(tmp_path, "over", "acme.over")
+    # The release train's build: the set that holds the deleter leaves the
+    # deleted step out, and a set that does not runs it.
+    assert _lifecycle.build(over, tmp_path) == Path("dist-over")
+    assert _lifecycle.build(plain, tmp_path) == Path("dist-base")
+    said = capsys.readouterr().out
+    assert "over built packages/over" in said
+    assert "base built packages/plain" in said
+    assert "base built packages/over" not in said
+    # A walk over the deleted step itself, as the gate walks a registered
+    # step: the package whose set deletes it skips, naming who and why.
+    declared = declaration("acme.base")
+    assert declared is not None
+    ctx = PhaseContext(root=tmp_path, packages=(plain, over), phase="build")
+    run_phase(ctx, declared.phases["build"], inputs={"build": {"epoch": 0}})
+    said = capsys.readouterr().out
+    assert "base built packages/plain" in said
+    assert "base built packages/over" not in said
+    assert (
+        "  build.base: packages/over skips (acme.over deletes it: it builds the"
+        " dist this one builds)" in said
+    )
+
+
 def test_a_package_its_kind_tests_nothing_isolated_for_refuses_a_leg(
     tmp_path: Path,
 ) -> None:

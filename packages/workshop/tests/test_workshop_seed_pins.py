@@ -138,10 +138,11 @@ def _files(directory: Path) -> dict[str, str]:
 # The births.
 
 #: The package-level extensions each tree's member holds, in composition
-#: order. A member that lists none holds what its kind stands for.
+#: order: its list and what the list requires. nanobind requires python,
+#: cpp and conan, so it comes after all three.
 HELD = {
     "package-python": ("python",),
-    "package-python-nanobind": ("cpp", "conan", "nanobind", "python"),
+    "package-python-nanobind": ("cpp", "conan", "python", "nanobind"),
     "package-cpp-conan": ("cmake", "cpp", "conan"),
     "package-extension": ("python",),
 }
@@ -160,14 +161,14 @@ def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
     }
     assert held == HELD
     # The mount takes the union of the members' sets, in composition order.
-    assert package_extensions(root) == ("cmake", "cpp", "conan", "nanobind", "python")
+    assert package_extensions(root) == ("cmake", "cpp", "conan", "python", "nanobind")
 
 
 #: The lines of each tree's contract that say what its member is, by key.
 #: The golden holds ``<key> = ...`` in their place.
 IDENTIFYING = {
     "package-python": {"kind": '"python"', "extensions": '["python"]'},
-    "package-python-nanobind": {"kind": '"python-nanobind"'},
+    "package-python-nanobind": {"kind": '"python"', "extensions": '["nanobind"]'},
     "package-cpp-conan": {"kind": '"cpp-conan"', "extensions": '["cmake", "conan"]'},
     "package-extension": {
         "kind": '"python"',
@@ -218,8 +219,8 @@ MOUNTED = (
     "cmake",
     "cpp",
     "conan",
-    "nanobind",
     "python",
+    "nanobind",
     "ruff",
     "basedpyright",
     "mypy",
@@ -301,26 +302,27 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 
 #: What a workspace listing nothing requires as each seed's member joins
 #: it: each requirement's name and site, each pair once, in the order
-#: first required.
+#: first required. The nanobind member is of the python kind, and the
+#: extension it lists requires its build tools.
 REQUIRED = {
     "no member": (("uv", "kind python"),),
     "package-python": (("uv", "kind python"),),
     "package-python-nanobind": (
         ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
     "package-cpp-conan": (
         ("cmake", "kind cpp-conan"),
         ("conan", "kind cpp-conan"),
         ("ninja", "kind cpp-conan"),
         ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
 }
 
@@ -607,36 +609,52 @@ def test_the_find_links_are_the_set_s_existing_dist_directories(
     ]
 
 
-#: Where python's backend, conan's recipe code and the nanobind kind's
-#: backend are defined.
+#: Where python's backend, conan's recipe code, cpp's answers and
+#: nanobind's build are defined.
 PYTHON = "livery.extensions.python._backend"
 CONAN = "livery.extensions.conan._package"
-NANOBIND = "livery.workshop._backends._python_nanobind"
+CPP = "livery.extensions.cpp._language"
+NANOBIND = "livery.extensions.nanobind._build"
 
 #: The function each lifecycle entry ran for a nanobind member, which lists
-#: no extension, by the entry's name: the module and name that define it.
+#: nanobind, by the entry's name: the module and name that define it. The
+#: set answers in composition order, cpp, conan, python, then nanobind.
+#: conan answers no version and no version file for the member's recipe, a
+#: consumer's, and nanobind deletes conan's stamp, build and publish and
+#: python's build, so none of them runs.
 NANOBIND_BODIES = {
     "current_version": (f"{PYTHON}:current_version",),
     "version_files": (f"{PYTHON}:stamp_version",),
-    "declared_requirements": (f"{NANOBIND}:declared_requirements",),
-    "module_roots": (f"{PYTHON}:module_roots",),
-    "public_modules": (f"{PYTHON}:public_modules",),
+    "declared_requirements": (
+        f"{CONAN}:declared_requirements",
+        f"{PYTHON}:declared_requirements",
+    ),
+    "module_roots": (f"{CPP}:module_roots", f"{PYTHON}:module_roots"),
+    # python's reads the module roots it names the public modules under.
+    "public_modules": (
+        f"{CPP}:public_modules",
+        f"{PYTHON}:public_modules",
+        f"{PYTHON}:module_roots",
+    ),
+    # No extension of the set answers it, so the python kind's backend does.
     "compile_commands": (f"{PYTHON}:compile_commands",),
     "references": (f"{PYTHON}:references",),
-    # The answer is whether the backend has an isolated test; none runs.
+    # The answer is whether the set has an isolated test; none runs.
     "has_isolated_test": (),
     "stamp": (f"{PYTHON}:stamp_version",),
-    # Every writer of what the kind stands for is called, in composition
-    # order: conan's leaves the python sibling alone, and python's takes it.
+    # Every writer of the set is called, in composition order: conan's
+    # leaves the python sibling alone, and python's takes it, reading the
+    # requirements the pyproject already declares.
     "declare_requirement": (
         f"{CONAN}:declare_requirement",
         f"{PYTHON}:declare_requirement",
+        f"{PYTHON}:declared_requirements",
     ),
-    "build": (f"{NANOBIND}:build",),
+    "build": (f"{NANOBIND}:build_dist",),
     "publish": (f"{PYTHON}:publish_artifact",),
     "isolated_test": (f"{PYTHON}:isolated_test",),
     "verify": (f"{PYTHON}:verify",),
-    # The sync phase runs over what the kind stands for: conan's step.
+    # The set holds conan, so the sync phase runs conan's step.
     "sync": ("livery.extensions.conan._steps:profile",),
 }
 
@@ -706,8 +724,9 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
 ) -> None:
     from livery.extensions.conan import _package as conan_package
     from livery.extensions.conan import _steps as conan_steps
+    from livery.extensions.cpp import _language as cpp_language
+    from livery.extensions.nanobind import _build as nanobind_build
     from livery.extensions.python import _backend as python_backend
-    from livery.workshop._backends import _python_nanobind
     from livery.workshop._registries import RegistryTarget
 
     root = _workspace(tmp_path / "acme")
@@ -716,28 +735,49 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
     bodies = _Bodies()
     # A function that reads or writes the member's files runs; one that
     # builds, uploads, installs or calls conan answers in its place.
-    for name in (
-        "current_version",
-        "stamp_version",
-        "declared_requirements",
-        "module_roots",
-        "public_modules",
-        "compile_commands",
-        "references",
+    for module, names in (
+        (
+            python_backend,
+            (
+                "current_version",
+                "stamp_version",
+                "declared_requirements",
+                "module_roots",
+                "public_modules",
+                "compile_commands",
+                "references",
+                "declare_requirement",
+            ),
+        ),
+        (
+            conan_package,
+            (
+                "current_version",
+                "stamp_version",
+                "declared_requirements",
+                "declare_requirement",
+            ),
+        ),
+        (cpp_language, ("module_roots", "public_modules")),
     ):
-        bodies.record(monkeypatch, _python_nanobind, name)
-    # The requirement writers are the extensions' own, which their answers
-    # name.
-    for module in (python_backend, conan_package):
-        bodies.record(monkeypatch, module, "declare_requirement")
+        for name in names:
+            bodies.record(monkeypatch, module, name)
     stand_ins: dict[str, object] = {
-        "build": native.directory / "dist",
         "publish_artifact": True,
         "isolated_test": {"acme-native": "0.1.0"},
         "verify": 0,
     }
     for name, answer in stand_ins.items():
-        bodies.record(monkeypatch, _python_nanobind, name, answer, runs=False)
+        bodies.record(monkeypatch, python_backend, name, answer, runs=False)
+    for module, name in (
+        (conan_package, "build"),
+        (conan_package, "publish_artifact"),
+        (python_backend, "build"),
+    ):
+        bodies.record(monkeypatch, module, name, runs=False)
+    bodies.record(
+        monkeypatch, nanobind_build, "build_dist", native.directory / "dist", runs=False
+    )
     bodies.record(monkeypatch, conan_steps, "profile", runs=False)
 
     def relative(paths: tuple[Path, ...]) -> tuple[str, ...]:
