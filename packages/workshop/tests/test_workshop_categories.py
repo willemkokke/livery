@@ -233,9 +233,11 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
 
 
 def test_a_package_takes_the_table_of_each_extension_it_holds() -> None:
-    # A nanobind package lists nothing and holds python, cpp, conan and
-    # nanobind through its kind.
-    package = _package(kind="python-nanobind")
+    from dataclasses import replace
+
+    # A nanobind package lists nanobind, which requires python, cpp and
+    # conan.
+    package = replace(_package(), extensions=("nanobind",))
     assert category_of(package, "src/acme/ext.cpp").name == "source"
     assert category_of(package, "include/acme/ext.hpp").supplier == "cpp"
     assert category_of(package, "tests/test_ext.cpp").supplier == "cpp"

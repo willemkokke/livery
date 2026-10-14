@@ -21,6 +21,7 @@ from collections.abc import (
     Callable,
     Collection,
     Generator,
+    Iterable,
     Mapping,
     MutableMapping,
     Sequence,
@@ -583,19 +584,67 @@ def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str
 #: general form, and this name serves the Gitea-only callers.
 ALIAS_URL = "http://gitea:3000"
 
-#: The loop's members, name and template kind (empty for the default
-#: python kind). The nanobind member forces the wheels path on
+
+@dataclass(frozen=True)
+class LoopMember:
+    """One member of the loop: its directory and the seed tree it is born from.
+
+    Attributes:
+        name: The member's directory under ``packages/``.
+        seed: The seed tree ``fm new.package`` births it from, whose
+            contract lists the member's package-level extensions.
+    """
+
+    name: str
+    seed: str
+
+    def listed(self) -> tuple[str, ...]:
+        """The package-level extensions the member's contract lists, from its seed.
+
+        Read from the seed tree's own ``workshop.toml``, the file a
+        birth writes, so the loop and the seed name one list. The
+        seed's placeholders stand inside strings, so the file reads as
+        TOML before it renders.
+        """
+        import tomllib
+
+        from livery.workshop._seeds import SEEDS, TEMPLATE
+
+        contract = (
+            Path(__file__).resolve().parent
+            / "content"
+            / SEEDS
+            / self.seed
+            / f"workshop.toml{TEMPLATE}"
+        )
+        data = tomllib.loads(contract.read_text("utf-8"))
+        return tuple(str(name) for name in data.get("extensions", ()))
+
+    def holds(self) -> tuple[str, ...]:
+        """The installed package-level extensions the member's set holds."""
+        from livery.workshop._extensions import composed_set
+
+        return composed_set(self.listed())
+
+
+#: The loop's members. The nanobind member forces the wheels path on
 #: every pass: its wheel is built on the runner through cibuildwheel,
 #: published, and installed in the isolated leg. The cpp-conan member
 #: forces the native measurement and the conan path: its gate build
 #: is measured by gcov beside the runner image's gcc and its lines
 #: join the union, the release leg creates it into conan's cache, and
 #: the wave publishes it through the forge's conan registry.
-LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
-    ("loop-echo", "package-python"),
-    ("loop-native", "package-python-nanobind"),
-    ("loop-cpp", "package-cpp-conan"),
+LOOP_MEMBERS: tuple[LoopMember, ...] = (
+    LoopMember("loop-echo", "package-python"),
+    LoopMember("loop-native", "package-python-nanobind"),
+    LoopMember("loop-cpp", "package-cpp-conan"),
 )
+
+
+def loop_member(name: str) -> LoopMember | None:
+    """The loop's member named *name*; None when the loop has none of that name."""
+    return next((member for member in LOOP_MEMBERS if member.name == name), None)
+
 
 #: The member that contributes a point, and the point's name.
 CONTRIBUTING_MEMBER = "loop-echo"
@@ -1830,18 +1879,33 @@ def _loop_fm(
     return 0
 
 
-def member_kind(seed: str) -> str:
-    """The package kind a loop member's seed renders: its name past ``package-``."""
-    return seed.removeprefix("package-")
+def members_for(names: Sequence[str] = ()) -> tuple[LoopMember, ...]:
+    """The loop's members named *names*, in the loop's order; all when empty."""
+    return tuple(member for member in LOOP_MEMBERS if not names or member.name in names)
 
 
-def members_for(kinds: Sequence[str] = ()) -> tuple[tuple[str, str], ...]:
-    """The loop's members of *kinds*, as ``(name, seed)``; every member when empty."""
-    return tuple(
-        (name, seed)
-        for name, seed in LOOP_MEMBERS
-        if not kinds or member_kind(seed) in kinds
-    )
+def landed_members(named: Iterable[str]) -> tuple[str, ...]:
+    """The loop's members a pass lands for steps naming *named*, by name, in order.
+
+    A member lands for an extension a step names that its set holds and
+    that no member whose set lies within its own holds too: the smaller
+    member stands for that extension. loop-native's set holds
+    loop-echo's, so a step naming python lands loop-echo alone, and one
+    naming conan lands loop-native and loop-cpp. A pass carries the
+    members its steps were written for, and no slower one besides.
+    """
+    wanted = set(named)
+    sets = {member.name: frozenset(member.holds()) for member in LOOP_MEMBERS}
+    landed: list[str] = []
+    for member in LOOP_MEMBERS:
+        held = sets[member.name]
+        own = set(held)
+        for other, smaller in sets.items():
+            if other != member.name and smaller < held:
+                own -= smaller
+        if own & wanted:
+            landed.append(member.name)
+    return tuple(landed)
 
 
 def steps_declared_off(name: str) -> tuple[str, ...]:
@@ -1859,14 +1923,15 @@ def steps_declared_off(name: str) -> tuple[str, ...]:
 
 
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """The stack a pass births to test extension *name*, and the member kinds it lands.
+    """The stack a pass births to test extension *name*, and the members it lands.
 
     The stack is what *name* requires, each before what needs it, then
     *name* itself, and nothing else; the steps it declares off are
     turned on in the newborn's contract
     ([livery.workshop._e2e.steps_declared_off][]), so each of its steps
-    registers. The members are the loop's of the kinds *name*'s steps
-    declare, so each step has something of its own to judge.
+    registers. The members are the loop's whose sets hold an extension
+    *name*'s steps name, by name (`landed_members`), so each step has
+    something of its own to judge.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
@@ -1901,22 +1966,12 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         stack.append(extension)
 
     visit(name, ())
-    from livery.workshop._kinds import kind_for
-
     named = {extension for record in steps for extension in record.extensions}
-    # A member counts when its own kind stands for an extension a step
-    # names, never through a parent kind: a pass carries the members its
-    # steps were written for, and no slower one besides.
-    kinds = tuple(
-        member_kind(seed)
-        for _member, seed in LOOP_MEMBERS
-        if named & set(kind_for(member_kind(seed)).stands_for)
-    )
-    return tuple(stack), kinds
+    return tuple(stack), landed_members(named)
 
 
-def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
-    """Give the loop its members of *kinds*, all when empty, through one pull request.
+def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
+    """Give the loop its *members*, by name, all when empty, in one pull request.
 
     ``new.package`` renders and wires each missing member, a `[release]
     baseline` seeds the first release's number, the nanobind member's
@@ -1938,16 +1993,16 @@ def _ensure_members(root: Path, kinds: Sequence[str] = ()) -> None:
     # merged. The alignment makes the glob read main's truth.
     _align_main(root)
     missing: list[tuple[str, str]] = []
-    for name, kind in members_for(kinds):
-        if (root / "packages" / name / "workshop.toml").is_file():
-            print(f"  member {name}: already landed")
+    for wanted in members_for(members):
+        if (root / "packages" / wanted.name / "workshop.toml").is_file():
+            print(f"  member {wanted.name}: already landed")
         else:
-            missing.append((name, kind))
+            missing.append((wanted.name, wanted.seed))
     if not missing:
         return
     _fresh_branch(root, "feat/members")
-    for name, kind in missing:
-        _loop_fm(root, "new.package", name, f"--kind={kind}")
+    for name, seed in missing:
+        _loop_fm(root, "new.package", name, f"--kind={seed}")
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
         # A native seed names the hosted runners under [nanobind]
@@ -2803,7 +2858,9 @@ def _release_act(root: Path, kind: str) -> None:
     # Only the members without a receipt release: the driver refuses a
     # set with a member nothing unreleased touches, and a cut receipt
     # is exactly that. A fresh loop releases both in one set.
-    all_tags = {name: f"packages/{name}/v0.1.0" for name, _kind in LOOP_MEMBERS}
+    all_tags = {
+        member.name: f"packages/{member.name}/v0.1.0" for member in LOOP_MEMBERS
+    }
     try:
         on_origin = git.ls_remote(root, *all_tags.values(), tags=True)
     except git.GitError:
@@ -2812,7 +2869,7 @@ def _release_act(root: Path, kind: str) -> None:
     for name in sorted(cut):
         _require_receipt_protected(root, all_tags[name], kind)
         print(f"  release: receipt {all_tags[name]} already on the loop")
-    names = tuple(name for name, _kind in LOOP_MEMBERS if name not in cut)
+    names = tuple(member.name for member in LOOP_MEMBERS if member.name not in cut)
     if not names:
         return
     tags = {name: all_tags[name] for name in names}
@@ -2908,9 +2965,9 @@ def _release_act(root: Path, kind: str) -> None:
     from livery.workshop._ci_tasks import point_runs
 
     wave = point_runs(repo, "release", root, limit=1)[0]
-    for name in names:
-        if dict(LOOP_MEMBERS)[name] == "package-python-nanobind":
-            _require_prebuilt(repo, wave, _contract_name(root, name))
+    for member in members_for(names):
+        if "nanobind" in member.holds():
+            _require_prebuilt(repo, wave, _contract_name(root, member.name))
     served_versions = _serving_probe(root)
     deadline = time.monotonic() + 300
     for name in names:
@@ -3042,7 +3099,8 @@ class Pass:
         stack: The extensions the birth lists: the loop's own
             ([livery.workshop._e2e.loop_stack][]) or the extension
             under test's; empty for the stock list.
-        kinds: The member kinds the members scenario lands; empty for all.
+        members: The members the members scenario lands, by name; empty
+            for all.
     """
 
     forge: str
@@ -3052,7 +3110,7 @@ class Pass:
     timings: list[Timing] = field(default_factory=list)
     extension: str = ""
     stack: tuple[str, ...] = ()
-    kinds: tuple[str, ...] = ()
+    members: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -3226,7 +3284,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "verified-skip", ("birth",), lambda p: _prove_verified_skip(_at(p), p.forge)
     ),
-    Scenario("members", ("birth",), lambda p: _ensure_members(_at(p), p.kinds)),
+    Scenario("members", ("birth",), lambda p: _ensure_members(_at(p), p.members)),
     Scenario("ratchet", ("members",), lambda p: _prepare_ratchet(_at(p), p.forge)),
     Scenario("scoped-leg", ("ratchet",), lambda p: _prove_scoped_leg(_at(p), p.forge)),
     Scenario(
@@ -3411,7 +3469,8 @@ if _WORKSHOP_TESTS.is_dir():
         needs run first, once. ``--extension`` tests one extension in
         isolation, ``extension`` the default set: the birth lists that
         extension and what it requires instead of the loop's stack, and
-        the members are those of the kinds its steps declare. ``birth`` builds
+        the members are the loop's whose sets hold an extension its steps
+        name. ``birth`` builds
         this checkout's workshop, its dependencies and the extensions a
         birth lists into a local index, births or resumes the loop's
         workspace through ``fm new.project`` from that index (so an
@@ -3444,7 +3503,7 @@ if _WORKSHOP_TESTS.is_dir():
                 require_dev_branch(driver)
             asked = scenario or ("extension" if extension else "develop")
             chosen = scenarios_for(asked)
-            stack, kinds = (
+            stack, members = (
                 extension_under_test(extension) if extension else (loop_stack(), ())
             )
             if forge != "gitea":
@@ -3475,7 +3534,7 @@ if _WORKSHOP_TESTS.is_dir():
                 fresh,
                 extension=extension,
                 stack=stack,
-                kinds=kinds,
+                members=members,
             )
             RUNS.count = 0
             try:

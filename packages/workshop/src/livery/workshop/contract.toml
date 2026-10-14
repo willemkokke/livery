@@ -379,7 +379,7 @@ doc = "the package-level extensions the package is composed of, by name: its min
 
 [contract.package.kind]
 types = ["str"]
-doc = "the package's kind, which decides how it builds, tests and releases: python, python-nanobind, cpp-conan, or one an extension registers"
+doc = "the package's kind, which builds, tests and releases it where its extensions do not: python, cpp-conan, or one an extension registers"
 
 [contract.package.name]
 types = ["str"]
@@ -675,11 +675,11 @@ doc = "the file suffixes the step reads in the category, each starting with a do
 
 [contract.extension.phases."*"."*".deletes]
 types = ["table"]
-doc = "the steps of earlier extensions this one deletes, each <owner>:<phase>.<step> to the reason; none when absent"
+doc = "the steps of other extensions that never run for a package whose set holds this one, each <owner>:<phase>.<step> of an installed step that runs once per package, to the reason; none when absent"
 
 [contract.extension.phases."*"."*".deletes."*"]
 types = ["str"]
-doc = "an earlier extension's step, <owner>:<phase>.<step>, to the reason this one deletes it"
+doc = "another extension's step, <owner>:<phase>.<step>, to the reason it never runs where this one is held"
 
 [contract.extension.phases."*"."*".enabled]
 types = ["bool"]

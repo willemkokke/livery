@@ -1,4 +1,4 @@
-"""The python-nanobind kind: the guard and chain first, then the armed build."""
+"""nanobind's build: the guard and the seed chain first, then the armed build."""
 
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ import pytest
 from _pytest.outcomes import Skipped  # the skip a fixture raises
 
 import livery.toolroom.tools as tools
+from livery.extensions.nanobind import _build, _ci, _container
 from livery.extensions.python import _backend as _python
-from livery.workshop._backends import _python_nanobind
 from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
     kind_for,
+    kind_names,
     template_chain,
 )
 from livery.workshop._packages import Package
@@ -52,17 +53,25 @@ def build_rig(tmp_path: Path) -> None:
     """
     if gap := _toolchain_gap():
         pytest.skip(gap)
-    if gap := _python_nanobind.conan_tools(tmp_path)[2]:
+    if gap := _container.conan_tools(tmp_path)[2]:
         pytest.skip(gap)
 
 
-def _package(directory: Path, name: str) -> Package:
+def _package(
+    directory: Path,
+    name: str,
+    *,
+    kind: str = "python",
+    extensions: tuple[str, ...] = ("nanobind",),
+) -> Package:
+    """A package listing nanobind, or the *kind* and *extensions* given."""
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind="python-nanobind",
+        kind=kind,
         depends=(),
+        extensions=extensions,
     )
 
 
@@ -110,7 +119,7 @@ def test_no_rendered_python_line_is_over_the_column_limit_whatever_the_name(
 
 
 def _render_chain(tmp_path: Path) -> Package:
-    """A python-nanobind package's seeds, parent then leaf."""
+    """A nanobind package's seeds, python's then the leaf's."""
     destination = tmp_path / "packages" / "ext"
     answers = project_facts(ROOT)
     seed_into(
@@ -132,81 +141,74 @@ def _render_chain(tmp_path: Path) -> Package:
 # The guard and the refusals first.
 
 
-def test_a_pure_wheel_from_the_native_kind_refuses(tmp_path: Path) -> None:
+def test_a_pure_wheel_from_a_nanobind_build_refuses(tmp_path: Path) -> None:
     package = _package(tmp_path / "packages" / "ext", "acme-ext")
     dist = package.directory / "dist"
     dist.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="no wheel"):
-        _python_nanobind.assert_platform_tagged(package, dist)
+        _build.assert_platform_tagged(package, dist)
     (dist / "acme_ext-0.0.1-py3-none-any.whl").touch()
     with pytest.raises(_FAILURES, match="platform tag is the proof"):
-        _python_nanobind.assert_platform_tagged(package, dist)
+        _build.assert_platform_tagged(package, dist)
     (dist / "acme_ext-0.0.1-py3-none-any.whl").unlink()
     (dist / "acme_ext-0.0.1-cp314-cp314-macosx_11_0_arm64.whl").touch()
-    _python_nanobind.assert_platform_tagged(package, dist)
+    _build.assert_platform_tagged(package, dist)
 
 
-def test_the_kind_chains_from_python(python_steps: object) -> None:
+def test_the_seed_chain_runs_from_python_s_and_no_package_names_its_record() -> None:
     assert template_chain("package-python-nanobind") == (
         "package-base",
         "package-python",
         "package-python-nanobind",
     )
-    # The managed union is the parent's: the leaf adds build files
-    # the package owns, not rendered-managed ones.
-    # The native configs are rendered from the step records, so the kind
-    # manages them.
-    from livery.workshop._kinds import kind_stands_for
-    from livery.workshop._steps import tools_for
-
-    # A step naming python reaches the child kind through its chain:
-    # its tool joins the child's profile.
-    held = kind_stands_for("python-nanobind")
-    assert {"fake"} <= {tool for tool, _ in tools_for(held)}
+    # The record holds the seed chain alone: it builds nothing, and no
+    # contract's kind names it.
     record = kind_for("python-nanobind")
-    assert record.parent == "python"
-    # Its phases are those of the steps naming an extension it holds.
-    from livery.workshop._steps import judges_extensions, steps_by_name
-
-    phases = {r.phase for r in steps_by_name().values() if judges_extensions(r, held)}
-    assert {"test", "typecheck"} <= phases
-    assert record.host_tools == ("cc", "c++")
+    assert (record.parent, record.abstract, record.backend) == ("python", True, None)
+    assert record.stands_for == ()
+    assert "python-nanobind" not in kind_names()
 
 
-def test_the_kind_holds_python_cpp_conan_and_nanobind_while_it_lists_nothing() -> None:
-    """Python's extension through the chain, then cpp, conan and nanobind.
+def test_a_package_listing_nanobind_holds_python_cpp_and_conan(
+    python_steps: object,
+) -> None:
+    """Python's extension, cpp and conan, which nanobind requires.
 
     A nanobind package is a python distribution whose extension module
-    is C++ (cpp), it consumes conan's packages without being a recipe
-    (conan, for the provider that resolves them), and its wheels build
-    on the release's wheels job (nanobind). The kind's backend builds
-    what each leg of that job builds.
+    is C++ (cpp), it consumes conan's packages without being a conan
+    package (conan, for the provider that resolves them), and nanobind
+    builds its wheels. The tools the build runs are nanobind's.
     """
-    from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._extensions import composed_set, declaration
+    from livery.workshop._steps import judges_extensions, steps_by_name, tools_for
 
-    assert kind_stands_for("python-nanobind") == ("python", "cpp", "conan", "nanobind")
-    assert kind_for("python-nanobind").host_build is _python_nanobind.host_build
-    # No other kind builds on a host before the wave.
-    assert kind_for("python").host_build is None
-    assert kind_for("cpp-conan").host_build is None
+    held = composed_set(["nanobind"])
+    assert held == ("nanobind", "python", "cpp", "conan")
+    # A step naming python judges the package: its tool joins the profile.
+    assert {"fake"} <= {tool for tool, _ in tools_for(held)}
+    phases = {r.phase for r in steps_by_name().values() if judges_extensions(r, held)}
+    assert {"test", "typecheck"} <= phases
+    declared = declaration("nanobind")
+    assert declared is not None
+    assert declared.tools == ("cmake", "ninja", "conan", "cmake_conan")
 
 
 def test_the_one_wheel_skip_follows_the_hosts_libc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = "livery.workshop._backends._python_nanobind"
+    module = "livery.extensions.nanobind._build"
     monkeypatch.setattr(f"{module}._musl_loader_present", lambda: False)
     monkeypatch.setattr(
         "sysconfig.get_config_var", lambda name: "aarch64-unknown-linux-musl"
     )
-    assert _python_nanobind.host_is_musl()
+    assert _build.host_is_musl()
     monkeypatch.setattr(
         "sysconfig.get_config_var", lambda name: "aarch64-unknown-linux-gnu"
     )
-    assert not _python_nanobind.host_is_musl()
+    assert not _build.host_is_musl()
     # The loader is the second signal, for a musl-built python elsewhere.
     monkeypatch.setattr(f"{module}._musl_loader_present", lambda: True)
-    assert _python_nanobind.host_is_musl()
+    assert _build.host_is_musl()
 
 
 # The chain's seeds: the parent's first, the leaf's over them.
@@ -228,8 +230,10 @@ def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
     # The build is keyed on the commit, so a fresh checkout at the same
     # commit reuses it instead of rebuilding on new modification times.
     assert "cache-keys = [{ git = { commit = true } }]" in pyproject
-    # The contract records the leaf kind.
-    assert 'kind = "python-nanobind"' in (directory / "workshop.toml").read_text()
+    # The contract is of the python kind and lists nanobind.
+    contract = (directory / "workshop.toml").read_text()
+    assert 'kind = "python"' in contract
+    assert 'extensions = ["nanobind"]' in contract
     # The leaf's __init__ re-exports the compiled surface.
     init = (directory / "src" / "acme" / "ext" / "__init__.py").read_text()
     assert "native_hello" in init
@@ -256,7 +260,9 @@ def _render_library(tmp_path: Path) -> Package:
             "project_name": "acme",
         },
     )
-    return _package(destination, "acme-geometry")
+    return _package(
+        destination, "acme-geometry", kind="cpp-conan", extensions=("cmake", "conan")
+    )
 
 
 def _consume_the_library(package: Package) -> None:
@@ -335,7 +341,7 @@ def test_the_wheel_is_platform_tagged_and_imports(
     _consume_the_library(package)
     workspace = _cpp_conan.workspace_file(tmp_path)
     (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(workspace)
-    dist = _python_nanobind.build(package, tmp_path)
+    dist = _build.build_dist(package, tmp_path)
     wheels = sorted(dist.glob("*.whl"))
     assert wheels, "cibuildwheel produced no wheel"
     assert all("none-any" not in wheel.name for wheel in wheels)
@@ -383,11 +389,11 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
     # The refusal first: a root without the file, as in a release leg
     # that set it aside, gives the container none, so a sibling
     # resolves from the package the leg created.
-    assert _python_nanobind.container_workspace(tmp_path) is None
+    assert _container.container_workspace(tmp_path) is None
     (tmp_path / _cpp_conan.WORKSPACE_FILE).write_text(
         _cpp_conan.workspace_file(tmp_path)
     )
-    written = _python_nanobind.container_workspace(tmp_path)
+    written = _container.container_workspace(tmp_path)
     assert written is not None
     # The package builds in /project, outside the workspace. The copy
     # names each member by its absolute path, where the container
@@ -397,16 +403,14 @@ def test_the_build_container_finds_a_workspace_file_at_its_root(
     if sys.platform.startswith("linux"):
         provider = tmp_path / "conan_provider.cmake"
         monkeypatch.setattr(
-            _python_nanobind,
+            _container,
             "conan_tools",
             lambda root: (str(provider), str(tmp_path / "bin"), ""),
         )
         # The container's own conan install is another test's; here the
         # faked directory holds no binary to ask.
-        monkeypatch.setattr(
-            _python_nanobind, "conan_version", lambda root, conan: "2.0.0"
-        )
-        env = _python_nanobind.conan_environment(tmp_path)
+        monkeypatch.setattr(_container, "conan_version", lambda root, conan: "2.0.0")
+        env = _container.conan_environment(tmp_path)
         assert f"-v {written}:/project/conanws.yml:ro" in env["CIBW_CONTAINER_ENGINE"]
 
 
@@ -461,11 +465,11 @@ def test_the_build_rig_skips_where_the_native_tools_are_not_here(
 )
 def test_the_container_mounts_every_store_its_paths_name() -> None:
     # The fallback first: one path is one mount.
-    assert _python_nanobind.container_mounts((Path("/w"),)) == "-v /w:/w"
+    assert _container.container_mounts((Path("/w"),)) == "-v /w:/w"
     # The entered provider and conan live in another store than this
     # process's: each gets its own mount, and a path inside one already
     # mounted adds nothing.
-    mounts = _python_nanobind.container_mounts(
+    mounts = _container.container_mounts(
         (
             Path("/w"),
             Path("/isolated/toolroom"),
@@ -482,7 +486,7 @@ def test_the_container_mounts_every_store_its_paths_name() -> None:
         "/runner/toolroom/tools/conan@2.32.0/bin:/runner/toolroom/tools/conan@2.32.0/bin",
     ]
     # A later path that holds an earlier one replaces it.
-    assert _python_nanobind.container_mounts((Path("/s/a"), Path("/s"))) == "-v /s:/s"
+    assert _container.container_mounts((Path("/s/a"), Path("/s"))) == "-v /s:/s"
 
 
 def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
@@ -502,7 +506,7 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     monkeypatch.setenv("PATH", str(empty))
     # No receipts at all: both are named.
     with pytest.raises(_FAILURES, match="cmake-conan provider and conan"):
-        _python_nanobind.conan_environment(tmp_path)
+        _container.conan_environment(tmp_path)
     # The provider's path is the record's own env entry, carried by
     # the receipt; nothing here rebuilds it from a file name.
     provider = home.tools / "cmake_conan@0.19.0" / "conan_provider.cmake"
@@ -515,11 +519,11 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         env={"CMAKE_CONAN_PROVIDER": str(provider)},
     )
     with pytest.raises(_FAILURES, match="conan is not here"):
-        _python_nanobind.conan_environment(tmp_path)
+        _container.conan_environment(tmp_path)
     # A receipt in a mode that puts nothing on PATH is no answer either.
     _receipt(tmp_path, "conan", "2.32.0", mode="none", entry_points=["conan"])
     with pytest.raises(_FAILURES, match="conan is not here"):
-        _python_nanobind.conan_environment(tmp_path)
+        _container.conan_environment(tmp_path)
     # Conan on PATH and nowhere else is an answer: a workspace with no
     # receipts of its own is what a CI leg's tests build in, and there the
     # entered environment carries the store's tools.
@@ -529,7 +533,7 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     (entered / "conan").chmod(0o755)
     monkeypatch.setenv("PATH", str(entered))
     if sys.platform != "win32":  # PATHEXT decides on Windows, and .sh is not on it
-        assert _python_nanobind.conan_tools(tmp_path)[1] == str(entered)
+        assert _container.conan_tools(tmp_path)[1] == str(entered)
     monkeypatch.setenv("PATH", str(empty))
     conan_bin = home.tools / "conan@2.32.0" / "bin"
     _receipt(
@@ -541,14 +545,14 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         entry_points=["conan"],
     )
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
-    env = _python_nanobind.conan_environment(tmp_path)
+    env = _container.conan_environment(tmp_path)
     # The receipt's version wins over a newer directory in the store:
     # the lock, not the store's contents, says what this checkout uses.
     newer = home.tools / "cmake_conan@0.20.0" / "conan_provider.cmake"
     newer.parent.mkdir(parents=True)
     newer.write_text("# newer\n")
     assert env["CMAKE_CONAN_PROVIDER"] == str(provider)
-    assert _python_nanobind.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"] == str(
+    assert _container.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"] == str(
         provider
     )
     assert env["CONAN_HOME"] == str(tmp_path / "conan-home")
@@ -564,7 +568,7 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         # The container installs the receipt's conan for itself: the
         # store's is the host's frozen binary, which it cannot run.
         assert env["CIBW_BEFORE_ALL_LINUX"] == (
-            _python_nanobind.container_conan_install("2.32.0")
+            _container.container_conan_install("2.32.0")
         )
         assert "conan==2.32.0" in env["CIBW_BEFORE_ALL_LINUX"]
         assert "CIBW_ENVIRONMENT_LINUX" not in env
@@ -575,7 +579,7 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     # An entered environment's provider is kept as it is.
     monkeypatch.setenv("CMAKE_CONAN_PROVIDER", "/entered/conan_provider.cmake")
     assert (
-        _python_nanobind.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"]
+        _container.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"]
         == "/entered/conan_provider.cmake"
     )
 
@@ -594,7 +598,7 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
     extension = root / "packages" / "ext"
     extension.mkdir(parents=True)
     (extension / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-ext"\n'
+        'kind = "python"\nname = "acme-ext"\nextensions = ["nanobind"]\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.1.0"\n'
     )
@@ -610,8 +614,9 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
         directory=extension,
         path="packages/ext",
         name="acme-ext",
-        kind="python-nanobind",
+        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
+        extensions=("nanobind",),
     )
     return root, package
 
@@ -620,19 +625,15 @@ def test_the_declared_conan_arguments_are_read_in_both_spellings(
     tmp_path: Path,
 ) -> None:
     _root, package = _floor_workspace(tmp_path)
-    assert _python_nanobind.conan_install_args(package) == (
-        "--build=missing;--build=editable"
-    )
+    assert _build.conan_install_args(package) == ("--build=missing;--build=editable")
     (package.directory / "pyproject.toml").write_text(
         '[project]\nname = "acme-ext"\n\n'
         "[tool.scikit-build.cmake.define]\n"
         'CONAN_INSTALL_ARGS = "--build=missing"\n'
     )
-    assert _python_nanobind.conan_install_args(package) == "--build=missing"
+    assert _build.conan_install_args(package) == "--build=missing"
     (package.directory / "pyproject.toml").write_text('[project]\nname = "acme-ext"\n')
-    assert _python_nanobind.conan_install_args(package) == (
-        _python_nanobind.DEFAULT_INSTALL_ARGS
-    )
+    assert _build.conan_install_args(package) == (_build.DEFAULT_INSTALL_ARGS)
 
 
 def test_a_floor_the_wave_itself_releases_is_the_build_that_already_ran(
@@ -643,8 +644,8 @@ def test_a_floor_the_wave_itself_releases_is_the_build_that_already_ran(
     def _never(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("the leg must not build for a co-released floor")
 
-    monkeypatch.setattr(_python_nanobind, "build_wheels", _never)
-    _python_nanobind.floor_legs(package, root, {"packages/geometry": "0.1.0"})
+    monkeypatch.setattr(_build, "build_wheels", _never)
+    _ci.floor_legs(package, root, {"packages/geometry": "0.1.0"})
     printed = capsys.readouterr().out
     assert "the floor on acme-geometry is 0.1.0" in printed
     assert "already linked it" in printed
@@ -682,12 +683,12 @@ def test_the_floor_leg_pins_conan_to_the_floor_and_tests_that_wheel(
         tested.append(wheels_dir)
         return {}
 
-    from livery.workshop._backends import _cpp_conan
+    from livery.extensions.conan import _package as _conan
 
-    monkeypatch.setattr(_cpp_conan, "restore_from_releases", _fake_restore)
-    monkeypatch.setattr(_python_nanobind, "build_wheels", _fake_build)
+    monkeypatch.setattr(_conan, "restore_from_releases", _fake_restore)
+    monkeypatch.setattr(_build, "build_wheels", _fake_build)
     monkeypatch.setattr(_python, "run_isolated_test", _fake_test)
-    _python_nanobind.floor_legs(package, root, {"packages/geometry": "0.2.0"})
+    _ci.floor_legs(package, root, {"packages/geometry": "0.2.0"})
     assert restored == [("acme-geometry", "0.1.0")]
     dist, args, one_host = built[0]
     assert dist == package.directory / "build" / "floor"
@@ -762,8 +763,9 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
         directory=extension.directory,
         path="packages/ext",
         name="acme-ext",
-        kind="python-nanobind",
+        kind="python",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
+        extensions=("nanobind",),
     )
 
     fake = FakeForge()
@@ -778,7 +780,7 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     )
 
     with pytest.raises(_FAILURES) as caught:
-        _python_nanobind.floor_legs(package, tmp_path, {"packages/geometry": "0.2.0"})
+        _ci.floor_legs(package, tmp_path, {"packages/geometry": "0.2.0"})
     message = str(caught.value)
     assert "area" in message, message
 
@@ -810,7 +812,7 @@ def test_the_rendered_extension_configures_from_its_preset(
     )
     env = {
         **os.environ,
-        **_python_nanobind.conan_environment(tmp_path),
+        **_container.conan_environment(tmp_path),
         "VIRTUAL_ENV": str(venv),
     }
     done = subprocess.run(
@@ -833,7 +835,7 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     with pytest.raises(_FAILURES, match="no conan at"):
-        _python_nanobind.conan_version(tmp_path, str(bin_dir))
+        _container.conan_version(tmp_path, str(bin_dir))
     # A binary that names nothing refuses the same way.
     conan = bin_dir / "conan"
     conan.write_text("#!/bin/sh\necho nothing here\n")
@@ -841,24 +843,24 @@ def test_the_conan_version_comes_from_the_receipt_else_the_binary(
     if sys.platform == "win32":
         return  # a shell script is no executable there; the receipt path is the same
     with pytest.raises(_FAILURES, match="names no version"):
-        _python_nanobind.conan_version(tmp_path, str(bin_dir))
+        _container.conan_version(tmp_path, str(bin_dir))
     # No receipt: the binary's --version answers, as the provider reads it.
     conan.write_text("#!/bin/sh\necho 'Conan version 2.31.0'\n")
-    assert _python_nanobind.conan_version(tmp_path, str(bin_dir)) == "2.31.0"
+    assert _container.conan_version(tmp_path, str(bin_dir)) == "2.31.0"
     # A receipt names the lock's version, which wins over the binary.
     _receipt(tmp_path, "conan", "2.32.0", tool_dir=str(tmp_path), paths=[str(bin_dir)])
-    assert _python_nanobind.conan_version(tmp_path, str(bin_dir)) == "2.32.0"
-    line = _python_nanobind.container_conan_install("2.32.0")
+    assert _container.conan_version(tmp_path, str(bin_dir)) == "2.32.0"
+    line = _container.container_conan_install("2.32.0")
     assert line.startswith("python -m venv /opt/workshop-conan && ")
     assert "pip install --quiet conan==2.32.0" in line
     # Every build runs the script in front of that install as its conan.
     assert line.endswith(
-        _python_nanobind.write_script(
-            "/usr/local/bin/conan", _python_nanobind.container_conan_wrapper()
+        _container.write_script(
+            "/usr/local/bin/conan", _container.container_conan_wrapper()
         )
     )
     assert '/opt/workshop-conan/bin/conan "$@"' in (
-        _python_nanobind.container_conan_wrapper()
+        _container.container_conan_wrapper()
     )
 
 
@@ -882,11 +884,11 @@ def test_the_container_s_conan_gives_the_home_back_and_keeps_conan_s_exit_code(
     ):
         (stand_ins / name).write_text(f"#!/bin/sh\n{body}\n")
         (stand_ins / name).chmod(0o755)
-    wrapper = _python_nanobind.container_conan_wrapper(str(stand_ins / "conan"))
+    wrapper = _container.container_conan_wrapper(str(stand_ins / "conan"))
     script = tmp_path / "conan"
     # The line the container runs writes the script exactly, executable.
     subprocess.run(
-        ["sh", "-c", _python_nanobind.write_script(str(script), wrapper)], check=True
+        ["sh", "-c", _container.write_script(str(script), wrapper)], check=True
     )
     assert script.read_text() == wrapper
     assert os.access(script, os.X_OK)
@@ -922,11 +924,15 @@ def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
     from livery.workshop._packages import discover_packages
 
     def member(name: str, *, recipe: bool) -> Package:
-        """A member listing nothing, whose kind stands for conan; its record."""
+        """A member whose set holds conan: a library, or a package listing nanobind."""
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
-        kind = "cpp-conan" if recipe else "python-nanobind"
-        (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "{name}"\n')
+        held = (
+            'kind = "cpp-conan"\n'
+            if recipe
+            else 'kind = "python"\nextensions = ["nanobind"]\n'
+        )
+        (directory / "workshop.toml").write_text(f'{held}name = "{name}"\n')
         if not recipe:
             (directory / "pyproject.toml").write_text(f'[project]\nname = "{name}"\n')
         text = (

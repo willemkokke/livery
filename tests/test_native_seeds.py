@@ -50,16 +50,22 @@ def _supplied() -> bool:
 
 
 @pytest.mark.parametrize(
-    ("tree", "kind", "name"),
+    ("tree", "kind", "listed", "name"),
     [
-        ("package-cpp-conan", "cpp-conan", "acme-native"),
-        ("package-python-nanobind", "python-nanobind", "ci-e2e-loop-loop-native"),
-        ("package-python-nanobind", "python-nanobind", "x-y"),
+        ("package-cpp-conan", "cpp-conan", ("cmake", "conan"), "acme-native"),
+        ("package-python-nanobind", "python", ("nanobind",), "ci-e2e-loop-loop-native"),
+        ("package-python-nanobind", "python", ("nanobind",), "x-y"),
     ],
 )
 def test_a_member_born_from_the_native_seeds_is_in_style(
-    tmp_path: Path, registered: None, tree: str, kind: str, name: str
+    tmp_path: Path,
+    registered: None,
+    tree: str,
+    kind: str,
+    listed: tuple[str, ...],
+    name: str,
 ) -> None:
+    from livery.workshop._extensions import composed_set
     from livery.workshop._shipped_files import settle_package
 
     if not _supplied():
@@ -75,7 +81,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
             "project_name": "acme",
         },
     )
-    settle_package(destination, kind_stands_for(kind))
+    settle_package(destination, composed_set(listed))
     assert (destination / ".clang-format").is_file()
     package = Package(
         directory=destination,
@@ -83,6 +89,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
         name=name,
         kind=kind,
         depends=(),
+        extensions=listed,
     )
     suffixes = {
         suffix

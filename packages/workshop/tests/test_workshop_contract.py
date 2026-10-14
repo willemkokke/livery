@@ -165,19 +165,38 @@ def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> N
     member = _workspace(
         tmp_path,
         "",
-        'kind = "python-nanobind"\nname = "m"\n\n[ci]\n'
+        'kind = "python"\nname = "m"\nextensions = ["nanobind"]\n\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # The key in nanobind's table loads: the package holds nanobind
-    # through its kind, listing nothing.
+    # The key in nanobind's table loads: the package lists nanobind.
     member.write_text(
-        'kind = "python-nanobind"\nname = "m"\n\n[nanobind]\n'
+        'kind = "python"\nname = "m"\nextensions = ["nanobind"]\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest", "windows-latest"]\n'
     )
     assert _contract.load_contract(member)["nanobind"] == {
         "wheel-platforms": ["ubuntu-latest", "windows-latest"]
     }
+
+
+def test_a_contract_naming_the_nanobind_kind_refuses_naming_the_list_to_write(
+    tmp_path: Path,
+) -> None:
+    refusal = (
+        '  kind = "python-nanobind" is not a kind a package names: a package holds'
+        ' nanobind by listing it, kind = "python" and extensions = ["nanobind"]'
+    )
+    member = _workspace(tmp_path, "", 'kind = "python-nanobind"\nname = "m"\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+    # A contract that lists nanobind beside the kind refuses the same way,
+    # and so does one carrying nanobind's own table.
+    member.write_text(
+        'kind = "python-nanobind"\nname = "m"\nextensions = ["nanobind"]\n\n'
+        '[nanobind]\nwheel-platforms = ["ubuntu-latest"]\n'
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
+    # Nothing rewrites it.
+    assert member.read_text().startswith('kind = "python-nanobind"\n')
 
 
 def test_qa_refuses_naming_the_coverage_table(tmp_path: Path) -> None:

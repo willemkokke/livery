@@ -638,7 +638,8 @@ def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
     member = root / "packages" / "native"
     (member / "src").mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-native"\n\n[nanobind]\n'
+        'kind = "python"\nname = "acme-native"\nextensions = ["nanobind"]\n\n'
+        "[nanobind]\n"
         'wheel-platforms = ["ubuntu-latest"]\n'
     )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')

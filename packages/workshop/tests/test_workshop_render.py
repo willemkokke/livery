@@ -438,7 +438,8 @@ def test_wheel_platforms_render_the_wheels_job_before_the_wave(
     member = root / "packages" / "native"
     (member / "src").mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-native"\n\n[nanobind]\n'
+        'kind = "python"\nname = "acme-native"\nextensions = ["nanobind"]\n\n'
+        "[nanobind]\n"
         'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n'
     )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')

@@ -18,11 +18,15 @@ every package template renders first. It heads every kind's chain,
 so what it carries reaches every kind without a leaf restating it.
 A package's ``kind`` never names it: the vocabulary a contract may
 use is the concrete kinds.
+
+``python-nanobind`` is abstract too: the record behind the nanobind
+seed tree, which a birth writes over python's. A package born from it
+is of the ``python`` kind and lists nanobind, whose declaration builds
+and releases it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -173,19 +177,14 @@ class KindRecord:
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        abstract: Whether the kind exists for its children alone: it
-            heads their chains with its seed tree, builds nothing,
-            and is never a package's ``kind``. A concrete
-            kind needs a backend; an abstract one has none.
+        abstract: Whether the record exists for the seed chain alone:
+            a birth writes its seed tree over its parent's, it builds
+            nothing, and a package's ``kind`` never names it. A
+            concrete kind needs a backend; an abstract one has none.
         stands_for: The package-level extensions a package of the kind
             that lists none is taken to hold: their categories, root
             files and steps are its own. A child kind adds to its
             parent's.
-        host_build: How the kind builds, on one host, the native
-            artifacts a release ships, before the wave publishes them,
-            given the workspace root; it reads the release at the
-            root's HEAD. None for a kind whose packages the wave builds
-            itself.
     """
 
     name: str
@@ -196,7 +195,6 @@ class KindRecord:
     artifact: str = "python"
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
-    host_build: Callable[[Path], None] | None = None
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -355,7 +353,7 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
 
 def _register_builtin() -> None:
     from livery.extensions.python import _backend as _python
-    from livery.workshop._backends import _cpp_conan, _python_nanobind
+    from livery.workshop._backends import _cpp_conan
 
     # The base every kind derives from: abstract, the record behind the
     # package-base template.
@@ -381,26 +379,16 @@ def _register_builtin() -> None:
             stands_for=("python",),
         )
     )
-    # The binary extension: a python distribution in every checker's
-    # eyes (the chain says so), built through cibuildwheel so the
-    # wheel carries its platform tag.
+    # The nanobind seed tree: a python package's seeds with the
+    # extension module's build files over them. The record holds the
+    # seed chain alone; a package born from it is of the python kind
+    # and lists nanobind, which requires python, cpp and conan.
     register_kind(
         KindRecord(
             name="python-nanobind",
-            backend=_python_nanobind,
             template="package-python-nanobind",
             parent="python",
-            host_tools=("cc", "c++"),
-            # Beside python's, the extension module's C++ sources, the
-            # provider that resolves their dependencies, and nanobind's
-            # wheels job: a nanobind package consumes conan and is never
-            # a recipe, so conan's sync step applies to it through the
-            # bridge, while the lifecycle phases read the listed
-            # extensions alone and this kind's backend builds it.
-            stands_for=_python_nanobind.STANDS_FOR,
-            # What each leg of nanobind's wheels job builds: the release's
-            # conan packages and every platform-wheel package.
-            host_build=_python_nanobind.host_build,
+            abstract=True,
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the

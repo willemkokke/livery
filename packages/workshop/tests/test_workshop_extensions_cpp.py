@@ -184,6 +184,25 @@ def test_a_recipe_naming_a_reference_releases_its_package_to_the_conan_target(
     assert _lifecycle.registry(listing).versions("acme-lib") == ("1.0.0",)
 
 
+def test_a_consumer_recipe_answers_no_version_and_no_version_file(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._queries import CURRENT_VERSION, VERSION_FILES, answer
+
+    # A consumer's recipe, requirements alone, holds no version to read or
+    # to stamp: conan answers neither, so the set's other answers stand.
+    consumer = _member(tmp_path / "consumer", ("cmake", "conan"))
+    (consumer.directory / "conanfile.py").write_text(
+        'class C:\n    requires = ("acme-lib/[>=1.0.0]",)\n'
+    )
+    assert answer(consumer, CURRENT_VERSION) == ""
+    assert answer(consumer, VERSION_FILES) == ()
+    # A recipe that names its reference answers both.
+    listing = _member(tmp_path / "listing", ("cmake", "conan"))
+    assert answer(listing, CURRENT_VERSION) == "1.0.0"
+    assert answer(listing, VERSION_FILES) == (listing.directory / "conanfile.py",)
+
+
 def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> None:
     from livery.workshop._extensions import declaration
 

@@ -1,4 +1,4 @@
-"""The runners the release point's wheels job fans out to, and the members it builds.
+"""The wheels job's runners, the members it builds, and what each of its legs builds.
 
 A package that holds nanobind names the runner labels that build its
 platform wheels under ``[nanobind] wheel-platforms`` in its own
@@ -13,9 +13,8 @@ that holds nanobind, and every package that releases a conan package.
 It is nanobind's answer to the workspace's ``job-built-members``
 query, which the release train reads to publish what the run
 collected for those members, and the entry reads to install the ones
-uv installs after the tools. The verb each leg runs is in this
-extension's ``_tasks`` module; this module only reads the contracts
-and the packages' answers.
+uv installs after the tools. `host_build` is what each leg builds; the
+verb that runs it is in this extension's ``_tasks`` module.
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ CONAN = "conan"
 
 
 def holds_nanobind(package: Package) -> bool:
-    """Whether *package* holds nanobind: it lists it, or its kind stands for it."""
+    """Whether *package*'s set holds nanobind: its list, or what the list requires."""
     return EXTENSION in extension_set(package)
 
 
@@ -136,3 +135,134 @@ def wheel_runners(root: Path) -> list[str]:
             if label not in labels:
                 labels.append(label)
     return labels
+
+
+def host_build(root: Path) -> None:
+    """Build this host's native artifacts for the release at *root*'s HEAD.
+
+    Each leg of the release's wheels job runs this before the wave,
+    over the members of the release that `job_built_members` names, in
+    three steps. Each of them that releases a conan package is created
+    into this leg's cache and saved beside its wheels, one file per
+    host, which is how a forge with no conan registry carries the
+    package. Then each package that holds nanobind builds through its
+    set's build phase, for the interpreters the caller's ``CIBW_BUILD``
+    names, resolving each conan member from the cache the first step
+    filled. Then every declared floor on a conan member is proved with
+    its own build (`floor_legs`). The publish job collects each leg's
+    ``dist/``, and the wave publishes the union. A release with no such
+    member prints so and builds nothing, so the leg stays green on a
+    pure release.
+    """
+    from livery import git
+    from livery.extensions.conan import _package as _conan
+    from livery.workshop import _lifecycle
+    from livery.workshop._publish import discover_release
+    from livery.workshop._queries import JOB_BUILT_MEMBERS
+
+    resolved_ref = git.head_sha(root)
+    epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    members = discover_release(root, resolved_ref)
+    released = {package.path: version for package, version in members}
+    built = answer(root, JOB_BUILT_MEMBERS)
+    conan_members: list[tuple[Package, str]] = []
+    native: list[Package] = []
+    for package, version in members:
+        if package.path not in built:
+            continue
+        if releases_a_conan_package(package):
+            conan_members.append((package, version))
+        else:
+            native.append(package)
+    if not native and not conan_members:
+        print("  no native members in this release; nothing to build")
+        return
+    # A release leg builds the packages the release ships, so a sibling
+    # resolves to the package this leg created, never to its source
+    # tree: the conan workspace is set aside for every build.
+    with _conan.workspace_aside(root):
+        for package, version in conan_members:
+            _lifecycle.build(package, root, epoch=epoch)
+            dist = package.directory / "dist"
+            archive = _conan.save_cache(package, version, dist)
+            print(f"  {package.name}: {archive.name}")
+        for package in native:
+            dist = _lifecycle.build(package, root, epoch=epoch)
+            wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
+            print(f"  {package.name}: {wheels}")
+        for package in native:
+            floor_legs(package, root, released, epoch=epoch)
+
+
+def floor_legs(
+    package: Package, root: Path, released: dict[str, str], *, epoch: int = 0
+) -> None:
+    """Prove every floor *package* declares on a conan package, one leg each.
+
+    A floor is a claim: the extension module compiles and its tests
+    pass against that version of the library, so a consumer who
+    resolves the floor gets a working package. The claim is proved
+    here. Per dependency that releases a conan package: the floor's
+    saved cache is restored from its own release, one wheel is built
+    for this machine with the requirement replaced by the floor, and
+    the package's tests run against that wheel in a fresh venv. The pin
+    is a conan profile holding a `[replace_requires]` line, added to the
+    ones the dependency provider already passes, so the range the
+    recipe declares resolves to that version alone.
+
+    A floor equal to the version this wave releases is the package
+    the main build already linked, so that leg says so and does
+    nothing. *released* is the wave's manifest, member path to
+    version.
+
+    Raises:
+        Failed: when the floor's cache is not on its release, when
+            the pinned build fails, or when the tests fail against
+            it. A floor whose header lacks a symbol the extension
+            module calls fails at the compile.
+    """
+    import shutil
+
+    from livery.extensions.conan import _package as _conan
+    from livery.extensions.nanobind import _build
+    from livery.extensions.python import _backend as _python
+
+    by_path = {member.path: member for member in discover_packages(root)}
+    for edge in package.depends:
+        dependency = by_path.get(edge.path)
+        if dependency is None or not edge.floor:
+            continue
+        if not releases_a_conan_package(dependency):
+            continue
+        floor = edge.floor
+        if released.get(edge.path) == floor:
+            print(
+                f"  {package.name}: the floor on {dependency.name} is"
+                f" {floor}, the version this wave releases; the build"
+                " above already linked it"
+            )
+            continue
+        _conan.restore_from_releases(
+            root, dependency.name, floor, cwd=package.directory
+        )
+        dist = package.directory / "build" / "floor"
+        shutil.rmtree(dist, ignore_errors=True)
+        profile = package.directory / "build" / "floor-profile.txt"
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text(
+            f"[replace_requires]\n{dependency.name}/*: {dependency.name}/{floor}\n",
+            encoding="utf-8",
+        )
+        # A posix path: the string rides a CMake list, where a
+        # Windows separator would read as an escape.
+        pinned = f"{_build.conan_install_args(package)};-pr:h;{profile.as_posix()}"
+        _build.build_wheels(
+            package,
+            root,
+            dist,
+            epoch=epoch,
+            conan_install_args=pinned,
+            one_host_wheel=True,
+        )
+        _python.run_isolated_test(package, root, wheels_dir=dist)
+        print(f"  {package.name}: floor leg green against {dependency.name} {floor}")

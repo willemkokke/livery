@@ -64,11 +64,7 @@ dev = [
 {% endfor %}    # Every contract extension that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
 {% for requirement in extension_requirements %}    "{{ requirement }}",
-{% endfor %}{% if packages | selectattr('kind', 'defined') | selectattr('kind', 'equalto', 'python-nanobind') | list %}    # An extension member's editor configure asks this interpreter
-    # where nanobind's cmake directory is, so the venv carries it
-    # beside the build's own isolated copy.
-    "nanobind>=2.7",
-{% endif %}    # What the listed extensions need in the venv: each line is an
+{% endfor %}    # What the listed extensions need in the venv: each line is an
     # extension's answer to the `python.dev-group` query, so an extension
     # taken off the list takes its lines with it, and its declaration is
     # where each floor and its reason live.

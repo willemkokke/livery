@@ -39,16 +39,14 @@ def _workspace(tmp_path: Path) -> Path:
     (root / "workshop.toml").write_text(
         '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
-    for name, kind in (
-        ("pure", "python"),
-        ("native", "python-nanobind"),
-        ("lib", "cpp-conan"),
+    for name, held in (
+        ("pure", 'kind = "python"\n'),
+        ("native", 'kind = "python"\nextensions = ["nanobind"]\n'),
+        ("lib", 'kind = "cpp-conan"\n'),
     ):
         member = root / "packages" / name
         (member / "src").mkdir(parents=True)
-        (member / "workshop.toml").write_text(
-            f'kind = "{kind}"\nname = "acme-{name}"\n'
-        )
+        (member / "workshop.toml").write_text(f'{held}name = "acme-{name}"\n')
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         (member / "CHANGELOG.md").write_text("## 1.0.0\n")
     _git(root, "init", "-q", "--initial-branch=main")

@@ -1,11 +1,14 @@
 # nanobind: a python package whose extension module is C++, bound to
 # python through nanobind and built into one wheel per platform. A
-# package of the python-nanobind kind lists no extension and holds
-# nanobind, python, cpp and conan through its kind, whose backend
-# builds, tests and releases it. What nanobind adds is the tools the
-# extension module builds with, the release's wheels job, the key
-# that names the runners its legs run on, and the answer naming the
-# members the job builds.
+# package lists nanobind and holds what it requires beside it: python
+# for the distribution, cpp for the extension module's sources, and
+# conan for the provider that resolves their dependencies, which the
+# package consumes without being a conan package. What nanobind adds is
+# the build of the wheels and the sdist, the deletion of the steps of
+# python and conan that would build or release something else, the
+# tools the build runs, the release's wheels job, the key that names
+# the runners its legs run on, and the answer naming the members the
+# job builds.
 
 [extension]
 api-version = 1
@@ -13,6 +16,9 @@ api-version = 1
 levels = ["package"]
 # The footman plugin that carries the verb the wheels job runs.
 plugin = "livery.extensions.nanobind"
+# The distribution, the extension module's language, and the provider
+# that resolves the module's C++ dependencies.
+requires = ["python", "cpp", "conan"]
 
 # The tools the extension module builds with: cmake, the Ninja
 # generator, and the cmake-conan provider, which installs its C++
@@ -28,6 +34,29 @@ requires = ["cmake", "ninja", "conan", "cmake_conan"]
 # entry installs the ones uv installs after the tools.
 [queries]
 job-built-members = "livery.extensions.nanobind._ci:job_built_members"
+
+# An editor's configure of the extension module asks the venv's
+# interpreter where nanobind's cmake directory is, so the venv carries
+# nanobind beside the build's own isolated copy.
+[queries."python.dev-group"]
+value = ["nanobind>=2.7"]
+
+# The release's build: cibuildwheel builds and repairs the platform
+# wheels, and uv the sdist, on the build phase's isolated side. The
+# steps python and conan add that would build or release something
+# else are deleted in every package whose set holds nanobind; a package
+# whose set does not hold it runs them as before.
+[phases.build.nanobind]
+main = "livery.extensions.nanobind._build:build"
+isolated = true
+reads = ["epoch"]
+provides = { dist = "path" }
+
+[phases.build.nanobind.deletes]
+"python:build.python" = "uv build writes a pure wheel, and the package's wheels are platform wheels, which this step builds with the sdist"
+"conan:stamp.conan" = "the package's recipe names the requirements its extension module builds against, and no version to stamp"
+"conan:build.conan" = "the package's recipe creates no conan package: the provider installs its requirements while the wheels build"
+"conan:publish.conan" = "the package releases its wheels, never a conan package"
 
 # Where a package's platform wheels build.
 [contract.package.nanobind]

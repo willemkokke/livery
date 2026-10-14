@@ -19,6 +19,10 @@ from livery.workshop._packages import Package, verify_workspace
 _FAILURES = (BaseException,)
 
 
+#: The line a member listing nanobind writes beside its kind.
+NANOBIND = 'extensions = ["nanobind"]\n'
+
+
 def _member(
     root: Path,
     name: str,
@@ -56,7 +60,7 @@ def _extension(root: Path, *, conan_ref: str, floor: str = "0.1.0") -> Path:
     if conan_ref:
         files["conanfile.py"] = f'requires = "{conan_ref}"\n'
     return _member(
-        root, "ext", kind_name="python-nanobind", contract_tail=tail, files=files
+        root, "ext", kind_name="python", contract_tail=NANOBIND + tail, files=files
     )
 
 
@@ -107,7 +111,8 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "ext",
-        kind_name="python-nanobind",
+        kind_name="python",
+        contract_tail=NANOBIND,
         files={
             "pyproject.toml": '[project]\nname = "acme-ext"\ndependencies = []\n',
             "conanfile.py": 'requires = "acme-geometry/[>=0.1.0]"\n',
@@ -195,11 +200,16 @@ def test_conan_requirements_reads_every_declared_form(tmp_path: Path) -> None:
     }
 
 
-def test_the_extension_extractor_unions_both_ecosystems(tmp_path: Path) -> None:
+def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import _lifecycle
+
     directory = _member(
         tmp_path,
         "ext",
-        kind_name="python-nanobind",
+        kind_name="python",
+        contract_tail=NANOBIND,
         files={
             "pyproject.toml": (
                 '[project]\nname = "acme-ext"\ndependencies = ["acme-core>=0.3.0"]\n'
@@ -211,12 +221,13 @@ def test_the_extension_extractor_unions_both_ecosystems(tmp_path: Path) -> None:
         directory=directory,
         path="packages/ext",
         name="acme-ext",
-        kind="python-nanobind",
+        kind="python",
         depends=(),
+        extensions=("nanobind",),
     )
-    from livery.workshop._backends import _python_nanobind
-
-    declared = _python_nanobind.declared_requirements(package)
+    # python's answer from the pyproject and conan's from the recipe.
+    declared = _lifecycle.declared_requirements(package)
+    assert declared is not None
     assert declared["acme-core"] == ">=0.3.0"
     assert declared["acme-geometry"] == "[>=0.1.0]"
 

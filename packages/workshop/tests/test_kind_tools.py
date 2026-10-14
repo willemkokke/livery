@@ -357,15 +357,17 @@ def test_each_native_tool_names_the_extension_that_requires_it(
 
     root = _workspace(tmp_path, monkeypatch)
     # A C++ library that lists cmake and conan, and a nanobind package
-    # that lists nothing and holds nanobind, python, cpp and conan through
-    # its kind: each tool is its extensions', whichever way the set is
-    # held.
+    # that lists nanobind and holds python, cpp and conan through what
+    # nanobind requires: each tool is its extensions'.
     for member, contract in (
         (
             "lib",
             'kind = "cpp-conan"\nname = "acme-lib"\nextensions = ["cmake", "conan"]\n',
         ),
-        ("native", 'kind = "python-nanobind"\nname = "acme-native"\n'),
+        (
+            "native",
+            'kind = "python"\nname = "acme-native"\nextensions = ["nanobind"]\n',
+        ),
     ):
         (root / "packages" / member).mkdir()
         (root / "packages" / member / "workshop.toml").write_text(contract)

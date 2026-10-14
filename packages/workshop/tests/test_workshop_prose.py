@@ -64,10 +64,14 @@ def _extension(tmp_path: Path, name: str, **files: str) -> Path:
     return content
 
 
-def _member(root: Path, name: str, kind: str) -> None:
+def _member(root: Path, name: str, kind: str, *extensions: str) -> None:
     member = root / "packages" / name
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text(f'kind = "{kind}"\nname = "acme-{name}"\n')
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    held = f"extensions = [{listed}]\n" if extensions else ""
+    (member / "workshop.toml").write_text(
+        f'kind = "{kind}"\nname = "acme-{name}"\n{held}'
+    )
     if kind != "cpp-conan":
         (member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-{name}"\nversion = "0.1.0"\n'
@@ -421,18 +425,18 @@ def test_the_compositions_and_tools_fragments_render_what_is_present(
         render_compositions(root, AGENT)
     )
     _member(root, "cpp", "cpp-conan")
-    _member(root, "nb", "python-nanobind")
+    _member(root, "nb", "python", "nanobind")
     agent = render_compositions(root, AGENT)
     assert (
         "- cmake+conan (packages/cpp): holds cmake, cpp, conan;"
         " gate phases build, test" in agent
     )
     assert (
-        "- conan+nanobind+python (packages/nb): holds cpp, conan, nanobind,"
-        " python; gate phases" in agent
+        "- nanobind (packages/nb): holds cpp, conan, python, nanobind; gate phases"
+        in agent
     )
     assert (
-        "| conan+nanobind+python | cpp, conan, nanobind, python | packages/nb |"
+        "| nanobind | cpp, conan, python, nanobind | packages/nb |"
         in render_compositions(root, HUMAN)
     )
     # A step of a phase the gate never runs is no gate phase of a set,

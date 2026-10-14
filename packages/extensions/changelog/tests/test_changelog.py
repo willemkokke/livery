@@ -356,7 +356,7 @@ def test_every_member_takes_a_cliff_toml_of_its_own_whatever_its_kind(
 
     root = _workspace(tmp_path / "ws", '["changelog"]')
     _member(root, "thing")
-    _member(root, "ext", kind="python-nanobind")
+    _member(root, "ext", kind="cpp-conan")
     written = deliver(root)
     for name in ("thing", "ext"):
         assert f"  wrote packages/{name}/cliff.toml" in written

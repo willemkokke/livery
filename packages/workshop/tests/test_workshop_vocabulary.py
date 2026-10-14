@@ -68,7 +68,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_kinds", "conan"): 1,
     ("_kinds", "cpp-conan"): 1,
     ("_kinds", "python"): 4,
-    ("_kinds", "python-nanobind"): 1,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
@@ -224,18 +223,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_backends._cpp_conan", "conan"): (
         1,
         "the cpp-conan kind's set; #1614's P5 deletes _backends",
-    ),
-    ("_backends._python_nanobind", "cmake"): (
-        1,
-        "the nanobind backend's build; #1614's P2 moves it into nanobind",
-    ),
-    ("_backends._python_nanobind", "cmake_conan"): (
-        1,
-        "the nanobind backend's build; #1614's P2 moves it into nanobind",
-    ),
-    ("_backends._python_nanobind", "conan"): (
-        16,
-        "the nanobind backend's build; #1614's P2 moves it into nanobind",
     ),
     ("_ci_generate", "conan"): (
         1,

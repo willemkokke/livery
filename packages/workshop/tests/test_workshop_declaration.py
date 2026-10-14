@@ -419,13 +419,78 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     )
     assert _refusal(package, STEP + 'replaces = { "acme.base:lint.acme" = " " }\n') == (
         f'{where}: phases.lint.acme.replaces."acme.base:lint.acme" states no reason;'
-        " a step names another with the reason it takes its place"
+        " a step names each step it replaces or deletes with the reason"
     )
     # A gate phase's table holds steps alone.
     assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
         f"{where}: phases.lint.main belongs to a step: a phase's table holds"
         " steps, [phases.lint.<step>], each with main"
     )
+
+
+#: A package-level extension's identity and its one build step, which the
+#: deletion refusals hang a ``deletes`` table on.
+BUILD_STEP = (
+    '[extension]\nlevels = ["package"]\n'
+    '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
+)
+
+
+def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
+    where = package / "extension.toml"
+    # A step its owner does not declare: the refusal names the phase's
+    # installed steps, the base's among them.
+    refused = _refusal(
+        package, BUILD_STEP + 'deletes = { "python:build.wheel" = "it builds twice" }\n'
+    )
+    assert refused.startswith(
+        f'{where}: phases.build.acme.deletes."python:build.wheel" names no step an'
+        " installed extension or the base declares; the build phase's are "
+    )
+    listed = refused.rpartition("the build phase's are ")[2].split(", ")
+    assert {"python:build.python", "livery.workshop:build.configure"} <= set(listed)
+    # An owner nothing installs, in a phase no step is installed in.
+    assert _refusal(
+        package,
+        BUILD_STEP + 'deletes = { "acme.gone:clean.all" = "it cleans twice" }\n',
+    ) == (
+        f'{where}: phases.build.acme.deletes."acme.gone:clean.all" names no step an'
+        " installed extension or the base declares; the clean phase has none"
+    )
+
+
+def test_a_deletion_without_a_reason_refuses(package: Path) -> None:
+    where = package / "extension.toml"
+    assert _refusal(
+        package, BUILD_STEP + 'deletes = { "python:build.python" = "  " }\n'
+    ) == (
+        f'{where}: phases.build.acme.deletes."python:build.python" states no reason;'
+        " a step names each step it replaces or deletes with the reason"
+    )
+
+
+def test_a_deletion_of_a_step_run_once_over_the_workspace_refuses(
+    package: Path,
+) -> None:
+    where = package / "extension.toml"
+    # The base's render comparison runs once over the workspace, where no
+    # package's set decides anything.
+    assert _refusal(
+        package,
+        BUILD_STEP + 'deletes = { "livery.workshop:drift.check" = "it renders" }\n',
+    ) == (
+        f'{where}: phases.build.acme.deletes."livery.workshop:drift.check" names a'
+        " step that runs once over the workspace; a deletion takes a step off each"
+        " package whose set holds this extension, so it names a step that runs once"
+        " per package"
+    )
+    # A step that runs once per package is taken.
+    found = _declare(
+        package,
+        BUILD_STEP + 'deletes = { "python:build.python" = "it builds twice" }\n',
+    )
+    (record,) = found.phases["build"]
+    assert record.deletes == (("python:build.python", "it builds twice"),)
 
 
 def test_a_step_reads_every_key_it_takes(package: Path) -> None:
@@ -443,7 +508,7 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         ' ignores = ["docs/README.md"], per-file = false }\n'
         'enabled = false\nreads = ["wheel"]\n'
         'replaces = { "acme.base:lint.acme" = "it reads faster" }\n'
-        'deletes = { "acme.base:lint.old" = "it reads nothing" }\n'
+        'deletes = { "python:test.python" = "it reads nothing" }\n'
         '[phases.lint.acme.provides]\nreport = "path"\n'
         '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n'
         'doc = "refuses warnings too"\n'
@@ -495,7 +560,7 @@ def test_a_step_reads_every_key_it_takes(package: Path) -> None:
         ("wheel",),
         (("report", "path"),),
         (("acme.base:lint.acme", "it reads faster"),),
-        (("acme.base:lint.old", "it reads nothing"),),
+        (("python:test.python", "it reads nothing"),),
     )
     # A step in code with inputs is selected by them and judges the
     # whole; one that names tools takes the words after --.

@@ -15,12 +15,25 @@ if TYPE_CHECKING:
 
 
 def current_version(package: Package) -> str:
-    """The version the recipe's ``version`` attribute declares."""
+    """The version the recipe's ``version`` attribute declares.
+
+    A consumer's recipe, one that names no reference, declares no
+    version: it answers empty, which leaves the version to the set's
+    other answers.
+    """
+    if not _package.names_a_reference(package):
+        return ""
     return _package.current_version(package)
 
 
 def version_files(package: Package) -> tuple[Path, ...]:
-    """The recipe, ``conanfile.py``, the one file the version lives in."""
+    """The recipe, ``conanfile.py``, the one file the version lives in.
+
+    Empty for a consumer's recipe, one that names no reference: no
+    version lives in it.
+    """
+    if not _package.names_a_reference(package):
+        return ()
     return tuple(_package.stamp_version(package).homes())
 
 

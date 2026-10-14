@@ -38,6 +38,12 @@ does for this one by declaring a ``[for.<this>]`` table: until a listed
 extension does, this one is dormant
 ([livery.workshop._extensions.dormancy][]).
 
+A step table's ``deletes`` names the steps of other extensions that
+never run for a package whose set holds this one, each
+``<owner>:<phase>.<step>`` to the reason. A deletion naming no step an
+installed extension or the base declares, one naming a step that runs
+once over the workspace, and one without a reason refuse here.
+
 A step is declared at ``[phases.<phase>.<step>]`` and reads into one
 record whatever its phase's level
 ([livery.workshop._steps.StepRecord][]): a workspace-level phase's
@@ -907,6 +913,8 @@ class _Reader:
             key: self.other_steps(entry.get(key, {}), (*where, key))
             for key in ("replaces", "deletes")
         }
+        for address, _reason in others["deletes"]:
+            self.deletion(address, (*where, "deletes", address))
         record = self.record(step, phase, entry, where, run, fix, words)
         if self.specs[phase].level == PACKAGE_LEVEL:
             # The phase's level says how often the step runs: once per
@@ -962,11 +970,45 @@ class _Reader:
             if not str(reason).strip():
                 raise self.refuse(
                     (*where, text),
-                    "states no reason; a step names another with the reason it"
-                    " takes its place",
+                    "states no reason; a step names each step it replaces or"
+                    " deletes with the reason",
                 )
             found.append((text, str(reason)))
         return tuple(found)
+
+    def deletion(self, address: str, where: tuple[str, ...]) -> None:
+        """Refuse a deletion of a step nothing installed declares, or of a workspace's.
+
+        A deletion takes a step off each package whose set holds this
+        extension, so it names a step that runs once per package.
+        """
+        from livery.workshop._steps import PACKAGE
+
+        steps = installed_steps()
+        scope = steps.get(address)
+        if scope is None:
+            phase = address.partition(":")[2].partition(".")[0]
+            held = sorted(
+                other
+                for other in steps
+                if other.partition(":")[2].partition(".")[0] == phase
+            )
+            listed = (
+                f"the {phase} phase's are {', '.join(held)}"
+                if held
+                else f"the {phase} phase has none"
+            )
+            raise self.refuse(
+                where,
+                f"names no step an installed extension or the base declares; {listed}",
+            )
+        if scope != PACKAGE:
+            raise self.refuse(
+                where,
+                "names a step that runs once over the workspace; a deletion takes"
+                " a step off each package whose set holds this extension, so it"
+                " names a step that runs once per package",
+            )
 
     def record(
         self,
@@ -1653,6 +1695,62 @@ def _step_address(text: str) -> bool:
     owner, colon, address = text.partition(":")
     phase, dot, step = address.partition(".")
     return bool(owner and colon and phase and dot and step) and "." not in step
+
+
+def installed_steps() -> dict[str, str]:
+    """Every installed step, ``<owner>:<phase>.<step>``, to the scope it runs at.
+
+    The base's own steps, then each installed extension's
+    ``[phases.<phase>.<step>]`` tables, its ``[for.<target>]`` tables'
+    among them, read without judging the rest of the file and without
+    importing anything. A step of a package-level phase runs once per
+    package; a step of a workspace-level phase at the scope its table
+    names, the workspace when it names none.
+
+    Raises:
+        DeclarationError: when a declaration file does not parse.
+    """
+    from livery.footman import installed_entry_points
+    from livery.workshop._phases import PACKAGE_LEVEL, declared_phases
+    from livery.workshop._steps import PACKAGE, WORKSPACE, snapshot
+
+    builtin, _withdrawn = snapshot(initial=True)
+    found = {
+        f"{record.extension}:{record.name}": record.scope for record in builtin.values()
+    }
+    phases = declared_phases()
+    for entry in installed_entry_points("workshop.extensions"):
+        path = declaration_file(entry.value.partition(":")[0])
+        if path is None:
+            continue
+        data = _parsed(path, path.read_text("utf-8"))
+        targets = data.get("for", {})
+        tables = [data]
+        if isinstance(targets, dict):
+            tables += [
+                cast("dict[str, Any]", table)
+                for table in cast("dict[str, Any]", targets).values()
+                if isinstance(table, dict)
+            ]
+        for table in tables:
+            held = table.get("phases", {})
+            if not isinstance(held, dict):
+                continue
+            for phase, steps in cast("dict[str, Any]", held).items():
+                if not isinstance(steps, dict):
+                    continue
+                spec = phases.get(phase)
+                per_package = spec is not None and spec.level == PACKAGE_LEVEL
+                for step, declared in _step_tables(
+                    cast("dict[str, Any]", steps)
+                ).items():
+                    scope = (
+                        PACKAGE
+                        if per_package
+                        else str(declared.get("scope", WORKSPACE))
+                    )
+                    found[f"{entry.name}:{phase}.{step}"] = scope
+    return found
 
 
 _DEFINED: dict[tuple[Path, str], frozenset[str]] = {}

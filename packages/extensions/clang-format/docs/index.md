@@ -5,8 +5,9 @@
 # livery-extensions-clang-format
 
 clang-format as a step of the workshop: `format.clang-format` judges one
-native package at a time, a `cpp-conan` or a `python-nanobind` member, and
-rewrites under `--fix`. A workspace turns it on by listing the extension:
+native package at a time, a member whose set holds `cpp`, such as a
+`cpp-conan` member or one that lists `nanobind`, and rewrites under
+`--fix`. A workspace turns it on by listing the extension:
 
 ```toml
 [workspace]

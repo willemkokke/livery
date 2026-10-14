@@ -59,7 +59,7 @@ class Package:
             package in a group directory).
         name: The distribution name (``livery-forge``).
         kind: The package kind, as the contract's ``kind`` declares
-            it: ``python``, ``python-nanobind`` or ``cpp-conan``.
+            it: ``python`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
         step_options: The options the package sets on its steps, by
             the table that sets them: ``phases.<phase>`` (every step of
@@ -1061,9 +1061,6 @@ EXTENSIONS_NAMESPACE = "livery.extensions"
 BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
     ("livery.workshop._kinds", "livery.extensions.python"): (
         "registers the python kind with the extension's code as its backend"
-    ),
-    ("livery.workshop._backends._python_nanobind", "livery.extensions.python"): (
-        "the nanobind kind builds on the python kind's functions"
     ),
     ("livery.workshop._backends._cpp_conan", "livery.extensions.cmake"): (
         "the cpp-conan kind's gate build and tests are cmake's code"

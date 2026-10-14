@@ -212,7 +212,7 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     ext = root / "packages" / "ext"
     (ext / "src" / "acme" / "ext").mkdir(parents=True)
     (ext / "workshop.toml").write_text(
-        'kind = "python-nanobind"\nname = "acme-ext"\n'
+        'kind = "python"\nname = "acme-ext"\nextensions = ["nanobind"]\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.3.0"\n'
     )
@@ -356,7 +356,7 @@ def test_the_cross_kind_wave_orders_and_dispatches(
     def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
         dist = package.directory / "dist"
         dist.mkdir(exist_ok=True)
-        if package.kind == "python-nanobind":
+        if "nanobind" in package.extensions:
             (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
         return dist
 
@@ -373,11 +373,11 @@ def test_the_cross_kind_wave_orders_and_dispatches(
         registry.serve(package.name, "0.3.0")
         return True
 
+    from livery.extensions.nanobind import _build as nb
     from livery.workshop._backends import _cpp_conan as cpp
-    from livery.workshop._backends import _python_nanobind as nb
 
     monkeypatch.setattr(cpp, "build", _fake_build)
-    monkeypatch.setattr(nb, "build", _fake_build)
+    monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
@@ -435,7 +435,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
         dist = package.directory / "dist"
         dist.mkdir(exist_ok=True)
-        if package.kind == "python-nanobind":
+        if "nanobind" in package.extensions:
             (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
         else:
             (dist / _cpp_conan.cache_name(package.name, "0.3.0")).write_bytes(b"cache")
@@ -445,11 +445,11 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         registry.serve(package.name, "0.3.0")
         return True
 
+    from livery.extensions.nanobind import _build as nb
     from livery.workshop._backends import _cpp_conan as cpp
-    from livery.workshop._backends import _python_nanobind as nb
 
     monkeypatch.setattr(cpp, "build", _fake_build)
-    monkeypatch.setattr(nb, "build", _fake_build)
+    monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
     conan_registry = _cpp_conan.ConanRegistry(target, root=root)
 
@@ -483,7 +483,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     )
     monkeypatch.setattr(_publish, "cut_tag", _cut_and_push_to_the_forge)
     monkeypatch.setattr(cpp, "build", _fake_build)
-    monkeypatch.setattr(nb, "build", _fake_build)
+    monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     receipts = publish_release(
@@ -505,8 +505,8 @@ def _serving_wave(
     Each upload appends the member's name to *order* and serves it.
     Returns the registry each member is probed on.
     """
+    from livery.extensions.nanobind import _build as nb
     from livery.workshop._backends import _cpp_conan as cpp
-    from livery.workshop._backends import _python_nanobind as nb
 
     registry = _Ledger()
     conan_registry = _Ledger()
@@ -527,7 +527,7 @@ def _serving_wave(
         return True
 
     monkeypatch.setattr(cpp, "build", _no_build)
-    monkeypatch.setattr(nb, "build", _no_build)
+    monkeypatch.setattr(nb, "build_dist", _no_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 

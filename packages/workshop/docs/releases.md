@@ -183,15 +183,15 @@ run against it. A floor equal to the version the wave is releasing
 is the package the main build already linked, and the leg says so
 instead of building twice.
 
-A member that holds the nanobind extension, as a member of the
-nanobind kind does, names the runner labels that build its platform
-wheels under `[nanobind] wheel-platforms` in its own `workshop.toml`;
-the key refuses in a member that holds no nanobind. The extension
-adds a wheels job to the release workflow: before the wave, one leg
-per label builds that platform's wheels for the workspace's python
-matrix through cibuildwheel, and the publish job waits for the legs
-and ships the collected set. A workspace whose members hold no
-nanobind has no wheels job.
+A member that lists the nanobind extension builds its platform wheels
+through cibuildwheel and its sdist through uv, and names the runner
+labels that build them under `[nanobind] wheel-platforms` in its own
+`workshop.toml`; the key refuses in a member that holds no nanobind.
+The extension adds a wheels job to the release workflow: before the
+wave, one leg per label builds that platform's wheels for the
+workspace's python matrix, and the publish job waits for the legs and
+ships the collected set. A workspace whose members hold no nanobind
+has no wheels job.
 
 Which members a job builds before the wave is the workspace's
 `job-built-members` answer. nanobind answers it with every member that

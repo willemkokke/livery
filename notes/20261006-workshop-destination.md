@@ -328,8 +328,8 @@ every kind the check judges"). What changes:
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | the coverage extension's `[coverage]` table and pages; the base's `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
 | the site's override template as a rendered file | `_site_files`, read by `_ci_generate` | a whole-file fragment the docs extension ships under `content/root/overrides/main.html`; `_site_files` goes |
-| the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in the nanobind kind's backend | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
-| the docs tree embedded into a wheel | the python extension's `module_docs`, read by its build and by the nanobind backend | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
+| the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in `livery.extensions.nanobind._ci` | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
+| the docs tree embedded into a wheel | the python extension's `module_docs`, read by its build and by nanobind's | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | mkdocstrings reads `[docs] api` as data; the docs extension places a package at the shallowest of its module roots | `[docs] api` stays the docs extension's key; the handler's search paths are the `paths` option of mkdocstrings' step, set at `[phases.docs.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
 | the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
@@ -1449,9 +1449,13 @@ parts, each mergeable alone:
   the step says why.
 - P1h (#1625): every reader of the kind reads the held set instead;
   the kinds guidance becomes the compositions guidance.
-- P2: nanobind holds its packages by being listed: its declaration
-  deletes python's build and conan's recipe steps within the sets that
-  hold it, and the nanobind backend moves into the extension.
+- P2 (built, #1639): nanobind holds its packages by being listed: it
+  requires python, cpp and conan; its build step builds the wheels and
+  the sdist; its declaration deletes, each with its reason, python's
+  build and conan's recipe stamp, build and publish within the sets
+  that hold it; the nanobind backend moves into the extension, and the
+  base imports it no more. `kind = "python-nanobind"` refuses, naming
+  `extensions = ["nanobind"]`.
 - P3: the fallbacks through the kind go (#1550), and a contract that
   writes `kind` refuses. This repository's packages already list their
   extensions (#1616), so P3 drops their `kind` lines.
@@ -1624,8 +1628,8 @@ neither needs nor rules out).
 | `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
 | `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
 | `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions, the nanobind kind standing for nanobind (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
-| the host build of nanobind's wheels in the nanobind kind's backend, run by nanobind's hidden `nanobind.wheels` task | nanobind's own build step, and conan's per-host artifact (phase 13) |
+| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| the host build of nanobind's wheels in the extension's code, run by nanobind's hidden `nanobind.wheels` task | conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
