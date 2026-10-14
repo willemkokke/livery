@@ -356,6 +356,7 @@ or the rule's answer over nothing. The base declares:
 | `version-files` | package | the files `stamp` may write a version into | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
+| `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
@@ -814,6 +815,18 @@ or every source:
   the distribution and the `pyproject.toml` to declare it in.
 
 A step's fix runs inside the gate's rewrite, before the judges.
+
+The sibling references' fix writes each edge's requirement before the
+edge. The package's set answers `requirement-writers` with its
+writers, and every one is called. Each takes a sibling of its own
+ecosystem alone: python writes into `pyproject.toml` for a sibling that
+holds python, and conan writes into `conanfile.py` for a conan package,
+a sibling that holds conan and whose recipe names a reference. Conan
+opens the recipe's `requires` tuple when the recipe declares no
+requirement. A sibling no writer takes refuses, naming the sibling's
+set, and nothing is written. A requirement written into a member's
+`pyproject.toml` moves the uv lock, so the fix locks again, and the
+fix's judge reads the contracts as the fix left them.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into

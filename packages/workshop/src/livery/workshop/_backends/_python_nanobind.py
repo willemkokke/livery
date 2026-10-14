@@ -50,22 +50,10 @@ references = _python.references
 #: to hold beside python's: cpp for its extension module's sources,
 #: conan for the provider that resolves their dependencies, which it
 #: consumes without being a recipe, and nanobind for the release's
-#: wheels job. The sync step applies through it; the lifecycle phases
-#: read the listed extensions alone.
+#: wheels job. The sync step and the writers of a requirement on a
+#: sibling apply through it; the lifecycle phases read the listed
+#: extensions alone.
 STANDS_FOR = ("cpp", "conan", "nanobind")
-
-
-def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
-    """Write the requirement where the dependency's kind lives.
-
-    The pyproject for a python sibling, the recipe for a conan one.
-    """
-    from livery.workshop._backends import _cpp_conan
-    from livery.workshop._kinds import is_python_kind
-
-    if is_python_kind(dependency.kind):
-        return _python.declare_requirement(package, dependency, floor)
-    return _cpp_conan.declare_requirement(package, dependency, floor)
 
 
 def declared_requirements(package: Package) -> dict[str, str]:
