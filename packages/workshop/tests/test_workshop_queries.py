@@ -808,6 +808,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "executables",
         "editor-extensions",
         "python.dev-group",
+        "python.docs-group",
         "python.test.addopts",
         "store.series",
         "release-notes",
@@ -816,6 +817,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
     assert [name for name, spec in found.items() if spec.level == "workspace"] == [
         "editor-extensions",
         "python.dev-group",
+        "python.docs-group",
         "python.test.addopts",
         "store.series",
         "release-notes",

@@ -199,3 +199,9 @@ values = ["public", "all"]
 [queries."docs.theme"]
 level = "workspace"
 combine = "livery.extensions.docs._theme:merge_theme"
+
+# zensical, the site's builder: the docs verbs run it from the
+# workspace's environment, and it imports the plugins other extensions
+# add to the build from there, so it rides the docs dependency group.
+[queries."python.docs-group"]
+value = ["zensical>=0.0.50"]

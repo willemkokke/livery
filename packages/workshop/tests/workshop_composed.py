@@ -83,3 +83,22 @@ def seed_into(destination: Path, tree: str, data: Mapping[str, Any]) -> Path:
         )
         create(root, destination, trees, full)
     return destination
+
+
+def composed_groups(root: Path) -> dict[str, list[str]]:
+    """The dependency groups of the project file the engine composes for *root*.
+
+    Read from the engine's outputs, so nothing is written: the contract
+    at *root* says what the workspace lists.
+    """
+    import tomllib
+
+    from livery.workshop._shipped_files import outputs
+
+    (composed,) = [
+        output for output in outputs(root) if output.path == "pyproject.toml"
+    ]
+    groups: dict[str, list[str]] = tomllib.loads(composed.body.decode())[
+        "dependency-groups"
+    ]
+    return groups
