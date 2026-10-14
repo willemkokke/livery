@@ -762,10 +762,7 @@ def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> 
             "jobs": {"gate": {"wall_ms": 1000.0 * n}},
         }
         values = {"packages/x": 90.0 + n, "packages/y": 100.0}
-        if n == 2:
-            # A row collected before the run's file named its sections.
-            entry["coverage"] = values
-        if n == 3:
+        if n > 1:
             entry["sections"] = {"coverage": {"unit": "%", "packages": values}}
         files[_metrics.run_file(str(n))] = json.dumps(entry)
     assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""

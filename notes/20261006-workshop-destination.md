@@ -1515,7 +1515,6 @@ neither needs nor rules out).
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | `_docs_contract` in the base | the docs extension's keys and `Job.installs`, `Job.deploy`, `Job.inputs` (phase 10, 12) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
-| the run row's reader taking an older row's top-level `coverage` key as the coverage section (#1570) | nothing, once the metrics window has rolled past every row without `sections` |
 | `_site_files` | a whole-file fragment (phase 12a) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
@@ -3046,6 +3045,13 @@ neither needs nor rules out).
   them, as the task reference's block does; PC2, which gives the docs
   extension that directory's layout, removes what no listed step
   writes.
+
+- 2026-10-14, Willem (#1570): the run row's reader drops the older
+  top-level `coverage` key now, before the metrics window rolls past
+  the rows that carry it. Its one reader was `fm ci.timings`, whose
+  coverage median and 90th percentile come from the newer rows alone
+  until the window refills; 257 of the window's 300 rows carried the
+  old key, at about 75 runs a day.
 
 ## Open
 
