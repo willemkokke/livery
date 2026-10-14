@@ -432,3 +432,172 @@ def test_a_package_whose_extensions_test_isolated_and_verify_goes_through_them(
         extras="",
     )
     assert code == 0
+
+
+# What a package releases and the registry it releases to: its set's
+# answers to the distributions and registry queries, and for a package
+# that lists nothing, what its kind stands for.
+
+#: A conan recipe that names a reference, and a consumer's, with
+#: requirements alone.
+REFERENCE = 'class R:\n    name = "acme-geometry"\n    version = "0.3.0"\n'
+CONSUMER = 'class R:\n    requires = ("fmt/[>=11.0]",)\n'
+
+#: The python index and its credential the tests declare through the
+#: environment, which the registry ladder reads first.
+INDEX = "https://idx.example/simple"
+INDEX_TOKEN = "index-token"
+
+
+def _releasing(
+    root: Path, member: str, kind_name: str, *extensions: str, recipe: str = ""
+) -> Package:
+    """``packages/<member>`` of *root*: *kind_name*, listing *extensions*.
+
+    It carries a ``pyproject.toml``, and *recipe* as its ``conanfile.py``
+    when one is given.
+    """
+    directory = root / "packages" / member
+    directory.mkdir(parents=True)
+    (directory / "pyproject.toml").write_text(
+        f'[project]\nname = "acme-{member}"\nversion = "0.3.0"\n'
+    )
+    if recipe:
+        (directory / "conanfile.py").write_text(recipe)
+    return Package(
+        directory=directory,
+        path=f"packages/{member}",
+        name=f"acme-{member}",
+        kind=kind_name,
+        depends=(),
+        extensions=extensions,
+    )
+
+
+def _no_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse every registry resolution, so a test sees that none happened."""
+    from livery.workshop import _registries
+
+    def _resolved(root: Path, kind: str) -> RegistryTarget:
+        raise AssertionError(f"a {kind} target was resolved under {root}")
+
+    monkeypatch.setattr(_registries, "resolve_registry", _resolved)
+
+
+def _declared(root: Path, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Declare *root*'s python index and a conan folder; each index probe built.
+
+    The python probe stands in for the simple index and records the
+    address and credential it was built for; conan's folder probe runs
+    for real over ``share/`` beside *root*.
+    """
+    import livery.forge as forge
+
+    (root / "workshop.toml").write_text("[workspace]\n")
+    (root / "share").mkdir()
+    monkeypatch.setenv("PYTHON_REGISTRY_URL", INDEX)
+    monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", INDEX_TOKEN)
+    monkeypatch.delenv("PYTHON_PUBLISH_INDEX", raising=False)
+    monkeypatch.setenv("CONAN_REMOTE_URL", str(root / "share"))
+    built: list[tuple[str, str]] = []
+
+    class _Index:
+        def __init__(self, url: str, *, token: str = "") -> None:
+            built.append((url, token))
+
+        def versions(self, name: str) -> tuple[str, ...]:
+            return (f"{name} 1.0.0",)
+
+    monkeypatch.setattr(forge, "SimpleRegistry", _Index)
+    return built
+
+
+def test_a_member_answering_two_registries_refuses_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman import Failed
+
+    # A python package whose recipe names a conan reference: python
+    # releases its distribution and conan its package, and a package
+    # releases to one registry. The refusal comes before either probe
+    # resolves its target.
+    _no_target(monkeypatch)
+    package = _releasing(
+        tmp_path, "geometry", "python", "python", "conan", recipe=REFERENCE
+    )
+    assert _lifecycle.distributions(package) == (
+        ("conan", "acme-geometry"),
+        ("python", "acme-geometry"),
+    )
+    refusal = (
+        "packages/geometry: its extensions answer more than one registry, conan"
+        " and python: each releases a distribution of it, and a package releases"
+        " to one registry. List the extensions that release it to one of them"
+    )
+    for asked in (_lifecycle.ecosystem, _lifecycle.registry):
+        with pytest.raises(Failed) as refused:
+            asked(package)
+        assert str(refused.value) == refusal
+
+
+def test_a_member_whose_extensions_answer_no_probe_of_its_registry_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman import Failed
+
+    # An extension that releases the package's distribution and answers
+    # no probe of the registry it goes to: the train could upload and
+    # never see the upload served, so it refuses before anything uploads.
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        releasing=PACKAGE
+        + '\n[queries]\ndistributions = "{package}._steps:distributions"\n',
+    )
+    fake_steps(
+        tmp_path,
+        "releasing",
+        "def distributions(package):\n    return (('acme', package.name),)\n",
+    )
+    package = _listing(tmp_path, "acme.releasing")
+    assert _lifecycle.ecosystem(package) == "acme"
+    with pytest.raises(Failed) as refused:
+        _lifecycle.registry(package)
+    assert str(refused.value) == (
+        "packages/core: its extensions release it to acme and answer no probe of"
+        " that registry, so the release train cannot see what it serves"
+    )
+
+
+def test_a_member_listing_nothing_takes_its_kind_s_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The bridge while package kinds remain: a member that lists no
+    # extension is asked as holding what its kind stands for. The
+    # nanobind member consumes conan and releases its python wheel.
+    built = _declared(tmp_path, monkeypatch)
+    core = _releasing(tmp_path, "core", "python")
+    native = _releasing(tmp_path, "native", "python-nanobind", recipe=CONSUMER)
+    geometry = _releasing(tmp_path, "geometry", "cpp-conan", recipe=REFERENCE)
+    assert [
+        _lifecycle.distributions(member) for member in (core, native, geometry)
+    ] == [
+        (("python", "acme-core"),),
+        (("python", "acme-native"),),
+        (("conan", "acme-geometry"),),
+    ]
+    assert [_lifecycle.ecosystem(member) for member in (core, native, geometry)] == [
+        "python",
+        "python",
+        "conan",
+    ]
+    # python's probe is the index the ladder resolves, read with its
+    # credential; conan's reads the folder the ladder resolves for conan.
+    assert _lifecycle.registry(core).versions("acme-core") == ("acme-core 1.0.0",)
+    assert _lifecycle.registry(native).versions("acme-native") == ("acme-native 1.0.0",)
+    assert built == [(INDEX, INDEX_TOKEN), (INDEX, INDEX_TOKEN)]
+    (tmp_path / "share" / "acme-geometry-0.3.0.tgz").touch()
+    assert _lifecycle.registry(geometry).versions("acme-geometry") == ("0.3.0",)
+    # Listing python, the member is answered by python alone.
+    listed = _releasing(tmp_path, "listed", "cpp-conan", "python", recipe=REFERENCE)
+    assert _lifecycle.distributions(listed) == (("python", "acme-listed"),)

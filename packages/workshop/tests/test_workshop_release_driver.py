@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -1440,3 +1441,57 @@ def test_each_leg_reports_what_it_resolved_per_co_member_and_sibling(
     assert "  livery-tool floor leg: livery-core 0.2.0\n" in out
     assert "  livery-tool latest leg: livery-core 0.2.0\n" in out
     assert out.index("floor leg") < out.index("latest leg")
+
+
+def test_the_publish_verb_asks_each_member_s_probe_once_through_its_extensions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wave polls one probe per member, the one its extensions answer."""
+    from livery.workshop import _lifecycle, _publish, _release_driver
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setenv("PYTHON_REGISTRY_URL", "https://idx.example/simple")
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://idx.example/")
+    monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", "t")
+    asked: list[str] = []
+
+    class _Probe:
+        def versions(self, name: str) -> tuple[str, ...]:
+            return (name,)
+
+    def _answered(package: Package) -> _Probe:
+        asked.append(package.path)
+        return _Probe()
+
+    monkeypatch.setattr(_lifecycle, "registry", _answered)
+    members = [
+        Package(
+            directory=tmp_path / "packages" / name,
+            path=f"packages/{name}",
+            name=f"livery-{name}",
+            kind="python",
+            depends=(),
+            extensions=("python",),
+        )
+        for name in ("core", "tool")
+    ]
+    polled: list[object] = []
+
+    def _wave(
+        root: Path,
+        registry_for: Callable[[Package], _publish.Registry],
+        **_kwargs: object,
+    ) -> tuple[()]:
+        assert root == tmp_path
+        for package in (*members, *members):
+            polled.append(registry_for(package))
+        return ()
+
+    monkeypatch.setattr(_publish, "publish_release", _wave)
+    _release_driver.workflow_release_publish(prebuilt=True)
+    assert asked == ["packages/core", "packages/tool"]
+    # The second ask of each member polls the probe the first one built.
+    assert polled[0] is polled[2] and polled[1] is polled[3]

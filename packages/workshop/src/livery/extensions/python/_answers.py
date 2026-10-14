@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
+    from livery.forge import Registry
     from livery.workshop._packages import Package, SourceReferences
     from livery.workshop._queries import RequirementWriter
 
@@ -55,6 +56,34 @@ def public_modules(package: Package) -> tuple[str, ...]:
 def references(package: Package) -> tuple[SourceReferences, ...]:
     """What each python source under ``src`` and ``tests`` references, one per file."""
     return _backend.references(package)
+
+
+#: The ecosystem a python package is released to, as the ``distributions``
+#: query names it, and the registry kind its target resolves by.
+ECOSYSTEM = "python"
+
+
+def distributions(package: Package) -> tuple[tuple[str, str], ...]:
+    """The distribution the package releases, as its ecosystem and its name."""
+    return ((ECOSYSTEM, package.name),)
+
+
+def registry(package: Package) -> Registry:
+    """The simple index the package is released to, as a probe of its versions.
+
+    The index is the python target the registry ladder resolves for the
+    package's workspace ([livery.workshop.registry][]), and the probe
+    reads it with the target's credential: an authenticated index, a
+    forge's own registry or a private owner's, answers only with it, and
+    an anonymous probe would wait for a version the index already
+    serves.
+    """
+    from livery.forge import SimpleRegistry
+    from livery.workshop import registry as resolved
+    from livery.workshop._packages import root_of
+
+    target = resolved(root_of(package), ECOSYSTEM)
+    return SimpleRegistry(target.url, token=target.token)
 
 
 def suite_runner(root: Path) -> Callable[..., None]:

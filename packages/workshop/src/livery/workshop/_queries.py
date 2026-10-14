@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast
 
 if TYPE_CHECKING:
+    from livery.forge import Registry
     from livery.git import Keyed, Series
     from livery.workshop._composition import Lookup
     from livery.workshop._declaration import Declaration, DeclaredValue, Reference
@@ -260,6 +261,11 @@ REQUIREMENT_WRITERS: Query[tuple[RequirementWriter, ...]] = Query("requirement-w
 #: The distributions the package releases, each as its ecosystem and its
 #: name.
 DISTRIBUTIONS: Query[tuple[tuple[str, str], ...]] = Query("distributions")
+
+#: The registry the package releases to, as a probe of the versions it
+#: serves, which the release train polls until an upload is served; an
+#: empty answer when no extension of the package's set releases it.
+REGISTRY: Query[Registry | None] = Query("registry")
 
 #: The executables ``fm run`` may start, by name.
 EXECUTABLES: Query[tuple[str, ...]] = Query("executables")

@@ -323,7 +323,11 @@ The release train stamps, builds, tests and publishes a package, and
 `fm release.verify` verifies a released version, through these phases
 when its extensions add steps to them, and through the package's kind
 otherwise. A phase whose steps provide nothing under the key the train
-reads back refuses, naming the phase and the key.
+reads back refuses, naming the phase and the key. The registry it
+publishes a package to is its extensions' answer: the one ecosystem
+their `distributions` answer names, and the probe of that registry
+their `registry` answer gives, which the train polls until an upload is
+served.
 
 An extension also answers queries, questions the base or another
 extension declares:
@@ -359,6 +363,7 @@ or the rule's answer over nothing. The base declares:
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
 | `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
+| `registry` | package | the registry the package releases to, as a probe of the versions it serves | one value every answer that is not empty agrees on |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
 | `host-tools` | package | what the host must provide and no store installs, such as a C compiler; `fm doctor` and `fm env.check` name each one that does not resolve | the union |

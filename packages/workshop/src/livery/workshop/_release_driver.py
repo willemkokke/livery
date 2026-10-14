@@ -1544,9 +1544,11 @@ def workflow_release_publish(
     The CI entry point after a release PR merges, and the recovery
     entry when a publish died mid-wave: everything already tagged is
     walked past. ``--ref`` exists because HEAD usually moves past the
-    squash before a recovery runs. Each member probes and publishes
-    through its kind's artifact target: python members through the
-    resolved index, conan members through the resolved conan target.
+    squash before a recovery runs. Each member publishes to the
+    registry of the ecosystem its extensions release it to, and the
+    wave reads what that registry serves through the probe they answer:
+    the resolved index for a python package, the resolved conan target
+    for a conan recipe that names a reference.
     ``--prebuilt`` says the jobs of the run already built the members
     they build before the wave, the workspace's ``job-built-members``
     answer: a platform-wheel member's dist/ holds the wheels collected
@@ -1558,9 +1560,7 @@ def workflow_release_publish(
     """
     import os
 
-    from livery.forge import SimpleRegistry
     from livery.workshop._extensions import workspace_root
-    from livery.workshop._kinds import kind_for
     from livery.workshop._publish import Registry, publish_release
     from livery.workshop._registries import resolve_registry
 
@@ -1577,32 +1577,17 @@ def workflow_release_publish(
             " never defaulted. Declare [registries.python] publish in"
             f" workshop.toml, or set {INDEX_VAR}."
         )
-    # The probe carries the resolved credential: an authenticated
-    # index, a forge's own registry or a private owner, answers only
-    # with it, and an anonymous probe would time out waiting for a
-    # wheel the index is already serving.
-    registry = SimpleRegistry(target.url, token=target.token)
-    registries: dict[str, Registry] = {"python": registry}
     if not prebuilt:
         prebuilt = collected_wheels(root, ref)
+    # Each member's probe is its extensions' answer, asked once and
+    # polled through the wave's whole wait.
+    probes: dict[str, Registry] = {}
 
     def registry_for(package: Package) -> Registry:
-        artifact = kind_for(package.kind).artifact
-        cached = registries.get(artifact)
-        if cached is None:
-            if artifact != "conan":
-                fail(
-                    f"{package.name}: kind {package.kind!r} publishes"
-                    f" to {artifact!r}, and the wave has no probe for"
-                    " that artifact kind"
-                )
-            from livery.workshop._backends import _cpp_conan
-
-            assert root is not None  # narrowed before the closure
-            conan = resolve_registry(root, "conan")
-            cached = _cpp_conan.ConanRegistry(conan, root=root)
-            registries[artifact] = cached
-        return cached
+        probe = probes.get(package.path)
+        if probe is None:
+            probe = probes[package.path] = _lifecycle.registry(package)
+        return probe
 
     receipts = publish_release(
         root,

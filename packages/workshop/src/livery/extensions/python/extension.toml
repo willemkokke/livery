@@ -8,7 +8,9 @@ api-version = 1
 levels = ["package"]
 
 # The questions about a package this extension answers. Its requirement
-# writer writes into the pyproject for a sibling that holds python.
+# writer writes into the pyproject for a sibling that holds python; the
+# package releases its python distribution, and the release train probes
+# the python index the registry ladder resolves for it.
 [queries]
 current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
@@ -17,6 +19,8 @@ requirement-writers = "livery.extensions.python._answers:requirement_writers"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"
+distributions = "livery.extensions.python._answers:distributions"
+registry = "livery.extensions.python._answers:registry"
 
 # Who prints a machine's coverage preview after its suites ran, a query
 # a listed extension answers with the function that prints it, given
