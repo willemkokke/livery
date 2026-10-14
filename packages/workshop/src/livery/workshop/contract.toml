@@ -1054,6 +1054,12 @@ combine = "union"
 [queries.executables]
 combine = "livery.workshop._queries:owned"
 
+# What the host must provide for a package and no store installs, such
+# as a C compiler, each by the name it resolves by on PATH: fm doctor
+# and fm env.check name each one that does not resolve.
+[queries.host-tools]
+combine = "union"
+
 # The marketplace ids of the editor extensions the listed extensions
 # recommend, which the rendered .vscode/extensions.json lists.
 [queries.editor-extensions]

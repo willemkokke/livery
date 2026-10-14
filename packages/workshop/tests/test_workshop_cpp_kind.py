@@ -656,8 +656,9 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
     assert workspace.read_text() == "packages: []\n" and not aside.exists()
 
 
-def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
-
+def test_a_member_listing_nothing_takes_its_kind_s_host_tools(
+    restored_registry, tmp_path: Path
+) -> None:
     from livery.workshop._env_tasks import missing_host_tools
 
     (tmp_path / "packages" / "member").mkdir(parents=True)

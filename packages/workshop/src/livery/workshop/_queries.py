@@ -236,6 +236,10 @@ DISTRIBUTIONS: Query[tuple[tuple[str, str], ...]] = Query("distributions")
 #: The executables ``fm run`` may start, by name.
 EXECUTABLES: Query[tuple[str, ...]] = Query("executables")
 
+#: What the host must provide for the package and no store installs,
+#: such as a C compiler, each by the name it resolves by on ``PATH``.
+HOST_TOOLS: Query[tuple[str, ...]] = Query("host-tools")
+
 #: The marketplace ids of the editor extensions the listed extensions
 #: recommend, which the rendered ``.vscode/extensions.json`` lists.
 EDITOR_EXTENSIONS: Query[tuple[str, ...]] = Query("editor-extensions")
