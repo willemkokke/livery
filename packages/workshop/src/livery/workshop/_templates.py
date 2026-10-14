@@ -336,10 +336,10 @@ def new_package(
 ) -> None:
     """Create a package from *kind*'s seeds and wire it into the workspace.
 
-    Writes the seeds of the kind's chain into ``packages/<name>``, with
-    the distribution named ``<namespace>-<name>``. Then the runner the
-    workspace's environment holds wires the member, run as
-    ``new.package <name> --resume``
+    Writes the seeds of the tree's chain, ``package-base`` first, into
+    ``packages/<name>``, with the distribution named
+    ``<namespace>-<name>``. Then the runner the workspace's environment
+    holds wires the member, run as ``new.package <name> --resume``
     ([livery.workshop._templates.wire_member][]): it writes the project
     files again so every per-package list picks the member up, and
     locks and syncs the environment and the tools. A process mounts the
@@ -414,15 +414,16 @@ def _check_member_name(name: str) -> None:
 
 
 def render_member(root: Path, name: str, *, kind: str = "package-python") -> str:
-    """Write one *kind* package's seeds into *root*; the import path.
+    """Write the seeds of the tree *kind* into ``packages/<name>``; the import path.
 
-    Writes the seeds of the kind's chain (livery.workshop._seeds.create)
-    and the files the records compose for it. The member's own contract
-    is one of the seeds, and discovery finds the member through it, so
-    the roster needs no write. The project files, the lock and the
-    install are the caller's: `wire_member` runs them for one member,
-    and a caller adding many members runs them once after the last.
-    Refuses an existing directory, naming it.
+    Writes the seeds of the tree's chain, ``package-base`` first
+    (`livery.workshop._seeds.chain`), and the files the records compose
+    for the member. The member's own contract is one of the seeds, and
+    discovery finds the member through it, so the roster needs no
+    write. The project files, the lock and the install are the
+    caller's: `wire_member` runs them for one member, and a caller
+    adding many members runs them once after the last. Refuses an
+    existing directory, naming it.
     """
     _check_member_name(name)
     destination = root / "packages" / name
@@ -447,11 +448,10 @@ def render_member(root: Path, name: str, *, kind: str = "package-python") -> str
             f"{package_name}: a {facts.get('project_name', '')} workspace package."
         ),
     }
-    from livery.workshop._kinds import template_chain
-    from livery.workshop._seeds import create, derived
+    from livery.workshop._seeds import chain, create, derived
 
     data.update(derived(data))
-    create(root, destination, template_chain(kind), data)
+    create(root, destination, chain(kind), data)
     from livery.workshop._shipped_files import deliver
 
     deliver(root)

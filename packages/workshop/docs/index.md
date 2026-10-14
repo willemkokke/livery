@@ -643,12 +643,14 @@ An option no step the table reaches declares, a step or phase no
 registered step has, and a value of the wrong type each refuse, naming
 the vocabulary.
 
-An extension's kinds and steps are judged by the conformance kit,
-`livery.workshop.testing`: a `Subject` names what the extension registers,
-each clause in `CLAUSES` returns the violations the subject commits,
-each naming its clause, and an extension's own suite runs every clause on
-its subject. The clauses so far: a per-package configuration file has one
-owner among the steps whose fragments name an extension; a path's
+An extension's steps and categories are judged by the conformance kit,
+`livery.workshop.testing`: a `Subject` names the extension, the sets of
+package-level extensions to probe it with, each as the list a package
+writes, and the steps it registers; each clause in `CLAUSES` returns
+the violations the subject commits, each naming its clause, and an
+extension's own suite runs every clause on its subject. The clauses so
+far: a per-package configuration file has one owner among the steps
+whose fragments name an extension; a path's
 category is the most specific rule's, the nearer table winning a tie
 between tables and two rules of one table never tying; every step a
 step runs `after` is registered, and following them never leads back
@@ -657,8 +659,8 @@ its type, and every reference in it names a function its module
 defines; importing a module a reference names registers nothing, which
 the kit proves by importing each in a process of its own; every task a
 CI job's entries name is one the extension defines, read from its
-sources; every category a step's claims name is one an extension
-registers, every suffix starting with a dot; the plugin an
+sources; every category a step's claims name is one the workshop
+knows, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
 every contract key an extension declares carries a doc; a step's
 fragments render with the kit's probe answers, the
@@ -667,12 +669,14 @@ its render until a person edits it, when the drift gate names it; and
 once a step is withdrawn and no other step renders its per-package
 file for the package's extensions, an unedited copy is removed and an
 edited one kept;
-and in the gate's walk over a probe workspace, with the step bodies
-recording instead of running, every step that can fix rewrites
-before any judge starts and is not judged again, every step names the
-extension that registered it, which the gate prints, and a step with no
-file to read is named and never started. The workshop's own kinds and
-steps pass the same clauses in its test suite.
+and in the gate's walk over a probe workspace holding one package of
+each set, with the step bodies recording instead of running, every
+step that can fix rewrites before any judge starts and is not judged
+again, every step names the extension that registered it, which the
+gate prints, and a step with no file to read is named and never
+started. The workshop's own steps pass the same clauses in its test
+suite, probed with a package that lists nothing and one listing each
+installed package-level extension.
 
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a

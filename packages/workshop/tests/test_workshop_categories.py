@@ -1,4 +1,4 @@
-"""The category and channel registries: the refusals first, then what they answer."""
+"""The category tables and the channel rules: refusals first, then their answers."""
 
 from __future__ import annotations
 
@@ -7,17 +7,18 @@ from pathlib import Path
 import pytest
 
 from livery import git
+from livery.workshop import _categories
 from livery.workshop._categories import (
     BASE_TABLE,
     WORKSPACE,
     CategoryError,
+    CategoryRule,
     ChannelRule,
     Provenance,
     category_of,
     channel_of,
-    register_categories,
+    known_categories,
     register_channels,
-    unregister_categories,
     unregister_channels,
 )
 from livery.workshop._packages import Package, discover_packages
@@ -60,9 +61,6 @@ PACKAGE_LEVEL = '[extension]\nlevels = ["package"]\n'
 @pytest.fixture
 def brand_extension():
     yield
-    for table in (BASE_TABLE, WORKSPACE):
-        unregister_categories(table, extension="acme.brand")
-        unregister_categories(table, extension="acme.other")
     unregister_channels(extension="acme.brand")
 
 
@@ -70,26 +68,24 @@ def brand_extension():
 
 
 def test_two_rules_of_one_specificity_claiming_one_path_refuse_naming_both(
-    brand_extension,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    register_categories(
-        BASE_TABLE, [("src/**/*_vendor.py", "vendored")], extension="acme.brand"
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_package_extensions
+
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        brand=PACKAGE_LEVEL
+        + '\n[categories]\nvendored = ["src/**/*_vendor.py"]\n'
+        + 'generated = ["src/**/*_vendor.py"]\n',
     )
-    register_categories(
-        BASE_TABLE, [("src/**/*_vendor.py", "generated")], extension="acme.other"
-    )
+    package = replace(_package(), extensions=("acme.brand",))
     with pytest.raises(CategoryError, match="two rules of one specificity") as caught:
-        category_of(_package(), "src/livery/x/lib_vendor.py")
-    assert "acme.brand" in str(caught.value) and "acme.other" in str(caught.value)
-
-
-def test_a_rule_for_a_table_no_package_reads_refuses_naming_the_tables() -> None:
-    with pytest.raises(
-        CategoryError,
-        match=r"acme\.brand registers category rules into 'python', which no"
-        r" package reads: the tables are base, workspace",
-    ):
-        register_categories("python", [("src/**", "vendored")], extension="acme.brand")
+        category_of(package, "src/livery/x/lib_vendor.py")
+    assert "'src/**/*_vendor.py' as vendored (acme.brand)" in str(caught.value)
+    assert "'src/**/*_vendor.py' as generated (acme.brand)" in str(caught.value)
 
 
 def test_a_categories_value_off_the_shape_refuses_naming_it(tmp_path: Path) -> None:
@@ -192,18 +188,45 @@ def test_a_set_whose_declared_order_has_no_start_reads_its_tables_alphabetically
     assert (found.name, found.supplier) == ("source", "acme.b")
 
 
-# Then what the registries answer, and who supplied it.
+# Then what the tables answer, and who supplied it.
+
+
+def test_the_known_categories_are_the_four_builtin_and_the_base_s() -> None:
+    assert known_categories() == {
+        "source",
+        "test",
+        "test-support",
+        "configuration",
+        "prose",
+        "nav",
+        "asset",
+        "example",
+        "generated",
+        "notes",
+        "site",
+        "readme",
+    }
 
 
 def test_a_extensions_rule_answers_with_its_name_and_the_more_specific_wins(
-    brand_extension,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    register_categories(
-        BASE_TABLE, [("src/livery/x/_vendor/**", "vendored")], extension="acme.brand"
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        brand=PACKAGE_LEVEL
+        + '\n[categories]\nvendored = ["src/livery/x/_vendor/**"]\n',
     )
-    found = category_of(_package(), "src/livery/x/_vendor/lib.py")
+    # Its pattern is more specific than python's src/**, whatever the
+    # order of the two tables.
+    package = replace(_package(), extensions=("python", "acme.brand"))
+    found = category_of(package, "src/livery/x/_vendor/lib.py")
     assert (found.name, found.supplier) == ("vendored", "acme.brand")
-    assert category_of(_package(), "src/livery/x/mod.py").name == "source"
+    assert category_of(package, "src/livery/x/mod.py").name == "source"
 
 
 def test_the_package_exception_wins_over_its_extensions_rules() -> None:
@@ -258,7 +281,7 @@ def test_a_package_takes_the_table_of_each_extension_it_holds() -> None:
 
 
 def test_between_two_tables_the_extension_later_in_composition_order_wins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, brand_extension
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from dataclasses import replace
 
@@ -280,7 +303,8 @@ def test_between_two_tables_the_extension_later_in_composition_order_wins(
         lib=declares("generated"),
     )
     # The base's table comes last, whatever it claims at one specificity.
-    register_categories(BASE_TABLE, [("gen/**", "asset")], extension="acme.brand")
+    asset = CategoryRule(BASE_TABLE, "gen/**", "asset", "livery.workshop")
+    monkeypatch.setattr(_categories, "BASE_RULES", (asset, *_categories.BASE_RULES))
 
     def found(*extensions: str) -> tuple[str, str]:
         category = category_of(replace(_package(), extensions=extensions), "gen/a")

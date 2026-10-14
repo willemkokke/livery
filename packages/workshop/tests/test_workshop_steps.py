@@ -31,14 +31,11 @@ _FAILURES = (BaseException,)
 
 @pytest.fixture
 def restored_registries():
-    from livery.workshop import _kinds, _steps
+    from livery.workshop import _steps
 
     steps = _steps.snapshot()
-    kinds = dict(_kinds._KINDS)
     yield
     _steps.restore(steps)
-    _kinds._KINDS.clear()
-    _kinds._KINDS.update(kinds)
 
 
 def _package(tmp_path: Path, name: str, *extensions: str) -> Package:

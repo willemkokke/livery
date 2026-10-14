@@ -14,12 +14,8 @@ import livery.toolroom.tools as tools
 from livery.extensions.nanobind import _build, _ci, _container
 from livery.extensions.python import _backend as _python
 from livery.workshop._identity import project_facts
-from livery.workshop._kinds import (
-    kind_for,
-    kind_names,
-    template_chain,
-)
 from livery.workshop._packages import Package
+from livery.workshop._seeds import chain
 from workshop_composed import seed_into
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
@@ -154,16 +150,12 @@ def test_a_pure_wheel_from_a_nanobind_build_refuses(tmp_path: Path) -> None:
     _build.assert_platform_tagged(package, dist)
 
 
-def test_the_seed_chain_runs_from_python_s_and_no_package_names_its_record() -> None:
-    assert template_chain("package-python-nanobind") == (
+def test_the_seed_chain_runs_from_python_s() -> None:
+    assert chain("package-python-nanobind") == (
         "package-base",
         "package-python",
         "package-python-nanobind",
     )
-    # The record holds the seed chain alone, and no refusal names it.
-    record = kind_for("python-nanobind")
-    assert (record.parent, record.abstract) == ("python", True)
-    assert "python-nanobind" not in kind_names()
 
 
 def test_a_package_listing_nanobind_holds_python_cpp_and_conan(

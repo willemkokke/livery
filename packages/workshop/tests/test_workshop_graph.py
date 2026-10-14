@@ -209,8 +209,13 @@ def _paths(root: Path, *paths: str) -> None:
 
 
 def test_the_python_kind_classifies_tests_support_source_and_configuration() -> None:
-    from livery.workshop._categories import category_of
-    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+    from livery.workshop._categories import (
+        CONFIGURATION,
+        SOURCE,
+        TEST,
+        TEST_SUPPORT,
+        category_of,
+    )
 
     package = Package(
         Path("packages/x"),
