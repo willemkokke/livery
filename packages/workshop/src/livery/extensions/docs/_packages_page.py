@@ -1,13 +1,14 @@
 """The site's Packages section: where each package sits, in what order, and its page.
 
 Every package sits under one entry, Packages, in a tree its contract
-decides. A python package sits at its import path, less the namespace
-every python package shares: ``livery.toolroom.bench`` sits at
-toolroom, then bench. A package of another kind sits at its folder
-under ``packages/``. A package's ``[docs] name``, a dotted path whose
-last part is its label, places it anywhere, inside another package's
-entry included. Siblings come in the order the release wave publishes
-in, every dependency before its dependents, and a group sorts with its
+decides. A package whose code other packages reference by import path
+sits at the shallowest of those paths, less the namespace every such
+package shares: ``livery.toolroom.bench`` sits at toolroom, then
+bench. A package no import path reaches sits at its folder under
+``packages/``. A package's ``[docs] name``, a dotted path whose last
+part is its label, places it anywhere, inside another package's entry
+included. Siblings come in the order the release wave publishes in,
+every dependency before its dependents, and a group sorts with its
 earliest member. The landing page lists the same tree, each package
 with its contract's description.
 """
@@ -20,8 +21,12 @@ from pathlib import Path
 
 from livery.footman import fail
 from livery.workshop import Package, discover_packages, read_contract
-from livery.workshop._docs_contract import MOUNT, module_root
 from livery.workshop._graph import order_topologically
+from livery.workshop._lifecycle import module_roots
+
+#: Where package docs mount inside the site's tree, per package
+#: directory name. Gitignored; rebuilt on every docs verb.
+MOUNT = "docs/packages"
 
 #: The landing page's name under the mount: ``packages/index.md`` on the site.
 LANDING = "index.md"
@@ -72,19 +77,35 @@ def declared_place(package: Package) -> tuple[str, ...] | None:
     return tuple(name.split("."))
 
 
+def imported_place(package: Package) -> tuple[str, ...] | None:
+    """The shallowest import path *package*'s code is referenced by, split at its dots.
+
+    Read from its module roots, which the package's extensions answer,
+    or its kind while it lists none. The path with the fewest parts
+    wins; of two with as many, the one answered first. None for a
+    package no import path reaches.
+    """
+    roots = module_roots(package)
+    if not roots:
+        return None
+    return tuple(min(roots, key=lambda root: root.count(".")).split("."))
+
+
 def places(packages: tuple[Package, ...]) -> dict[str, tuple[str, ...]]:
     """Each package's place in the Packages tree, by its path.
 
-    Its ``[docs] name`` when it declares one; else its import path, less
-    the first part when every python package's import path shares it;
-    else its folder under ``packages/``.
+    Its ``[docs] name`` when it declares one; else its shallowest import
+    path (`imported_place`), less the first part when every such path
+    shares it; else its folder under ``packages/``.
     """
     declared = {package.path: declared_place(package) for package in packages}
     imported: dict[str, tuple[str, ...]] = {}
     for package in packages:
-        root = module_root(package)
-        if declared[package.path] is None and root is not None:
-            imported[package.path] = root.relative_to(package.directory / "src").parts
+        if declared[package.path] is not None:
+            continue
+        place = imported_place(package)
+        if place is not None:
+            imported[package.path] = place
     heads = {parts[0] for parts in imported.values()}
     shared = (
         heads.pop()

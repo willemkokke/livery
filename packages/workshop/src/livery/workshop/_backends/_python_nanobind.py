@@ -617,8 +617,6 @@ def build_wheels(
         Failed: when cibuildwheel exits non-zero, or the wheels it
             wrote carry no platform tag.
     """
-    from livery.workshop._docs_contract import module_docs
-
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
@@ -644,7 +642,7 @@ def build_wheels(
         env.setdefault("CIBW_ARCHS", "native")
     for key, value in conan_environment(root).items():
         env.setdefault(key, value)
-    with module_docs(package):
+    with _python.module_docs(package):
         result = tools.uv.opts(
             cwd=package.directory, env=env, nofail=True, recorded=False
         )(

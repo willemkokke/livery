@@ -31,7 +31,11 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from livery.extensions.docs._navblocks import nav_block_markers, write_nav_block
+from livery.extensions.docs._navblocks import (
+    GENERATED_DIR,
+    nav_block_markers,
+    write_nav_block,
+)
 from livery.footman import fail
 from livery.workshop._packages import Package, discover_packages
 
@@ -261,7 +265,7 @@ def generate_task_reference(root: Path) -> list[str]:
     rendered: list[str] = []
     for package, trees in providing:
         owner = package.member
-        out = package.directory / "docs" / "_generated" / PAGES
+        out = package.directory / "docs" / GENERATED_DIR / PAGES
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         index = ["# Task reference", ""]

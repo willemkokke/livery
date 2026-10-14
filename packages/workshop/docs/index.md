@@ -469,7 +469,12 @@ verb runs the `docs` phase before it assembles the site's config: its
 generators`, each once, at the root, and its `task-reference` step
 writes the task reference of every package that advertises
 `footman.tasks` entry points, declared off until the root contract
-turns it on with `[phases.docs.task-reference] enabled = true`.
+turns it on with `[phases.docs.task-reference] enabled = true`. Before
+the phase runs, the verb removes every generated tree, each package's
+`docs/_generated/` and the root's, which the phase's steps and the
+extension's own passes write again. So a step that no longer runs, its
+extension unlisted or the step turned off, leaves no page and no nav
+block behind.
 `fm docs.publish` runs the `deploy` phase on the built site just before
 it publishes it, then puts each declared coverage report's tree into
 the site. A listed extension that requires docs adds its steps to
@@ -616,13 +621,16 @@ table naming `livery-workshop` as its distribution. It owns the site's
 assembly, the `docs` verbs, the `docs.config`, `docs.members` and
 `docs.theme` queries, the `docs` and `deploy` phases, the staged
 extension css, the generators a package declares and the seam the site
-publishes through, and it arrives through its own task entry point. The base keeps what it reads
-of a package's docs for its own reasons (a package's `[docs] api` and
-the layout of the `docs/` tree) and the nav blocks generators write;
-it imports no extension,
-which `layering.base-imports-no-extension` enforces. It lives under
-`livery.extensions`, a namespace any distribution can add an extension
-to.
+publishes through, and it arrives through its own task entry point.
+A package's `[docs]` table is the extension's whole, `api` among its
+keys, so it refuses, naming docs, while the workspace does not list
+the extension. The base reads no `[docs]` table: the extension places
+each package in the site's Packages tree at the shallowest import path
+the package's code is referenced by, and the python extension copies a
+package's `docs/` into the wheel it builds. The base imports no
+extension, which `layering.base-imports-no-extension` enforces. The
+extension lives under `livery.extensions`, a namespace any
+distribution can add an extension to.
 The root contract's `[docs]` table is the extension's, `site-url`
 among its keys. A `pre_tasks` hook of the extension links each task
 name in `--help`, `--list` and `--json` rows to the task's page on the

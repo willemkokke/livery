@@ -18,7 +18,8 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -675,6 +676,61 @@ def declare_requirement(package: Package, dependency: Package, floor: str) -> li
     return ["pyproject.toml"]
 
 
+def module_docs_dir(package: Package) -> Path | None:
+    """Where *package*'s wheel-embedded ``_docs`` lives; None without a module.
+
+    In the shallowest of the package's module roots (`module_roots`)
+    whose directory exists under ``src``, the importable package the
+    wheel ships. Of two roots with as many parts, the one answered
+    first.
+    """
+    src = package.directory / "src"
+    directories = [src.joinpath(*root.split(".")) for root in module_roots(package)]
+    present = [directory for directory in directories if directory.is_dir()]
+    if not present:
+        return None
+    return min(present, key=lambda directory: len(directory.parts)) / "_docs"
+
+
+def materialise_module_docs(package: Package) -> Path | None:
+    """Copy the package's ``docs/`` into its wheel-embedded ``_docs``, whole.
+
+    The copy is rebuilt from scratch, so the wheel never carries docs
+    older than the tree it is built from, and a package without
+    ``docs/`` loses its old copy instead of shipping it.
+
+    Returns:
+        The copy's path; None when the package has no module to carry
+        it, or no ``docs/`` to copy.
+    """
+    target = module_docs_dir(package)
+    if target is None:
+        return None
+    shutil.rmtree(target, ignore_errors=True)
+    docs = package.directory / "docs"
+    if not docs.is_dir():
+        return None
+    shutil.copytree(docs, target)
+    return target
+
+
+@contextmanager
+def module_docs(package: Package) -> Generator[Path | None]:
+    """The wheel-embedded ``_docs``, in the source tree for one build alone.
+
+    Copied whole on entry, as `materialise_module_docs` copies it, and
+    removed on exit, after a failed build too. A copy left behind puts
+    the docs' example files under the package's source, where every
+    checker that walks the tree judges them as the package's own code.
+    """
+    target = materialise_module_docs(package)
+    try:
+        yield target
+    finally:
+        if target is not None:
+            shutil.rmtree(target, ignore_errors=True)
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build *package*'s wheel and sdist into its ``dist/``; the dist dir.
 
@@ -684,8 +740,6 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     timestamp) rides ``SOURCE_DATE_EPOCH`` so a pure-Python rebuild
     at the same ref is byte-identical.
     """
-    from livery.workshop._docs_contract import module_docs
-
     dist = package.directory / "dist"
     shutil.rmtree(dist, ignore_errors=True)
     env = dict(os.environ)
