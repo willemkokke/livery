@@ -48,7 +48,6 @@ def _package(member: Path, *extensions: str) -> Package:
         directory=member,
         path=f"packages/{member.name}",
         name=f"acme-{member.name}",
-        kind="",
         depends=(),
         extensions=extensions or ("python",),
     )

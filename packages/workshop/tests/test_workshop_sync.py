@@ -213,7 +213,6 @@ def test_the_sync_phase_runs_the_listed_extensions_alone(
             directory=tmp_path / name,
             path=f"packages/{name}",
             name=name,
-            kind="",
             depends=(),
             extensions=extensions,
         )

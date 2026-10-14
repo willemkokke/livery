@@ -566,11 +566,7 @@ def unit_of(
 
 def _root_unit(root: Path) -> Package:
     """The workspace unit for a root without its own tests directory."""
-    from livery.workshop._categories import WORKSPACE
-
-    return Package(
-        directory=root, path=".", name="workspace", kind=WORKSPACE, depends=()
-    )
+    return Package(directory=root, path=".", name="workspace", depends=())
 
 
 def owned_lines(root: Path, relative: Path) -> list[str]:

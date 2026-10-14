@@ -312,7 +312,6 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
         directory=package_dir,
         path="packages/thing",
         name="livery-thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

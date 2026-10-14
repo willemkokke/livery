@@ -64,7 +64,6 @@ def _native(tmp_path: Path, floor: str = "floor = 100") -> Package:
         directory=directory,
         path="packages/n",
         name="acme-n",
-        kind="cpp-conan",
         depends=(),
         extensions=("cmake", "conan"),
     )

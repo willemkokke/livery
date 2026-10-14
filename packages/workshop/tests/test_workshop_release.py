@@ -285,7 +285,6 @@ def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
         directory=tmp_path,
         path="packages/thing",
         name="acme-thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

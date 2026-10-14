@@ -730,7 +730,7 @@ def _package_records(ctx: PhaseContext, package: Package) -> list[StepRecord]:
 
 
 def members(ctx: PhaseContext) -> tuple[Package, ...]:
-    """The packages under judgment that a kind owns: the tests unit is none's."""
+    """The packages under judgment that are members: every one but the tests unit."""
     from livery.workshop._packages import WORKSPACE_TESTS
 
     return tuple(package for package in ctx.judged if package.path != WORKSPACE_TESTS)

@@ -54,8 +54,8 @@ CONFIGURATION = "configuration"
 #: page shows by snippet, run by the examples step and no suite.
 EXAMPLE = "example"
 
-#: The workspace's own unit, the root's tests and the files beside
-#: them: its kind, and the name of the table the base registers for it.
+#: The name of the table the base registers for the workspace's own
+#: unit, the root's tests and the files beside them.
 WORKSPACE = "workspace"
 
 #: The base's table, whose rules (the documentation's paths, and
@@ -296,7 +296,9 @@ def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
     takes the tables of the package-level extensions it holds, over the
     base's.
     """
-    if package.kind == WORKSPACE:
+    from livery.workshop._packages import is_workspace_unit
+
+    if is_workspace_unit(package):
         return workspace_rules()
     from livery.workshop._composition import extension_set
 

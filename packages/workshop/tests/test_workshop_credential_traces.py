@@ -101,7 +101,6 @@ def test_a_publish_token_reaches_a_trace_as_stars(
         directory=member,
         path="packages/thing",
         name="thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

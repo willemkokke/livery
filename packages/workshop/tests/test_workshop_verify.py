@@ -54,7 +54,6 @@ def released(seeds: Seeds) -> tuple[Path, Package]:
         directory=root / "packages" / "thing",
         path="packages/thing",
         name="livery-thing",
-        kind="python",
         depends=(),
         extensions=("python",),
     )

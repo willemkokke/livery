@@ -216,7 +216,6 @@ def _category_table(subject: Subject) -> list[Violation]:
             Path("."),
             "packages/probe",
             "probe",
-            kind.name,
             (),
             extensions=_listed(kind),
         )
@@ -877,7 +876,6 @@ def _probe_packages(root: Path) -> tuple[Package, ...]:
             root / "packages" / kind.name,
             f"packages/{kind.name}",
             f"probe-{kind.name}",
-            kind.name,
             (),
             extensions=_listed(kind),
         )

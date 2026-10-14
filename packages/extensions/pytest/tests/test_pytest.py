@@ -75,7 +75,6 @@ def _member(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind="python",
         depends=(),
         step_options=options,
         extensions=extensions,

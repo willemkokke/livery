@@ -35,7 +35,6 @@ def _package(
         Path("packages/x"),
         "packages/x",
         "livery-x",
-        "",
         (),
         categories=categories,
         extensions=extensions,
@@ -43,7 +42,7 @@ def _package(
 
 
 def _member(root: Path, contract: str) -> Path:
-    """A python member with *contract*'s lines after its kind and name."""
+    """A python member with *contract*'s lines after its list and name."""
     member = root / "packages" / "x"
     member.mkdir(parents=True, exist_ok=True)
     member.joinpath("workshop.toml").write_text(
@@ -295,7 +294,8 @@ def test_between_two_tables_the_extension_later_in_composition_order_wins(
 
 
 def test_the_workspace_unit_answers_for_the_roots_own_files(tmp_path: Path) -> None:
-    unit = Package(tmp_path, ".", "workspace", WORKSPACE, ())
+    from livery.workshop._packages import is_workspace_unit, workspace_suite
+
     expected = {
         "tests/test_a.py": "test",
         "tests/helpers.py": "test-support",
@@ -305,7 +305,18 @@ def test_the_workspace_unit_answers_for_the_roots_own_files(tmp_path: Path) -> N
         "README.md": "readme",
         "pyproject.toml": "configuration",
     }
-    assert {path: category_of(unit, path).name for path in expected} == expected
+    # The root of a workspace without tests is its unit, and so are the
+    # tests once they exist: each takes the workspace's table.
+    root = Package(tmp_path, ".", "workspace", ())
+    (tmp_path / "tests").mkdir()
+    suite = workspace_suite(tmp_path)
+    assert suite is not None
+    for unit in (root, suite):
+        assert is_workspace_unit(unit)
+        assert {path: category_of(unit, path).name for path in expected} == expected
+    # A member is no unit of the workspace, and its extensions' tables answer.
+    assert not is_workspace_unit(_package())
+    assert category_of(_package(), "notes/musings.md").name == "configuration"
 
 
 def test_a_extensions_channel_rule_answers_at_its_rank(
@@ -382,8 +393,8 @@ def test_explain_names_the_schema_a_contract_is_judged_by(
     # The fallback first: a file that is no contract names no schema.
     assert schema("notes/musings.md") == []
     assert schema("packages/x/pyproject.toml") == []
-    # The member lists nothing and holds python through its kind, so
-    # python's keys are judged beside the listed extension's.
+    # The member lists python, so python's keys are judged beside the
+    # listed extension's.
     assert schema("workshop.toml") == [
         "    schema: .workshop/schema/workshop.json"
         " (livery.workshop, livery.toolroom.store, python, docs)"

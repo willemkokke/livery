@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._declaration import (
+    _REMOVED,
     Additions,
     CodedFix,
     Declaration,
@@ -256,6 +257,26 @@ def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
     assert "has no key" not in _refusal(package, STEP + 'narrowing = "paths"\n')
 
 
+def test_a_step_declaring_kinds_refuses_naming_extensions(package: Path) -> None:
+    where = package / "extension.toml"
+    named = (
+        " is extensions: the package-level extensions whose packages the step"
+        " judges, each package whose set holds one"
+    )
+    assert _refusal(package, STEP + 'kinds = ["python"]\n') == (
+        f"{where}: phases.lint.acme.kinds{named}"
+    )
+    # A step under a [for.<target>] table refuses the same way.
+    assert _refusal(
+        package,
+        '[for.docs.phases.lint.acme]\nmain = "acme_declared._steps:judge"\n'
+        'kinds = ["python"]\n',
+    ) == (f"{where}: for.docs.phases.lint.acme.kinds{named}")
+    # The spelling it names reads.
+    (record,) = _declare(package, STEP + 'extensions = ["python"]\n').additions.steps
+    assert record.extensions == ("python",)
+
+
 def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     where = package / "extension.toml"
     # The refusals: no body, a body of the wrong kind for its phase, a
@@ -370,18 +391,7 @@ def test_every_declaration_is_in_the_step_spelling() -> None:
 
     # The keys that declare a phase sit beside its steps in its table.
     declaring = {"level", "gated", "after", "verb", "keys"}
-    removed = {
-        "narrowing",
-        "transport",
-        "threshold",
-        "roles",
-        "listed-with",
-        "judge",
-        "run",
-        "arguments",
-        "pre",
-        "post",
-    }
+    removed = set(_REMOVED)
     found = 0
     for entry in entry_points(group="workshop.extensions"):
         path = declaration_file(entry.value.partition(":")[0])

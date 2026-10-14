@@ -93,7 +93,6 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
         directory=tmp_path / "packages" / "one",
         path="packages/one",
         name="acme-one",
-        kind="python",
         depends=(),
         extensions=("python",),
     )
