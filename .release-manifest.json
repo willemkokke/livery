@@ -1,26 +1,21 @@
 {
  "schema": 1,
- "mined-at": "e2a1955fe9fdb10256f5667ed3242e6fbd21182c",
+ "mined-at": "d0dc551efa398bb84f4aa724ff8884a5e18b41da",
  "members": [
-  {
-   "dir": "footman",
-   "name": "livery-footman",
-   "version": "0.60.0"
-  },
   {
    "dir": "git",
    "name": "livery-git",
-   "version": "0.1.0"
-  },
-  {
-   "dir": "toolroom-store",
-   "name": "livery-toolroom-store",
-   "version": "0.4.0"
+   "version": "0.2.0"
   },
   {
    "dir": "workshop",
    "name": "livery-workshop",
-   "version": "0.9.0"
+   "version": "0.10.0"
+  },
+  {
+   "dir": "extensions/basedpyright",
+   "name": "livery-extensions-basedpyright",
+   "version": "0.2.0"
   }
  ]
 }
