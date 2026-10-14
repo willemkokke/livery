@@ -37,6 +37,9 @@ if TYPE_CHECKING:
 #: an explicit path names passes through untouched.
 PY_SUFFIXES = (".py", ".pyi")
 
+#: The name a package lists this extension by.
+EXTENSION = "python"
+
 #: How a pure wheel's file name ends: no ABI, any platform.
 PURE_TAG = "-none-any.whl"
 
@@ -637,17 +640,27 @@ def declared_requirements(package: Package) -> dict[str, str]:
     return entries
 
 
-def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
+def declare_requirement(
+    package: Package, dependency: Package, floor: str
+) -> list[str] | None:
     """Add ``<dependency>>=<floor>`` to the project's dependencies; the files changed.
 
-    A text edit that keeps the manifest's formatting: the entry joins
-    the existing list, one per line, or opens the list when the
-    project declares none. Already declared, whatever the constraint,
-    means nothing to write. A manifest without a ``[project]`` table
-    refuses naming it.
+    The python extension's requirement writer, its answer to the
+    ``requirement-writers`` query. It takes a sibling whose set holds
+    python, which the pyproject names as a distribution, and returns
+    None for any other sibling, which it leaves to another writer of
+    the package's set. A text edit that keeps the manifest's
+    formatting: the entry joins the existing list, one per line, or
+    opens the list when the project declares none. Already declared,
+    whatever the constraint, means nothing to write. A manifest without
+    a ``[project]`` table refuses naming it.
     """
     import re as _re
 
+    from livery.workshop._kinds import extension_set
+
+    if EXTENSION not in extension_set(dependency):
+        return None
     pyproject = package.directory / "pyproject.toml"
     if dependency.name in declared_requirements(package):
         return []

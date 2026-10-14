@@ -10,10 +10,13 @@ levels = ["package"]
 requires = ["cpp"]
 
 # The questions about a package this extension answers, from its recipe.
+# Its requirement writer writes into the recipe for a sibling that is a
+# conan package: one that holds conan and whose recipe names a reference.
 [queries]
 current-version = "livery.extensions.conan._answers:current_version"
 version-files = "livery.extensions.conan._answers:version_files"
 requirements = "livery.extensions.conan._answers:requirements"
+requirement-writers = "livery.extensions.conan._answers:requirement_writers"
 distributions = "livery.extensions.conan._answers:distributions"
 
 # The steps this extension adds to a package's lifecycle phases, one

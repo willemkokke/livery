@@ -13,10 +13,13 @@ isolated test, a publish or a verification runs as the package's phase
 ([livery.workshop._phases.run_phase][]) when its extensions add steps
 to it; anything else, and any package whose extensions do neither, is
 answered by the package's kind backend
-([livery.workshop._kinds.backend_for][]). So a caller never names an
-extension or a backend. A function a backend may leave out answers None
-or an empty tuple when the backend has none, and so does an abstract
-kind, which has no backend.
+([livery.workshop._kinds.backend_for][]). A requirement on a sibling
+is the exception: every writer of the package's set writes it, and a
+package that lists no extension takes the writers of what its kind
+stands for. So a caller never names an extension or a backend. A
+function a backend may leave out answers None or an empty tuple when
+the backend has none, and so does an abstract kind, which has no
+backend.
 """
 
 from __future__ import annotations
@@ -252,13 +255,43 @@ def declared_requirements(package: Package) -> dict[str, str] | None:
 
 
 def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
-    """Write *dependency* at *floor* into *package*'s manifest; the files changed.
+    """Write *dependency* at *floor* into *package*'s manifests; the files changed.
 
-    Empty when the manifest names the dependency already.
+    The package's set answers the ``requirement-writers`` query with its
+    writers, and every one is called. Each takes a sibling of its own
+    ecosystem alone, so the requirement lands in the manifest of the
+    dependency's ecosystem: python's ``pyproject.toml`` for a sibling
+    that holds python, conan's recipe for a sibling that is a conan
+    package. A package that lists no extension takes the writers of
+    what its kind stands for. The files are relative to the package;
+    empty when the manifests name the dependency already.
+
+    Raises:
+        Failed: when no writer of the set takes *dependency*, naming
+            both sets; nothing is written then.
     """
-    from livery.workshop._kinds import backend_for
+    from dataclasses import replace
 
-    return backend_for(package).declare_requirement(package, dependency, floor)
+    from livery.footman import fail
+    from livery.workshop._kinds import extension_set
+    from livery.workshop._queries import REQUIREMENT_WRITERS, answer
+
+    held = replace(package, extensions=extension_set(package))
+    taken = [
+        written
+        for writer in answer(held, REQUIREMENT_WRITERS)
+        if (written := writer(package, dependency, floor)) is not None
+    ]
+    if not taken:
+        own = ", ".join(held.extensions) or "no extension"
+        theirs = ", ".join(extension_set(dependency)) or "no extension"
+        fail(
+            f"{package.path} holds {own}, and no writer of its set takes a"
+            f" requirement on {dependency.path}, which holds {theirs}: a writer"
+            " takes a sibling of its own ecosystem alone. List an extension"
+            f" whose manifest takes {dependency.path}, or drop the dependency"
+        )
+    return list(dict.fromkeys(name for written in taken for name in written))
 
 
 def module_roots(package: Package) -> tuple[str, ...]:

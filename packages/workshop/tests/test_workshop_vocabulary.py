@@ -42,6 +42,10 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_pythons", "python"): (1, "the venv's interpreter"),
     ("_reconcile", "pyproject.toml"): (2, "the uv workspace the venv follows"),
     ("_speed", "python"): (1, "a runner's interpreter version"),
+    ("_steps", "pyproject.toml"): (
+        1,
+        "a uv member's manifest the sibling fix wrote, which moves the lock",
+    ),
     ("_sync", "pyproject.toml"): (2, "the uv workspace the lock follows"),
     ("testing._conformance", "pyproject.toml"): (3, "the root pyproject's fragments"),
 }
@@ -71,7 +75,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "pyproject.toml"): 2,
     ("_release_driver", "python"): 2,
     ("_steps", BACKEND_IMPORT): 1,
-    ("_steps", "pyproject.toml"): 1,
     ("_templates", "python"): 4,
     ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,

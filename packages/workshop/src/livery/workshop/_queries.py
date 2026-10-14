@@ -31,7 +31,7 @@ import functools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast
 
 if TYPE_CHECKING:
     from livery.git import Keyed, Series
@@ -203,6 +203,30 @@ def owned(answers: Mapping[str, Any], lookup: Lookup) -> tuple[str, ...]:
 #: Each rule by its name in a declaration.
 RULES: Mapping[str, Combine] = {UNION: _union, NEAREST: _nearest, AGREED: _agreed}
 
+
+class RequirementWriter(Protocol):
+    """Write a package's requirement on a sibling into one ecosystem's manifest.
+
+    An extension answers the ``requirement-writers`` query with its
+    writers, and every writer of a package's set is called for each
+    requirement. A writer takes a sibling of its own ecosystem alone:
+    for any other sibling it writes nothing and returns None, so the
+    requirement lands in the manifest of the sibling's ecosystem.
+    """
+
+    def __call__(
+        self, package: Package, dependency: Package, floor: str
+    ) -> list[str] | None:
+        """Write *dependency* at *floor* into *package*'s manifest.
+
+        Returns:
+            The files changed, relative to the package; empty when the
+            manifest names *dependency* already. None for a sibling
+            outside the writer's ecosystem, which it leaves alone.
+        """
+        ...
+
+
 #: The modules that declare the package's public API, by import path:
 #: what a type-completeness step verifies.
 PUBLIC_MODULES: Query[tuple[str, ...]] = Query("public-modules")
@@ -228,6 +252,10 @@ VERSION_FILES: Query[tuple[Path, ...]] = Query("version-files")
 #: What the package's native manifests require, each distribution's name
 #: to its constraint.
 REQUIREMENTS: Query[Mapping[str, str]] = Query("requirements")
+
+#: The writers of a requirement on a sibling into the package's native
+#: manifests, each for a sibling of its own ecosystem; every one is called.
+REQUIREMENT_WRITERS: Query[tuple[RequirementWriter, ...]] = Query("requirement-writers")
 
 #: The distributions the package releases, each as its ecosystem and its
 #: name.

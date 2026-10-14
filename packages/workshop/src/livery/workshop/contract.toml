@@ -1045,6 +1045,14 @@ combine = "union"
 [queries.requirements]
 combine = "livery.workshop._queries:merged"
 
+# The writers of a requirement on a sibling into a package's native
+# manifests, each a function called with the package, the sibling and
+# the floor. Every writer of the package's set is called, and each takes
+# a sibling of its own ecosystem alone, answering None for any other; a
+# sibling no writer takes refuses, naming the sibling's set.
+[queries.requirement-writers]
+combine = "union"
+
 # The distributions a package releases, each as its ecosystem and name.
 [queries.distributions]
 combine = "union"
