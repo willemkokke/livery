@@ -1397,6 +1397,11 @@ parts, each mergeable alone:
   answers `distributions` for a recipe that names a reference.
 - P1c (#1619): uv is the base's tool; cmake, ninja and conan are
   required by the extensions that run them.
+- P1d (built, #1621): cpp answers a `host-tools` query naming the C
+  compilers, until phase 14's toolchains; `fm doctor` and
+  `fm env.check` union the answers of the workspace's packages.
+- P1e (#1620): each extension writes its own manifest's requirement on
+  a sibling; a sibling no writer takes refuses.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
 - P1e (built, #1620): each extension writes its own manifest's
@@ -1591,6 +1596,7 @@ neither needs nor rules out).
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
+| cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |

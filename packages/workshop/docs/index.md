@@ -361,6 +361,7 @@ or the rule's answer over nothing. The base declares:
 | `distributions` | package | each released distribution's ecosystem and name | the union |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
+| `host-tools` | package | what the host must provide and no store installs, such as a C compiler; `fm doctor` and `fm env.check` name each one that does not resolve | the union |
 | `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
 | `python.docs-group` | workspace | the lines of the root project file's `docs` dependency group | the union |
