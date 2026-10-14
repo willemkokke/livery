@@ -1,17 +1,17 @@
 """Write the files a birth starts with, which are the workspace's own afterwards.
 
 A seed is a file an extension ships under `content/seeds/<tree>/`, where
-the tree names what is being born: `project` for a workspace,
-`package-base` and a kind's own tree (`package-python`, ...) for a
-member. [livery.workshop._seeds.create][] writes the seeds of every
-listed extension into a destination: a `.jinja` file rendered with
-minijinja and its suffix dropped, any other file copied byte for byte,
-and path names rendered too (`src/{{ source_path }}/...`). A file that
-exists is never touched, and nothing is receipted: once written, a seed
-belongs to the workspace, and no step judges it.
+the tree names what is being born: `project` for a workspace, and for a
+member the chain of trees `chain` names, `package-base` first and the
+package's own tree (`package-python`, ...) last. `create` writes the
+seeds of every listed extension into a destination: a `.jinja` file
+rendered with minijinja and its suffix dropped, any other file copied
+byte for byte, and path names rendered too (`src/{{ source_path }}/...`).
+A file that exists is never touched, and nothing is receipted: once
+written, a seed belongs to the workspace, and no step judges it.
 
 Within one extension, a later tree of the chain wins over an earlier
-one for the same path (a kind's tree over `package-base`). Two
+one for the same path (a package's tree over `package-base`). Two
 extensions seeding one path follow the shipped files' rule: the later
 one declares the earlier's under `[replaces]` or `[deletes]` in its
 `extension.toml`, or the birth refuses naming both. The fragment engine
@@ -38,8 +38,33 @@ TEMPLATE = ".jinja"
 PROJECT = "project"
 """The tree a workspace's birth writes."""
 
+PACKAGE_BASE = "package-base"
+"""The tree every member's birth writes first.
+
+The base's own holds the docs page and its nav, and a listed extension
+may ship seeds of its own under the same tree.
+"""
+
+#: Each package tree that a birth writes over another package tree, to
+#: that tree. A package tree not named here is written over
+#: `package-base` alone.
+PARENTS: dict[str, str] = {"package-python-nanobind": "package-python"}
+
 #: The base's project seeds, which `fm explain` names as seeds.
 PROJECT_SEEDS = ("docs/index.md", "README.md", "LICENSE")
+
+
+def chain(tree: str) -> tuple[str, ...]:
+    """The trees a birth of *tree* writes, in the order `create` takes: *tree* last.
+
+    A package tree, one named ``package-<name>``, comes after its parent
+    and the parent's own chain, so every member's chain starts at
+    `package-base`, the one home of the docs seeds. Any other tree, and
+    `package-base` itself, is written alone.
+    """
+    if tree == PACKAGE_BASE or not tree.startswith("package-"):
+        return (tree,)
+    return (*chain(PARENTS.get(tree, PACKAGE_BASE)), tree)
 
 
 def derived(facts: Mapping[str, Any]) -> dict[str, str]:

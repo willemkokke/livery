@@ -16,7 +16,6 @@ import pytest
 from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
-from livery.workshop._kinds import template_chain
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -71,13 +70,10 @@ def fresh_toolchain() -> object:
 
 @pytest.fixture
 def restored_registry():
-    from livery.workshop import _kinds, _steps
+    from livery.workshop import _steps
 
-    before = dict(_kinds._KINDS)
     steps = _steps.snapshot()
     yield
-    _kinds._KINDS.clear()
-    _kinds._KINDS.update(before)
     _steps.restore(steps)
 
 
@@ -372,8 +368,13 @@ def test_a_native_build_without_coverage_is_not_instrumented(
 def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._categories import category_of
-    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+    from livery.workshop._categories import (
+        CONFIGURATION,
+        SOURCE,
+        TEST,
+        TEST_SUPPORT,
+        category_of,
+    )
 
     package = _package(
         tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
@@ -622,13 +623,15 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
     assert workspace.read_text() == "packages: []\n" and not aside.exists()
 
 
-# The registry facts.
+# The seed chain and the tools.
 
 
-def test_the_kind_registers_alone_in_the_chain() -> None:
-    # Alone in the KIND chain (no python parent); the shared base
-    # template still renders first, carrying the docs seeds.
-    assert template_chain("package-cpp-conan") == (
+def test_the_cpp_seed_tree_is_written_over_the_base_alone() -> None:
+    # No python tree comes between them; the shared base tree still
+    # comes first, carrying the docs seeds.
+    from livery.workshop._seeds import chain
+
+    assert chain("package-cpp-conan") == (
         "package-base",
         "package-cpp-conan",
     )

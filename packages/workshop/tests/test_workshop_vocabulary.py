@@ -1,20 +1,22 @@
-"""The vocabulary test: the base names no kind, no extension's tool, no coverage verb.
+"""The vocabulary test: the base names no package extension, tool or coverage verb.
 
-The workshop's base (``livery.workshop`` outside ``_backends``) reaches
-a kind through the kind registry, never by importing a backend or by
-spelling the kind's words, names no tool a listed extension's steps
-bring, and names none of the coverage extension's verbs. This test
-scans the base's sources for each, and every extension's
-(``livery.extensions``) for an import of a backend.
+The workshop's base (``livery.workshop`` outside ``_backends``) names
+no package-level extension and no registry kind, the words this test
+looks for, and imports no backend: it asks the extensions a package
+holds instead. It names no tool a listed extension's steps bring, and
+none of the coverage extension's verbs. This test scans the base's
+sources for each, and every extension's (``livery.extensions``) for an
+import of a backend.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
 interpreter, the venv, the runtime's language and the project file of
 a member holding it), each with its reason; those stay. ``ALLOWANCE``
-holds what the base still knows of a kind today, one count per module
-and word. A count may only fall: a finding above it refuses, and a
-module that now finds fewer refuses until its count is lowered here,
-so the list always states what is left.
+holds what the base still names beyond it, one count per module and
+word, each with the change that removes it or the ruling that keeps
+it. A count may only fall: a finding above it refuses, and a module
+that now finds fewer refuses until its count is lowered here, so the
+list always states what is left.
 """
 
 from __future__ import annotations
@@ -59,37 +61,105 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("testing._conformance", "pyproject.toml"): (3, "the root pyproject's fragments"),
 }
 
-#: What the base still knows of a kind: (module, word) to count. Only falls.
-ALLOWANCE: dict[tuple[str, str], int] = {
-    ("_ci_generate", "conanfile.py"): 1,
-    # The refusal of a contract's kind names the list each kind's
-    # packages write in its place.
-    ("_contract", "conan"): 1,
-    ("_contract", "cpp-conan"): 1,
-    ("_contract", "python"): 2,
-    ("_devenv", "conan"): 1,
-    ("_e2e", "pyproject.toml"): 1,
-    ("_kinds", "cpp-conan"): 1,
-    ("_kinds", "python"): 2,
-    ("_publish", "python"): 1,
-    ("_registries", "conan"): 3,
-    ("_registries", "container"): 1,
-    ("_registries", "python"): 4,
-    ("_release", "python"): 1,
-    ("_release_driver", "conanfile.py"): 2,
-    ("_release_driver", "pyproject.toml"): 2,
-    ("_release_driver", "python"): 1,
-    ("_steps", BACKEND_IMPORT): 1,
-    ("_templates", "python"): 1,
-    ("_update", "pyproject.toml"): 1,
+#: What the base still names beyond its runtime: (module, word) to
+#: (count, reason). Each reason names the change that removes the row: a
+#: part of the kinds' removal (#1614), an issue, or a phase of the
+#: destination note; or the ruling that keeps it. Only falls.
+ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
+    ("_ci_generate", "conanfile.py"): (
+        1,
+        "a GitHub job's conan cache key, read from the recipes; the CI"
+        " placement review, #1534",
+    ),
+    ("_contract", "cmake"): (
+        1,
+        "the refusal of a contract's kind names the list cpp-conan's packages"
+        " write; kept, as ruled",
+    ),
+    ("_contract", "conan"): (
+        1,
+        "the refusal of a contract's kind names the list cpp-conan's packages"
+        " write; kept, as ruled",
+    ),
+    ("_contract", "nanobind"): (
+        1,
+        "the refusal of a contract's kind names the list python-nanobind's"
+        " packages write; kept, as ruled",
+    ),
+    ("_contract", "python"): (
+        2,
+        "the refusal of a contract's kind names the python kind and the list"
+        " its packages write; kept, as ruled",
+    ),
+    ("_devenv", "conan"): (1, "a loop environment's conan home; phase 15"),
+    ("_e2e", "nanobind"): (
+        1,
+        "the loop's check that a native member's wheels were built ahead;"
+        " phase 15 moves _e2e out of the base",
+    ),
+    ("_e2e", "pyproject.toml"): (
+        1,
+        "the loop's root project file, rendered again by the pass; phase 15"
+        " moves _e2e out of the base",
+    ),
+    ("_publish", "python"): (1, "the python registry a publish targets; phase 13"),
+    ("_registries", "conan"): (3, "the registry tables; phase 13"),
+    ("_registries", "container"): (1, "the registry tables; phase 13"),
+    ("_registries", "python"): (4, "the registry tables; phase 13"),
+    ("_release", "python"): (1, "the python registry a release resolves; phase 13"),
+    ("_release_driver", "conanfile.py"): (
+        2,
+        "the manifests a release stamps and commits; phase 13",
+    ),
+    ("_release_driver", "pyproject.toml"): (
+        2,
+        "the manifests a release stamps and commits; phase 13",
+    ),
+    ("_release_driver", "python"): (
+        1,
+        "the python registry the wave resolves; phase 13",
+    ),
+    ("_steps", "cmake"): (
+        3,
+        "the base's cmake build and test steps; #1614's P5 moves them",
+    ),
+    ("_steps", BACKEND_IMPORT): (
+        1,
+        "the base's cmake steps import the backend; #1614's P5 deletes it",
+    ),
+    ("_templates", "python"): (
+        1,
+        "the python registry the root project file renders; phase 13",
+    ),
+    ("_update", "pyproject.toml"): (
+        1,
+        "a sibling's floor bumped in the project file; phase 13",
+    ),
 }
 
 
 def _words() -> set[str]:
-    from livery.workshop._kinds import all_kinds
+    """The words the base never names: the package-level extensions and registry kinds.
 
-    concrete = {record.name for record in all_kinds() if not record.abstract}
-    return concrete | {"conan", "container"}
+    Each installed extension a package may list, and each kind of
+    registry an artifact is published to.
+    """
+    from typing import get_args
+
+    from livery.forge import RegistryKind
+    from livery.workshop._extensions import installed_extensions, levels_of
+
+    extensions = {
+        name for name in installed_extensions() if "package" in levels_of(name)
+    }
+    return extensions | set(get_args(RegistryKind))
+
+
+def _counts(
+    allowance: dict[tuple[str, str], tuple[int, str]],
+) -> dict[tuple[str, str], int]:
+    """*allowance*'s counts alone, as `judge` takes them."""
+    return {key: count for key, (count, _reason) in allowance.items()}
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -183,25 +253,38 @@ def judge(
                 " runtime list; lower it to what is left"
             )
             continue
-        kind_knowledge = found[key] - exempt
+        beyond = found[key] - exempt
         allowed = allowance.get(key, 0)
-        if kind_knowledge > allowed:
+        if beyond > allowed:
             problems.append(
-                f"{module}: {word!r} {kind_knowledge} time(s), {allowed} allowed;"
-                " the base names no package kind, so reach the kind through"
-                " its registration"
+                f"{module}: {word!r} {beyond} time(s), {allowed} allowed;"
+                " the base names no package-level extension and no registry"
+                " kind, so ask the extensions a package holds"
             )
-        elif kind_knowledge < allowed:
+        elif beyond < allowed:
             problems.append(
-                f"{module}: {word!r} {kind_knowledge} time(s) now, {allowed} in"
+                f"{module}: {word!r} {beyond} time(s) now, {allowed} in"
                 " the allowance; lower it to what is left"
             )
     return problems
 
 
-def test_the_base_names_no_kind_beyond_its_allowance() -> None:
+def test_the_words_are_the_package_level_extensions_and_the_registry_kinds() -> None:
+    # The scan has something to look for: every extension a package may
+    # list, and the registry kind no extension is named after.
+    assert {"cmake", "conan", "cpp", "nanobind", "python", "container"} <= _words()
+
+
+def test_the_base_names_no_word_beyond_its_allowance() -> None:
     found, _ = scan(SRC, _words())
-    assert judge(found, RUNTIME, ALLOWANCE) == []
+    assert judge(found, RUNTIME, _counts(ALLOWANCE)) == []
+
+
+@pytest.mark.parametrize("key", sorted(ALLOWANCE))
+def test_every_allowance_entry_states_its_reason(key: tuple[str, str]) -> None:
+    count, reason = ALLOWANCE[key]
+    assert count > 0
+    assert reason
 
 
 def test_no_extension_imports_a_backend() -> None:
@@ -447,21 +530,22 @@ def test_a_base_module_importing_a_backend_refuses(tmp_path: Path) -> None:
     assert problem.startswith("_fresh: 'import a backend' 1 time(s), 0 allowed")
 
 
-def test_a_new_kind_literal_in_the_base_refuses_naming_the_module(
+def test_a_new_word_literal_in_the_base_refuses_naming_the_module(
     tmp_path: Path,
 ) -> None:
     src = _base_module(
         tmp_path,
         "_fresh.py",
-        '"""A docstring naming conan is prose."""\nKIND = "conan"\n'
+        '"""A docstring naming conan is prose."""\nNAME = "conan"\n'
         'HOME = "packages/x/pyproject.toml"\n',
     )
     found, _ = scan(src, {"conan"})
     assert judge(found, {}, {}) == [
-        "_fresh: 'conan' 1 time(s), 0 allowed; the base names no package kind,"
-        " so reach the kind through its registration",
+        "_fresh: 'conan' 1 time(s), 0 allowed; the base names no package-level"
+        " extension and no registry kind, so ask the extensions a package holds",
         "_fresh: 'pyproject.toml' 1 time(s), 0 allowed; the base names no"
-        " package kind, so reach the kind through its registration",
+        " package-level extension and no registry kind, so ask the extensions a"
+        " package holds",
     ]
 
 
@@ -470,8 +554,8 @@ def test_the_allowance_only_falls(tmp_path: Path) -> None:
     found, _ = scan(src, {"conan"})
     assert judge(found, {}, {("_fresh", "conan"): 2}) == []
     assert judge(found, {}, {("_fresh", "conan"): 1}) == [
-        "_fresh: 'conan' 2 time(s), 1 allowed; the base names no package kind,"
-        " so reach the kind through its registration"
+        "_fresh: 'conan' 2 time(s), 1 allowed; the base names no package-level"
+        " extension and no registry kind, so ask the extensions a package holds"
     ]
     assert judge(found, {}, {("_fresh", "conan"): 3}) == [
         "_fresh: 'conan' 2 time(s) now, 3 in the allowance; lower it to what is left"

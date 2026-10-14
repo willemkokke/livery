@@ -899,6 +899,46 @@ def test_a_tree_no_listed_extension_seeds_refuses_naming_it(
     assert not (root / "packages" / "thing").exists()
 
 
+# The seed chain a member's birth writes, the fallbacks first.
+
+
+def test_a_tree_that_is_no_package_s_is_written_alone() -> None:
+    from livery.workshop._seeds import chain
+
+    # A workspace's tree, and the base tree every package starts from.
+    assert chain("project") == ("project",)
+    assert chain("package-base") == ("package-base",)
+
+
+def test_a_package_tree_no_parent_names_is_written_over_the_base_alone() -> None:
+    from livery.workshop._seeds import chain
+
+    # The extension package's tree, and one an extension of its own ships.
+    assert chain("package-extension") == ("package-base", "package-extension")
+    assert chain("package-lua") == ("package-base", "package-lua")
+
+
+def test_a_package_tree_is_written_over_its_parent_s_chain() -> None:
+    from livery.workshop._seeds import chain
+
+    assert chain("package-python") == ("package-base", "package-python")
+    assert chain("package-python-nanobind") == (
+        "package-base",
+        "package-python",
+        "package-python-nanobind",
+    )
+
+
+def test_every_tree_the_chain_names_is_one_the_base_ships() -> None:
+    from livery.workshop._extensions import SELF, extension_content
+    from livery.workshop._seeds import PACKAGE_BASE, PARENTS, SEEDS
+
+    content = extension_content(SELF)
+    assert content is not None
+    named = {PACKAGE_BASE, *PARENTS, *PARENTS.values()}
+    assert {tree for tree in named if not (content / SEEDS / tree).is_dir()} == set()
+
+
 def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
     # The fallbacks first: no contract, then a contract without the
     # table, both answer empty and a template reading it keeps its own

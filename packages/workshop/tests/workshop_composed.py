@@ -60,13 +60,12 @@ SEED_DEFAULTS: dict[str, Any] = {
 def seed_into(destination: Path, tree: str, data: Mapping[str, Any]) -> Path:
     """Write the seeds of *tree* into *destination*, as a birth would.
 
-    A package tree (`package-python`, ...) writes its kind's whole chain,
+    A package tree (`package-python`, ...) writes its whole chain,
     `package-base` first. The seeds come from the base alone, through a
     scratch workspace listing no extensions; *data* overrides
     `SEED_DEFAULTS`, and the derived names follow the package's name.
     """
-    from livery.workshop._kinds import template_chain
-    from livery.workshop._seeds import create, derived
+    from livery.workshop._seeds import chain, create, derived
 
     full = {**SEED_DEFAULTS, **data}
     if "package_name" in full:
@@ -75,7 +74,7 @@ def seed_into(destination: Path, tree: str, data: Mapping[str, Any]) -> Path:
             f"{full['package_name']}: a {full['project_name']} workspace package.",
         )
         full.update(derived(full))
-    trees = template_chain(tree) if tree.startswith("package-") else (tree,)
+    trees = chain(tree)
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         (root / "workshop.toml").write_text(

@@ -10,9 +10,8 @@ from typing import cast
 import pytest
 
 import livery.workshop.testing
-from livery.workshop import _categories, _kinds, _steps
+from livery.workshop import _categories, _steps
 from livery.workshop._fragments import Fragment, package_fragment
-from livery.workshop._kinds import KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -29,28 +28,22 @@ EXTENSION = "acme.extension"
 
 @pytest.fixture
 def acme() -> Iterator[None]:
-    """Restore the kinds, steps and category tables a test registers into."""
-    kinds = dict(_kinds._KINDS)  # pyright: ignore[reportPrivateUsage]
+    """Restore the steps a test registers."""
     steps = _steps.snapshot()
     yield
-    _kinds._KINDS.clear()  # pyright: ignore[reportPrivateUsage]
-    _kinds._KINDS.update(kinds)  # pyright: ignore[reportPrivateUsage]
     _steps.restore(steps)
-    _categories.unregister_categories(_categories.BASE_TABLE, extension=EXTENSION)
 
 
 def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 
-def _family() -> tuple[KindRecord, KindRecord]:
-    """A parent kind and its child, both python underneath."""
-    python = kind_for("python")
-    parent = replace(python, name="acme-parent", parent="python", template="")
-    child = replace(python, name="acme-child", parent="acme-parent", template="")
-    register_kind(parent)
-    register_kind(child)
-    return parent, child
+#: A package-level extension whose one table claims ``lib/x.py`` twice at
+#: one specificity, for different categories.
+TIED = (
+    '[extension]\nlevels = ["package"]\n\n[categories]\n'
+    'source = ["lib/*.py"]\ntest = ["lib/x*.p*"]\n'
+)
 
 
 def _names(subject: Subject, clause: str) -> list[str]:
@@ -88,20 +81,53 @@ def test_two_steps_carrying_one_file_for_one_extension_break_the_fragment_owner(
 
 
 def test_two_rules_of_one_table_at_one_specificity_break_the_category_table(
-    acme: None,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _parent, child = _family()
-    _categories.register_categories(
-        _categories.BASE_TABLE,
-        [("lib/*.py", "source"), ("lib/x*.p*", "test")],
-        extension=EXTENSION,
+    from workshop_extension_fakes import fake_package_extensions
+
+    fake_package_extensions(tmp_path, monkeypatch, lib=TIED)
+    found = _names(Subject(EXTENSION, sets=(("acme.lib",),)), "category-table")
+    assert found == [
+        "category-table: set acme.lib lib/x.py: 'lib/*.py' (source, acme.lib) and"
+        " 'lib/x*.p*' (test, acme.lib) claim it at one specificity in one table;"
+        " one of them names the file more closely"
+    ]
+
+
+def test_a_subject_naming_no_set_probes_no_package(
+    acme: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _quality
+    from workshop_extension_fakes import fake_package_extensions
+
+    # acme.lib's table ties, and no set names it, so no probe holds it.
+    fake_package_extensions(tmp_path, monkeypatch, lib=TIED)
+    assert _names(Subject(EXTENSION), "category-table") == []
+    # A walk that judges nothing: the package step has no package to judge,
+    # so only the fixer that never rewrote is named.
+    monkeypatch.setattr(_quality, "walk", _walked_nothing)
+    assert _names(replace(_walkers(), sets=()), "walk-order") == [
+        "walk-order: step format.acme-fixer: never rewrote under --fix",
+    ]
+
+
+def test_a_probe_of_the_empty_set_is_named_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A package listing nothing holds the base's table alone, so a tie
+    # there is the empty set's.
+    tied = tuple(
+        _categories.CategoryRule(
+            _categories.BASE_TABLE, pattern, category, "livery.workshop"
+        )
+        for pattern, category in (("lib/*.py", "source"), ("lib/x*.p*", "test"))
     )
-    found = _names(Subject(EXTENSION, kinds=(child,)), "category-table")
-    assert any(
-        "kind acme-child lib/x.py: 'lib/*.py' (source, acme.extension) and 'lib/x*.p*'"
-        " (test, acme.extension) claim it at one specificity in one table" in line
-        for line in found
-    )
+    monkeypatch.setattr(_categories, "BASE_RULES", (*tied, *_categories.BASE_RULES))
+    assert _names(Subject(EXTENSION, sets=((),)), "category-table") == [
+        "category-table: set none lib/x.py: 'lib/*.py' (source, livery.workshop)"
+        " and 'lib/x*.p*' (test, livery.workshop) claim it at one specificity in"
+        " one table; one of them names the file more closely"
+    ]
 
 
 def test_a_step_after_nothing_or_after_itself_breaks_the_step_order(
@@ -234,8 +260,8 @@ def test_a_claim_on_an_unknown_category_or_a_bare_suffix_breaks_the_clause(
     clause = "claims-name-categories"
     assert _names(Subject("acme_kit_claims"), clause) == [
         "claims-name-categories: phases.lint.acme.claims: names the category"
-        " 'sources', which no extension registers; did you mean 'source'?; the"
-        " step claims no file of it",
+        " 'sources', which the workshop does not know; did you mean 'source'?;"
+        " the step claims no file of it",
         "claims-name-categories: phases.lint.acme.claims: names the suffix 'py';"
         " a suffix starts with a dot, '.py'",
     ]
@@ -524,7 +550,12 @@ def _walkers() -> Subject:
         )
     )
     steps = (step_for("format.acme-fixer"), step_for("lint.acme-judge"))
-    return Subject(EXTENSION, steps=steps)
+    return Subject(EXTENSION, sets=(("python",),), steps=steps)
+
+
+def _walked_nothing(ctx: PhaseContext, **kwargs: object) -> None:
+    """A gate walk that starts no step."""
+    del ctx, kwargs
 
 
 def test_a_step_registered_without_its_extension_breaks_the_gate_lines(
@@ -595,10 +626,7 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
         " rewrote is not judged again",
     ]
 
-    def idle(ctx: PhaseContext, **kwargs: object) -> None:
-        del ctx, kwargs
-
-    monkeypatch.setattr(_quality, "walk", idle)
+    monkeypatch.setattr(_quality, "walk", _walked_nothing)
     assert _names(subject, "walk-order") == [
         "walk-order: step format.acme-fixer: never rewrote under --fix",
         "walk-order: step lint.acme-judge: never judged under --fix",
@@ -643,7 +671,7 @@ def test_a_package_fragment_renders_for_the_extensions_a_package_holds(
 
 
 def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
-    acme: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from workshop_extension_fakes import fake_package_extensions
 
@@ -654,17 +682,11 @@ def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
         early=declared.format("generated"),
         late=declared.format("source"),
     )
-    from livery.workshop import _contract
-
-    child = replace(kind_for("python"), name="acme-child", parent="python", template="")
-    register_kind(child)
-    # A package of the kind lists the two, which the kit's probe lists too.
-    monkeypatch.setitem(
-        _contract.REMOVED_KINDS, "acme-child", ("acme.early", "acme.late")
-    )
-    found = _categories.category_of(_checks_package("acme.early", "acme.late"), "gen/a")
+    listed = ("acme.early", "acme.late")
+    found = _categories.category_of(_checks_package(*listed), "gen/a")
     assert (found.name, found.supplier) == ("source", "acme.late")
-    assert _names(Subject(EXTENSION, kinds=(child,)), "category-table") == []
+    # The kit's probe of a package listing the two finds the same answer.
+    assert _names(Subject(EXTENSION, sets=(listed,)), "category-table") == []
     # The rules come nearest table first: the later composed extension's.
     rules = _categories.category_rules(("acme.early", "acme.late"))
     assert rules[0].table == "acme.late"
@@ -677,12 +699,17 @@ def _checks_package(*extensions: str) -> Package:
 # Then the builtins, and the kit's own shape.
 
 
-def test_the_builtin_kinds_and_steps_pass_every_clause() -> None:
+def test_the_builtin_steps_pass_every_clause() -> None:
     subject = builtin_subject()
-    assert {kind.name for kind in subject.kinds} >= {
-        "python",
-        "python-nanobind",
-        "cpp-conan",
+    # A package that lists nothing, and one listing each package-level
+    # extension the workshop's wheel ships.
+    assert set(subject.sets) >= {
+        (),
+        ("cmake",),
+        ("conan",),
+        ("cpp",),
+        ("nanobind",),
+        ("python",),
     }
     assert {record.name for record in subject.steps} >= {
         "build.compile",

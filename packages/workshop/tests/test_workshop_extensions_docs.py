@@ -253,16 +253,11 @@ def _language_words() -> set[str]:
     """The words of a language the docs extension never names outside prose.
 
     The language the API reference renders and the tools that read it,
-    each part of every concrete kind's name, and the name of every
-    installed extension a package lists.
+    and the name of every installed extension a package lists.
     """
     from livery.workshop._extensions import installed_extensions, levels_of
-    from livery.workshop._kinds import all_kinds
 
     words = {"python", "griffe", "mkdocstrings"}
-    for record in all_kinds():
-        if not record.abstract:
-            words.update(record.name.split("-"))
     words.update(
         name for name in installed_extensions() if "package" in levels_of(name)
     )
@@ -367,13 +362,12 @@ _BUILDER_GROUP = "queries.python.docs-group"
 def test_the_docs_extension_names_no_language() -> None:
     """Docs' sources and declaration name no language outside their prose.
 
-    No python, griffe or mkdocstrings word and no part of a kind's name
-    in a name, a string or a declared key or value, and no import of
-    the kind registry: what renders a language's API reference is an
-    extension of its own, which answers the docs extension's queries
-    and adds its steps. The key of the docs extension's answer to the
-    query that installs the site's builder names where the builder
-    installs, and is left out.
+    No python, griffe or mkdocstrings word and no name of an extension
+    a package lists, in a name, a string or a declared key or value:
+    what renders a language's API reference is an extension of its own,
+    which answers the docs extension's queries and adds its steps. The
+    key of the docs extension's answer to the query that installs the
+    site's builder names where the builder installs, and is left out.
     """
     import tomllib
 
@@ -387,12 +381,6 @@ def test_the_docs_extension_names_no_language() -> None:
             f"{path.name}:{line} {word}"
             for line, word in _code_words(source)
             if word in words
-        ]
-        found += [
-            f"{path.name}:{node.lineno} imports {node.module}"
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.ImportFrom)
-            and (node.module or "").startswith("livery.workshop._kinds")
         ]
     declaration = tomllib.loads((docs / "extension.toml").read_text("utf-8"))
     declared = _declared_words(declaration)

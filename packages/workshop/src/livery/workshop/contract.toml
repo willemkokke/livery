@@ -659,7 +659,7 @@ doc = "one category the step judges, with the rules it leaves out and the suffix
 
 [contract.extension.phases."*"."*"."claims[]".category]
 types = ["str"]
-doc = "the category the step judges: source, test, test-support, configuration, example, or one an extension registers"
+doc = "the category the step judges: source, test, test-support, configuration, example, or another the base's category tables name"
 
 [contract.extension.phases."*"."*"."claims[]".ignore]
 types = ["strs"]

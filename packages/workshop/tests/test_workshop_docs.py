@@ -1091,9 +1091,9 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
 
 def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
     # Every package's seed chain starts at package-base, the one home
-    # of the docs seeds; a copy in a kind's tree would shadow the
-    # base's and rot separately.
-    from livery.workshop._kinds import template_chain
+    # of the docs seeds; a copy in another package tree would shadow
+    # the base's and rot separately.
+    from livery.workshop._seeds import chain
 
     templates = (
         Path(__file__).resolve().parents[1]
@@ -1110,7 +1110,7 @@ def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
         if template.name == "package-base":
             continue
         assert not (template / "docs").exists(), template
-        assert template_chain(template.name)[0] == "package-base"
+        assert chain(template.name)[0] == "package-base"
 
 
 # The config surface and the theme. Refusals first.

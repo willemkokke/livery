@@ -1,23 +1,20 @@
-"""The two questions the workshop asks about a path, one store, two axes.
+"""The two questions the workshop asks about a path, on two axes.
 
 A path's **category** says what it is to its package: source, test,
-test support, configuration, and whatever an extension adds, prose,
+test support, configuration, and whatever a table adds, prose,
 example, asset, nav. Its **channel** says who wrote it and where to
 edit it: rendered, generated, materialised, seed, contract, yours.
 Neither answer can be read off the other, so the vocabularies stay
-apart, and one store keyed by axis holds both with a typed pair of
-functions per axis: [livery.workshop._categories.register_categories][]
-and [livery.workshop._categories.category_of][],
-[livery.workshop._categories.register_channels][] and
-[livery.workshop._categories.channel_of][].
+apart: `category_of` answers the first, and `channel_of` the second
+from the rules `register_channels` adds.
 
 A category rule is a pattern in a table, since nothing a category
 needs reads state: an extension declares its own table under
-``[categories]`` in its ``extension.toml``, and the base registers
-two, the one beneath every package's extensions and the one for the
-workspace's own unit. A channel rule is a callable with a rank, since
-it reads the delivery manifest, the emitted set and the template
-source.
+``[categories]`` in its ``extension.toml``, and the base's two tables
+are data here, `BASE_RULES` beneath every package's extensions and
+`WORKSPACE_RULES` for the workspace's own unit. A channel rule is a
+callable with a rank, since it reads the delivery manifest, the
+emitted set and the template source.
 
 The most specific category rule wins. Between rules of one
 specificity from two tables, the nearer table wins: of the extensions
@@ -26,10 +23,11 @@ extension comes after the extensions it requires and the others go
 alphabetically, and the base's table last. Two rules of one table and
 one specificity that claim one path for different categories, or from
 different extensions, refuse naming both, so two checkouts of one
-commit answer alike and nothing is settled by registration order in
-silence. A package's contract may reassign its own paths among the
-categories, ``[categories] vendored = ["docs/assets/vendor/**"]``,
-and that table wins over every rule of its extensions and the base.
+commit answer alike and the order a table lists its rules in settles
+nothing in silence. A package's contract may reassign its own paths
+among the categories,
+``[categories] vendored = ["docs/assets/vendor/**"]``, and that table
+wins over every rule of its extensions and the base.
 """
 
 from __future__ import annotations
@@ -54,27 +52,24 @@ CONFIGURATION = "configuration"
 #: page shows by snippet, run by the examples step and no suite.
 EXAMPLE = "example"
 
-#: The name of the table the base registers for the workspace's own
-#: unit, the root's tests and the files beside them.
+#: The name of the base's table for the workspace's own unit, the
+#: root's tests and the files beside them.
 WORKSPACE = "workspace"
 
-#: The base's table, whose rules (the documentation's paths, and
-#: configuration for the rest) answer for every package, beneath the
-#: tables of the extensions it holds.
+#: The name of the base's table, whose rules (the documentation's
+#: paths, and configuration for the rest) answer for every package,
+#: beneath the tables of the extensions it holds.
 BASE_TABLE = "base"
-
-#: The tables the base registers rules into.
-TABLES = (BASE_TABLE, WORKSPACE)
 
 #: The extension the builtin rules belong to.
 _BASE = "livery.workshop"
 
 
 class CategoryError(ValueError):
-    """A registry refuses a claim, naming what it refuses.
+    """Two rules claim one path at one level; the message names both.
 
-    Two rules of one specificity claim one path, or a rule names a
-    table no package reads.
+    Two category rules of one table and one specificity, or two
+    channel rules of one rank.
     """
 
 
@@ -84,8 +79,7 @@ class CategoryRule:
 
     Attributes:
         table: The table the rule belongs to: the extension that
-            declares it, or ``base`` or ``workspace``, the two the base
-            registers.
+            declares it, or ``base`` or ``workspace``, the base's two.
         pattern: A path pattern relative to the package, ``src/**``,
             ``tests/**/test_*.py``, ``**``.
         category: The label the pattern claims.
@@ -171,7 +165,36 @@ class Channel:
     supplier: str
 
 
-_CATEGORIES: dict[str, list[CategoryRule]] = {}
+#: The base's table, beneath the tables of every package's extensions:
+#: the documentation's paths, and configuration for the rest.
+BASE_RULES: tuple[CategoryRule, ...] = tuple(
+    CategoryRule(BASE_TABLE, pattern, category, _BASE)
+    for pattern, category in (
+        ("docs/**/*.md", "prose"),
+        ("docs/nav.toml", "nav"),
+        ("docs/assets/**", "asset"),
+        ("docs/examples/**/*.py", EXAMPLE),
+        ("docs/_generated/**", "generated"),
+        ("**", CONFIGURATION),
+    )
+)
+
+#: The workspace's own unit's table: its tests as python's table reads
+#: them, and the files beside them that only the site or nobody reads.
+WORKSPACE_RULES: tuple[CategoryRule, ...] = tuple(
+    CategoryRule(WORKSPACE, pattern, category, _BASE)
+    for pattern, category in (
+        ("tests/**/test_*.py", TEST),
+        ("tests/**/*_test.py", TEST),
+        ("tests/**", TEST_SUPPORT),
+        ("notes/**", "notes"),
+        ("docs/**", "site"),
+        ("zensical.toml", "site"),
+        ("README.md", "readme"),
+        ("**", CONFIGURATION),
+    )
+)
+
 _CHANNELS: list[ChannelRule] = []
 
 
@@ -211,44 +234,6 @@ def matches(pattern: str, path: str) -> bool:
     return _regex(pattern).match(path) is not None
 
 
-def register_categories(
-    table: str, rules: Iterable[tuple[str, str]], *, extension: str = _BASE
-) -> None:
-    """Register *rules*, ``(pattern, category)`` pairs, into *table*.
-
-    *table* is ``base``, the table beneath every package's extensions,
-    or ``workspace``, the workspace's own unit's. Registering the same
-    pattern into the same table from the same extension replaces the
-    earlier claim.
-
-    Raises:
-        CategoryError: when *table* is neither, naming the two: no
-            package reads another, and an extension's own rules are the
-            ``[categories]`` its ``extension.toml`` declares.
-    """
-    if table not in TABLES:
-        raise CategoryError(
-            f"{extension} registers category rules into {table!r}, which no"
-            f" package reads: the tables are {', '.join(TABLES)}, and an"
-            " extension declares its own under [categories] in its"
-            " extension.toml"
-        )
-    found = _CATEGORIES.setdefault(table, [])
-    for pattern, category in rules:
-        found[:] = [
-            rule
-            for rule in found
-            if not (rule.pattern == pattern and rule.extension == extension)
-        ]
-        found.append(CategoryRule(table, pattern, category, extension))
-
-
-def unregister_categories(table: str, *, extension: str) -> None:
-    """Withdraw every rule *extension* registered into *table*."""
-    found = _CATEGORIES.get(table, [])
-    found[:] = [rule for rule in found if rule.extension != extension]
-
-
 def category_rules(extensions: Iterable[str]) -> tuple[CategoryRule, ...]:
     """The rules that answer for a package holding *extensions*, the nearest first.
 
@@ -263,13 +248,13 @@ def category_rules(extensions: Iterable[str]) -> tuple[CategoryRule, ...]:
     found: list[CategoryRule] = []
     for name in reversed(order_or_sorted(extensions, installed_declaration)):
         found.extend(extension_rules(name))
-    found.extend(_CATEGORIES.get(BASE_TABLE, ()))
+    found.extend(BASE_RULES)
     return tuple(found)
 
 
 def workspace_rules() -> tuple[CategoryRule, ...]:
     """The rules that answer for the workspace's own unit: its table alone."""
-    return tuple(_CATEGORIES.get(WORKSPACE, ()))
+    return WORKSPACE_RULES
 
 
 def extension_rules(extension: str) -> tuple[CategoryRule, ...]:
@@ -409,41 +394,7 @@ def channel_of(
 
 
 def known_categories() -> frozenset[str]:
-    """Every category a registered table names, the four builtin ones among them."""
+    """The four builtin categories, and every category the base's two tables name."""
     found = {SOURCE, TEST, TEST_SUPPORT, CONFIGURATION}
-    for rules in _CATEGORIES.values():
-        found.update(rule.category for rule in rules)
+    found.update(rule.category for rule in (*BASE_RULES, *WORKSPACE_RULES))
     return frozenset(found)
-
-
-def _register_builtin() -> None:
-    """The base's two tables: the one beneath every package's, and the root's."""
-    register_categories(
-        BASE_TABLE,
-        [
-            ("docs/**/*.md", "prose"),
-            ("docs/nav.toml", "nav"),
-            ("docs/assets/**", "asset"),
-            ("docs/examples/**/*.py", EXAMPLE),
-            ("docs/_generated/**", "generated"),
-            ("**", CONFIGURATION),
-        ],
-    )
-    # The workspace's own unit: its tests as python's table reads them,
-    # and the files beside them that only the site or nobody reads.
-    register_categories(
-        WORKSPACE,
-        [
-            ("tests/**/test_*.py", TEST),
-            ("tests/**/*_test.py", TEST),
-            ("tests/**", TEST_SUPPORT),
-            ("notes/**", "notes"),
-            ("docs/**", "site"),
-            ("zensical.toml", "site"),
-            ("README.md", "readme"),
-            ("**", CONFIGURATION),
-        ],
-    )
-
-
-_register_builtin()

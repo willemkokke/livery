@@ -23,9 +23,7 @@ from livery.workshop._categories import (
     matches,
 )
 from livery.workshop._composition import extension_set
-from livery.workshop._contract import REMOVED_KINDS
 from livery.workshop._fragments import Fragment, package_fragment
-from livery.workshop._kinds import KindRecord, all_kinds
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -52,14 +50,16 @@ class Subject:
         extension: The extension's package, ``acme.extension``: where its
             ``extension.toml`` sits, which the kit reads as the mount
             does.
-        kinds: The kinds the extension registers; the kit judges a
-            probe package of each, which lists what a package of the
-            kind lists ([livery.workshop._contract.REMOVED_KINDS][]).
+        sets: The sets of package-level extensions the kit probes, each
+            as the list a package writes for it, ``("acme",)``. The
+            category-table clause judges a package listing each, and the
+            gate's walk runs over a workspace holding one such package
+            for each.
         steps: The steps the extension registers.
     """
 
     extension: str
-    kinds: tuple[KindRecord, ...] = ()
+    sets: tuple[tuple[str, ...], ...] = ()
     steps: tuple[StepRecord, ...] = ()
 
 
@@ -69,7 +69,7 @@ class Violation:
 
     Attributes:
         clause: The clause's name.
-        where: What the violation concerns: a kind, a step, a file or
+        where: What the violation concerns: a set, a step, a file or
             a path.
         reason: What is wrong, and what the gate does because of it.
     """
@@ -204,27 +204,27 @@ def _documented_answer(held: tuple[str, ...], path: str) -> list[CategoryRule]:
     return [first]
 
 
-def _listed(kind: KindRecord) -> tuple[str, ...]:
-    """What a package of *kind* lists; none for a kind the table does not name."""
-    return REMOVED_KINDS.get(kind.name, ())
+def _set_name(listed: tuple[str, ...]) -> str:
+    """*listed* as a violation names it: its names joined with ``+``, or none."""
+    return "+".join(listed) or "none"
 
 
 def _category_table(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
-    for kind in subject.kinds:
+    for listed in subject.sets:
         probe = Package(
             Path("."),
             "packages/probe",
             "probe",
             (),
-            extensions=_listed(kind),
+            extensions=listed,
         )
         held = extension_set(probe)
         for rule in category_rules(held):
             path = _representative(rule.pattern)
             if not matches(rule.pattern, path):
                 continue
-            where = f"kind {kind.name} {path}"
+            where = f"set {_set_name(listed)} {path}"
             wanted = _documented_answer(held, path)
             if len(wanted) > 1:
                 first, second = wanted[0], wanted[1]
@@ -563,8 +563,8 @@ def _claims_name_categories(subject: Subject) -> list[Violation]:
                         Violation(
                             CLAIMS_NAME_CATEGORIES,
                             where,
-                            f"names the category {claim.category!r}, which no"
-                            f" extension registers{hint}; the step claims no"
+                            f"names the category {claim.category!r}, which the"
+                            f" workshop does not know{hint}; the step claims no"
                             " file of it",
                         )
                     )
@@ -866,21 +866,22 @@ class _Recorder:
 _UNCLAIMED = "probe/unclaimed.probe"
 
 
-def _probe_packages(root: Path) -> tuple[Package, ...]:
-    """One probe package of each concrete kind, listing what a package of it lists.
+def _probe_packages(
+    root: Path, sets: tuple[tuple[str, ...], ...]
+) -> tuple[Package, ...]:
+    """One probe package for each of *sets*, listing it.
 
     So a package step finds its own.
     """
     return tuple(
         Package(
-            root / "packages" / kind.name,
-            f"packages/{kind.name}",
-            f"probe-{kind.name}",
+            root / "packages" / f"probe-{index}",
+            f"packages/probe-{index}",
+            f"probe-{index}",
             (),
-            extensions=_listed(kind),
+            extensions=listed,
         )
-        for kind in all_kinds()
-        if not kind.abstract
+        for index, listed in enumerate(sets)
     )
 
 
@@ -932,7 +933,7 @@ def _probe_walk(
             root = Path(scratch)
             (root / _UNCLAIMED).parent.mkdir(parents=True)
             (root / _UNCLAIMED).write_text("probe\n")
-            packages = _probe_packages(root)
+            packages = _probe_packages(root, subject.sets)
             ctx = PhaseContext(
                 root=root,
                 packages=packages,
@@ -1081,8 +1082,8 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         CLAIMS_NAME_CATEGORIES,
-        "Every category a step's claims name is one an extension registers,"
-        " and every suffix starts with a dot.",
+        "Every category a step's claims name is one the workshop knows, and"
+        " every suffix starts with a dot.",
         _claims_name_categories,
     ),
     Clause(
@@ -1145,10 +1146,22 @@ def judge(subject: Subject) -> list[Violation]:
 
 
 def builtin_subject() -> Subject:
-    """The workshop's own kinds and steps as a subject, for its own suite."""
+    """The workshop's own steps as a subject, for its own suite.
+
+    Its sets are the empty one, whose package the base's table answers
+    for alone, and each installed package-level extension's alone.
+    """
+    from livery.workshop._composition import package_level
+    from livery.workshop._extensions import installed_declaration, installed_extensions
+
+    package_level_names = [
+        name
+        for name in installed_extensions()
+        if package_level(name, installed_declaration)
+    ]
     return Subject(
         BASE_EXTENSION,
-        kinds=all_kinds(),
+        sets=((), *((name,) for name in package_level_names)),
         steps=tuple(
             record
             for record in steps_by_name().values()
