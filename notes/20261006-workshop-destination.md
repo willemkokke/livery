@@ -1349,12 +1349,18 @@ alone.
   the shallowest of its module roots; and every docs build first
   removes `docs/_generated/` at the root and in each package, so a
   step no longer listed leaves nothing behind there.
-- PD: the `docs` dependency group follows what a workspace lists, and
-  `griffelib` leaves the workshop's runtime dependencies.
+- PD (built, #1606): the `docs` dependency group follows what a
+  workspace lists: the base declares the `python.docs-group` query
+  while python ships in the workshop wheel, docs answers zensical and
+  mkdocstrings answers mkdocstrings-python. `griffelib` leaves the
+  workshop's runtime dependencies for its `test` extra, which the
+  isolated release legs install.
 
 `zensical.toml` stays the build's own file: its nav reads pages the
 generators write during the build, so it cannot be rendered by `fm
-sync`. The docs extension names no language.
+sync`. The docs extension names no language, apart from the key of
+its answer to `python.docs-group`: the site's toolchain installs into
+the python environment.
 
 Acceptance, refusals first:
 
@@ -3151,6 +3157,21 @@ neither needs nor rules out).
   would be a second truth beside the native manifest. A CMake-only
   package's target type needs a configure to read, so the workshop
   reads it only where it builds.
+- 2026-10-14, 11c's PD (#1606): the root `pyproject.toml`'s `docs`
+  group renders the `python.docs-group` query, which the base declares
+  beside `python.dev-group` while the python extension ships in the
+  workshop wheel. docs answers `zensical>=0.0.50` and mkdocstrings
+  `mkdocstrings-python>=1.11`, so a workspace without docs composes an
+  empty group, which stays declared because `default-groups` names it.
+  `griffelib` moves from the workshop wheel's runtime dependencies to
+  its `test` extra, which the isolated release legs install; a
+  workspace gets griffe through mkdocstrings-python while mkdocstrings
+  is listed. This replaces the extensions plan's 2026-10-06 entry that
+  kept griffelib a runtime dependency until the docs extension ships.
+  Found while proving it: the workshop on main needs a livery-git newer
+  than its 0.1.0 floor (#1626), so the next release names git with the
+  workshop and the train raises the floor. 11c is complete with this
+  part.
 
 ## Open
 

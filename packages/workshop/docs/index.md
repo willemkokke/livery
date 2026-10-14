@@ -361,6 +361,7 @@ or the rule's answer over nothing. The base declares:
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
 | `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
+| `python.docs-group` | workspace | the lines of the root project file's `docs` dependency group | the union |
 | `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
@@ -444,11 +445,15 @@ reach the tool profile while a package it judges exists, each
 requirement naming `step <name>` as its site, so unregistering a
 step removes its tool. What the base template leaves to the listed
 extensions, they answer through workspace-level queries: the `dev`
-dependency group's tool lines and pytest's `addopts` are the union of
-the answers in list order, and a rendered template reads any
-workspace-level query by its name, `queries['python.dev-group']`. The
-docs extension declares three more. The site's config, `docs.config`:
-an extension that adds tables to it answers with the function that
+dependency group's tool lines, the `docs` dependency group's lines and
+pytest's `addopts` are the union of the answers in list order, and a
+rendered template reads any workspace-level query by its name,
+`queries['python.dev-group']`. The docs extension answers
+`python.docs-group` with zensical, the site's builder, and the
+mkdocstrings extension with its python handler, so a workspace that
+lists neither composes an empty `docs` group. The docs extension
+declares three more queries. The site's config, `docs.config`: an
+extension that adds tables to it answers with the function that
 writes them for the packages a config covers, every package for the
 site and one for a package's preview; the docs extension joins each
 answer's tables after its own, in list order, a table two answers write
@@ -506,11 +511,13 @@ the search paths of the packages the config covers, the inventories,
 with the published site's own for a preview, and the handler's
 options, with an empty filter list when `docs.members` answers `all`.
 A workspace that does not list it renders no API reference and no
-handler table. It also holds the two lint steps that judge the
-docstrings the reference publishes: `lint.docrefs`, every
-cross-reference in a docstring the site renders names an anchor the
-site renders, and `lint.docstrings`, every name a python package
-exports has a docstring.
+handler table, and installs no mkdocstrings: the extension answers
+`python.docs-group` with `mkdocstrings-python`, which also brings
+griffe, the library `lint.docrefs` reads the sources with. It also
+holds the two lint steps that judge the docstrings the reference
+publishes: `lint.docrefs`, every cross-reference in a docstring the
+site renders names an anchor the site renders, and `lint.docstrings`,
+every name a python package exports has a docstring.
 
 The coverage extension, `livery.extensions.coverage`, ships in the
 workshop wheel, listed as `coverage`, and adds a step to each of those

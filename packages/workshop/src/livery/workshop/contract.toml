@@ -1067,6 +1067,14 @@ combine = "union"
 level = "workspace"
 combine = "union"
 
+# The lines of the root project file's docs dependency group: what the
+# listed extensions' site build imports from the venv, each line naming
+# its floor; empty while no listed extension answers. Declared by the
+# base while the python extension ships in its wheel.
+[queries."python.docs-group"]
+level = "workspace"
+combine = "union"
+
 # The words the rendered pytest.toml's addopts holds, as the test
 # runner's extension answers them. Declared by the base while the
 # python extension ships in its wheel.

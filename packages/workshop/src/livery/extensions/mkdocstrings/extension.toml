@@ -50,3 +50,10 @@ extensions = ["python"]
 # options, with the docs.members answer applied.
 [queries]
 "docs.config" = "livery.extensions.mkdocstrings._config:writer"
+
+# mkdocstrings-python, the python handler: the site's builder imports
+# it from the workspace's environment to render the reference, and it
+# brings griffe, which lint.docrefs reads the sources with. So it rides
+# the docs dependency group, after the builder's own line.
+[queries."python.docs-group"]
+value = ["mkdocstrings-python>=1.11"]

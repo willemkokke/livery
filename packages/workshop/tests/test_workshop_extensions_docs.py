@@ -351,6 +351,14 @@ def test_a_language_word_in_a_source_s_code_is_found_and_its_prose_is_not() -> N
     assert ("phases.lint.refs.doc", "python") not in _declared_words(declared)
 
 
+#: The one declared key that names a language: the docs extension's
+#: answer to the query whose lines the workspace's environment installs.
+#: The site's builder is a python program the docs verbs run from that
+#: environment, so its line rides the environment's docs group; the key
+#: says where the builder installs, not what the site documents.
+_BUILDER_GROUP = "queries.python.docs-group"
+
+
 def test_the_docs_extension_names_no_language() -> None:
     """Docs' sources and declaration name no language outside their prose.
 
@@ -358,7 +366,9 @@ def test_the_docs_extension_names_no_language() -> None:
     in a name, a string or a declared key or value, and no import of
     the kind registry: what renders a language's API reference is an
     extension of its own, which answers the docs extension's queries
-    and adds its steps.
+    and adds its steps. The key of the docs extension's answer to the
+    query that installs the site's builder names where the builder
+    installs, and is left out.
     """
     import tomllib
 
@@ -380,9 +390,13 @@ def test_the_docs_extension_names_no_language() -> None:
             and (node.module or "").startswith("livery.workshop._kinds")
         ]
     declaration = tomllib.loads((docs / "extension.toml").read_text("utf-8"))
+    declared = _declared_words(declaration)
+    # The key left out is one the declaration holds, so it never outlives
+    # the answer.
+    assert _BUILDER_GROUP in {where for where, _word in declared}
     found += [
         f"extension.toml {where} {word}"
-        for where, word in _declared_words(declaration)
-        if word in words
+        for where, word in declared
+        if word in words and where != _BUILDER_GROUP
     ]
     assert found == []
