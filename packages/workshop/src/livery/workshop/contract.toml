@@ -1101,3 +1101,12 @@ combine = "union"
 [queries.release-notes]
 level = "workspace"
 combine = "nearest"
+
+# The members a job of the release point builds before the wave, each
+# member's path to the job's name. The wave publishes what the run
+# collected for them instead of building them again, and the entry
+# installs those of them uv installs after the tools. A member two
+# answers give different jobs refuses.
+[queries.job-built-members]
+level = "workspace"
+combine = "livery.workshop._queries:merged"

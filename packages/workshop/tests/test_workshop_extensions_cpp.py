@@ -133,6 +133,22 @@ def test_a_missing_compiler_is_named_for_a_package_holding_cpp(
     assert "  c++: MISSING (a host compiler; " in capsys.readouterr().out
 
 
+def test_a_recipe_releases_a_conan_package_only_when_it_names_a_reference(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._queries import DISTRIBUTIONS, answer
+
+    # A consumer's recipe, requirements alone, releases nothing.
+    consumer = _member(tmp_path / "consumer", ("cmake", "conan"))
+    (consumer.directory / "conanfile.py").write_text(
+        'class C:\n    requires = ("acme-lib/[>=1.0.0]",)\n'
+    )
+    assert answer(consumer, DISTRIBUTIONS) == ()
+    # A recipe that declares its name and version releases the package.
+    listing = _member(tmp_path / "listing", ("cmake", "conan"))
+    assert answer(listing, DISTRIBUTIONS) == (("conan", "acme-lib"),)
+
+
 def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> None:
     from livery.workshop._extensions import declaration
 

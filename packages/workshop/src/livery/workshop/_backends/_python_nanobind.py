@@ -195,38 +195,43 @@ def floor_legs(
 def host_build(root: Path) -> None:
     """Build this host's native artifacts for the release at *root*'s HEAD.
 
-    Each leg of the release's wheels job runs this before the wave, in
-    three steps. Each conan member is created into this leg's cache and
+    Each leg of the release's wheels job runs this before the wave,
+    over the members of the release that the workspace's
+    ``job-built-members`` answer names, in three steps. Each of them
+    that releases a conan package is created into this leg's cache and
     saved beside its wheels, one file per host, which is how a forge
     with no conan registry carries the package. Then cibuildwheel
-    builds every platform-wheel member for the interpreters the
-    caller's ``CIBW_BUILD`` names, resolving each conan member from the
-    cache the first step filled. Then every declared floor on a conan
-    member is proved with its own build. The publish job collects each
-    leg's ``dist/``, and the wave publishes the union. A release with
-    no native member prints so and builds nothing, so the leg stays
-    green on a pure release.
+    builds every other one, a platform-wheel member, for the
+    interpreters the caller's ``CIBW_BUILD`` names, resolving each
+    conan member from the cache the first step filled. Then every
+    declared floor on a conan member is proved with its own build. The
+    publish job collects each leg's ``dist/``, and the wave publishes
+    the union. A release with no such member prints so and builds
+    nothing, so the leg stays green on a pure release.
     """
     from livery import git
     from livery.workshop import _lifecycle
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     resolved_ref = git.head_sha(root)
     epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
     members = discover_release(root, resolved_ref)
     released = {package.path: version for package, version in members}
-    conan_members = [
-        (package, version)
-        for package, version in members
-        if kind_for(package.kind).artifact == "conan"
-    ]
-    native = [
-        package
-        for package, _version in members
-        if kind_for(package.kind).wheel_identity == "platform"
-    ]
+    built = answer(root, JOB_BUILT_MEMBERS)
+    conan_members: list[tuple[Package, str]] = []
+    native: list[Package] = []
+    # The kind's artifact says which of them is a conan package, until
+    # the kinds go.
+    for package, version in members:
+        if package.path not in built:
+            continue
+        if kind_for(package.kind).artifact == "conan":
+            conan_members.append((package, version))
+        else:
+            native.append(package)
     if not native and not conan_members:
         print("  no native members in this release; nothing to build")
         return
@@ -252,8 +257,8 @@ def assert_platform_tagged(package: Package, dist: Path) -> None:
 
     A wheel from a native kind that says ``none-any`` was built
     without its extension, and publishing it would hand every
-    consumer an ImportError. The other half of the guard (a native
-    tag from a pure kind) lives with the publish wave.
+    consumer an ImportError. The other half of the guard, a platform
+    tag on a pure package's wheel, is python's build's.
     """
     wheels = sorted(dist.glob("*.whl"))
     if not wheels:

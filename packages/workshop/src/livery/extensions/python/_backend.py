@@ -37,6 +37,9 @@ if TYPE_CHECKING:
 #: an explicit path names passes through untouched.
 PY_SUFFIXES = (".py", ".pyi")
 
+#: How a pure wheel's file name ends: no ABI, any platform.
+PURE_TAG = "-none-any.whl"
+
 
 def public_modules(package: Package) -> tuple[str, ...]:
     """The modules that declare *package*'s public API.
@@ -739,6 +742,14 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     footgun bought off for seconds of build. *epoch* (a commit's
     timestamp) rides ``SOURCE_DATE_EPOCH`` so a pure-Python rebuild
     at the same ref is byte-identical.
+
+    Raises:
+        Failed: when ``uv build`` exits non-zero, when it writes no
+            wheel, and when it writes a wheel tagged for a platform.
+            Python's build ships a pure wheel, tagged ``none-any``; a
+            platform tag means compiled code built for this machine
+            alone, and a package with compiled code lists the extension
+            that builds a wheel for each platform.
     """
     dist = package.directory / "dist"
     shutil.rmtree(dist, ignore_errors=True)
@@ -756,8 +767,17 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
             f"uv build ({package.name}) exited {result.code}:\n"
             f"{result.stdout}{result.stderr}"
         )
-    if not list(dist.glob("*.whl")):
+    wheels = sorted(dist.glob("*.whl"))
+    if not wheels:
         fail(f"{package.name}: the build produced no wheel in {dist}")
+    tagged = [wheel.name for wheel in wheels if not wheel.name.endswith(PURE_TAG)]
+    if tagged:
+        fail(
+            f"{package.name}: the build produced a wheel tagged for a platform,"
+            f" {', '.join(tagged)}; python's build ships a pure wheel, tagged"
+            " none-any, so a package with compiled code lists the extension that"
+            " builds its platform wheels"
+        )
     return dist
 
 

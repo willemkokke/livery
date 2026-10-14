@@ -23,6 +23,7 @@ from livery.workshop._declaration import DeclarationError, DeclaredValue
 from livery.workshop._packages import Package
 from livery.workshop._queries import (
     EDITOR_EXTENSIONS,
+    JOB_BUILT_MEMBERS,
     QueryError,
     QuerySpec,
     answers,
@@ -30,7 +31,12 @@ from livery.workshop._queries import (
     workspace_answers,
 )
 from livery.workshop._release_notes import RELEASE_NOTES, release_notes
-from workshop_extension_fakes import fake_extensions, fake_steps, root_contract
+from workshop_extension_fakes import (
+    fake_extensions,
+    fake_steps,
+    package_contract,
+    root_contract,
+)
 
 #: A package-level extension's identity, the start of every package fake.
 PACKAGE = '[extension]\nlevels = ["package"]\n'
@@ -275,12 +281,6 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
             " the answer",
         ),
         (
-            PACKAGE + _answering(**{"editor-extensions": "public_modules"}),
-            "queries.editor-extensions answers a question about the workspace, and"
-            " this extension's levels are package; add 'workspace' to levels, or"
-            " drop the answer",
-        ),
-        (
             PACKAGE + _answering(**{"public-modules": "public_module"}),
             "queries.public-modules names public_module, which acme.odd._steps does"
             " not define at its top level; did you mean 'public_modules'?",
@@ -303,7 +303,6 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
     ids=[
         "unknown-query",
         "workspace-level",
-        "package-level",
         "no-function",
         "no-value",
         "for-unknown-query",
@@ -320,6 +319,48 @@ def test_an_answer_the_file_alone_shows_wrong_refuses(
     path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
     expected = refusal.format(queries=", ".join(_queries.declared_queries()))
     assert str(raised.value) == f"{path}: {expected}"
+
+
+def test_a_package_level_extension_answers_a_workspace_query_while_a_package_holds_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A workspace-level query is asked of every extension the workspace
+    # mounts, and a package-level one is mounted while a package holds it.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        held=PACKAGE + _literal("editor-extensions", '["acme.held"]'),
+    )
+    root_contract(tmp_path, "[]")
+    assert answer(tmp_path, EDITOR_EXTENSIONS) == ()
+    package_contract(tmp_path, "core", '["acme.held"]')
+    assert answer(tmp_path, EDITOR_EXTENSIONS) == ("acme.held",)
+
+
+def test_a_member_two_answers_give_different_jobs_refuses_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = '{{ "packages/core" = "{job}" }}'
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        a=WORKSPACE + _literal("job-built-members", built.format(job="wheels")),
+        b=WORKSPACE + _literal("job-built-members", built.format(job="binaries")),
+    )
+    root_contract(tmp_path, '["acme.a", "acme.b"]')
+    with pytest.raises(QueryError) as raised:
+        answer(tmp_path, JOB_BUILT_MEMBERS)
+    assert str(raised.value) == (
+        "job-built-members: acme.a answers packages/core 'wheels' and acme.b"
+        " answers 'binaries'; the answers name each entry once, or alike"
+    )
+    # Alike answers name the member once.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        b=WORKSPACE + _literal("job-built-members", built.format(job="wheels")),
+    )
+    assert answer(tmp_path, JOB_BUILT_MEMBERS) == {"packages/core": "wheels"}
 
 
 def test_a_question_asked_at_the_other_level_refuses(tmp_path: Path) -> None:
@@ -813,6 +854,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "python.test.addopts",
         "store.series",
         "release-notes",
+        "job-built-members",
     ]
     assert all(spec.extension == "livery.workshop" for spec in found.values())
     assert [name for name, spec in found.items() if spec.level == "workspace"] == [
@@ -822,8 +864,10 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "python.test.addopts",
         "store.series",
         "release-notes",
+        "job-built-members",
     ]
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"
+    assert str(found["job-built-members"].combine) == "livery.workshop._queries:merged"
     assert str(found["executables"].combine) == "livery.workshop._queries:owned"
     # The base's are among every declared query, as the base declares them.
     declared = _queries.declared_queries()

@@ -2139,9 +2139,10 @@ def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
     wheels the wheels job built and handed over, or from a build of its
     own on the publish job's runner. The served version is the same
     after both. The publish job's ``prebuilt:`` line tells them apart:
-    the wave prints it only when the collected ``dist/`` held the
-    member's wheels. A publish job that did not end green proves
-    nothing, so it fails here too, naming how it ended.
+    the wave prints it for each member a job builds before the wave
+    whose collected ``dist/`` held what the job built, naming the job.
+    A publish job that did not end green proves nothing, so it fails
+    here too, naming how it ended.
     """
     jobs = repo.checks.jobs(run.id)
     publish = next((job for job in jobs if job.name.startswith("publish")), None)
@@ -2155,7 +2156,7 @@ def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
         run,
         jobs,
         "publish",
-        (f"prebuilt: the run collected wheels for {distribution}",),
+        (f"prebuilt: {distribution}: the run collected what the wheels job built",),
     )
     print(
         f"  release: the wave published the wheels the wheels job built for"
