@@ -1,9 +1,10 @@
 """The release point's verbs decide for themselves what the shell once decided.
 
 The templates verb reads the wave at the ref and skips a wave that did
-not release the publisher; the wave decides prebuilt from a collected
-dist inside CI; the driver pin installs nothing on an empty input.
-The refusals and skips first, then the acting cases.
+not release the publisher; the wave decides prebuilt inside CI from
+the collected dist of each member a job builds before the wave; the
+driver pin installs nothing on an empty input. The refusals and skips
+first, then the acting cases.
 """
 
 from __future__ import annotations
@@ -32,13 +33,17 @@ def _git(cwd: Path, *args: str) -> None:
 
 
 def _workspace(tmp_path: Path) -> Path:
-    """A workspace with a pure member and a platform-wheel member, on git."""
+    """A workspace with a pure, a platform-wheel and a conan member, on git."""
     root = tmp_path / "ws"
     (root / "packages").mkdir(parents=True)
     (root / "workshop.toml").write_text(
         '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
-    for name, kind in (("pure", "python"), ("native", "python-nanobind")):
+    for name, kind in (
+        ("pure", "python"),
+        ("native", "python-nanobind"),
+        ("lib", "cpp-conan"),
+    ):
         member = root / "packages" / name
         (member / "src").mkdir(parents=True)
         (member / "workshop.toml").write_text(
@@ -72,7 +77,7 @@ def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- the wave's prebuilt decision -------------------------------------------------
 
 
-def test_the_wave_builds_unless_ci_collected_wheels(
+def test_the_wave_builds_unless_ci_collected_what_a_job_built(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._release_driver import collected_wheels
@@ -89,13 +94,28 @@ def test_the_wave_builds_unless_ci_collected_wheels(
     # Inside CI, an empty dist/ means no job of the run fed the wave.
     (dist / "acme_native-1.0.0-cp314-cp314-linux_x86_64.whl").unlink()
     assert collected_wheels(root, sha) is False
+    # A pure member's dist/ is never a job's: the wave builds it itself.
+    pure = root / "packages" / "pure" / "dist"
+    pure.mkdir()
+    (pure / "acme_pure-1.0.0-py3-none-any.whl").write_bytes(b"")
+    assert collected_wheels(root, sha) is False
     # Inside CI, wheels in a platform member's dist/ were collected.
     (dist / "acme_native-1.0.0-cp314-cp314-linux_x86_64.whl").write_bytes(b"")
     assert collected_wheels(root, sha) is True
-    assert "prebuilt: the run collected wheels for acme-native" in (
+    assert (
+        "prebuilt: acme-native: the run collected what the wheels job built"
+        in capsys.readouterr().out
+    )
+    # A wave of a conan member alone trusts the caches the job saved.
+    lib_only = _stamp(root, "lib")
+    saved = root / "packages" / "lib" / "dist"
+    saved.mkdir()
+    (saved / "acme-lib-1.0.0-linux-x64.tgz").write_bytes(b"")
+    assert collected_wheels(root, lib_only) is True
+    assert "prebuilt: acme-lib: the run collected what the wheels job built" in (
         capsys.readouterr().out
     )
-    # A wave without a platform member has nothing to collect.
+    # A wave without a job-built member has nothing to collect.
     pure_only = _stamp(root, "pure")
     assert collected_wheels(root, pure_only) is False
 

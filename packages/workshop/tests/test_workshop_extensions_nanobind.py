@@ -1,10 +1,11 @@
-"""The nanobind extension: its declaration, the labels its wheels job reads, its verb.
+"""The nanobind extension: its declaration, its wheels job's labels and members.
 
 The refusals first: the extension in the workspace's list, its key in
 a package that holds no nanobind, and the labels a package that holds
-it gets wrong. Then the declaration, the union of labels, the mount
-that adds the wheels job for a workspace whose packages hold
-nanobind, and the verb each leg of the job runs.
+it gets wrong; and a workspace without nanobind names no member its
+job builds. Then the declaration, the union of labels, the members the
+wheels job builds, the mount that adds the wheels job for a workspace
+whose packages hold nanobind, and the verb each leg of the job runs.
 """
 
 from __future__ import annotations
@@ -216,6 +217,21 @@ def test_the_verb_refuses_outside_a_workspace_and_without_a_host_build(
     )
 
 
+def test_a_workspace_without_nanobind_names_no_job_built_member(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    # A conan library is a member the wheels job builds where the job
+    # exists; without a package that holds nanobind there is no job.
+    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
+    assert answer(tmp_path, JOB_BUILT_MEMBERS) == {}
+    # Asked directly, nanobind's answer names none either.
+    assert _ci.job_built_members(tmp_path) == {}
+
+
 # --- the declaration ----------------------------------------------------------
 
 
@@ -240,6 +256,12 @@ def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> No
     assert declared.requires == ()
     assert declared.plugin == "livery.extensions.nanobind"
     assert declared.additions.steps == ()
+    # The members its wheels job builds, a question about the workspace.
+    assert declared.queries == {
+        "job-built-members": Reference(
+            "livery.extensions.nanobind._ci", "job_built_members"
+        )
+    }
     # The key a package that holds nanobind names its runners under.
     owned = declarations()[("package", "nanobind.wheel-platforms")]
     assert (owned.owner, owned.declared.types) == ("nanobind", ("strs",))
@@ -306,6 +328,47 @@ def test_the_labels_are_the_union_in_declaration_order(tmp_path: Path) -> None:
         "windows-latest",
         "linux-arm",
     ]
+
+
+def _recipe(root: Path, name: str, recipe: str) -> None:
+    """Write ``packages/<name>/conanfile.py`` holding *recipe*."""
+    (root / "packages" / name / "conanfile.py").write_text(recipe)
+
+
+def test_the_wheels_job_builds_each_nanobind_member_and_each_conan_package(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
+    _member(tmp_path, "plain", 'kind = "python"\nname = "plain"\n')
+    # A library listing nothing is answered by its kind, which packages
+    # it with conan.
+    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
+    # A library listing conan releases the package its recipe names.
+    _member(
+        tmp_path,
+        "mesh",
+        'kind = "cpp-conan"\nname = "mesh"\nextensions = ["cmake", "conan"]\n',
+    )
+    _recipe(tmp_path, "mesh", 'class M:\n    name = "mesh"\n    version = "0.1.0"\n')
+    # A recipe of requirements alone is a consumer's, and releases nothing.
+    _member(
+        tmp_path,
+        "app",
+        'kind = "cpp-conan"\nname = "app"\nextensions = ["cmake", "conan"]\n',
+    )
+    _recipe(tmp_path, "app", 'class A:\n    requires = ("mesh/[>=0.1.0]",)\n')
+    built = {
+        "packages/ext": "wheels",
+        "packages/geometry": "wheels",
+        "packages/mesh": "wheels",
+    }
+    assert _ci.job_built_members(tmp_path) == built
+    # The workspace's answer is nanobind's, mounted for the package that
+    # holds it.
+    assert answer(tmp_path, JOB_BUILT_MEMBERS) == built
 
 
 @pytest.mark.usefixtures("nanobind_jobs")
@@ -401,10 +464,14 @@ def test_a_release_of_conan_members_alone_creates_and_saves_each_with_no_floor_l
     _release_root(tmp_path)
     for name in ("geometry", "mesh"):
         _member(tmp_path, name, f'kind = "cpp-conan"\nname = "{name}"\n')
+    # The workspace holds nanobind, which the wheels job is for, though
+    # this release ships none of it.
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
     listed = "packages:\n  - path: packages/geometry\n  - path: packages/mesh\n"
     workspace = tmp_path / _cpp_conan.WORKSPACE_FILE
     workspace.write_text(listed)
-    geometry, mesh = discover_packages(tmp_path)
+    members = {package.name: package for package in discover_packages(tmp_path)}
+    geometry, mesh = members["geometry"], members["mesh"]
     calls = _leg(monkeypatch, tmp_path, ((geometry, "0.1.0"), (mesh, "0.2.0")))
     ctx = _context()
     _tasks.nanobind_wheels(ctx)

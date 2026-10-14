@@ -59,7 +59,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_kinds", "python"): 5,
     ("_kinds", "python-nanobind"): 1,
     ("_packages", "pyproject.toml"): 1,
-    ("_publish", "conan"): 4,
+    ("_publish", "conan"): 3,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,

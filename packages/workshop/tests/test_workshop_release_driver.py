@@ -1335,9 +1335,9 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     core, tool = packages["core"], packages["tool"]
-    # The edge first: a member whose kind builds no wheel has no dist
-    # directory for a leg to search, so the set's directories are its
-    # wheel members' alone, in set order.
+    # The edge first: a member whose build writes nothing to dist/ (a
+    # conan member's) has no directory for a leg to search, so the
+    # set's directories are the ones its builds left, in set order.
     native = Package(
         directory=root / "packages" / "native",
         path="packages/native",
@@ -1351,6 +1351,9 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
         MemberPlan(native, "0.1.0"),
         MemberPlan(tool, "0.3.0"),
     )
+    assert _wheel_dists(plans) == ()
+    for dist in dists:
+        dist.mkdir()
     assert _wheel_dists(plans) == dists
     # One member's legs: the floor leg, then the latest leg, each handed
     # the directories as given.
@@ -1378,9 +1381,16 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
     sha = git.remote_head(root, "main")
     fake.push(OWNER, NAME, "main", sha=sha)
     fake.settle(OWNER, NAME, sha)
-    monkeypatch.setattr(
-        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
-    )
+
+    def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+        # A build writes the member's dist/, which a find-links names.
+        dist = package.directory / "dist"
+        dist.mkdir(exist_ok=True)
+        return dist
+
+    for dist in dists:
+        dist.rmdir()
+    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),

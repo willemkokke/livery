@@ -566,24 +566,40 @@ def _declared(package: Package, sibling: Package) -> tuple[str, ...]:
 # The release wave and the lifecycle.
 
 
-def test_the_entry_installs_a_native_member_after_the_tools(tmp_path: Path) -> None:
+def test_the_entry_installs_the_job_built_uv_members_after_the_tools(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._entry import entry_script, native_members
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     root = _workspace(tmp_path / "acme")
     _born(root, *THREE)
-    # The nanobind member alone builds at install: the entry's first uv
+    # The wheels job builds the nanobind member and the conan library
+    # before the wave.
+    assert answer(root, JOB_BUILT_MEMBERS) == {
+        "packages/lib": "wheels",
+        "packages/native": "wheels",
+    }
+    # Of those, uv installs the nanobind member alone: the entry's first uv
     # sync leaves it out, and the workshop's sync after the tools builds it.
     assert native_members(root) == ("acme-native",)
     lines = entry_script(root).split("\n")
     assert "_native=(--no-install-package acme-native)" in lines
 
 
-def test_the_find_links_name_the_wheel_building_members(tmp_path: Path) -> None:
+def test_the_find_links_are_the_set_s_existing_dist_directories(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._release_driver import MemberPlan, _wheel_dists
 
     root = _workspace(tmp_path / "acme")
     members = _born(root, *THREE)
     plans = tuple(MemberPlan(package, "0.1.0") for package in members.values())
+    # Before any build, no member has a dist/ to name.
+    assert _wheel_dists(plans) == ()
+    # The python and nanobind builds write theirs; conan's writes none.
+    for tree in ("package-python", "package-python-nanobind"):
+        (members[tree].directory / "dist").mkdir()
     assert [path.relative_to(root).as_posix() for path in _wheel_dists(plans)] == [
         "packages/echo/dist",
         "packages/native/dist",
