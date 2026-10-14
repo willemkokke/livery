@@ -140,11 +140,13 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _member(root: Path, member: str, *, kind: str = "python") -> None:
+def _member(root: Path, member: str) -> None:
     directory = root / "packages" / member
     (directory / "src").mkdir(parents=True)
     name = "acme-" + member.replace("/", "-")
-    (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "{name}"\n')
+    (directory / "workshop.toml").write_text(
+        f'extensions = ["python"]\nname = "{name}"\n'
+    )
     (directory / "pyproject.toml").write_text(f'[project]\nname = "{name}"\n')
     (directory / "src" / "x.py").write_text("X = 1\n")
 

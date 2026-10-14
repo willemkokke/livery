@@ -1,11 +1,9 @@
-"""The ``cpp-conan`` kind's backend, gathered from the cmake, cpp and conan extensions.
+"""The C and C++ library's code, gathered from the cmake, cpp and conan extensions.
 
-A package of kind ``cpp-conan`` that lists no extension builds, tests
-and releases through the code those extensions ship: the gate build
-and its tests through cmake's, the language's file conventions through
-cpp's, the recipe and its release through conan's. This module gathers
-their names into the one backend the kind registry and the base
-modules that serve the kind call, until the package kinds go.
+The gate build and its tests are cmake's, the language's file
+conventions cpp's, the recipe and its release conan's. The base's
+``build.configure``, ``build.compile`` and ``test.ctest`` steps run
+cmake's gate build and ctest through this module.
 """
 
 from livery.extensions.cmake._build import (
@@ -134,8 +132,3 @@ from livery.extensions.cpp._language import (
 from livery.extensions.cpp._language import (
     public_modules as public_modules,
 )
-
-#: The extensions a ``cpp-conan`` package that lists none is taken to
-#: hold: the three a new one lists, ``cmake`` and ``conan`` and the
-#: ``cpp`` conan requires.
-STANDS_FOR = ("cmake", "conan", "cpp")

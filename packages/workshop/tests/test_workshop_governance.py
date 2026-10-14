@@ -41,7 +41,7 @@ def _workspace(tmp_path: Path, *, owners: bool = True) -> Path:
         f'[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n{owner_block}'
     )
     (root / "packages" / "core" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-core"\n\n[owners]\nusers = ["bob"]\n'
+        'extensions = ["python"]\nname = "livery-core"\n\n[owners]\nusers = ["bob"]\n'
     )
     (root / "packages" / "core" / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.1.0"\n'
@@ -247,7 +247,9 @@ def test_the_check_title_task_refuses_a_drifted_title(
     _git(root, "checkout", "-b", "workflow/release/core")
     member = root / "packages" / "core"
     member.mkdir(parents=True, exist_ok=True)
-    (member / "workshop.toml").write_text('kind = "python"\nname = "livery-core"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-core"\n'
+    )
     (root / ".release-manifest.json").write_text(
         '{"schema": 1, "members": [{"dir": "core", "name": "livery-core",'
         ' "version": "0.2.0"}]}\n'

@@ -377,10 +377,6 @@ doc = "the extras the package's entry in the root's dev group installs"
 types = ["strs"]
 doc = "the package-level extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"
 
-[contract.package.kind]
-types = ["str"]
-doc = "the package's kind, which builds, tests and releases it where its extensions do not: python, cpp-conan, or one an extension registers"
-
 [contract.package.name]
 types = ["str"]
 doc = "the package's distribution name"
@@ -821,7 +817,7 @@ doc = "whether a package step also runs when a package's change is confined to i
 
 [contract.extension.phases."*"."*".tools]
 types = ["strs"]
-doc = "the tools the step runs, as the tool profile names them, each added to the profile of every kind the step judges; none when absent"
+doc = "the tools the step runs, as the tool profile names them, each required while a package the step judges is present; none when absent"
 
 [contract.extension.categories]
 types = ["table"]

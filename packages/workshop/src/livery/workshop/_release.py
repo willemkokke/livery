@@ -62,9 +62,9 @@ def verify_release(
     """Check *tag* against the tree; every finding fails verbatim.
 
     The agreements checked: the tag names an existing package; the
-    kind's own version homes (pyproject, and one ``__version__`` for
-    a package holding the runtime's language with a root module, the
-    recipe's ``version`` for conan) carry the tag's version; the
+    version homes its set answers (pyproject, and one ``__version__``
+    for a package holding the runtime's language with a root module,
+    the recipe's ``version`` for conan) carry the tag's version; the
     release notes provider, when one is mounted, finds the version's
     notes sound; and every ``[[depends]]`` floor names a version whose
     release tag exists, so nothing ships depending on an unreleased
@@ -86,7 +86,7 @@ def verify_release(
     if notes is not None:
         problems += notes.verify(package, version)
     if holds_runtime_language(package):
-        # The modules the kind's stamper writes the version into: a
+        # The modules the set's stamp writes the version into: a
         # package's __init__.py. A package with none, a namespace with
         # no public names, carries its version in its manifest alone.
         modules = [

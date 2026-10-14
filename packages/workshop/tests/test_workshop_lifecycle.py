@@ -1,18 +1,17 @@
-"""The lifecycle seam: what it answers where a kind has nothing to say."""
+"""The lifecycle seam: what a package's set answers, and what it refuses."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from livery.workshop import _kinds, _lifecycle
-from livery.workshop._kinds import KindRecord
+from livery.footman import Failed
+from livery.workshop import _lifecycle
 from livery.workshop._packages import (
+    Edge,
     Package,
-    ReferencedName,
     SourceReferences,
     graph_problems,
 )
@@ -25,84 +24,130 @@ from workshop_extension_fakes import (
     root_contract,
 )
 
-if TYPE_CHECKING:
-    from livery.workshop._kinds import Backend
-
 _FAILURES = (BaseException,)
 
 
-class _BuildOnly:
-    """A backend that builds and leaves out every function the seam may miss."""
-
-    def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-        del root, epoch
-        return package.directory / "dist"
-
-
-def _build_only_kind(monkeypatch: pytest.MonkeyPatch) -> str:
-    """Register a kind whose backend is incomplete on purpose; its name."""
-    backend = cast("Backend", _BuildOnly())
-    record = KindRecord(name="acme-build-only", backend=backend)
-    monkeypatch.setitem(_kinds._KINDS, record.name, record)
-    return record.name
-
-
-def _package(tmp_path: Path, kind_name: str) -> Package:
+def _package(tmp_path: Path, *extensions: str) -> Package:
+    """``packages/thing`` under *tmp_path*, listing *extensions*."""
     directory = tmp_path / "packages" / "thing"
     directory.mkdir(parents=True, exist_ok=True)
     return Package(
         directory=directory,
         path="packages/thing",
         name="acme-thing",
-        kind=kind_name,
+        kind="",
         depends=(),
+        extensions=extensions,
     )
 
 
-def _answers_nothing(package: Package) -> None:
-    assert _lifecycle.declared_requirements(package) is None
-    assert _lifecycle.module_roots(package) == ()
-    assert _lifecycle.references(package) == ()
+# The refusals first: a phase the set adds no step to, and the version
+# nothing in the set answers.
 
 
-def test_an_abstract_kind_answers_nothing_and_refuses_to_build(
+def _release_phase(package: Package, phase: str, root: Path) -> object:
+    """Run *phase* of *package*'s release through the lifecycle's entry for it."""
+    if phase == "build":
+        return _lifecycle.build(package, root)
+    if phase == "stamp":
+        return _lifecycle.stamp(package, root, "1.0.0")
+    if phase == "publish":
+        target = RegistryTarget(kind="python", url="idx")
+        return _lifecycle.publish(package, root, version="1.0.0", target=target)
+    return _lifecycle.verify(
+        package,
+        root,
+        tree=root,
+        version="1.0.0",
+        python="3.14",
+        index="",
+        extras="",
+    )
+
+
+def test_a_package_whose_set_serves_no_build_step_refuses_the_release_naming_the_phase(
     tmp_path: Path,
 ) -> None:
-    package = _package(tmp_path, "base")
-    _answers_nothing(package)
-    with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
-        _lifecycle.build(package, tmp_path)
+    # cpp names a package's files and adds no step to any phase, and a
+    # package that lists nothing holds nothing.
+    for package, held in (
+        (_package(tmp_path, "cpp"), "cpp"),
+        (_package(tmp_path), "none"),
+    ):
+        for phase in ("build", "stamp", "publish", "verify"):
+            with pytest.raises(Failed) as refused:
+                _release_phase(package, phase, tmp_path)
+            assert str(refused.value) == (
+                f"packages/thing: its extensions ({held}) add no step to the"
+                f" {phase} phase, so the release has nothing to run there. List"
+                f" the extension whose steps serve the {phase} phase"
+            )
 
 
-def test_a_backend_that_leaves_a_function_out_answers_nothing_for_it(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_a_package_nothing_answers_the_version_for_refuses_naming_the_query(
+    tmp_path: Path,
 ) -> None:
-    # The seam reads these four only where the backend has them.
-    package = _package(tmp_path, _build_only_kind(monkeypatch))
-    _answers_nothing(package)
-    assert _lifecycle.build(package, tmp_path) == package.directory / "dist"
+    for package, held in (
+        (_package(tmp_path, "cpp"), "cpp"),
+        (_package(tmp_path), "none"),
+    ):
+        with pytest.raises(Failed) as refused:
+            _lifecycle.current_version(package)
+        assert str(refused.value) == (
+            f"packages/thing: its extensions ({held}) answer no current-version:"
+            " none of them reads a version from the package's manifests, so the"
+            " release train has no version to read or stamp. List the extension"
+            " whose manifest carries the version"
+        )
 
 
-def test_layering_graph_names_a_kind_that_reads_no_manifest(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_a_package_whose_set_answers_nothing_takes_each_empty_answer(
+    tmp_path: Path,
 ) -> None:
-    package = _package(tmp_path, _build_only_kind(monkeypatch))
-    assert graph_problems(tmp_path, (package,)) == [
-        "packages/thing: kind 'acme-build-only' registers no"
-        " declared_requirements extractor, so the lint cannot compare its"
-        " edges; add the callable to the backend"
+    for package in (_package(tmp_path, "cpp"), _package(tmp_path)):
+        assert _lifecycle.version_files(package) == ()
+        assert _lifecycle.declared_requirements(package) == {}
+        assert _lifecycle.public_modules(package) == ()
+        assert _lifecycle.compile_commands(package) is None
+        assert _lifecycle.references(package) == ()
+        assert _lifecycle.distributions(package) == ()
+        assert _lifecycle.has_isolated_test(package) is False
+    # cpp's own answers: a C or C++ package names no module.
+    assert _lifecycle.module_roots(_package(tmp_path, "cpp")) == ()
+
+
+def test_layering_graph_names_each_edge_of_a_package_whose_set_reads_no_manifest(
+    tmp_path: Path,
+) -> None:
+    other = Package(
+        directory=tmp_path / "packages" / "other",
+        path="packages/other",
+        name="acme-other",
+        kind="",
+        depends=(),
+    )
+    thing = Package(
+        directory=tmp_path / "packages" / "thing",
+        path="packages/thing",
+        name="acme-thing",
+        kind="",
+        depends=(Edge(path="packages/other", kind="runtime", floor="0.1.0"),),
+    )
+    assert graph_problems(tmp_path, (other, thing)) == [
+        "packages/thing: the runtime edge on packages/other is not declared in the"
+        " package's manifests (acme-other missing; packages/other holds no"
+        " extension)"
     ]
 
 
-# The bridge: a package's extensions answer where one of them answers a
-# query, and its kind backend answers the rest.
+# A package's extensions answer what the set answers.
 
 #: A package-level extension's identity, the start of every fake here.
 PACKAGE = '[extension]\nlevels = ["package"]\n'
 
 
 def _listing(tmp_path: Path, *extensions: str) -> Package:
-    """A python package whose manifest the kind backend reads, listing *extensions*."""
+    """A package with a python manifest, listing *extensions*."""
     directory = tmp_path / "packages" / "core"
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "pyproject.toml").write_text(
@@ -113,23 +158,17 @@ def _listing(tmp_path: Path, *extensions: str) -> Package:
         directory=directory,
         path="packages/core",
         name="acme-core",
-        kind="python",
+        kind="",
         depends=(),
         extensions=extensions,
     )
 
 
-def test_a_package_listing_no_extension_takes_its_kinds_answers(
-    tmp_path: Path,
-) -> None:
-    package = _listing(tmp_path)
-    assert _lifecycle.current_version(package) == "1.0.0"
-    assert _lifecycle.declared_requirements(package) == {"acme-base": ">=0.2"}
-
-
-def test_a_for_table_s_answer_waits_for_its_target_and_the_kind_answers_meanwhile(
+def test_a_for_table_s_answer_waits_for_its_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._queries import CURRENT_VERSION, answer
+
     fake_package_extensions(
         tmp_path,
         monkeypatch,
@@ -143,20 +182,26 @@ def test_a_for_table_s_answer_waits_for_its_target_and_the_kind_answers_meanwhil
     package_contract(tmp_path, "core", '["acme.answering"]')
     package = _listing(tmp_path, "acme.answering")
     # The target unlisted: the [for] table's answer is never asked, and
-    # the kind's backend answers from the manifest.
-    assert _lifecycle.current_version(package) == "1.0.0"
+    # nothing answers.
+    assert answer(package, CURRENT_VERSION) == ""
+    with pytest.raises(Failed, match="answer no current-version"):
+        _lifecycle.current_version(package)
     # Listed, by another package: the [for] table's answer is taken.
     package_contract(tmp_path, "other", '["acme.other"]')
     assert _lifecycle.current_version(package) == "9.9.9"
 
 
-def test_an_extension_that_answers_no_query_leaves_each_to_the_kind(
+def test_an_extension_that_answers_no_query_answers_each_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_package_extensions(tmp_path, monkeypatch, quiet=PACKAGE)
     package = _listing(tmp_path, "acme.quiet")
-    assert _lifecycle.current_version(package) == "1.0.0"
-    assert _lifecycle.declared_requirements(package) == {"acme-base": ">=0.2"}
+    # The manifest says 1.0.0 and requires acme-base, and no extension of
+    # the set reads it.
+    assert _lifecycle.declared_requirements(package) == {}
+    assert _lifecycle.module_roots(package) == ()
+    with pytest.raises(Failed, match=r"its extensions \(acme.quiet\) answer no"):
+        _lifecycle.current_version(package)
 
 
 def test_a_package_whose_extensions_answer_takes_their_answers(
@@ -191,9 +236,8 @@ def test_a_package_whose_extensions_answer_takes_their_answers(
     assert _lifecycle.public_modules(package) == ("acme.answered",)
 
 
-# What a package's sources reference: its extensions' answer where one
-# of them answers, its kind's otherwise; every file inside the package,
-# and one extension answering for each.
+# What a package's sources reference: its extensions' answers, every
+# file inside the package, and one extension answering for each.
 
 #: A fake's declaration answering the references query from its steps.
 ANSWERS_REFERENCES = (
@@ -252,9 +296,8 @@ def test_two_extensions_answering_one_source_refuse_naming_both(
 def test_a_package_whose_extensions_read_no_source_references_nothing(
     tmp_path: Path,
 ) -> None:
-    # A C++ package, listing its extensions or not: none of them, and not
-    # its kind, reads a source for references, the python one under its
-    # src included.
+    # A C++ package, listing its extensions or not: none of them reads a
+    # source for references, the python one under its src included.
     directory = tmp_path / "packages" / "native"
     (directory / "src").mkdir(parents=True)
     (directory / "src" / "native.cpp").write_text('#include "other/other.hpp"\n')
@@ -264,7 +307,7 @@ def test_a_package_whose_extensions_read_no_source_references_nothing(
             directory=directory,
             path="packages/native",
             name="acme-native",
-            kind="cpp-conan",
+            kind="",
             depends=(),
             extensions=extensions,
         )
@@ -272,25 +315,20 @@ def test_a_package_whose_extensions_read_no_source_references_nothing(
         assert _lifecycle.references(package) == ()
 
 
-def test_a_package_that_lists_nothing_answers_through_its_kind(
+def test_a_package_that_lists_nothing_references_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The fallback first: an installed extension answering the query is
-    # never asked for a package that lists nothing; its kind answers.
+    # never asked for a package that lists nothing, and nothing reads its
+    # python source.
     fake_package_extensions(tmp_path, monkeypatch, loud=ANSWERS_REFERENCES)
     fake_steps(tmp_path, "loud", _references_of("packages/core/src/answered.py"))
     package = _listing(tmp_path)
     source = package.directory / "src" / "acme" / "core" / "__init__.py"
     source.parent.mkdir(parents=True)
     source.write_text("import json\n")
-    assert _lifecycle.references(package) == (
-        SourceReferences(
-            "packages/core/src/acme/core/__init__.py",
-            module="acme.core",
-            references=(ReferencedName("json"),),
-        ),
-    )
-    # Listing the extension takes its answer instead.
+    assert _lifecycle.references(package) == ()
+    # Listing the extension takes its answer.
     listing = _listing(tmp_path, "acme.loud")
     assert _lifecycle.references(listing) == (
         SourceReferences("packages/core/src/answered.py"),
@@ -420,15 +458,16 @@ def test_a_step_deleted_in_a_set_never_runs_there_and_runs_elsewhere(
     )
 
 
-def test_a_package_its_kind_tests_nothing_isolated_for_refuses_a_leg(
+def test_a_package_whose_set_tests_nothing_isolated_refuses_a_leg(
     tmp_path: Path,
 ) -> None:
     package = Package(
         directory=tmp_path / "packages" / "native",
         path="packages/native",
         name="acme-native",
-        kind="cpp-conan",
+        kind="",
         depends=(),
+        extensions=("cmake", "conan"),
     )
     assert _lifecycle.has_isolated_test(package) is False
     with pytest.raises(_FAILURES, match="nothing tests its release isolated"):
@@ -440,24 +479,15 @@ def test_a_package_its_kind_tests_nothing_isolated_for_refuses_a_leg(
 def test_a_set_testing_on_the_tree_side_alone_has_no_isolated_test(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The fallback first: the set's one test step serves the tree side,
-    # so the release falls back to the kind, which the fixture's kind
-    # answers with nothing.
+    # The set's one test step serves the tree side, so the release has no
+    # isolated test to run.
     package = _stepping(
         tmp_path,
         monkeypatch,
         "def main(ctx):\n    del ctx\n",
         '\n[phases.test.tree]\nmain = "{package}._steps:main"\nisolated = false\n',
     )
-    native = Package(
-        directory=package.directory,
-        path=package.path,
-        name=package.name,
-        kind="cpp-conan",
-        depends=(),
-        extensions=package.extensions,
-    )
-    assert _lifecycle.has_isolated_test(native) is False
+    assert _lifecycle.has_isolated_test(package) is False
 
 
 def test_a_package_whose_extensions_test_isolated_and_verify_goes_through_them(
@@ -504,8 +534,7 @@ def test_a_package_whose_extensions_test_isolated_and_verify_goes_through_them(
 
 
 # What a package releases and the registry it releases to: its set's
-# answers to the distributions and registry queries, and for a package
-# that lists nothing, what its kind stands for.
+# answers to the distributions and registry queries.
 
 #: A conan recipe that names a reference, and a consumer's, with
 #: requirements alone.
@@ -518,10 +547,8 @@ INDEX = "https://idx.example/simple"
 INDEX_TOKEN = "index-token"
 
 
-def _releasing(
-    root: Path, member: str, kind_name: str, *extensions: str, recipe: str = ""
-) -> Package:
-    """``packages/<member>`` of *root*: *kind_name*, listing *extensions*.
+def _releasing(root: Path, member: str, *extensions: str, recipe: str = "") -> Package:
+    """``packages/<member>`` of *root*, listing *extensions*.
 
     It carries a ``pyproject.toml``, and *recipe* as its ``conanfile.py``
     when one is given.
@@ -537,7 +564,7 @@ def _releasing(
         directory=directory,
         path=f"packages/{member}",
         name=f"acme-{member}",
-        kind=kind_name,
+        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -591,9 +618,7 @@ def test_a_member_answering_two_registries_refuses_naming_both(
     # releases to one registry. The refusal comes before either probe
     # resolves its target.
     _no_target(monkeypatch)
-    package = _releasing(
-        tmp_path, "geometry", "python", "python", "conan", recipe=REFERENCE
-    )
+    package = _releasing(tmp_path, "geometry", "python", "conan", recipe=REFERENCE)
     assert _lifecycle.distributions(package) == (
         ("conan", "acme-geometry"),
         ("python", "acme-geometry"),
@@ -638,16 +663,15 @@ def test_a_member_whose_extensions_answer_no_probe_of_its_registry_refuses(
     )
 
 
-def test_a_member_listing_nothing_takes_its_kind_s_registry(
+def test_each_member_releases_to_its_set_s_registry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The bridge while package kinds remain: a member that lists no
-    # extension is asked as holding what its kind stands for. The
-    # nanobind member consumes conan and releases its python wheel.
+    # The nanobind member consumes conan and releases its python wheel;
+    # the C++ library's recipe names a reference and releases it.
     built = _declared(tmp_path, monkeypatch)
     core = _releasing(tmp_path, "core", "python")
-    native = _releasing(tmp_path, "native", "python-nanobind", recipe=CONSUMER)
-    geometry = _releasing(tmp_path, "geometry", "cpp-conan", recipe=REFERENCE)
+    native = _releasing(tmp_path, "native", "nanobind", recipe=CONSUMER)
+    geometry = _releasing(tmp_path, "geometry", "cmake", "conan", recipe=REFERENCE)
     assert [
         _lifecycle.distributions(member) for member in (core, native, geometry)
     ] == [
@@ -667,6 +691,10 @@ def test_a_member_listing_nothing_takes_its_kind_s_registry(
     assert built == [(INDEX, INDEX_TOKEN), (INDEX, INDEX_TOKEN)]
     (tmp_path / "share" / "acme-geometry-0.3.0.tgz").touch()
     assert _lifecycle.registry(geometry).versions("acme-geometry") == ("0.3.0",)
-    # Listing python, the member is answered by python alone.
-    listed = _releasing(tmp_path, "listed", "cpp-conan", "python", recipe=REFERENCE)
+    # Listing python and not conan, a member with a recipe is answered by
+    # python alone.
+    listed = _releasing(tmp_path, "listed", "python", recipe=REFERENCE)
     assert _lifecycle.distributions(listed) == (("python", "acme-listed"),)
+    # A member that lists nothing releases to no registry.
+    with pytest.raises(Failed, match="answer no registry"):
+        _lifecycle.ecosystem(_releasing(tmp_path, "plain"))

@@ -999,6 +999,7 @@ def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
         name="livery-plain",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     wheel = member / "dist" / "livery_plain-0.1.0-py3-none-any.whl"
     assert _install_target(package, wheel) == str(wheel)
@@ -1023,6 +1024,7 @@ def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
         name="livery-hosted",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     wheel = member / "dist" / "livery_hosted-0.1.0-py3-none-any.whl"
     target = _install_target(package, wheel)
@@ -1345,6 +1347,7 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
         name="livery-native",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
     dists = (core.directory / "dist", tool.directory / "dist")
     plans = (

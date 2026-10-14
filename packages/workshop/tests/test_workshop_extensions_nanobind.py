@@ -38,7 +38,7 @@ def _member(root: Path, name: str, contract: str) -> None:
 
 
 #: The lines a member listing nanobind opens its contract with.
-NATIVE = 'kind = "python"\nextensions = ["nanobind"]\n'
+NATIVE = 'extensions = ["nanobind"]\n'
 
 
 def _native(root: Path, name: str, labels: str = "") -> None:
@@ -142,7 +142,8 @@ def test_the_key_in_a_package_that_holds_no_nanobind_refuses_naming_nanobind(
     _member(
         tmp_path,
         "lib",
-        'kind = "python"\nname = "lib"\n\n[nanobind]\nwheel-platforms = ["x"]\n',
+        'extensions = ["python"]\nname = "lib"\n\n'
+        '[nanobind]\nwheel-platforms = ["x"]\n',
     )
     # The contract's judge refuses it: the package holds python alone.
     message = _refusal(lambda: _ci.wheel_runners(tmp_path))
@@ -210,10 +211,12 @@ def test_a_workspace_without_nanobind_names_no_job_built_member(
     from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'extensions = ["python"]\nname = "lib"\n')
     # A conan library is a member the wheels job builds where the job
     # exists; without a package that holds nanobind there is no job.
-    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
+    _member(
+        tmp_path, "geometry", 'extensions = ["cmake", "conan"]\nname = "geometry"\n'
+    )
     assert answer(tmp_path, JOB_BUILT_MEMBERS) == {}
     # Asked directly, nanobind's answer names none either.
     assert _ci.job_built_members(tmp_path) == {}
@@ -373,7 +376,7 @@ def test_a_package_listing_nanobind_releases_through_its_set(
 
 
 def test_a_pure_workspace_names_no_wheel_runners(tmp_path: Path) -> None:
-    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'extensions = ["python"]\nname = "lib"\n')
     assert _ci.wheel_runners(tmp_path) == []
     (package,) = discover_packages(tmp_path)
     assert _ci.declared_wheel_platforms(package) == []
@@ -383,7 +386,7 @@ def test_a_pure_workspace_names_no_wheel_runners(tmp_path: Path) -> None:
 def test_the_labels_are_the_union_in_declaration_order(tmp_path: Path) -> None:
     _native(tmp_path, "alpha", '["ubuntu-latest", "macos-latest"]')
     _native(tmp_path, "beta", '["windows-latest", "ubuntu-latest"]')
-    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'extensions = ["python"]\nname = "lib"\n')
     _native(tmp_path, "listed", '["linux-arm"]')
     assert _ci.wheel_runners(tmp_path) == [
         "ubuntu-latest",
@@ -405,29 +408,22 @@ def test_the_wheels_job_builds_each_nanobind_member_and_each_conan_package(
 
     (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     _native(tmp_path, "ext", '["ubuntu-latest"]')
-    _member(tmp_path, "plain", 'kind = "python"\nname = "plain"\n')
-    # A library listing nothing is answered by its kind, which packages
-    # it with conan.
-    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
+    _member(tmp_path, "plain", 'extensions = ["python"]\nname = "plain"\n')
     # A library listing conan releases the package its recipe names.
     _member(
         tmp_path,
         "mesh",
-        'kind = "cpp-conan"\nname = "mesh"\nextensions = ["cmake", "conan"]\n',
+        'name = "mesh"\nextensions = ["cmake", "conan"]\n',
     )
     _recipe(tmp_path, "mesh", 'class M:\n    name = "mesh"\n    version = "0.1.0"\n')
     # A recipe of requirements alone is a consumer's, and releases nothing.
     _member(
         tmp_path,
         "app",
-        'kind = "cpp-conan"\nname = "app"\nextensions = ["cmake", "conan"]\n',
+        'name = "app"\nextensions = ["cmake", "conan"]\n',
     )
     _recipe(tmp_path, "app", 'class A:\n    requires = ("mesh/[>=0.1.0]",)\n')
-    built = {
-        "packages/ext": "wheels",
-        "packages/geometry": "wheels",
-        "packages/mesh": "wheels",
-    }
+    built = {"packages/ext": "wheels", "packages/mesh": "wheels"}
     assert _ci.job_built_members(tmp_path) == built
     # The workspace's answer is nanobind's, mounted for the package that
     # holds it.
@@ -467,7 +463,7 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
     pure = tmp_path / "pure"
     pure.mkdir()
     (pure / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    _member(pure, "lib", 'kind = "python"\nname = "lib"\n')
+    _member(pure, "lib", 'extensions = ["python"]\nname = "lib"\n')
     native = tmp_path / "native"
     native.mkdir()
     (native / "workshop.toml").write_text("[workspace]\nextensions = []\n")
@@ -503,7 +499,7 @@ def test_a_release_with_no_native_member_builds_nothing_and_stays_green(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _release_root(tmp_path)
-    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'extensions = ["python"]\nname = "lib"\n')
     (package,) = discover_packages(tmp_path)
     calls = _leg(monkeypatch, tmp_path, ((package, "0.1.0"),))
     ctx = _context()
@@ -526,7 +522,10 @@ def test_a_release_of_conan_members_alone_creates_and_saves_each_with_no_floor_l
 
     _release_root(tmp_path)
     for name in ("geometry", "mesh"):
-        _member(tmp_path, name, f'kind = "cpp-conan"\nname = "{name}"\n')
+        _member(tmp_path, name, f'extensions = ["cmake", "conan"]\nname = "{name}"\n')
+        _recipe(
+            tmp_path, name, f'class R:\n    name = "{name}"\n    version = "0.1.0"\n'
+        )
     # The workspace holds nanobind, which the wheels job is for, though
     # this release ships none of it.
     _native(tmp_path, "ext", '["ubuntu-latest"]')
@@ -580,7 +579,12 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     from livery.extensions.conan import _package as _conan
 
     _release_root(tmp_path)
-    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
+    _member(
+        tmp_path, "geometry", 'extensions = ["cmake", "conan"]\nname = "geometry"\n'
+    )
+    _recipe(
+        tmp_path, "geometry", 'class R:\n    name = "geometry"\n    version = "0.1.0"\n'
+    )
     _native(tmp_path, "ext", '["ubuntu-latest"]')
     members = {p.name: p for p in discover_packages(tmp_path)}
     workspace = tmp_path / _conan.WORKSPACE_FILE

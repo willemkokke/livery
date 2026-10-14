@@ -23,7 +23,7 @@ def _package(
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n{contract_extra}'
+        f'extensions = ["python"]\nname = "livery-{name}"\n{contract_extra}'
     )
     deps = ", ".join(f'"{d}"' for d in dependencies)
     (directory / "pyproject.toml").write_text(
@@ -37,7 +37,7 @@ def _forge_stub(root: Path) -> None:
     src.mkdir(parents=True)
     (src / "ok.py").write_text("import json\n")
     (root / "packages" / "forge" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-forge"\n'
+        'extensions = ["python"]\nname = "livery-forge"\n'
     )
     (root / "packages" / "forge" / "pyproject.toml").write_text(
         '[project]\nname = "livery-forge"\ndependencies = []\n'
@@ -485,7 +485,6 @@ CONSUMER_RECIPE = (
 def _member(
     root: Path,
     name: str,
-    kind: str,
     files: dict[str, str],
     extensions: tuple[str, ...] = (),
 ) -> Package:
@@ -494,16 +493,14 @@ def _member(
     directory.mkdir(parents=True)
     listed = ", ".join(f'"{extension}"' for extension in extensions)
     held = f"extensions = [{listed}]\n" if extensions else ""
-    (directory / "workshop.toml").write_text(
-        f'kind = "{kind}"\nname = "acme-{name}"\n{held}'
-    )
+    (directory / "workshop.toml").write_text(f'name = "acme-{name}"\n{held}')
     for relative, text in files.items():
         (directory / relative).write_text(text)
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind=kind,
+        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -518,17 +515,13 @@ def _three_ecosystems(root: Path) -> tuple[Package, Package, Package]:
     echo = _member(
         root,
         "echo",
-        "python",
         {"pyproject.toml": '[project]\nname = "acme-echo"\n'},
         ("python",),
     )
-    lib = _member(
-        root, "lib", "cpp-conan", {"conanfile.py": _recipe("lib")}, ("cmake", "conan")
-    )
+    lib = _member(root, "lib", {"conanfile.py": _recipe("lib")}, ("cmake", "conan"))
     native = _member(
         root,
         "native",
-        "python",
         {
             "pyproject.toml": '[project]\nname = "acme-native"\n',
             "conanfile.py": CONSUMER_RECIPE,
@@ -555,7 +548,7 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     from livery.workshop._packages import declare_edge
 
     echo, lib, native = _three_ecosystems(tmp_path)
-    bare = _member(tmp_path, "bare", "cpp-conan", {"conanfile.py": _recipe("bare")})
+    bare = _member(tmp_path, "bare", {"conanfile.py": _recipe("bare")})
     before = _tree(tmp_path)
     # The package's set holds python's writer alone, and the library
     # holds no python.
@@ -570,13 +563,12 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     # The edge refuses before its contract changes.
     with pytest.raises(Failed, match=re.escape("which holds cmake, conan, cpp")):
         declare_edge(echo, lib, kind="runtime", floor="0.1.0")
-    # A package that lists nothing takes the writers of what its kind
-    # stands for: conan's, which leaves a consumer's recipe alone.
+    # A package that lists nothing holds no writer at all.
     with pytest.raises(
         Failed,
         match=re.escape(
-            "packages/bare holds cmake, conan, cpp, and no writer of its set takes"
-            " a requirement on packages/native, which holds nanobind, python, cpp,"
+            "packages/bare holds no extension, and no writer of its set takes a"
+            " requirement on packages/native, which holds nanobind, python, cpp,"
             " conan:"
         ),
     ):
@@ -702,6 +694,7 @@ def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_projec
             name=f"livery-{name}",
             kind="python",
             depends=(),
+            extensions=("python",),
         )
 
     low = member("low", '[project]\nname = "livery-low"\n')
@@ -732,7 +725,7 @@ def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_projec
 
 def _recipe_member(root: Path, name: str, body: str) -> Package:
     """The conan package ``acme-<name>``, its recipe *body*."""
-    return _member(root, name, "cpp-conan", {"conanfile.py": body}, ("cmake", "conan"))
+    return _member(root, name, {"conanfile.py": body}, ("cmake", "conan"))
 
 
 def test_the_conan_requirement_refuses_a_recipe_it_cannot_place_the_tuple_in(

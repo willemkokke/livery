@@ -164,9 +164,9 @@ def test_a_package_entry_with_options_or_nothing_installed_refuses_naming_it(
 @pytest.mark.parametrize(
     ("contract", "refusal"),
     [
-        ('kind = "python\nextensions = [', " not valid TOML: "),
+        ('name = "acme-core\nextensions = [', " not valid TOML: "),
         (
-            'kind = "python"\nextensions = "acme.cpp"\n',
+            'extensions = "acme.cpp"\n',
             "\n  extensions is a string ('acme.cpp'); it takes a list of strings",
         ),
     ],
@@ -337,15 +337,13 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
         '  layering: packages/tool `extensions` is ["acme.cpp", "acme.zig"], its'
         " canonical list",
     ]
-    assert core.read_text() == 'kind = "python"\nextensions = ["acme.nanobind"]\n'
-    assert (
-        tool.read_text() == 'kind = "python"\nextensions = ["acme.cpp", "acme.zig"]\n'
-    )
+    assert core.read_text() == 'extensions = ["acme.nanobind"]\n'
+    assert tool.read_text() == 'extensions = ["acme.cpp", "acme.zig"]\n'
     assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.write_extensions(tmp_path) == []
     # A list twice over says so; a list the fix cannot find inline stays
     # named until a person writes it.
-    tool.write_text('kind = "python"\nextensions=["acme.cpp", "acme.cpp"]\n')
+    tool.write_text('extensions=["acme.cpp", "acme.cpp"]\n')
     assert _extensions.closure_problems(tmp_path) == [
         'packages/tool: `extensions` is ["acme.cpp", "acme.cpp"], and its canonical'
         ' list is ["acme.cpp"]; it lists an extension twice; the gate\'s --fix'

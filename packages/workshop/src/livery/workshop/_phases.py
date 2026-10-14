@@ -539,8 +539,8 @@ def deletions(members: Iterable[str], lookup: Lookup) -> dict[str, tuple[str, st
 
 def set_deletions(package: Package) -> dict[str, tuple[str, str]]:
     """The steps *package*'s set deletes, by address, to the deleter and why."""
+    from livery.workshop._composition import extension_set
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._kinds import extension_set
 
     return deletions(extension_set(package), installed_declaration)
 
@@ -939,7 +939,7 @@ def _body(
     the step; the unit is marked done however the body ends, so a unit
     waiting on it never waits past its end.
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     record = unit.record
 

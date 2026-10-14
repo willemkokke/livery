@@ -1,8 +1,9 @@
-"""The quality verbs: the gate and its parts, dispatched by contract.
+"""The quality verbs: the gate and its parts, over the packages the contracts declare.
 
-Each verb discovers the packages by their ``workshop.toml``, refuses
-any package kind without a backend, and hands the work to the kind's backend
-module. ``check`` is the whole local gate; CI runs the same command.
+Each verb discovers the packages by their ``workshop.toml`` and runs
+its phase's registered steps over them, each step over the packages
+whose extensions it judges. ``check`` is the whole local gate; CI runs
+the same command.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ if TYPE_CHECKING:
 import livery.footman as footman
 from livery.footman import Forward, doc, fail, group, task
 from livery.workshop import _steps
-from livery.workshop._backends import require_backends
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
@@ -35,13 +35,11 @@ from livery.workshop._templates import drift_check as drift_check
 
 
 def _packages() -> tuple[Package, ...]:
-    """The workspace's packages, backends verified before anything runs."""
+    """The workspace's packages, discovered before anything runs."""
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    packages = discover_packages(root)
-    require_backends(packages)
-    return packages
+    return discover_packages(root)
 
 
 def _context(

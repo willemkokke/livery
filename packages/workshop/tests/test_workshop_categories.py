@@ -28,10 +28,17 @@ from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
 def _package(
-    kind: str = "python", categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    extensions: tuple[str, ...] = ("python",),
+    categories: tuple[tuple[str, tuple[str, ...]], ...] = (),
 ) -> Package:
     return Package(
-        Path("packages/x"), "packages/x", "livery-x", kind, (), categories=categories
+        Path("packages/x"),
+        "packages/x",
+        "livery-x",
+        "",
+        (),
+        categories=categories,
+        extensions=extensions,
     )
 
 
@@ -40,7 +47,7 @@ def _member(root: Path, contract: str) -> Path:
     member = root / "packages" / "x"
     member.mkdir(parents=True, exist_ok=True)
     member.joinpath("workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-x"\n{contract}'
+        f'extensions = ["python"]\nname = "livery-x"\n{contract}'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     return member
@@ -147,8 +154,8 @@ def test_a_package_whose_extensions_declare_no_categories_takes_the_base_s_alone
     from workshop_extension_fakes import fake_extensions
 
     fake_extensions(tmp_path, monkeypatch, lua=PACKAGE_LEVEL)
-    # The package's kind stands for python, and it lists an extension
-    # that declares no categories: python's table no longer answers.
+    # The package lists an extension that declares no categories: no
+    # table but the base's answers.
     package = replace(_package(), extensions=("acme.lua",))
 
     def found(package: Package, path: str) -> tuple[str, str]:
@@ -158,7 +165,9 @@ def test_a_package_whose_extensions_declare_no_categories_takes_the_base_s_alone
     assert found(package, "src/acme/x.py") == ("configuration", "livery.workshop")
     assert found(package, "tests/test_x.py") == ("configuration", "livery.workshop")
     assert found(package, "docs/index.md") == ("prose", "livery.workshop")
-    # Listing nothing, it holds what its kind stands for.
+    # Listing nothing, it holds no table but the base's either.
+    assert found(_package(()), "src/acme/x.py") == ("configuration", "livery.workshop")
+    # Listing python, python's table answers.
     assert found(_package(), "src/acme/x.py") == ("source", "python")
 
 

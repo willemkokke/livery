@@ -259,8 +259,8 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
             )
             if (package.directory / name).is_file()
         )
-        # Every file the kind's stamper writes a version into. A kind
-        # that cannot name them restores the rest regardless.
+        # Every file the set's stamp writes a version into. A set that
+        # cannot name them restores the rest regardless.
         with contextlib.suppress(Exception):
             paths.extend(
                 home.relative_to(root).as_posix()
@@ -342,15 +342,15 @@ def validate_member(
     find-links name each sibling's ``dist/``, so a later member's
     wheel must exist before an earlier member's floor leg resolves.
 
-    A member whose kind publishes no wheels (conan) has no venv to
-    isolate: its own gate already built and ran ctest, so the legs
-    skip saying why.
+    A member whose extensions add no isolated test, as a conan
+    package's do, has no venv to isolate: its own gate already built
+    and ran ctest, so the legs skip saying why.
     """
     if not _lifecycle.has_isolated_test(plan.package):
         print(
-            f"  {plan.package.name}: isolated legs skip"
-            f" ({plan.package.kind} kind publishes no wheels; its own"
-            " gate builds and tests)"
+            f"  {plan.package.name}: isolated legs skip (its extensions add no"
+            " isolated test, since it publishes no wheel; its own gate builds"
+            " and tests)"
         )
         return
     legs, where = proved_resolutions(root, plan.package)

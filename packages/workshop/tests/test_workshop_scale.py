@@ -32,7 +32,9 @@ def _member(root: Path, name: str) -> Path:
         f'[project]\nname = "livery-{name}"\nversion = "0.0.0"\n'
         'requires-python = ">=3.11"\n'
     )
-    (member / "workshop.toml").write_text(f'kind = "python"\nname = "livery-{name}"\n')
+    (member / "workshop.toml").write_text(
+        f'extensions = ["python"]\nname = "livery-{name}"\n'
+    )
     return member
 
 

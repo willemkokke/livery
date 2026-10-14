@@ -34,7 +34,7 @@ def _workspace(tmp_path: Path) -> Path:
         '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     (root / "packages" / "geometry" / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-geometry"\n'
+        'extensions = ["cmake", "conan"]\nname = "acme-geometry"\n'
     )
     (root / "packages" / "geometry" / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [0.3.0]\n\n- the area function\n\n## [0.2.0]\n\n- older\n"
@@ -49,6 +49,7 @@ def _member(root: Path) -> Package:
         name="acme-geometry",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
 
 

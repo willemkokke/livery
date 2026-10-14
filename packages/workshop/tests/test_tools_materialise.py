@@ -66,8 +66,6 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     The archive `tea` is served from a folder source beside the records,
     never from the network; the uv tool `ruff` through the installer seam.
     """
-    from livery.workshop._kinds import KindRecord, kind_for, register_kind
-
     root = tmp_path / "ws"
     (root / "packages" / "member").mkdir(parents=True)
     (root / "workshop.toml").write_text(
@@ -75,14 +73,10 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         'requires = ["tea", "ruff"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "bare"\nname = "acme-member"\n'
+        'name = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
-    )
-    python = kind_for("python")
-    register_kind(
-        KindRecord(name="bare", backend=python.backend, template=python.template)
     )
     # The root's own files run on a language named bare, which no step
     # judges, and the base's own requirement is left out, so nothing

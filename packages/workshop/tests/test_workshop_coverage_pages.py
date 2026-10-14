@@ -45,7 +45,7 @@ def _workspace(
     (core / "src" / "acme" / "core").mkdir(parents=True)
     (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
     (core / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-core"\n\n[docs]\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n[docs]\n'
         'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (core / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
@@ -305,7 +305,7 @@ def _core(root: Path, coverage: str = "") -> Path:
     core = root / "packages" / "core"
     table = f"\n[coverage]\n{coverage}" if coverage else ""
     (core / "workshop.toml").write_text(
-        f'kind = "python"\nname = "acme-core"\n{table}\n[docs]\n'
+        f'extensions = ["python"]\nname = "acme-core"\n{table}\n[docs]\n'
         'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     forget_contracts()

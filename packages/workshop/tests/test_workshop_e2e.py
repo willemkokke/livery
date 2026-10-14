@@ -505,20 +505,20 @@ def test_the_loop_probes_each_member_through_its_extensions(
     _loop_member(
         root,
         "loop-echo",
-        'kind = "python"\nextensions = ["python"]\n',
+        'extensions = ["python"]\n',
         pyproject=True,
     )
     _loop_member(
         root,
         "loop-native",
-        'kind = "python"\nextensions = ["nanobind"]\n',
+        'extensions = ["nanobind"]\n',
         pyproject=True,
         recipe='class N:\n    requires = ("fmt/[>=11.0]",)\n',
     )
     _loop_member(
         root,
         "loop-cpp",
-        'kind = "cpp-conan"\nextensions = ["cmake", "conan"]\n',
+        'extensions = ["cmake", "conan"]\n',
         recipe='class L:\n    name = "ci_e2e_loop-loop-cpp"\n    version = "0.1.0"\n',
     )
     served = _e2e._serving_probe(root)
@@ -571,7 +571,7 @@ def _member(root: Path, name: str, *edges: str) -> None:
         for edge in edges
     )
     (home / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n' + declared
+        f'extensions = ["python"]\nname = "livery-{name}"\n' + declared
     )
     (home / "pyproject.toml").write_text(
         f'[project]\nname = "livery-{name}"\nversion = "0.1.0"\n'
@@ -612,7 +612,7 @@ def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
     home = tmp_path / "packages" / "extensions" / "ruff"
     home.mkdir(parents=True)
     (home / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-extensions-ruff"\n'
+        'extensions = ["python"]\nname = "livery-extensions-ruff"\n'
         '\n[[depends]]\npath = "packages/workshop"\nkind = "runtime"\nfloor = "0"\n'
     )
     (home / "pyproject.toml").write_text('[project]\nname = "livery-extensions-ruff"\n')
@@ -914,7 +914,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         home = tmp_path / "packages" / member
         home.mkdir(parents=True)
         (home / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{member}"\n'
+            f'extensions = ["python"]\nname = "livery-{member}"\n'
             + (_EDGES if member == "workshop" else "")
         )
         (home / "pyproject.toml").write_text(
@@ -1062,6 +1062,7 @@ def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -
         name="livery-x",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     with pytest.raises(_FAILURES, match="no version line"):
         _e2e._stamp_content(member, tmp_path)  # pyright: ignore[reportPrivateUsage]

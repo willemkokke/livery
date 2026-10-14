@@ -33,10 +33,15 @@ def _workspace(root: Path, extensions: str, forge: str = "") -> Path:
     return root
 
 
-def _member(root: Path, name: str, kind: str = "python") -> Package:
+def _member(
+    root: Path, name: str, extensions: tuple[str, ...] = ("python",)
+) -> Package:
     directory = root / "packages" / name
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "acme-{name}"\n')
+    listed = ", ".join(f'"{extension}"' for extension in extensions)
+    (directory / "workshop.toml").write_text(
+        f'extensions = [{listed}]\nname = "acme-{name}"\n'
+    )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "acme-{name}"\nversion = "0.2.0"\n'
     )
@@ -44,8 +49,9 @@ def _member(root: Path, name: str, kind: str = "python") -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind=kind,
+        kind="",
         depends=(),
+        extensions=extensions,
     )
 
 
@@ -139,6 +145,7 @@ def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
         name="livery-thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     return tmp_path, package
 
@@ -349,14 +356,14 @@ def test_a_member_born_while_it_is_listed_starts_its_history(tmp_path: Path) -> 
 # writes through it.
 
 
-def test_every_member_takes_a_cliff_toml_of_its_own_whatever_its_kind(
+def test_every_member_takes_a_cliff_toml_of_its_own_whatever_its_extensions(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._shipped_files import deliver
 
     root = _workspace(tmp_path / "ws", '["changelog"]')
     _member(root, "thing")
-    _member(root, "ext", kind="cpp-conan")
+    _member(root, "ext", ("cmake", "conan"))
     written = deliver(root)
     for name in ("thing", "ext"):
         assert f"  wrote packages/{name}/cliff.toml" in written

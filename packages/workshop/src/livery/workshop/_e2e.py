@@ -891,11 +891,13 @@ def _stamp_content(package: Package, root: Path) -> None:
     the code from before a fix (measured). The segment is a digest of
     the package's files, so a change gets a new name and an unchanged
     tree the same one, and every floor the version met still holds, a
-    local version sorting with its public one. The kind's own stamper
-    writes it, where the kind keeps its version.
+    local version sorting with its public one. The stamp phase of the
+    package's set writes it, into the files the package keeps its
+    version in.
 
     Raises:
-        Failed: when the kind's stamper finds no version to stamp.
+        Failed: when nothing in the package's set answers its version,
+            or adds a step to the stamp phase.
     """
     import hashlib
 

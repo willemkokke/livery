@@ -218,7 +218,7 @@ def is_conan_package(member: Package) -> bool:
     reference. A member that holds conan through a consumer's recipe,
     one that names no reference, is not one.
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     return EXTENSION in extension_set(member) and names_a_reference(member)
 
@@ -326,9 +326,9 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
     The fragment this extension declares: the workshop writes it at
     the root while a package's set holds conan and withdraws it with
     the last package that did. A package that lists conan, or an
-    extension that requires it, holds it; one that lists nothing holds
-    what its kind stands for ([livery.workshop._kinds.extension_set][]).
-    The members are listed in path order.
+    extension that requires it, holds it
+    ([livery.workshop._composition.extension_set][]). The members are
+    listed in path order.
 
     Conan finds the file by walking up from the directory a command
     runs in, so a command inside the workspace resolves each member
@@ -433,7 +433,7 @@ def save_cache(package: Package, version: str, into: Path) -> Path:
 def publish_artifact(
     package: Package, root: Path, *, version: str, target: RegistryTarget
 ) -> bool:
-    """The kind's publish seam: the package to the resolved target.
+    """Publish the package to the resolved target: conan's publish step calls it.
 
     Three routes, by what the ladder resolved: the forge's own
     releases, a folder, or a conan remote. On the remote route conan

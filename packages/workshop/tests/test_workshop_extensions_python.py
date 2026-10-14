@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import importlib.metadata
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -60,31 +58,6 @@ def test_python_s_build_refuses_a_platform_wheel(
     assert _backend.build(package, tmp_path) == directory / "dist"
 
 
-def test_the_python_extension_imported_before_the_base_registers_the_kind() -> None:
-    """The extension loads first and the kind still registers with its code.
-
-    The kind registry imports the extension's code while it registers,
-    so the extension's module imports the registry only when it is
-    called. Imported first, in a fresh interpreter, it loads, and the
-    python kind's backend is that module.
-    """
-    run = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from livery.extensions.python import _backend\n"
-            "from livery.workshop._kinds import kind_for\n"
-            "assert kind_for('python').backend is _backend\n"
-            "print(kind_for('python').name)",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert run.returncode == 0, run.stderr
-    assert run.stdout.strip() == "python"
-
-
 def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
     from livery.workshop._extensions import declaration
 
@@ -98,12 +71,11 @@ def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
     assert declared.levels == ("package",)
 
 
-def test_the_extension_answers_each_python_package_as_the_kind_backend_does() -> None:
-    """Every python package here, listing it or not, is answered as the backend does."""
-    from dataclasses import replace
-
+def test_the_extension_answers_each_python_package_here_as_its_code_does() -> None:
+    """Every package here holding python is answered as python's code reads it."""
     import livery.workshop
     from livery.extensions.python import _backend
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import discover_packages
     from livery.workshop._queries import (
         CURRENT_VERSION,
@@ -120,11 +92,11 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
         # alone, beside no checkout's packages.
         pytest.skip("the comparison reads this checkout's packages")
     listing = [
-        replace(package, extensions=("python",))
+        package
         for package in discover_packages(ROOT)
-        if package.kind == "python"
+        if "python" in extension_set(package)
     ]
-    assert listing, "no package here is of the python kind"
+    assert listing, "no package here holds python"
     for package in listing:
         assert answer(package, CURRENT_VERSION) == _backend.current_version(package)
         assert answer(package, VERSION_FILES) == tuple(
@@ -165,26 +137,6 @@ def test_python_answers_its_runners_while_pytest_is_listed_and_a_package_holds_i
     assert answer(tmp_path, examples) is _backend.run_examples
 
 
-def test_a_member_listing_nothing_takes_its_kind_s_runners(tmp_path: Path) -> None:
-    """A package that lists no extension holds what its kind stands for."""
-    from livery.extensions.python import _backend
-    from livery.workshop import Query, answer
-    from workshop_extension_fakes import root_contract
-
-    suites: Query[object] = Query("python.test.runner")
-    root_contract(tmp_path, '["pytest"]')
-    # The fallback first: the C++ library's kind stands for no python.
-    lib = tmp_path / "packages" / "lib"
-    lib.mkdir(parents=True)
-    (lib / "workshop.toml").write_text('kind = "cpp-conan"\n')
-    assert answer(tmp_path, suites) is None
-    # The binary extension's kind stands for python among others.
-    native = tmp_path / "packages" / "native"
-    native.mkdir(parents=True)
-    (native / "workshop.toml").write_text('kind = "python-nanobind"\n')
-    assert answer(tmp_path, suites) is _backend.run_test
-
-
 def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     tmp_path: Path,
 ) -> None:
@@ -218,6 +170,7 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
         name="acme-core",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     (record,) = references(package)
     assert record.path == "packages/core/src/acme/core/__init__.py"
@@ -246,12 +199,13 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     assert record.accounted == ()
 
 
-def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
+def test_the_python_steps_stamp_and_publish_as_its_code_does(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One package through the extension's steps, its twin through the backend."""
+    """One package through the extension's steps, its twin through its code."""
     from dataclasses import replace
 
+    from livery.extensions.python import _backend
     from livery.workshop import _lifecycle
     from livery.workshop._packages import Package
     from livery.workshop._registries import RegistryTarget
@@ -278,7 +232,7 @@ def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
         listing, directory=_member("plain"), path="packages/plain", extensions=()
     )
     stamped = _lifecycle.stamp(listing, tmp_path, "2.0.0")
-    assert stamped == _lifecycle.stamp(plain, tmp_path, "2.0.0")
+    assert stamped == _backend.stamp_version(plain).stamp("2.0.0")
     assert stamped
     for name in ("pyproject.toml", "src/acme/core/__init__.py"):
         assert (listing.directory / name).read_text() == (
@@ -301,14 +255,12 @@ def test_the_python_steps_stamp_and_publish_as_the_kind_backend_does(
     assert uploads == [("acme-core", "https://idx.example/", "t")]
 
 
-def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
+def test_the_python_isolated_test_runs_the_release_leg(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """One package through the test phase's isolated side, its twin through the kind."""
-    from dataclasses import replace
-
+    """One package through the test phase's isolated side: the extension's step."""
     from livery.workshop import _lifecycle, _steps
     from livery.workshop._packages import Package
 
@@ -333,18 +285,13 @@ def test_the_python_isolated_test_runs_the_release_leg_as_the_kind_backend_does(
         depends=(),
         extensions=("python",),
     )
-    plain = replace(listing, path="packages/plain", extensions=())
     dirs = (tmp_path / "dist",)
-    for package in (listing, plain):
-        assert _lifecycle.has_isolated_test(package)
-        resolved = _lifecycle.isolated_test(
-            package, tmp_path, resolution="head", release_dirs=dirs
-        )
-        assert resolved == {"acme-core": "1.0.0"}
-    assert legs == [
-        ("packages/listing", "head", dirs),
-        ("packages/plain", "head", dirs),
-    ]
+    assert _lifecycle.has_isolated_test(listing)
+    resolved = _lifecycle.isolated_test(
+        listing, tmp_path, resolution="head", release_dirs=dirs
+    )
+    assert resolved == {"acme-core": "1.0.0"}
+    assert legs == [("packages/listing", "head", dirs)]
     # The listing package's leg is the extension's step in the walk; the
     # gate, which runs the tree side, registers no step for it.
     assert "test.python: packages/listing runs (a python package)" in (
@@ -362,6 +309,7 @@ def _verified_package(directory: Path) -> object:
         name="acme-core",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -423,6 +371,7 @@ def test_a_red_verification_install_runs_no_test(
         name="acme-core",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     code = _verify.verify(
         package, tree=tree, version="1.2.0", python="3.14", index="idx", extras="x"
@@ -512,30 +461,31 @@ def test_the_released_version_installs_alone_into_a_plain_environment(
     ]
 
 
-def test_a_python_package_is_categorised_alike_listing_the_extension_or_not() -> None:
-    """One table, the extension's, answers both ways for every python package."""
-    from dataclasses import replace
-
+def test_each_python_package_here_is_categorised_by_python_s_table() -> None:
+    """The extension's table answers for every package here that holds python."""
     import livery.workshop
     from livery.workshop._categories import category_of
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import discover_packages
 
     if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
-        pytest.skip("the comparison reads this checkout's packages")
-    paths = (
-        "src/livery/x/mod.py",
-        "tests/test_x.py",
-        "tests/x_test.py",
-        "tests/conftest.py",
-        "docs/index.md",
-        "docs/examples/first.py",
-        "pyproject.toml",
-    )
-    for package in discover_packages(ROOT):
-        if package.kind != "python":
-            continue
-        listing = replace(package, extensions=("python",))
-        plain = replace(package, extensions=())
-        for path in paths:
-            assert category_of(listing, path) == category_of(plain, path), path
-        assert category_of(plain, "src/livery/x/mod.py").supplier == "python"
+        pytest.skip("the categories are read from this checkout's packages")
+    expected = {
+        "src/livery/x/mod.py": "source",
+        "tests/test_x.py": "test",
+        "tests/x_test.py": "test",
+        "tests/conftest.py": "test-support",
+        "docs/index.md": "prose",
+        "docs/examples/first.py": "example",
+        "pyproject.toml": "configuration",
+    }
+    holding = [
+        package
+        for package in discover_packages(ROOT)
+        if "python" in extension_set(package)
+    ]
+    assert holding
+    for package in holding:
+        found = {path: category_of(package, path).name for path in expected}
+        assert found == expected, package.path
+        assert category_of(package, "src/livery/x/mod.py").supplier == "python"

@@ -1,8 +1,8 @@
-"""The python package kind: build, version, publish and test a python distribution.
+"""Build, version, publish and test a python distribution: the python extension's code.
 
-The base registers the python kind with this module as its backend, so
-every package of kind ``python`` builds, stamps, publishes and runs its
-tests through the functions here. One invocation covers every python
+The python extension's answers and steps call the functions here, so a
+package whose set holds python builds, stamps, publishes and runs its
+tests through them. One invocation covers every python
 package at once: the checkers read their scopes from the workspace's
 own configuration, so the whole repository is checked as CI checks it,
 and a tracked file outside any package still cannot pass the gate and
@@ -67,12 +67,6 @@ def public_modules(package: Package) -> tuple[str, ...]:
         ).is_file():
             modules.append(root)
     return tuple(modules)
-
-
-def compile_commands(package: Package) -> Path | None:
-    """None: a python package's build writes no compilation database."""
-    del package
-    return None
 
 
 def module_for(package: Package) -> str:
@@ -166,11 +160,6 @@ class _Stamper:
                 init.write_text(stamped, encoding="utf-8")
                 changed.append(str(init.relative_to(self._package.directory)))
         return changed
-
-
-def gate_build(package: Package, root: Path) -> None:
-    """Nothing: python tests run on source, so there is nothing to build."""
-    del package, root
 
 
 def test(
@@ -556,7 +545,7 @@ def references(package: Package) -> tuple[SourceReferences, ...]:
     another rule also reads is parsed once per gate; a file that does
     not parse is left out, since the syntax gate names it. A source
     under ``src`` is referenced by its dotted path, and a test by
-    nothing. Two of this kind's conventions account for a name: each
+    nothing. Two of python's conventions account for a name: each
     name a module the package declares as a footman task entry point
     references, since the runner that loads the module brings what it
     imports, and each name of a sibling one of its optional extras
@@ -656,7 +645,7 @@ def declare_requirement(
     """
     import re as _re
 
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     if EXTENSION not in extension_set(dependency):
         return None
@@ -796,12 +785,12 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
 def publish_artifact(
     package: Package, root: Path, *, version: str, target: RegistryTarget
 ) -> bool:
-    """Upload ``dist/*`` to the python index; the kind's publish seam.
+    """Upload ``dist/*`` to the python index: python's publish step calls it.
 
     ``uv publish``, to the target's upload endpoint with its
-    credential. *version* and *root* are other kinds' fields: the
-    wheels in ``dist/`` already carry their versions, and the index
-    needs nothing from the workspace.
+    credential. *version* and *root* are what another ecosystem's
+    publisher reads: the wheels in ``dist/`` already carry their
+    versions, and the index needs nothing from the workspace.
     """
     from livery.workshop._publish import publish_wheels
 

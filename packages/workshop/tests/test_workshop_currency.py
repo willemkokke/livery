@@ -907,7 +907,7 @@ def test_the_sweep_says_nothing_when_every_directory_has_its_contract(
     assert sweep_residue(root) == []
     member = root / "packages" / "kept"
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text('kind = "python"\nname = "kept"\n')
+    (member / "workshop.toml").write_text('extensions = ["python"]\nname = "kept"\n')
     (member / "pyproject.toml").write_text('[project]\nname = "kept"\n')
     assert sweep_residue(root) == []
     assert [package.name for package in discover_packages(root)] == ["kept"]
@@ -918,7 +918,7 @@ def _removed_upstream(tmp_path: Path, clone: Path, origin: Path) -> Path:
     (clone / ".gitignore").write_text(_IGNORED)
     package = clone / "packages" / "gone"
     package.mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "gone"\n')
+    (package / "workshop.toml").write_text('extensions = ["python"]\nname = "gone"\n')
     (package / "pyproject.toml").write_text('[project]\nname = "gone"\n')
     _git(clone, "add", ".")
     _git(clone, "commit", "-q", "-m", "feat: gone")

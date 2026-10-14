@@ -42,15 +42,15 @@ def main(ctx):
 """
 
 
-#: What the build steps here judge: the library holds python through its
-#: kind, and the app lists the fixture extension.
+#: What the build steps here judge: the library lists python, and the
+#: app lists the fixture extension.
 BOTH = ("python", "acme.native")
 
 
 def _member(root: Path, name: str, extensions: str, depends: str = "") -> Path:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
-    contract = f'kind = "python"\nname = "acme-{name}"\nextensions = {extensions}\n'
+    contract = f'name = "acme-{name}"\nextensions = {extensions}\n'
     if depends:
         contract += f'\n[[depends]]\npath = "packages/{depends}"\n'
     (directory / "workshop.toml").write_text(contract)
@@ -70,7 +70,7 @@ def _workspace(
     if git:
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    _member(root, "lib", "[]")
+    _member(root, "lib", '["python"]')
     _member(root, "app", '["acme.native"]', depends="lib")
     fake_extensions(tmp_path, monkeypatch, native=NATIVE)
     fake_steps(tmp_path, "native", STEPS)
@@ -82,8 +82,8 @@ def _workspace(
 def built() -> Iterator[list[str]]:
     """A counting build step over the fixture's packages: the paths it built.
 
-    The library lists nothing, so it holds python through its kind; the
-    app lists the fixture extension alone.
+    The library lists python, and the app lists the fixture extension
+    alone.
     """
     state = _steps.snapshot()
     calls: list[str] = []
@@ -238,7 +238,7 @@ def test_inside_a_package_the_workspace_is_the_root_that_holds_it(
     # Without a workspace above it, a package's contract is the nearest.
     alone = tmp_path / "alone" / "packages" / "x"
     alone.mkdir(parents=True)
-    (alone / "workshop.toml").write_text('kind = "python"\n')
+    (alone / "workshop.toml").write_text('extensions = ["python"]\n')
     assert _extensions.workspace_root(alone) == alone
 
 
@@ -501,6 +501,7 @@ def test_the_closure_holds_each_dependency_once_however_it_is_reached() -> None:
             depends=tuple(
                 Edge(path=f"packages/{need}", kind="build", floor="") for need in needs
             ),
+            extensions=("python",),
         )
 
     packages = (member("app", "util", "lib"), member("lib"), member("util", "lib"))

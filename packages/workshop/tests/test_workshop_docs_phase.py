@@ -44,7 +44,7 @@ def _workspace(tmp_path: Path, listed: str = '["docs"]') -> Path:
     (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (core / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-core"\n\n[docs]\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n[docs]\n'
         'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (core / "pyproject.toml").write_text(

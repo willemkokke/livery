@@ -43,7 +43,7 @@ def verify(
 def import_name(package: Package) -> str:
     """The module *package*'s wheel ships, which the tests import from site-packages.
 
-    The first of the python kind's module roots
+    The first of the package's python module roots
     ([livery.extensions.python._backend.module_roots][]): the build
     backend's ``module-name`` where the manifest declares one, which
     names a module under a namespace too.

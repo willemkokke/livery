@@ -21,14 +21,14 @@ RECIPE = (
 
 
 def _member(directory: Path, extensions: tuple[str, ...]) -> Package:
-    """A ``cpp-conan`` member in *directory* listing *extensions*, with the recipe."""
+    """A C++ library in *directory* listing *extensions*, with the recipe."""
     directory.mkdir(parents=True)
     (directory / "conanfile.py").write_text(RECIPE)
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name="acme-lib",
-        kind="cpp-conan",
+        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -73,16 +73,14 @@ def test_a_workspace_without_cpp_names_no_compiler(
     root = _workspace(
         tmp_path / "acme",
         {
+            # python answers no host tool, and a member listing nothing
+            # holds no extension to answer one.
             "echo": 'name = "acme-echo"\nextensions = ["python"]\n',
-            # A member listing nothing takes its kind's, and python's are none.
-            "plain": 'name = "acme-plain"\nkind = "python"\n',
-            # A member that lists takes its set's answer alone: its kind is
-            # not read.
-            "lib": 'name = "acme-lib"\nkind = "cpp-conan"\nextensions = ["python"]\n',
+            "plain": 'name = "acme-plain"\n',
         },
     )
-    # Each member holds python, so each carries a pyproject.toml.
-    for member in ("echo", "plain", "lib"):
+    # The member holding python carries a pyproject.toml.
+    for member in ("echo",):
         (root / "packages" / member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-{member}"\n'
         )
@@ -224,10 +222,10 @@ def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> No
     assert conan.requires == ("cpp",)
 
 
-def test_the_extensions_answer_a_cpp_conan_package_as_the_kind_backend_does(
+def test_the_extensions_answer_a_cpp_conan_package_from_its_recipe(
     tmp_path: Path,
 ) -> None:
-    """A member listing cmake and conan is answered as its twin listing nothing."""
+    """A member listing cmake and conan is answered from its recipe."""
     from livery.workshop._queries import (
         CURRENT_VERSION,
         MODULE_ROOTS,
@@ -238,32 +236,26 @@ def test_the_extensions_answer_a_cpp_conan_package_as_the_kind_backend_does(
     )
 
     listing = _member(tmp_path / "listing", ("cmake", "conan"))
-    plain = _member(tmp_path / "plain", ())
-    assert answer(listing, CURRENT_VERSION) == _lifecycle.current_version(plain)
-    assert _lifecycle.current_version(plain) == "1.0.0"
+    assert answer(listing, CURRENT_VERSION) == _lifecycle.current_version(listing)
+    assert _lifecycle.current_version(listing) == "1.0.0"
     assert answer(listing, VERSION_FILES) == (listing.directory / "conanfile.py",)
-    assert _lifecycle.version_files(plain) == (plain.directory / "conanfile.py",)
     requirements = answer(listing, REQUIREMENTS)
-    assert dict(requirements) == _lifecycle.declared_requirements(plain)
+    assert dict(requirements) == _lifecycle.declared_requirements(listing)
     assert dict(requirements) == {"acme-base": "[>=0.1 <1]"}
-    assert answer(listing, MODULE_ROOTS) == _lifecycle.module_roots(plain) == ()
-    assert answer(listing, PUBLIC_MODULES) == _lifecycle.public_modules(plain) == ()
+    assert answer(listing, MODULE_ROOTS) == _lifecycle.module_roots(listing) == ()
+    assert answer(listing, PUBLIC_MODULES) == _lifecycle.public_modules(listing) == ()
 
 
-def test_the_conan_steps_stamp_build_and_publish_as_the_kind_backend_does(
+def test_the_conan_steps_stamp_build_and_publish(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One member through conan's steps, its twin through the backend."""
+    """One member through conan's steps."""
     from livery.extensions.conan import _package
     from livery.workshop._registries import RegistryTarget
 
     listing = _member(tmp_path / "listing", ("cmake", "conan"))
-    plain = _member(tmp_path / "plain", ())
-    stamped = _lifecycle.stamp(listing, tmp_path, "2.0.0")
-    assert stamped == _lifecycle.stamp(plain, tmp_path, "2.0.0") == ["conanfile.py"]
-    assert (listing.directory / "conanfile.py").read_text() == (
-        plain.directory / "conanfile.py"
-    ).read_text()
+    assert _lifecycle.stamp(listing, tmp_path, "2.0.0") == ["conanfile.py"]
+    assert 'version = "2.0.0"' in (listing.directory / "conanfile.py").read_text()
     built: list[str] = []
 
     def _build(package: Package, root: Path, *, epoch: int = 0) -> Path:
@@ -286,9 +278,5 @@ def test_the_conan_steps_stamp_build_and_publish_as_the_kind_backend_does(
 
     monkeypatch.setattr(_package, "publish", _publish)
     target = RegistryTarget(kind="conan", url="https://conan.example/remote", token="t")
-    for package in (listing, plain):
-        assert _lifecycle.publish(package, tmp_path, version="2.0.0", target=target)
-    assert uploads == [
-        ("packages/listing", "2.0.0", "t"),
-        ("packages/plain", "2.0.0", "t"),
-    ]
+    assert _lifecycle.publish(listing, tmp_path, version="2.0.0", target=target)
+    assert uploads == [("packages/listing", "2.0.0", "t")]

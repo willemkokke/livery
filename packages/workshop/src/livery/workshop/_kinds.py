@@ -1,34 +1,27 @@
-"""The kind registry: what a package kind is, in one record.
+"""The kind registry: the seed trees a package's birth writes, by name.
 
-A kind answers two questions through one registration: how to
-build (the backend) and what a birth writes (the seed tree, with a
-parent chain written beneath it). The extensions a package holds
-require the tools it needs, and the steps say what the gate runs over
-it: each names the extensions it judges.
+A kind names a seed tree and the kind whose seeds a birth writes
+beneath it, its parent. Adding a kind means one call: ``register_kind``
+with the record. The workshop registers ``base``, ``python``,
+``python-nanobind`` and ``cpp-conan`` at import; an extension's plugin
+registers its own kinds at mount, which is how a brand ships a seed
+tree the way it ships fragments.
 
-Adding a kind means one call: ``register_kind`` with the record.
-The workshop registers ``base`` and ``python`` at import; an extension's
-plugin registers its own kinds at mount, which is how a brand ships
-a kind the way it ships fragments. An unknown declared kind refuses
-naming the vocabulary: a typo that silently builds the wrong kind
-is worse than a stop.
+A kind builds, tests and releases nothing, and a package holds nothing
+through it: a package holds the extensions its contract lists, and
+their steps and answers build, test and release it.
 
 ``base`` is abstract: the record behind the ``package-base`` template
 every package template renders first. It heads every kind's chain,
 so what it carries reaches every kind without a leaf restating it.
-A package's ``kind`` never names it: the vocabulary a contract may
-use is the concrete kinds.
 
 ``python-nanobind`` is abstract too: the record behind the nanobind
-seed tree, which a birth writes over python's. A package born from it
-is of the ``python`` kind and lists nanobind, whose declaration builds
-and releases it.
+seed tree, which a birth writes over python's.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
 
 from livery.footman import fail
 
@@ -53,148 +46,26 @@ from livery.workshop._categories import (
     WORKSPACE as WORKSPACE,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from livery.workshop._packages import Package
-    from livery.workshop._registries import RegistryTarget
-
-
-class Stamper(Protocol):
-    """What a backend's ``stamp_version`` answers with."""
-
-    def stamp(self, version: str) -> list[str]:
-        """Write *version* into the kind's homes; the files changed."""
-        ...
-
-    def homes(self) -> list[Path]:
-        """Every file `stamp` may write, so a caller can snapshot and restore them."""
-        ...
-
-
-class Backend(Protocol):
-    """The callables every kind's backend module exposes.
-
-    The dispatch extension absorbs a new kind automatically: call sites
-    ask the registry, never a module by name.
-    """
-
-    def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-        """Build the package's artifacts into its dist; the dist dir."""
-        ...
-
-    def publish_artifact(
-        self,
-        package: Package,
-        root: Path,
-        *,
-        version: str,
-        target: RegistryTarget,
-    ) -> bool:
-        """Upload the built artifacts to *target*, the resolved registry.
-
-        False when everything was already there: a re-run walks past
-        what an earlier attempt landed. The wave resolves the target
-        for the kind's artifact and hands it whole; each kind reads
-        the fields its own publisher needs.
-        """
-        ...
-
-    def current_version(self, package: Package) -> str:
-        """The version the package's own manifest declares."""
-        ...
-
-    def stamp_version(self, package: Package) -> Stamper:
-        """Where the kind keeps its version, ready to stamp."""
-        ...
-
-    def declared_requirements(self, package: Package) -> dict[str, str]:
-        """What the package declares natively, name to constraint."""
-        ...
-
-    def module_roots(self, package: Package) -> tuple[str, ...]:
-        """The names other packages reference this one's code by."""
-        ...
-
-    def public_modules(self, package: Package) -> tuple[str, ...]:
-        """The modules that declare the package's public API, by import path.
-
-        What a type-completeness step verifies; empty for a package
-        whose kind has no importable API.
-        """
-        ...
-
-    def compile_commands(self, package: Package) -> Path | None:
-        """Where the package's gate build writes its compilation database.
-
-        What a tool that reads one takes (clang-tidy's ``-p``); None for
-        a kind whose build writes none. The file exists once the build
-        is configured.
-        """
-        ...
-
-    def gate_build(self, package: Package, root: Path) -> None:
-        """Build what the kind's tests run on, into the gate's build directory.
-
-        Incremental, so a rebuild after one edit costs that edit. A
-        kind whose tests run on source does nothing here.
-        """
-        ...
-
-    def test(
-        self,
-        package: Package,
-        root: Path,
-        *,
-        selection: tuple[str, ...] = (),
-        arguments: tuple[str, ...] = (),
-    ) -> None:
-        """Run the kind's tests of *package*; a refusal is the verdict.
-
-        Every test, or with *selection* the tests of the named files
-        alone, relative to the package. A selection the kind cannot
-        map to a test is a refusal, never a silent empty run.
-        *arguments* go to the kind's test runner after its own.
-        """
-        ...
-
 
 @dataclass(frozen=True)
 class KindRecord:
-    """One package kind, completely.
+    """One package kind: the seed tree a birth writes, and its parent.
 
     Attributes:
-        name: The contract's ``kind`` value.
-        backend: The module carrying the kind's build callables.
+        name: The kind's name, which a seed chain names it by.
         template: The seed tree a package of the kind is born from,
             or empty for a kind with no seeds of its own.
         parent: The kind this one extends; a birth writes the
             parent's seeds first, then this kind's over them.
-        host_tools: What the host must already provide and no cache
-            will ever install (a C compiler); ``fm doctor`` and
-            ``fm env.check`` name an absence instead of letting a
-            build fail midway.
-        artifact: Which registry kind the release wave publishes
-            through (``python`` or ``conan``); empty for a kind
-            that publishes nothing.
-        abstract: Whether the record exists for the seed chain alone:
-            a birth writes its seed tree over its parent's, it builds
-            nothing, and a package's ``kind`` never names it. A
-            concrete kind needs a backend; an abstract one has none.
-        stands_for: The package-level extensions a package of the kind
-            that lists none is taken to hold: their categories, root
-            files and steps are its own. A child kind adds to its
-            parent's.
+        abstract: Whether the record exists for the seed chain alone,
+            as the base and nanobind's tree do: the conformance kit
+            probes no package of it.
     """
 
     name: str
-    backend: Backend | None = None
     template: str = ""
     parent: str = ""
-    host_tools: tuple[str, ...] = ()
-    artifact: str = "python"
     abstract: bool = False
-    stands_for: tuple[str, ...] = ()
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -212,17 +83,11 @@ def register_kind(record: KindRecord) -> None:
             f"kind {record.name!r} extends {record.parent!r}, which is"
             f" not registered; register the parent first"
         )
-    if record.backend is None and not record.abstract:
-        fail(
-            f"kind {record.name!r} has no backend: a kind a package may declare"
-            " builds through one, and a kind that exists for its children alone"
-            " is registered abstract"
-        )
     _KINDS[record.name] = record
 
 
 def kind_names() -> tuple[str, ...]:
-    """The vocabulary a contract's ``kind`` may name, sorted: the concrete kinds."""
+    """The kinds that are not abstract, sorted: the ones a refusal names."""
     return tuple(sorted(name for name, record in _KINDS.items() if not record.abstract))
 
 
@@ -232,28 +97,12 @@ def all_kinds() -> tuple[KindRecord, ...]:
 
 
 def kind_for(kind_name: str) -> KindRecord:
-    """The record for the contract's ``kind`` value; refusal teaches."""
+    """The record registered as *kind_name*; refusal names the kinds."""
     record = _KINDS.get(kind_name)
     if record is None:
         known = ", ".join(kind_names())
         fail(f"{kind_name!r} is not a registered package kind; kinds: {known}")
     return record
-
-
-def backend_for(package: Package) -> Backend:
-    """The backend that builds *package*, by its declared kind.
-
-    An abstract kind refuses naming the vocabulary: it builds nothing,
-    and a contract that names it has the wrong kind.
-    """
-    record = kind_for(package.kind)
-    if record.backend is None:
-        known = ", ".join(kind_names())
-        fail(
-            f"{package.path}: kind {package.kind!r} is an abstract kind and builds"
-            f" nothing; a package's kind is one of {known}"
-        )
-    return record.backend
 
 
 def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:
@@ -307,82 +156,28 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     return chain
 
 
-def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
-    """The union of host requirements the present kinds name, sorted."""
-    tools: set[str] = set()
-    for kind_name in present_types:
-        for record in kind_chain(kind_name):
-            tools.update(record.host_tools)
-    return tuple(sorted(tools))
-
-
-def kind_stands_for(kind_name: str) -> tuple[str, ...]:
-    """The extensions *kind_name*'s packages are taken to hold while they list none.
-
-    The chain's, ancestors first, each once; empty for a kind the
-    registry does not know, such as the workspace's own unit.
-    """
-    if kind_name not in _KINDS:
-        return ()
-    found: dict[str, None] = {}
-    for record in kind_chain(kind_name):
-        found.update(dict.fromkeys(record.stands_for))
-    return tuple(found)
-
-
-def extension_set(package: Package) -> tuple[str, ...]:
-    """The package-level extensions *package* holds, which its steps match.
-
-    Its set, the extensions it lists and those they require, for a
-    package that lists any; what its kind stands for
-    ([livery.workshop._kinds.kind_stands_for][]) otherwise, until the
-    kinds go.
-    """
-    return held_extensions(package.kind, package.extensions)
-
-
-def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
-    """What a package of *kind_name* listing *listed* holds; see `extension_set`."""
-    if not listed:
-        return kind_stands_for(kind_name)
-    from livery.workshop._composition import package_set
-    from livery.workshop._extensions import installed_declaration
-
-    return package_set(listed, installed_declaration)
-
-
 def _register_builtin() -> None:
-    from livery.extensions.python import _backend as _python
-    from livery.workshop._backends import _cpp_conan
-
     # The base every kind derives from: abstract, the record behind the
     # package-base template.
     register_kind(
         KindRecord(
             name="base",
             template=BASE_TEMPLATE,
-            artifact="",
             abstract=True,
         )
     )
-    # Two contract kinds exist today. The extension package template
-    # (package-extension) is a template variant of python, not
-    # a contract kind of its own: every member declares "python".
+    # The python package's seeds. The extension package template
+    # (package-extension) is a variant written over the base alone, not
+    # a kind of its own.
     register_kind(
         KindRecord(
             name="python",
-            backend=_python,
             template="package-python",
             parent="base",
-            # A package that lists no extension is taken to hold the
-            # python extension: its categories and steps are the same.
-            stands_for=("python",),
         )
     )
     # The nanobind seed tree: a python package's seeds with the
-    # extension module's build files over them. The record holds the
-    # seed chain alone; a package born from it is of the python kind
-    # and lists nanobind, which requires python, cpp and conan.
+    # extension module's build files over them.
     register_kind(
         KindRecord(
             name="python-nanobind",
@@ -391,24 +186,12 @@ def _register_builtin() -> None:
             abstract=True,
         )
     )
-    # The C/C++ library: cmake configures and builds, ctest is the
-    # test step, conan packages the result. The python type checkers
-    # do not gate it (there is no dist to verify types on); a python
-    # formatter and linter judge its conanfile.py beside clang-format
-    # and clang-tidy over its sources, and its build and ctest records
-    # carry the build and test phases.
+    # The C/C++ library's seeds: a CMake project and its conan recipe.
     register_kind(
         KindRecord(
             name="cpp-conan",
-            backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            host_tools=("cc", "c++"),
-            artifact="conan",
-            # A package that lists no extension is taken to hold the
-            # three a new one lists: one category table, one conan
-            # workspace and the same steps either way.
-            stands_for=_cpp_conan.STANDS_FOR,
         )
     )
 

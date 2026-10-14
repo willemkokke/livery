@@ -28,7 +28,7 @@ SPELLING = (
 #: The render: one line per package whose set holds the extension, in
 #: path order, found through the root it is handed.
 RENDER = (
-    "from livery.workshop._kinds import extension_set\n"
+    "from livery.workshop._composition import extension_set\n"
     "from livery.workshop._packages import discover_packages\n"
     "\n"
     "\n"
@@ -43,7 +43,7 @@ RENDER = (
 LOGGED_RENDER = (
     "from pathlib import Path\n"
     "\n"
-    "from livery.workshop._kinds import extension_set\n"
+    "from livery.workshop._composition import extension_set\n"
     "from livery.workshop._packages import discover_packages\n"
     "\n"
     "\n"
@@ -71,7 +71,7 @@ def _member(root: Path, name: str, extensions: str) -> None:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "acme-{name}"\nextensions = {extensions}\n'
+        f'name = "acme-{name}"\nextensions = {extensions}\n'
     )
     (directory / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
 

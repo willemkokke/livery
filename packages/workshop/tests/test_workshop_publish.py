@@ -61,7 +61,7 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
     )
     requirements = ", ".join(f'"livery-{dep}>=0.3.0"' for dep in floors_on)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n{depends}'
+        f'extensions = ["python"]\nname = "livery-{name}"\n{depends}'
     )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "livery-{name}"\nversion = "0.3.0"\n'
@@ -178,6 +178,7 @@ def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
         name="thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     with pytest.raises(_FAILURES) as caught:
         publish_wheels(package, index_url="", token="t")
@@ -206,6 +207,7 @@ def test_an_empty_publish_token_variable_never_reaches_uv(
         name="thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
@@ -252,6 +254,7 @@ def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
         name="thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
@@ -750,7 +753,8 @@ def test_a_publish_key_that_is_not_a_boolean_refuses(tmp_path: Path) -> None:
     directory = tmp_path / "packages" / "tool"
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-tool"\n\n[release]\npublish = "never"\n'
+        'extensions = ["python"]\nname = "livery-tool"\n\n'
+        '[release]\npublish = "never"\n'
     )
     (directory / "pyproject.toml").write_text('[project]\nname = "livery-tool"\n')
     with pytest.raises(
@@ -800,7 +804,8 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     native = root / "packages" / "native"
     native.mkdir()
     (native / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "livery-native"\n\n[release]\npublish = false\n'
+        'extensions = ["cmake", "conan"]\nname = "livery-native"\n\n'
+        "[release]\npublish = false\n"
     )
     (native / "conanfile.py").write_text(
         'class Native:\n    name = "livery-native"\n    version = "0.3.0"\n'
@@ -810,7 +815,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     python_build = _lifecycle.build
 
     def _fake_create(package: Package, root: Path, *, epoch: int = 0) -> Path:
-        if package.kind != "cpp-conan":
+        if "conan" not in package.extensions:
             return python_build(package, root, epoch=epoch)
         built.append(package.name)
         return package.directory

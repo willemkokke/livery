@@ -26,7 +26,7 @@ def _member(root: Path, name: str, files: dict[str, str], *, project: str = "") 
     directory = root / "packages" / name
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "acme-{name}"\n', encoding="utf-8"
+        f'extensions = ["python"]\nname = "acme-{name}"\n', encoding="utf-8"
     )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "acme-{name}"\n{project}', encoding="utf-8"
@@ -253,13 +253,13 @@ def test_a_narrowed_run_judges_the_sources_it_reaches(tmp_path: Path) -> None:
         "core",
         {"acme/core/__init__.py": "", "acme/core/bad.py": "import pygments\n"},
     )
-    # A cpp member holds no python extension, and a member of a kind no
-    # one registered is layering.graph's to name: the rule passes both by.
-    for name, kind in (("native", "cpp-conan"), ("odd", "acme-unknown")):
+    # A cpp member holds no python extension, and a member that lists
+    # nothing holds none: the rule passes both by.
+    for name, listed in (("native", '["cmake", "conan"]'), ("odd", "[]")):
         member = tmp_path / "packages" / name
         (member / "src").mkdir(parents=True)
         (member / "workshop.toml").write_text(
-            f'kind = "{kind}"\nname = "acme-{name}"\n', encoding="utf-8"
+            f'extensions = {listed}\nname = "acme-{name}"\n', encoding="utf-8"
         )
         (member / "src" / "stray.py").write_text(
             "import acme_absent\n", encoding="utf-8"
@@ -279,6 +279,7 @@ def test_a_member_without_a_manifest_declares_nothing(tmp_path: Path) -> None:
         name="acme-bare",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     declared = manifest(package)
     assert declared.path == "packages/bare/pyproject.toml"

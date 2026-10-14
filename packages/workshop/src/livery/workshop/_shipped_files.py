@@ -80,14 +80,13 @@ def delivery_order(root: Path) -> list[str]:
     The stack first ([livery.workshop._extensions.stack_names][]): the
     base, then every listed extension in mount order. After it, the
     package-level extensions a package holds through its kind alone
-    ([livery.workshop._kinds.extension_set][]), in composition order.
+    ([livery.workshop._composition.extension_set][]), in composition order.
     Such a package lists nothing and mounts no extension, and the
     fragments of what its kind stands for are delivered as a listed
     extension's are, until the kinds go.
     """
-    from livery.workshop._composition import order
+    from livery.workshop._composition import extension_set, order
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
 
     stack = list(stack_names(root))
@@ -271,10 +270,10 @@ def _packaged(
 
     A package's own files, its native tools' configuration, come from the
     first step by name whose fragment names an extension the package
-    holds ([livery.workshop._kinds.extension_set][]).
+    holds ([livery.workshop._composition.extension_set][]).
     """
+    from livery.workshop._composition import extension_set
     from livery.workshop._fragments import package_files, package_fragment
-    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
     from livery.workshop._steps import steps_by_name
 

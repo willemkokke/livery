@@ -213,8 +213,8 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
     build step judges is never built. With nothing changed, no build
     step runs. A checkout git cannot read is built whole, and says so.
     """
+    from livery.workshop._composition import extension_set
     from livery.workshop._graph import dependencies_closure, order_topologically
-    from livery.workshop._kinds import extension_set
     from livery.workshop._quality import run_on_packages
     from livery.workshop._steps import judges_extensions, steps_by_name
 

@@ -97,23 +97,17 @@ def _index(
 
 
 def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -> Path:
-    from livery.workshop._kinds import KindRecord, kind_for, register_kind
-
     root = tmp_path / "ws"
     (root / "packages" / "member").mkdir(parents=True)
-    # One package of a kind that requires nothing, so the sites'
-    # requirements are the contract's alone.
+    # One package that lists no extension and so requires nothing, so
+    # the sites' requirements are the contract's alone.
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "bare"\nname = "acme-member"\n'
+        'name = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
     )
     (root / "workshop.toml").write_text(contract)
-    python = kind_for("python")
-    register_kind(
-        KindRecord(name="bare", backend=python.backend, template=python.template)
-    )
     # The root's own files run on a language named bare, which no step
     # judges, and the base's own requirement is left out, so nothing
     # beyond what the contract requires is a requirement.

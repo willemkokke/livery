@@ -298,7 +298,7 @@ def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
     """
     if package.kind == WORKSPACE:
         return workspace_rules()
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     return category_rules(extension_set(package))
 

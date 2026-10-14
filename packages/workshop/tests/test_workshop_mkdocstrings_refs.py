@@ -96,7 +96,9 @@ def _workspace(tmp_path: Path, *, extensions: str = '["docs", "mkdocstrings"]') 
     tool.mkdir(parents=True)
     (root / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
-    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-thing"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-thing"\n'
+    )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-thing"\n')
     (package / "__init__.py").write_text(INIT)
     (package / "_impl.py").write_text(IMPL)
@@ -398,7 +400,7 @@ def test_a_reference_into_a_member_that_declines_its_reference_is_left_to_the_si
         '"""Other."""\n\n\nclass Thing:\n    """A thing."""\n'
     )
     (other / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-other"\n\n[docs]\napi = false\n'
+        'extensions = ["python"]\nname = "acme-other"\n\n[docs]\napi = false\n'
     )
     (other / "pyproject.toml").write_text('[project]\nname = "acme-other"\n')
     assert _problems(root, "See [acme.other.Thing][].") == []
@@ -416,12 +418,14 @@ def test_a_member_whose_source_is_one_module_has_no_page_to_link(
     (tool / "src" / "tool.py").write_text(
         '"""A tool, unlike [tool.Gone][]."""\n\nX = 1\n'
     )
-    (tool / "workshop.toml").write_text('kind = "python"\nname = "tool"\n')
+    (tool / "workshop.toml").write_text('extensions = ["python"]\nname = "tool"\n')
     (tool / "pyproject.toml").write_text('[project]\nname = "tool"\n')
     # A member the reference does not document renders no page either.
     native = root / "packages" / "native"
     (native / "src").mkdir(parents=True)
-    (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "native"\n')
+    (native / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "native"\n'
+    )
     assert _problems(root, "See [tool.X][].") == [
         _refusal(
             "packages/thing/src/acme/thing/_user.py:1",

@@ -792,9 +792,8 @@ def missing_host_tools(root: Path) -> tuple[str, ...]:
     A host tool, such as a C compiler, is one the store never installs:
     the machine provides it or the build cannot run, so ``fm doctor``
     and ``fm env.check`` name an absence before a build fails midway.
-    Each package's set answers the ``host-tools`` query, and a package
-    that lists no extension takes its kind's host tools instead, while
-    package kinds remain. The answers join, sorted, each tool once.
+    Each package's set answers the ``host-tools`` query, and the answers
+    join, sorted, each tool once.
     """
     from livery.workshop._packages import discover_packages
 
@@ -804,15 +803,7 @@ def missing_host_tools(root: Path) -> tuple[str, ...]:
 
 
 def _host_tools(package: Package) -> tuple[str, ...]:
-    """What *package* needs the host to provide: its set's ``host-tools`` answer.
-
-    A package that lists no extension takes its kind's host tools
-    instead, the bridge while package kinds remain.
-    """
-    if not package.extensions:
-        from livery.workshop._kinds import kind_host_tools
-
-        return kind_host_tools({package.kind})
+    """What *package* needs the host to provide: its set's ``host-tools`` answer."""
     from livery.workshop._queries import HOST_TOOLS, answer
 
     return tuple(answer(package, HOST_TOOLS))

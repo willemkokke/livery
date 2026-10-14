@@ -14,9 +14,12 @@ minimal one: no extension another member requires, in composition
 order. A combination is a set, named by its canonical list joined with
 ``+``.
 
-Every function here reads declarations through a lookup and imports
-nothing: [livery.workshop._extensions][] answers the lookup from what
-is installed, and a test from what it declares.
+Every function here but `extension_set` reads declarations through a
+lookup and imports nothing: [livery.workshop._extensions][] answers the
+lookup from what is installed, and a test from what it declares.
+[livery.workshop._composition.extension_set][] is a package's set as
+the installed declarations compose it, which the base's readers and the
+extensions ask.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from livery.workshop._declaration import Declaration
+    from livery.workshop._packages import Package
 
 #: How a name's declaration is found: None for an extension that no
 #: installed distribution declares.
@@ -87,6 +91,36 @@ def package_set(listed: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
     return tuple(
         name for name in closure(listed, lookup) if package_level(name, lookup)
     )
+
+
+#: Each list a package names, to the scan of the installed extensions it
+#: was composed against and the set it composed to.
+_SETS: dict[tuple[str, ...], tuple[object, tuple[str, ...]]] = {}
+
+
+def extension_set(package: Package) -> tuple[str, ...]:
+    """The package-level extensions *package* holds, which its steps match.
+
+    Its set: the extensions it lists and the package-level ones they
+    require, as the installed declarations compose them
+    ([livery.workshop._composition.package_set][]). Empty for a package
+    that lists none. Each distinct list is composed once for each scan
+    of the installed extensions, so a scan taken after an install
+    composes it again.
+    """
+    listed = package.extensions
+    if not listed:
+        return ()
+    from livery.footman import installed_entry_points
+    from livery.workshop._extensions import installed_declaration
+
+    scan = installed_entry_points()
+    held = _SETS.get(listed)
+    if held is not None and held[0] is scan:
+        return held[1]
+    found = package_set(listed, installed_declaration)
+    _SETS[listed] = (scan, found)
+    return found
 
 
 def implied(names: Iterable[str], lookup: Lookup) -> frozenset[str]:

@@ -62,12 +62,15 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 #: What the base still knows of a kind: (module, word) to count. Only falls.
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_ci_generate", "conanfile.py"): 1,
+    # The refusal of a contract's kind names the list each kind's
+    # packages write in its place.
+    ("_contract", "conan"): 1,
+    ("_contract", "cpp-conan"): 1,
+    ("_contract", "python"): 2,
     ("_devenv", "conan"): 1,
     ("_e2e", "pyproject.toml"): 1,
-    ("_kinds", BACKEND_IMPORT): 1,
-    ("_kinds", "conan"): 1,
     ("_kinds", "cpp-conan"): 1,
-    ("_kinds", "python"): 4,
+    ("_kinds", "python"): 2,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
@@ -216,13 +219,15 @@ def test_no_extension_imports_a_backend() -> None:
 #: removes it: a part of the kinds' removal (#1614), an issue, or a phase
 #: of the destination note.
 TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
-    ("_backends._cpp_conan", "cmake"): (
+    ("_contract", "cmake"): (
         1,
-        "the cpp-conan kind's set; #1614's P5 deletes _backends",
+        "the refusal of a contract's kind names cmake in the list cpp-conan's"
+        " packages write",
     ),
-    ("_backends._cpp_conan", "conan"): (
+    ("_contract", "conan"): (
         1,
-        "the cpp-conan kind's set; #1614's P5 deletes _backends",
+        "the refusal of a contract's kind names conan in the list cpp-conan's"
+        " packages write",
     ),
     ("_ci_generate", "conan"): (
         1,
@@ -247,7 +252,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "a GitHub job's conan home; the CI placement review, #1534",
     ),
-    ("_kinds", "conan"): (1, "the cpp-conan kind's artifact; #1614's P3"),
     ("_packages", "cmake"): (
         2,
         "BASE_EXTENSION_IMPORTS' cmake row; #1614's P5 deletes it",

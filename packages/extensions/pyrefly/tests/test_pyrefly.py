@@ -95,6 +95,7 @@ def test_a_run_checks_the_configured_whole_whatever_it_reaches(
         name="acme-one",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     record = registry.step_for("typecheck.pyrefly")
     record.run(PhaseContext(root=tmp_path, packages=(member,)))

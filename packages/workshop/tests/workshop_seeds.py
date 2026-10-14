@@ -280,7 +280,7 @@ def member(root: Path, name: str, *, floor_on: str = "") -> None:
     )
     requirement = f'"livery-{floor_on}>=0.1.0"' if floor_on else ""
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n{depends}'
+        f'extensions = ["python"]\nname = "livery-{name}"\n{depends}'
     )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "livery-{name}"\nversion = "0.2.0"\n'

@@ -101,7 +101,7 @@ def documented(package: Package) -> bool:
     A package whose set holds an extension the step names, python, is
     documented; any other is never asked.
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     return bool(set(step().extensions) & set(extension_set(package)))
 
@@ -119,8 +119,8 @@ def declines_api(package: Package) -> bool:
 def _owned_root(package: Package, src: Path) -> Path | None:
     """The directory under *src* of the first module *package* owns; None for none.
 
-    Its module roots, as its extensions answer them or its kind while it
-    lists none, in their order: the first whose directory exists. A root
+    Its module roots, as its extensions answer them, in their order:
+    the first whose directory exists. A root
     with no ``__init__.py`` starts there, at the module its wheel ships.
     """
     from livery.workshop._lifecycle import module_roots

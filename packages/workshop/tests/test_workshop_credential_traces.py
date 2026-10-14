@@ -103,6 +103,7 @@ def test_a_publish_token_reaches_a_trace_as_stars(
         name="thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     text, names = traced(
         tmp_path,

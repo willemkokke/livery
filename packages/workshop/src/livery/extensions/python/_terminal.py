@@ -12,7 +12,7 @@ The rule is a step of the layering phase,
 ``[phases.layering.runner-terminal]``, over the one parse of the python
 sources: the root's ``tasks.py`` and each package's ``src``, the files
 a narrowed run reaches or every one. It runs while the python
-extension is mounted, which a package of the python kind mounts.
+extension is mounted, which a package whose set holds python mounts.
 """
 
 from __future__ import annotations

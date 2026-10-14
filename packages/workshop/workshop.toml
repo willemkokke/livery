@@ -1,7 +1,6 @@
 # The package contract. Discovery is by this file: a directory under
 # packages/ is a package exactly when it carries one.
 
-kind = "python"
 extensions = ["python"]
 name = "livery-workshop"
 description = "The livery workshop, a footman plugin serving the whole dev loop."

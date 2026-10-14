@@ -39,13 +39,16 @@ def _package(tmp_path: Path) -> Package:
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-one"\nversion = "0.1.0"\n'
     )
-    (member / "workshop.toml").write_text('kind = "python"\nname = "livery-one"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-one"\n'
+    )
     return Package(
         directory=member,
         path="packages/one",
         name="livery-one",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -153,7 +156,9 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     other = tmp_path / "packages" / "two"
     (other / "tests").mkdir(parents=True)
     (other / "pyproject.toml").write_text('[project]\nname = "livery-two"\n')
-    (other / "workshop.toml").write_text('kind = "python"\nname = "livery-two"\n')
+    (other / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-two"\n'
+    )
     _quality._scoped_check((package, unit))
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format.fake"]["paths"] == ("packages/one/tests", "tests")
@@ -236,6 +241,7 @@ def test_the_module_derives_from_the_src_tree_not_the_dist_name(
         name="ci-e2e-loop-loop-echo",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     assert module_for(package) == "ci_e2e_loop.loop_echo"
 
@@ -253,6 +259,7 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
         name="livery-loop-echo",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     assert module_for(package) == "livery.loop_echo"
 
@@ -269,6 +276,7 @@ def _python_member(tmp_path: Path, name: str, manifest: str = "") -> Package:
         name=f"acme-{name}",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -477,7 +485,9 @@ def _whole_gate(
         member = tmp_path / "packages" / "one"
         (member / "src" / "one").mkdir(parents=True)
         (member / "src" / "one" / "__init__.py").write_text("x = 1\n")
-        (member / "workshop.toml").write_text('kind = "python"\nname = "acme-one"\n')
+        (member / "workshop.toml").write_text(
+            'extensions = ["python"]\nname = "acme-one"\n'
+        )
         (member / "pyproject.toml").write_text('[project]\nname = "acme-one"\n')
         (tmp_path / "tasks.py").write_text("x = 1\n")
         (tmp_path / "tests").mkdir()
@@ -583,6 +593,21 @@ def test_the_judges_read_the_tree_the_rewriters_left(
     trees.clear()
     _quality._run_check(full=True, fix=False, base="")
     assert trees == []
+
+
+def test_fix_rewrites_no_contract_that_writes_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path)
+    # The member's contract writes kind beside a list the layering fix
+    # would rewrite as canonical: the gate refuses before any step runs.
+    contract = tmp_path / "packages" / "one" / "workshop.toml"
+    written = 'kind = "python"\nname = "acme-one"\nextensions = ["python", "python"]\n'
+    contract.write_text(written)
+    with pytest.raises(BaseException, match='kind = "python" is not a key'):
+        _quality._run_check(full=True, fix=True, base="")
+    assert ran == []
+    assert contract.read_text() == written
 
 
 def test_one_refusing_member_is_the_gate_s_verdict(

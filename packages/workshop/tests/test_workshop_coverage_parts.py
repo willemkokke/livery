@@ -58,7 +58,7 @@ def _native(tmp_path: Path, floor: str = "floor = 100") -> Package:
     (directory / "src" / "x.cpp").write_text("int f() { return 1; }\n")
     (directory / "tests" / "test_x.cpp").write_text("int main() { return 0; }\n")
     (directory / "workshop.toml").write_text(
-        f'kind = "cpp-conan"\nname = "acme-n"\n[coverage]\n{floor}\n'
+        f'extensions = ["cmake", "conan"]\nname = "acme-n"\n[coverage]\n{floor}\n'
     )
     return Package(
         directory=directory,
@@ -66,6 +66,7 @@ def _native(tmp_path: Path, floor: str = "floor = 100") -> Package:
         name="acme-n",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
 
 

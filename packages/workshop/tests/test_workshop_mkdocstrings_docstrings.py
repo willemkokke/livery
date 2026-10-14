@@ -42,13 +42,15 @@ def _member(root: Path, init: str, *, name: str = "thing") -> Path:
     return member
 
 
-def _package(member: Path, kind: str = "python") -> Package:
+def _package(member: Path, *extensions: str) -> Package:
+    """*member* as a package listing *extensions*, python when none is named."""
     return Package(
         directory=member,
         path=f"packages/{member.name}",
         name=f"acme-{member.name}",
-        kind=kind,
+        kind="",
         depends=(),
+        extensions=extensions or ("python",),
     )
 
 
@@ -115,7 +117,7 @@ def test_a_package_of_another_language_is_never_imported(
     member = _member(tmp_path, "raise RuntimeError('imported')\n", name="native")
     monkeypatch.setenv("PYTHONPATH", str(member / "src"))
     docstrings_run(
-        PhaseContext(root=tmp_path, packages=(_package(member, "cpp-conan"),))
+        PhaseContext(root=tmp_path, packages=(_package(member, "cmake", "conan"),))
     )
     assert (
         "lint.docstrings: packages/native skips (not a python package)"

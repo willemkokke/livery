@@ -100,7 +100,9 @@ def test_only_example_files_are_collected_and_a_conftest_never_is(
 def _package(tmp_path: Path) -> Package:
     directory = tmp_path / "packages" / "x"
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "workshop.toml").write_text('kind = "python"\nname = "acme-x"\n')
+    (directory / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-x"\n'
+    )
     (directory / "pyproject.toml").write_text('[project]\nname = "acme-x"\n')
     from livery.workshop._packages import discover_packages
 

@@ -33,7 +33,7 @@ declares the options a package may set on it under its ``options``
 and reads a package's value with [livery.workshop.step_option][]; a
 step declared ``enabled = false`` registers once the root contract
 turns it on at the step's address. A package's
-public modules are its kind's answer,
+public modules are its extensions' answer,
 [livery.workshop.public_modules][], and so is where its build
 writes a compilation database, [livery.workshop.compile_commands][].
 The workspace's own tests, the ``tests`` directory at its root, are a

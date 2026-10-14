@@ -32,7 +32,9 @@ def _repository(tmp_path: Path) -> Path:
     member = root / "packages" / "one"
     (member / "src" / "one").mkdir(parents=True)
     (member / "src" / "one" / "__init__.py").write_text("x = 1\n")
-    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-one"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-one"\n'
+    )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-one"\n')
     (root / "workshop.toml").write_text("[workspace]\n")
     (root / "tasks.py").write_text("x = 1\n")

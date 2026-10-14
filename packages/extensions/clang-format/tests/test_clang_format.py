@@ -45,7 +45,7 @@ def _native(root: Path) -> Package:
     directory = root / "packages" / "native"
     (directory / "src").mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-native"\n'
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
     )
     (directory / "src" / "native.cpp").write_text(UNFORMATTED)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
@@ -55,6 +55,7 @@ def _native(root: Path) -> Package:
         name="acme-native",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
 
 

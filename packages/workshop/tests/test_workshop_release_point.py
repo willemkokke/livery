@@ -40,15 +40,19 @@ def _workspace(tmp_path: Path) -> Path:
         '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     for name, held in (
-        ("pure", 'kind = "python"\n'),
-        ("native", 'kind = "python"\nextensions = ["nanobind"]\n'),
-        ("lib", 'kind = "cpp-conan"\n'),
+        ("pure", 'extensions = ["python"]\n'),
+        ("native", 'extensions = ["nanobind"]\n'),
+        ("lib", 'extensions = ["cmake", "conan"]\n'),
     ):
         member = root / "packages" / name
         (member / "src").mkdir(parents=True)
         (member / "workshop.toml").write_text(f'{held}name = "acme-{name}"\n')
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         (member / "CHANGELOG.md").write_text("## 1.0.0\n")
+    # The library's recipe names its reference: it releases a conan package.
+    (root / "packages" / "lib" / "conanfile.py").write_text(
+        'class R:\n    name = "acme-lib"\n    version = "1.0.0"\n'
+    )
     _git(root, "init", "-q", "--initial-branch=main")
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "chore: birth")

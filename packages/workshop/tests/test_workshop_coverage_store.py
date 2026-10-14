@@ -39,7 +39,7 @@ def _package(root: Path, name: str, depends: tuple[str, ...] = ()) -> Package:
     (directory / "src" / name / "mod.py").write_text("a = 1\n")
     (directory / "tests" / "test_mod.py").write_text("def test_it():\n    pass\n")
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n'
+        f'extensions = ["python"]\nname = "livery-{name}"\n'
     )
     return Package(
         directory=directory,
@@ -49,6 +49,7 @@ def _package(root: Path, name: str, depends: tuple[str, ...] = ()) -> Package:
         depends=tuple(
             Edge(path=f"packages/{dep}", kind="build", floor="0") for dep in depends
         ),
+        extensions=("python",),
     )
 
 
@@ -430,6 +431,7 @@ def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
         name="livery-ghost",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     with pytest.raises(git.GitError):
         coverage_record.closure_id(work, (base, ghost), ghost)

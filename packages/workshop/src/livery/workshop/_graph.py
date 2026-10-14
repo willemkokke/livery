@@ -158,22 +158,10 @@ def affected_by(
 ) -> Scope | None:
     """What *paths*, changed since *before*, reach among the workspace's packages.
 
-    `affected_from_paths` over the packages discovered under *root*,
-    behind the guard every narrowed gate passes first: a package of a
-    kind no extension registers has edges the registry cannot vouch
-    for, so nothing is narrowed, and the package is named. ``None``
-    means everything.
+    `affected_from_paths` over the packages discovered under *root*.
+    ``None`` means everything.
     """
-    from livery.workshop._kinds import kind_names
-
     packages = discover_packages(root)
-    for package in packages:
-        if package.kind not in kind_names():
-            print(
-                f"  {package.path}: kind {package.kind!r} is not a"
-                " registered kind; failing open to everything"
-            )
-            return None
     return affected_from_paths(root, packages, paths, before=before)
 
 

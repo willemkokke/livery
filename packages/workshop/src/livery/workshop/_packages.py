@@ -22,6 +22,7 @@ from itertools import takewhile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from livery.footman import Failed
 from livery.workshop._contract import load_contract
 
 
@@ -58,8 +59,9 @@ class Package:
             (``packages/forge``, or ``packages/extensions/widgets`` for a
             package in a group directory).
         name: The distribution name (``livery-forge``).
-        kind: The package kind, as the contract's ``kind`` declares
-            it: ``python`` or ``cpp-conan``.
+        kind: Empty for a package discovery reads, since a contract
+            names no kind; the workspace's own tests unit carries
+            ``workspace``.
         depends: The declared edges, in contract order.
         step_options: The options the package sets on its steps, by
             the table that sets them: ``phases.<phase>`` (every step of
@@ -70,7 +72,7 @@ class Package:
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
             the narrow shape a coverage floor has, on the category
-            axis alone, winning over every kind's rule.
+            axis alone, winning over every extension's rule.
         publish: Whether the release train uploads the package's
             artifact to its registry. ``[release] publish = false``
             keeps an internal tool versioned, tagged and built by the
@@ -317,9 +319,9 @@ WORKSPACE_TESTS = "tests"
 def workspace_suite(root: Path) -> Package | None:
     """The workspace's own tests, the ``tests`` directory at its root, as a unit.
 
-    ``None`` when the workspace has none. The unit's kind,
-    ``workspace``, is no registered kind, so no step judges it by
-    kind; a test step runs it beside the members it judges.
+    ``None`` when the workspace has none. The unit's kind is
+    ``workspace`` and it lists no extension, so no package step judges
+    it; a test step runs it beside the members it judges.
     """
     directory = root / WORKSPACE_TESTS
     if not directory.is_dir():
@@ -345,15 +347,15 @@ RUNTIME_LANGUAGE = "python"
 def holds_runtime_language(package: Package) -> bool:
     """Whether *package* holds the runtime's language, `RUNTIME_LANGUAGE`.
 
-    A member holds it when it lists it, when an extension it lists
-    requires it, or, while it lists none, when its kind stands for it.
-    The workspace's own tests hold it always, since they run on the
-    runtime. Discovery asks this of every member, so a member that
-    lists it is answered without reading any extension's declaration.
+    A member holds it when it lists it, or when an extension it lists
+    requires it. The workspace's own tests hold it always, since they
+    run on the runtime. Discovery asks this of every member, so a
+    member that lists it is answered without reading any extension's
+    declaration.
     """
     if package.path == WORKSPACE_TESTS or RUNTIME_LANGUAGE in package.extensions:
         return True
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     return RUNTIME_LANGUAGE in extension_set(package)
 
@@ -447,9 +449,13 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     ``pyproject.toml`` a distribution of that language carries: a
     half-present package is a wrong state, not a lesser one. A
     directory holding only what a removed package left behind is
-    named as such, with the ``fm sync`` that removes it. A package of
-    an unknown kind that lists no extension holds nothing, so it
-    passes discovery and the backend refusal can name the vocabulary.
+    named as such, with the ``fm sync`` that removes it. A package
+    that lists no extension holds none, and needs no project file.
+
+    A contract that writes ``kind`` refuses, and the refusal names
+    every member's contract that writes it, each with the list to write
+    in its place ([livery.workshop._contract.removed_kinds][]); nothing
+    rewrites them.
     """
     problems = []
     packages = []
@@ -461,7 +467,11 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         if not contract_file.is_file():
             problems.append(_no_contract(root, directory))
             continue
-        contract = load_contract(contract_file)
+        try:
+            contract = load_contract(contract_file)
+        except Failed:
+            _refuse_written_kinds(root, contract_file)
+            raise
         depends = tuple(
             Edge(
                 path=str(edge.get("path", "")),
@@ -500,7 +510,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             directory=directory,
             path=f"{PACKAGES_DIR}/{member}",
             name=str(contract.get("name", "")),
-            kind=str(contract.get("kind", "")),
+            kind="",
             depends=depends,
             publish=publish,
             categories=tuple(reassigned),
@@ -521,6 +531,30 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             "packages missing a file they need:\n  " + "\n  ".join(problems)
         )
     return tuple(packages)
+
+
+def _refuse_written_kinds(root: Path, contract: Path) -> None:
+    """Refuse naming every member's contract that writes ``kind``, when *contract* does.
+
+    Asked after *contract*'s own load refused, so a workspace whose
+    contracts write no ``kind`` reads none of them twice.
+    """
+    from livery.footman import fail
+    from livery.workshop._contract import written_kinds
+
+    written = written_kinds(
+        directory / "workshop.toml" for directory in package_directories(root)
+    )
+    if contract not in written:
+        return
+    lines = [
+        f"{path.relative_to(root).as_posix()}: {line}"
+        for path, line in sorted(written.items())
+    ]
+    fail(
+        "these package contracts write kind, which nothing rewrites; edit each"
+        " as its line says:\n  " + "\n  ".join(lines)
+    )
 
 
 def verify_workspace(root: Path) -> tuple[Package, ...]:
@@ -610,17 +644,13 @@ class RuleContext:
         """What each source this run judges references, one record per source.
 
         Read from the ``references`` answer of each package in scope,
-        in package order; a package whose kind is not registered is
-        left out, since ``layering.graph`` names it.
+        in package order.
         """
         from livery.workshop import _lifecycle
-        from livery.workshop._kinds import kind_names
 
-        known = kind_names()
         return tuple(
             source
             for package in self.packages_in_scope()
-            if package.kind in known
             for source in _lifecycle.references(package)
             if self.files is None or source.path in self.files
         )
@@ -661,32 +691,17 @@ def rule_problems(
 def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
     """Every violation of the graph's invariants, verbatim; empty when they hold."""
     from livery.workshop import _lifecycle
-    from livery.workshop._kinds import extension_set, kind_names
+    from livery.workshop._composition import extension_set
 
     by_path = {package.path: package for package in packages}
     names_by_path = {package.path: package.name for package in packages}
     problems: list[str] = []
 
     for package in packages:
-        # The kind's own extractor answers what the package declares
-        # natively: pyproject dependencies for a python kind, conan
-        # references for a conan one, the union for the extension.
-        if package.kind not in kind_names():
-            known = ", ".join(kind_names())
-            problems.append(
-                f"{package.path}: kind {package.kind!r} is not a"
-                f" registered kind (kinds: {known}); its edges cannot"
-                " be checked"
-            )
-            continue
+        # The set's answers say what the package declares natively:
+        # python's the pyproject's dependencies, conan's the recipe's
+        # references, combined.
         native = _lifecycle.declared_requirements(package)
-        if native is None:
-            problems.append(
-                f"{package.path}: kind {package.kind!r} registers no"
-                " declared_requirements extractor, so the lint cannot"
-                " compare its edges; add the callable to the backend"
-            )
-            continue
         declared = {edge.path: edge for edge in package.depends}
         for edge in package.depends:
             if edge.path not in by_path:
@@ -789,8 +804,8 @@ class Neighbours:
 
     Attributes:
         owners: Each package's own import prefixes, mapped to its
-            path. The packages' extensions or kinds answer these; the
-            core collects them, so a reference is resolved the same way
+            path. The packages' extensions answer these; the core
+            collects them, so a reference is resolved the same way
             whoever made it.
         by_path: Every package by its identity path.
     """
@@ -815,14 +830,11 @@ class Neighbours:
 
 
 def neighbours(packages: tuple[Package, ...]) -> Neighbours:
-    """The reference map for *packages*, each kind answering for its own."""
+    """The reference map for *packages*, each package's set answering for its own."""
     from livery.workshop import _lifecycle
-    from livery.workshop._kinds import kind_names
 
     owners: dict[str, str] = {}
     for package in packages:
-        if package.kind not in kind_names():
-            continue
         for prefix in _lifecycle.module_roots(package):
             owners[prefix] = package.path
     return Neighbours(owners=owners, by_path={p.path: p for p in packages})
@@ -885,14 +897,10 @@ def undeclared_references(
     (package, dependency). *only* judges the packages at those paths
     and walks the graph over every one.
     """
-    from livery.workshop._kinds import kind_names
-
     around = neighbours(packages)
     writable: list[tuple[Package, Package, str, str]] = []
     refused: list[tuple[Package, Package]] = []
     for package in packages:
-        if package.kind not in kind_names():
-            continue
         if only is not None and package.path not in only:
             continue
         referenced = _referenced_siblings(package, around)
@@ -1054,22 +1062,21 @@ EXTENSIONS_NAMESPACE = "livery.extensions"
 
 
 #: The base modules that import an extension: each module and the
-#: extension it imports, to why. The package kinds' code is the
-#: extensions', and the base takes it as the kinds' backends while the
-#: kinds live in the base. A test keeps the list exact, and it is empty
-#: once the package kinds leave the base.
+#: extension it imports, to why. The base registers the C and C++
+#: library's build and test steps, which call cmake's code through a
+#: module that gathers cmake's, conan's and cpp's names. A test keeps
+#: the list exact.
 BASE_EXTENSION_IMPORTS: dict[tuple[str, str], str] = {
-    ("livery.workshop._kinds", "livery.extensions.python"): (
-        "registers the python kind with the extension's code as its backend"
-    ),
     ("livery.workshop._backends._cpp_conan", "livery.extensions.cmake"): (
-        "the cpp-conan kind's gate build and tests are cmake's code"
+        "the base's C and C++ build and test steps run cmake's gate build and ctest"
     ),
     ("livery.workshop._backends._cpp_conan", "livery.extensions.conan"): (
-        "the cpp-conan kind's recipe and release are conan's code"
+        "the C and C++ library's recipe and its release are conan's code,"
+        " gathered in one module"
     ),
     ("livery.workshop._backends._cpp_conan", "livery.extensions.cpp"): (
-        "the cpp-conan kind's file conventions are cpp's code"
+        "the C and C++ library's file conventions are cpp's code, gathered in"
+        " one module"
     ),
 }
 

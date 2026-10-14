@@ -316,7 +316,7 @@ def guidance(root: Path, audience: str) -> list[Prose]:
 
 def present_extensions(root: Path) -> frozenset[str]:
     """The package-level extensions a package present in *root* holds."""
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import discover_packages
 
     return frozenset(
@@ -556,9 +556,8 @@ def render_compositions(root: Path, audience: str | None) -> str:
     the gate phases that judge a package holding it. A package holding
     no package-level extension is listed under ``none``.
     """
-    from livery.workshop._composition import implied, order_or_sorted
+    from livery.workshop._composition import extension_set, implied, order_or_sorted
     from livery.workshop._extensions import installed_declaration
-    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
     from livery.workshop._phases import declared_phases
     from livery.workshop._steps import judges_extensions, steps_by_name

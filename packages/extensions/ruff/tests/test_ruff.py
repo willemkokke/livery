@@ -128,6 +128,7 @@ def test_each_step_hands_ruff_its_words_in_each_mode(
         name="acme-one",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     (member.directory / "src").mkdir(parents=True)
     ctx = PhaseContext(root=tmp_path, packages=(member,))

@@ -29,7 +29,7 @@ def _workspace(root: Path, listed: str = '["docs", "pytest", "coverage"]') -> Pa
     core = root / "packages" / "core"
     core.mkdir(parents=True, exist_ok=True)
     (core / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-core"\n\n[docs]\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n[docs]\n'
         'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     (core / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
