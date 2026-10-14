@@ -278,9 +278,8 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         "BASE_EXTENSION_IMPORTS' conan row; #1614's P5 deletes it",
     ),
     ("_publish", "conan"): (
-        5,
-        "the wave's conan target and prebuilt check; #1624 (P1a) and"
-        " #1618 (P1b), then the registries, phase 13",
+        3,
+        "the wave's conan target; #1624 (P1a), then the registries, phase 13",
     ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
     ("_release_driver", "conan"): (

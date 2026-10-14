@@ -440,8 +440,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-
-
 def record_for_template(template_kind: str) -> KindRecord | None:
     """The record whose template is *template_kind*; None when unmapped.
 

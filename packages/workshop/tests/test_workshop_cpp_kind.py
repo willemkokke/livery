@@ -18,7 +18,6 @@ from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     KindRecord,
-    kind_for,
     record_for_template,
     register_kind,
     template_chain,
