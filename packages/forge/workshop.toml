@@ -2,6 +2,8 @@
 # packages/ is a package exactly when it carries one.
 
 kind = "python"
+# The package-level extensions this package is composed of.
+extensions = ["python"]
 name = "livery-forge"
 description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
 dev-extras = ["github-secrets"]
