@@ -50,9 +50,6 @@ from livery.workshop._categories import (
 from livery.workshop._categories import (
     WORKSPACE as WORKSPACE,
 )
-from livery.workshop._categories import (
-    register_categories,
-)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -516,18 +513,6 @@ def requires_pyproject(kind_name: str) -> bool:
     return is_python_kind(kind_name)
 
 
-def record_for_template(template_kind: str) -> KindRecord | None:
-    """The record whose template is *template_kind*; None when unmapped.
-
-    A template variant (``package-extension``) maps to no record
-    and the caller falls back to the python wiring.
-    """
-    for record in _KINDS.values():
-        if record.template == template_kind:
-            return record
-    return None
-
-
 def _register_builtin() -> None:
     from livery.extensions.python import _backend as _python
     from livery.workshop._backends import _cpp_conan, _python_nanobind
@@ -625,36 +610,4 @@ def _register_builtin() -> None:
     )
 
 
-def _register_categories() -> None:
-    """The builtin category tables, one per kind that ships, and the root's."""
-    register_categories(
-        "base",
-        [
-            ("docs/**/*.md", "prose"),
-            ("docs/nav.toml", "nav"),
-            ("docs/assets/**", "asset"),
-            ("docs/examples/**/*.py", EXAMPLE),
-            ("docs/_generated/**", "generated"),
-            ("**", CONFIGURATION),
-        ],
-    )
-    # The workspace's own unit: its tests as the python kind reads
-    # them, and the files beside them that only the site or nobody
-    # reads.
-    register_categories(
-        WORKSPACE,
-        [
-            ("tests/**/test_*.py", TEST),
-            ("tests/**/*_test.py", TEST),
-            ("tests/**", TEST_SUPPORT),
-            ("notes/**", "notes"),
-            ("docs/**", "site"),
-            ("zensical.toml", "site"),
-            ("README.md", "readme"),
-            ("**", CONFIGURATION),
-        ],
-    )
-
-
 _register_builtin()
-_register_categories()

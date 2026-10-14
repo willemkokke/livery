@@ -20,7 +20,6 @@ from livery.workshop._kinds import (
     KindRecord,
     is_python_kind,
     kind_for,
-    record_for_template,
     register_kind,
     template_chain,
 )
@@ -749,9 +748,6 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     )
     assert not is_python_kind("cpp-conan")
     assert is_python_kind("python")
-    record = record_for_template("package-cpp-conan")
-    assert record is not None and record.name == "cpp-conan"
-    assert record_for_template("package-extension") is None
     # The build tools are the kind's; a native tool an extension brings
     # rides its step record, which is where the profile reads it, and
     # the measurer of a build made with MSVC rides cmake's [for.coverage]

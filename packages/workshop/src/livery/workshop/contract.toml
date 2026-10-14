@@ -296,7 +296,7 @@ doc = "the dotted Python namespace the members import under, which starts each n
 
 [contract.package.categories]
 types = ["table"]
-doc = "categories the package gives its own paths, which win over its kind's rules"
+doc = "categories the package gives its own paths, which win over its extensions' rules"
 
 [contract.package.categories."*"]
 types = ["strs"]

@@ -412,12 +412,17 @@ The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its
 **category** says what the file is to its package, `source`, `test`,
 `test-support`, `configuration`, and what an extension adds (`prose`,
-`example`, `asset`, `nav`); a kind or an extension registers a pattern
-table for a kind, `register_categories("python", [("src/**",
-"source"), ...])` in `livery.workshop._categories`, a derived kind
-inherits its parents' tables, the most specific pattern wins, and two
-patterns of one specificity claiming one path refuse naming both. A
-package reassigns its own paths in its contract, on this axis alone:
+`example`, `asset`, `nav`). A package-level extension declares a
+pattern table under `[categories]` in its `extension.toml`, and a
+package takes the tables of the extensions it holds over the base's
+own table, which names the documentation's paths and calls the rest
+configuration. The most specific pattern wins. Between patterns of
+one specificity in two tables, the extension later in composition
+order wins: an extension wins over the extensions it requires, and of
+two that do not require one another the later in alphabetical order
+wins. The base's table comes last. Two patterns of one table at one
+specificity that claim one path refuse naming both. A package
+reassigns its own paths in its contract, on this axis alone:
 
 ```toml
 [categories]
@@ -598,8 +603,8 @@ each naming its clause, and an extension's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
 call of the backend protocol; a per-package configuration file has one
 owner among the steps whose fragments name an extension; a path's
-category is the most specific rule's, the nearer kind winning a tie
-between kinds and two rules of one kind never tying; every step a
+category is the most specific rule's, the nearer table winning a tie
+between tables and two rules of one table never tying; every step a
 step runs `after` is registered, and following them never leads back
 to it; an extension's `extension.toml` holds only declared keys, each of
 its type, and every reference in it names a function its module
@@ -753,23 +758,25 @@ file is for, not its language, so ruff claims a native package's
 configuration and reaches its `conanfile.py` alone, which a scoped
 gate hands it by name. `fm explain` prints the steps whose claims
 reach a file, and the per-file ignores in `ruff.toml` render from the
-claims over the present kinds' tables, so the docstring rules stop at
-the tests of every kind without a table typed by hand.
+claims over the tables of the extensions the packages hold, so the
+docstring rules stop at the tests of every package without a table
+typed by hand.
 
 An extension's prose, its voice, its standards, its rules, is a set of
 fragments in sections the base orders: identity, voice, standards,
-rules, workflow, gate, verbs, kinds, tools. A fragment is a file in the
-extension's `content/fragments/` named
-`<section>.[<kind>.]<topic>[.<audience>].md`, or a registration with a
-render that answers each audience from the registries; a kind in the
-name delivers it only while a package of that kind, or one deriving
-from it, is present, and two fragments of one name refuse at sync
-naming both files. `fm sync` delivers the agent's set flat under
-`.workshop/fragments/`, a shipped file byte for byte and an edited copy
-kept and named, and writes the entry file from it in section order,
-the repository's own `fragments/` last. The gate, verbs, kinds and
-tools sections render from the registries, so no fragment names a
-checker by hand.
+rules, workflow, gate, verbs, compositions, tools. A fragment is a
+file in the extension's `content/fragments/` named
+`<section>.<topic>[.<audience>].md`, or a registration with a render
+that answers each audience from the registries, and two fragments of
+one name refuse at sync naming both files. `fm sync` delivers the
+agent's set flat under `.workshop/fragments/`, a shipped file byte for
+byte and an edited copy kept and named, and writes the entry file from
+it in section order, the repository's own `fragments/` last. The gate,
+verbs, compositions and tools sections render from the registries, so
+no fragment names a checker by hand. The compositions section names
+each set of package-level extensions the packages hold, by the
+shortest list that composes it, with its packages and the gate phases
+that judge them.
 
 Each rule over the sources is a step of the layering phase: the
 base's two (the base importing no extension, and the sibling

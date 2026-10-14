@@ -19,8 +19,8 @@ from livery.workshop._prose import (
     parse_name,
     register_fragment,
     register_section,
+    render_compositions,
     render_gate,
-    render_kinds,
     render_tools,
     render_verbs,
     sections,
@@ -96,26 +96,23 @@ def test_a_name_outside_the_convention_refuses_naming_the_file(tmp_path: Path) -
         shipped("acme.brand", content)
 
 
-def test_an_unknown_section_or_kind_refuses_naming_the_file() -> None:
+def test_an_unknown_section_or_a_kind_in_the_name_refuses_naming_the_file() -> None:
     with pytest.raises(
         ProseError, match=r"lore\.acme\.md: section 'lore' is not one the registry"
     ):
         parse_name("lore.acme.md")
     with pytest.raises(ProseError, match="the sections are identity, voice, standards"):
         parse_name("lore.acme.md")
-    with pytest.raises(
-        ProseError, match="kind 'rust' is not a registered package kind"
-    ):
-        parse_name("rules.rust.cargo.md")
-    # With three parts the last spells an audience, never a kind or a topic.
-    assert parse_name("rules.house.agent.md") == ("rules", "", "house", "agent")
-    assert parse_name("rules.python.wheels.human.md") == (
-        "rules",
-        "python",
-        "wheels",
-        "human",
-    )
-    assert parse_name("rules.python.wheels.md") == ("rules", "python", "wheels", "")
+    # A third part spells an audience; any other part beside the topic
+    # refuses, a kind's name among them.
+    for filename in ("rules.python.wheels.md", "rules.python.wheels.human.md"):
+        with pytest.raises(
+            ProseError,
+            match=rf"{filename}: a fragment is named <section>\.<topic>\[",
+        ):
+            parse_name(filename)
+    assert parse_name("rules.house.agent.md") == ("rules", "house", "agent")
+    assert parse_name("rules.house.md") == ("rules", "house", "")
 
 
 def test_two_fragments_of_one_name_refuse_naming_both_files(tmp_path: Path) -> None:
@@ -232,10 +229,6 @@ def test_a_rendered_fragment_outside_the_vocabulary_or_registered_twice_refuses(
     ):
         register_fragment("lore", "acme", render, extension="acme.brand")
     with pytest.raises(
-        ProseError, match="kind 'rust' is not a registered package kind"
-    ):
-        register_fragment("rules", "cargo", render, kind="rust", extension="acme.brand")
-    with pytest.raises(
         ProseError, match="a topic is never named 'agent', an audience is"
     ):
         register_fragment("rules", "agent", render, extension="acme.brand")
@@ -248,38 +241,6 @@ def test_a_rendered_fragment_outside_the_vocabulary_or_registered_twice_refuses(
     ):
         unregister_fragment("rules.none.md", by="acme.brand")
     unregister_fragment("rules.acme.md", by="acme.brand")
-
-
-def test_a_kind_gated_fragment_is_delivered_only_while_the_kind_is_present(
-    tmp_path: Path,
-) -> None:
-    root = _workspace(tmp_path)
-    listed = shipped(
-        "acme.brand",
-        _extension(
-            tmp_path,
-            "acme.brand",
-            **{
-                "rules.cpp-conan.native.md": "# native\n",
-                "rules.python.wheels.md": "# wheels\n",
-                "rules.everyone.md": "# all\n",
-            },
-        ),
-    )
-    # The absent arm first: no package, no kind, the gated fragments stay out.
-    assert _names(root, listed, AGENT) == ["rules.everyone.md"]
-    _member(root, "cpp", "cpp-conan")
-    assert _names(root, listed, AGENT) == [
-        "rules.cpp-conan.native.md",
-        "rules.everyone.md",
-    ]
-    # A derived kind counts as its parent: a nanobind package is a python one.
-    _member(root, "nb", "python-nanobind")
-    assert _names(root, listed, AGENT) == [
-        "rules.cpp-conan.native.md",
-        "rules.everyone.md",
-        "rules.python.wheels.md",
-    ]
 
 
 def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_order(
@@ -448,21 +409,33 @@ def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(
     assert render_verbs(root, HUMAN) != agent
 
 
-def test_the_kinds_and_tools_fragments_render_what_is_present(
+def test_the_compositions_and_tools_fragments_render_what_is_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path)
-    assert render_kinds(root, AGENT) == ""
+    assert render_compositions(root, AGENT) == ""
+    # A package holding no package-level extension, here one of a kind
+    # nothing registered, is listed under none.
+    _member(root, "odd", "rust")
+    assert "- none (packages/odd): holds none; gate phases none\n" in (
+        render_compositions(root, AGENT)
+    )
     _member(root, "cpp", "cpp-conan")
     _member(root, "nb", "python-nanobind")
-    agent = render_kinds(root, AGENT)
+    agent = render_compositions(root, AGENT)
     assert (
-        "- cpp-conan (packages/cpp): derives from nothing;"
+        "- cmake+conan (packages/cpp): holds cmake, cpp, conan;"
         " gate phases build, test" in agent
     )
-    assert "- python-nanobind (packages/nb): derives from python; gate phases" in agent
-    assert "| python-nanobind | python | packages/nb |" in render_kinds(root, HUMAN)
-    # A step of a phase the gate never runs is no gate phase of a kind,
+    assert (
+        "- conan+nanobind+python (packages/nb): holds cpp, conan, nanobind,"
+        " python; gate phases" in agent
+    )
+    assert (
+        "| conan+nanobind+python | cpp, conan, nanobind, python | packages/nb |"
+        in render_compositions(root, HUMAN)
+    )
+    # A step of a phase the gate never runs is no gate phase of a set,
     # whatever extensions it names.
     register_step(
         StepRecord(
@@ -475,8 +448,8 @@ def test_the_kinds_and_tools_fragments_render_what_is_present(
         )
     )
     assert (
-        "- cpp-conan (packages/cpp): derives from nothing;"
-        " gate phases build, test\n" in render_kinds(root, AGENT)
+        "- cmake+conan (packages/cpp): holds cmake, cpp, conan;"
+        " gate phases build, test\n" in render_compositions(root, AGENT)
     )
     assert render_tools(root, AGENT) == ""
     lock = SimpleNamespace(

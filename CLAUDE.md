@@ -7,6 +7,6 @@
 @.workshop/fragments/rules.workshop.md
 @.workshop/fragments/gate.checks.md
 @.workshop/fragments/verbs.extensions.md
-@.workshop/fragments/kinds.present.md
+@.workshop/fragments/compositions.present.md
 @.workshop/fragments/tools.locked.md
 @CLAUDE.project.md

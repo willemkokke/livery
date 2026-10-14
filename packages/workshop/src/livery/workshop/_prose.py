@@ -1,19 +1,16 @@
 """Prose fragments: what the extensions say to the agent and to a reader, in sections.
 
-An extension's prose, its voice, its standards, what a kind's package looks
-like, is a set of fragments, and one set writes the agent's entry file
-and the site's development pages. A fragment is a markdown file in the
-extension's ``content/fragments/`` named
-``<section>.[<kind>.]<topic>[.<audience>].md``, or a registration with
-[livery.workshop._prose.register_fragment][] and a render that takes
-the audience. The base defines the sections and their order;
-[livery.workshop._prose.register_section][] adds one at a declared
-position. A kind in the name delivers the fragment only while a
-package of that kind, or a kind deriving from it, is present. The
-audience is ``agent`` or ``human``, and a name without one serves
-both; a render answers each audience itself, and an empty answer
-leaves the fragment out for that reader. A topic is never named
-``agent`` or ``human``: the last part of a name spells the audience.
+An extension's prose, its voice, its standards, its rules, is a set of
+fragments, and one set writes the agent's entry file and the site's
+development pages. A fragment is a markdown file in the extension's
+``content/fragments/`` named ``<section>.<topic>[.<audience>].md``, or
+a registration with `register_fragment` and a render that takes the
+audience. The base defines the sections and their order;
+`register_section` adds one at a declared position. The audience is
+``agent`` or ``human``, and a name without one serves both; a render
+answers each audience itself, and an empty answer leaves the fragment
+out for that reader. A topic is never named ``agent`` or ``human``: the
+last part of a name spells the audience.
 
 ``fm sync`` delivers the agent's set flat under ``.workshop/fragments/``
 with the audience dropped from the name: a shipped fragment byte for
@@ -50,7 +47,7 @@ BASE_SECTIONS = (
     "workflow",
     "gate",
     "verbs",
-    "kinds",
+    "compositions",
     "tools",
 )
 
@@ -77,9 +74,7 @@ class Prose:
 
     Attributes:
         section: The section it belongs to, one the registry knows.
-        topic: What it is about; with the section and the kind, its name.
-        kind: The kind a present package must be or derive from, or
-            empty for every workspace.
+        topic: What it is about; with the section, its name.
         audience: ``agent`` or ``human`` for a file that serves one
             reader, empty for both; a rendered fragment is empty here
             and answers per audience.
@@ -91,7 +86,6 @@ class Prose:
 
     section: str
     topic: str
-    kind: str = ""
     audience: str = ""
     extension: str = BASE_EXTENSION
     source: Path | None = None
@@ -99,9 +93,8 @@ class Prose:
 
     @property
     def name(self) -> str:
-        """The delivered file name, ``<section>.[<kind>.]<topic>.md``."""
-        kind = f"{self.kind}." if self.kind else ""
-        return f"{self.section}.{kind}{self.topic}.md"
+        """The delivered file name, ``<section>.<topic>.md``."""
+        return f"{self.section}.{self.topic}.md"
 
     @property
     def origin(self) -> str:
@@ -183,24 +176,11 @@ def _check_section(where: str, section: str) -> None:
         )
 
 
-def _check_kind(where: str, kind: str) -> None:
-    if not kind:
-        return
-    from livery.workshop._kinds import kind_names
-
-    if kind not in kind_names():
-        raise ProseError(
-            f"{where}: kind {kind!r} is not a registered package kind; kinds:"
-            f" {', '.join(kind_names())}"
-        )
-
-
 def register_fragment(
     section: str,
     topic: str,
     render: Render,
     *,
-    kind: str = "",
     extension: str = BASE_EXTENSION,
 ) -> None:
     """Register a rendered fragment.
@@ -208,13 +188,12 @@ def register_fragment(
     The render takes the workspace root and the audience, ``agent``,
     ``human`` or None for no particular reader, and returns the
     markdown; an empty answer leaves the fragment out for that reader.
-    Refuses an unknown section or kind, a topic spelling an audience,
-    and a name an extension already registered, naming that extension.
+    Refuses an unknown section, a topic spelling an audience, and a name
+    an extension already registered, naming that extension.
     """
-    prose = Prose(section, topic, kind, "", extension, render=render)
+    prose = Prose(section, topic, "", extension, render=render)
     where = f"{extension} registers fragment {prose.name}"
     _check_section(where, section)
-    _check_kind(where, kind)
     if topic in AUDIENCES:
         raise ProseError(f"{where}: a topic is never named {topic!r}, an audience is")
     existing = _RENDERED.get(prose.name)
@@ -255,14 +234,13 @@ def restore(state: tuple[list[str], dict[str, str], dict[str, Prose]]) -> None:
     _RENDERED.update(rendered)
 
 
-def parse_name(filename: str, *, where: str = "") -> tuple[str, str, str, str]:
-    """Split a fragment file name into section, kind, topic and audience.
+def parse_name(filename: str, *, where: str = "") -> tuple[str, str, str]:
+    """Split a fragment file name into section, topic and audience.
 
-    ``rules.python.tests.agent.md`` is the rules section, the python
-    kind, the topic tests, for the agent. With three parts a last part
-    spelling an audience is one, so a topic is never named ``agent``
-    or ``human``. Refuses a name outside the convention, an unknown
-    section and an unknown kind, naming *where*, the file by default.
+    ``rules.tests.agent.md`` is the rules section, the topic tests, for
+    the agent. A third part spells the audience, so a topic is never
+    named ``agent`` or ``human``. Refuses a name outside the convention
+    and an unknown section, naming *where*, the file by default.
     """
     where = where or filename
     stem, dot, suffix = filename.rpartition(".")
@@ -270,15 +248,13 @@ def parse_name(filename: str, *, where: str = "") -> tuple[str, str, str, str]:
     audience = ""
     if len(parts) > 2 and parts[-1] in AUDIENCES:
         audience = parts.pop()
-    if len(parts) not in (2, 3) or not all(parts):
+    if len(parts) != 2 or not all(parts):
         raise ProseError(
-            f"{where}: a fragment is named <section>.[<kind>.]<topic>[.<audience>].md"
+            f"{where}: a fragment is named <section>.<topic>[.<audience>].md"
         )
-    section, topic = parts[0], parts[-1]
-    kind = parts[1] if len(parts) == 3 else ""
+    section, topic = parts
     _check_section(where, section)
-    _check_kind(where, kind)
-    return section, kind, topic, audience
+    return section, topic, audience
 
 
 def shipped(extension: str, content: Path) -> list[Prose]:
@@ -295,8 +271,8 @@ def shipped(extension: str, content: Path) -> list[Prose]:
     for path in sorted(directory.iterdir()):
         if not path.is_file():
             continue
-        section, kind, topic, audience = parse_name(path.name, where=path.as_posix())
-        found.append(Prose(section, topic, kind, audience, extension, source=path))
+        section, topic, audience = parse_name(path.name, where=path.as_posix())
+        found.append(Prose(section, topic, audience, extension, source=path))
     return found
 
 
@@ -329,8 +305,7 @@ def guidance(root: Path, audience: str) -> list[Prose]:
     fragment an extension renders, and the repository's own under
     ``fragments/``: by section, then by extension in mount order, the
     repository's own last, then by name. A fragment written for the
-    other reader is left out, and so is one for a kind no package in the
-    workspace is or derives from.
+    other reader is left out.
 
     Raises:
         ValueError: when two fragments in the set deliver under one name,
@@ -349,26 +324,12 @@ def present_extensions(root: Path) -> frozenset[str]:
     )
 
 
-def present_kinds(root: Path) -> frozenset[str]:
-    """The kinds a package present in *root* is or derives from."""
-    from livery.workshop._kinds import kind_chain, kind_names
-    from livery.workshop._packages import discover_packages
-
-    names = set(kind_names())
-    present: set[str] = set()
-    for package in discover_packages(root):
-        if package.kind in names:
-            present.update(r.name for r in kind_chain(package.kind) if not r.abstract)
-    return frozenset(present)
-
-
 def fragments(
     root: Path, shipped: Iterable[Prose], audience: str | None
 ) -> list[Prose]:
     """The fragments *audience* reads: by section, then extension, then name.
 
-    A shipped fragment for the other reader is left out, as is one
-    gated on a kind no present package is or derives from; a rendered
+    A shipped fragment for the other reader is left out; a rendered
     fragment is always in and answers for itself when rendered. The
     mounted extensions come in mount order, an extension outside the mount
     after them, and the repository's own last. Two fragments of one
@@ -376,11 +337,8 @@ def fragments(
     """
     from livery.workshop._extensions import stack_names
 
-    present = present_kinds(root)
     chosen: list[Prose] = []
     for prose in [*shipped, *_RENDERED.values()]:
-        if prose.kind and prose.kind not in present:
-            continue
         if prose.audience and prose.audience != audience:
             continue
         chosen.append(prose)
@@ -590,63 +548,74 @@ def render_verbs(root: Path, audience: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_kinds(root: Path, audience: str | None) -> str:
-    """The kinds the present packages are, what each derives from, its gate phases."""
-    from livery.workshop._kinds import extension_set, kind_chain, kind_names
+def render_compositions(root: Path, audience: str | None) -> str:
+    """The sets of extensions the present packages hold, each with its packages.
+
+    A set is named by the shortest list that composes it, the extensions
+    joined with ``+``, and is listed with every extension it holds and
+    the gate phases that judge a package holding it. A package holding
+    no package-level extension is listed under ``none``.
+    """
+    from livery.workshop._composition import implied, order_or_sorted
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages
     from livery.workshop._phases import declared_phases
     from livery.workshop._steps import judges_extensions, steps_by_name
 
     gated = {name for name, spec in declared_phases().items() if spec.gated}
-    names = set(kind_names())
-    members: dict[str, list[str]] = {}
-    held: dict[str, set[str]] = {}
+    members: dict[tuple[str, ...], list[str]] = {}
     for package in discover_packages(root):
-        if package.kind in names:
-            members.setdefault(package.kind, []).append(package.path)
-            held.setdefault(package.kind, set()).update(extension_set(package))
+        held = order_or_sorted(extension_set(package), installed_declaration)
+        members.setdefault(held, []).append(package.path)
     if not members:
         return ""
-    lines = ["# The kinds present", ""]
+    lines = ["# The compositions present", ""]
     if audience == HUMAN:
         lines += [
-            "| kind | derives from | packages | gate phases |",
+            "| composition | extensions | packages | gate phases |",
             "| --- | --- | --- | --- |",
         ]
     else:
         lines += [
-            "A package's kind, declared in its workshop.toml, decides its template,"
-            " its tools and the gate phases that apply to it:",
+            "The sets of package-level extensions the packages hold, each named by"
+            " the shortest list that composes it, with its packages and the gate"
+            " phases that judge them:",
             "",
         ]
-    for kind in sorted(members):
-        parents = (
+    named: dict[tuple[str, ...], str] = {}
+    for held in members:
+        required = implied(held, installed_declaration)
+        # The shortest list leaves out what another member requires; a
+        # cycle among the requires leaves nothing out of the whole set.
+        shortest = [name for name in held if name not in required] or held
+        named[held] = "+".join(shortest) or "none"
+    for held in sorted(members, key=named.__getitem__):
+        extensions = ", ".join(held) or "none"
+        paths = ", ".join(sorted(members[held]))
+        # A set's phases are those of the gate's steps that judge a
+        # package holding it; a step naming no extensions judges the
+        # workspace, never one set, and a step of a phase the gate never
+        # runs, the docs phase's, is no gate's.
+        phases = (
             ", ".join(
-                r.name for r in kind_chain(kind) if r.name != kind and not r.abstract
+                sorted(
+                    {
+                        r.phase
+                        for r in steps_by_name().values()
+                        if r.phase in gated
+                        and r.extensions
+                        and judges_extensions(r, held)
+                    }
+                )
             )
-            or "nothing"
-        )
-        paths = ", ".join(sorted(members[kind]))
-        # A kind's phases are those of the gate's steps that judge its
-        # members, by the extensions they hold; a step naming no
-        # extensions judges the workspace, never one kind, and a step of
-        # a phase the gate never runs, the docs phase's, is no gate's.
-        phases = ", ".join(
-            sorted(
-                {
-                    r.phase
-                    for r in steps_by_name().values()
-                    if r.phase in gated
-                    and r.extensions
-                    and judges_extensions(r, held[kind])
-                }
-            )
+            or "none"
         )
         if audience == HUMAN:
-            lines.append(f"| {kind} | {parents} | {paths} | {phases} |")
+            lines.append(f"| {named[held]} | {extensions} | {paths} | {phases} |")
         else:
             lines.append(
-                f"- {kind} ({paths}): derives from {parents}; gate phases {phases}"
+                f"- {named[held]} ({paths}): holds {extensions}; gate phases {phases}"
             )
     return "\n".join(lines) + "\n"
 
@@ -690,7 +659,7 @@ def _register_builtin() -> None:
     """The base's rendered fragments: what the registries say, never written by hand."""
     register_fragment("gate", "checks", render_gate)
     register_fragment("verbs", "extensions", render_verbs)
-    register_fragment("kinds", "present", render_kinds)
+    register_fragment("compositions", "present", render_compositions)
     register_fragment("tools", "locked", render_tools)
 
 
