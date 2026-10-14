@@ -1316,8 +1316,7 @@ alone.
   fixes what every later same-site comparison excludes.
 - PA2 (built, #1598): the `references` query, which the python extension answers from
   its own parse, replaces the base's python parse in the layering
-  checks; a package that lists nothing is answered through its kind
-  until the kinds go.
+  checks; a package that lists nothing references nothing since P3.
 - PA1 (built, #1601): the terminal rule becomes the python extension's
   layering step, and a general rule of the python extension,
   `layering.declared-imports`, replaces forge's stdlib-only rule: at
@@ -1456,9 +1455,17 @@ parts, each mergeable alone:
   that hold it; the nanobind backend moves into the extension, and the
   base imports it no more. `kind = "python-nanobind"` refuses, naming
   `extensions = ["nanobind"]`.
-- P3: the fallbacks through the kind go (#1550), and a contract that
-  writes `kind` refuses. This repository's packages already list their
-  extensions (#1616), so P3 drops their `kind` lines.
+- P3 (built, #1646): every package lists its extensions. A contract
+  that writes `kind` refuses, naming the list to write (`python` for
+  `["python"]`, `cpp-conan` for `["cmake", "conan"]`, `python-nanobind`
+  for `["nanobind"]`, any other value the installed package-level
+  extensions, and beside a list "delete kind"); every such contract is
+  named in one refusal, and `--fix` rewrites nothing. The fallbacks
+  through the kind go (#1550): a package that lists nothing holds
+  nothing, and a release phase its set adds no step to refuses, naming
+  the phase. `Backend`, `backend_for`, `stands_for`, `artifact` and
+  `host_tools` leave the kind records, which keep the seed trees and
+  their chain until P6 and P7.
 - P4: `Package.kind` goes, and `public_modules` and
   `compile_commands` leave the public names.
 - P5: cmake's build and test steps are cmake's; `_backends` goes, and
@@ -1625,10 +1632,8 @@ neither needs nor rules out).
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
-| `BASE_EXTENSION_IMPORTS`, the base modules that import `livery.extensions.python`, and the `cpp-conan` kind's backend importing `cmake`, `cpp` and `conan` | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
-| `livery.workshop._lifecycle` answering from the kind's backend | the package's extensions' phase steps and queries (phase 11b, slices 2 to 6) |
-| `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the `cpp-conan` kind | nothing: the package kinds go (phase 11b, slice 6) |
-| `KindRecord.stands_for`, what a package that lists no extension is taken to hold: its categories, root files, checks and fragments, its requirement writers, and, for the extension mount and the package contract judge, its extensions (#1550) | nothing: every package lists its extensions (phase 11b, slice 6) |
+| `BASE_EXTENSION_IMPORTS`, the `_backends._cpp_conan` module importing `cmake`, `cpp` and `conan` for the base's cmake steps and the loop | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
+| `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the base's cmake steps and the loop | cmake's own steps (step 7's P5) |
 | the host build of nanobind's wheels in the extension's code, run by nanobind's hidden `nanobind.wheels` task | conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
