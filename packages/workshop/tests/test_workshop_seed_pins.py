@@ -26,7 +26,7 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePath
 from types import ModuleType
 from typing import TypeVar
 
@@ -745,7 +745,13 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
         "has_isolated_test": bodies.entry(
             "has_isolated_test", lambda: _lifecycle.has_isolated_test(native)
         ),
-        "stamp": bodies.entry("stamp", lambda: _lifecycle.stamp(native, root, "0.1.0")),
+        # The stamp names the files it wrote with the platform's separator.
+        "stamp": [
+            PurePath(written).as_posix()
+            for written in bodies.entry(
+                "stamp", lambda: _lifecycle.stamp(native, root, "0.1.0")
+            )
+        ],
         "declare_requirement": bodies.entry(
             "declare_requirement",
             lambda: _lifecycle.declare_requirement(native, echo, "0.1.0"),
