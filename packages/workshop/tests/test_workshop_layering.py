@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import discover_packages, verify_workspace
-from livery.workshop._packages import RULES, write_edges
+from livery.workshop._packages import RULES, Package, write_edges
 
 _FAILURES = (BaseException,)
 
@@ -460,6 +460,146 @@ def test_a_contract_naming_the_kind_under_type_is_refused_with_the_migration(
 # --- the fix mode: the edge the graph already reaches is written -----------
 
 
+def _recipe(name: str) -> str:
+    """A conan package's recipe, which names its reference, for ``acme-<name>``."""
+    return (
+        "from conan import ConanFile\n\n\n"
+        f"class {name.title()}(ConanFile):\n"
+        f'    """The {name} library."""\n\n'
+        f'    name = "acme-{name}"\n'
+        '    version = "0.1.0"\n\n'
+        "    def build(self):\n"
+        "        pass\n"
+    )
+
+
+#: A consumer's recipe: requirements alone, and no reference of its own.
+CONSUMER_RECIPE = (
+    "from conan import ConanFile\n\n\n"
+    "class Consumer(ConanFile):\n"
+    '    generators = "CMakeDeps"\n'
+    '    requires = ("fmt/[>=11.0]",)\n'
+)
+
+
+def _member(
+    root: Path,
+    name: str,
+    kind: str,
+    files: dict[str, str],
+    extensions: tuple[str, ...] = (),
+) -> Package:
+    """The member ``acme-<name>`` at ``packages/<name>``, holding *files*."""
+    directory = root / "packages" / name
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text(f'kind = "{kind}"\nname = "acme-{name}"\n')
+    for relative, text in files.items():
+        (directory / relative).write_text(text)
+    return Package(
+        directory=directory,
+        path=f"packages/{name}",
+        name=f"acme-{name}",
+        kind=kind,
+        depends=(),
+        extensions=extensions,
+    )
+
+
+def _three_ecosystems(root: Path) -> tuple[Package, Package, Package]:
+    """A python package, a C++ library with conan, and a nanobind module.
+
+    The python package and the library list their extensions; the
+    nanobind module lists none, so it holds what its kind stands for:
+    python and conan among them, through a consumer's recipe.
+    """
+    echo = _member(
+        root,
+        "echo",
+        "python",
+        {"pyproject.toml": '[project]\nname = "acme-echo"\n'},
+        ("python",),
+    )
+    lib = _member(
+        root, "lib", "cpp-conan", {"conanfile.py": _recipe("lib")}, ("cmake", "conan")
+    )
+    native = _member(
+        root,
+        "native",
+        "python-nanobind",
+        {
+            "pyproject.toml": '[project]\nname = "acme-native"\n',
+            "conanfile.py": CONSUMER_RECIPE,
+        },
+    )
+    return echo, lib, native
+
+
+def _tree(root: Path) -> dict[str, str]:
+    """Every file under *root*'s packages, by its path there, to its text."""
+    return {
+        path.relative_to(root).as_posix(): path.read_text()
+        for path in sorted((root / "packages").rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
+    tmp_path: Path,
+) -> None:
+    from livery.footman import Failed
+    from livery.workshop import _lifecycle
+    from livery.workshop._packages import declare_edge
+
+    echo, lib, native = _three_ecosystems(tmp_path)
+    bare = _member(tmp_path, "bare", "cpp-conan", {"conanfile.py": _recipe("bare")})
+    before = _tree(tmp_path)
+    # The package's set holds python's writer alone, and the library
+    # holds no python.
+    with pytest.raises(Failed) as refused:
+        _lifecycle.declare_requirement(echo, lib, "0.1.0")
+    assert str(refused.value) == (
+        "packages/echo holds python, and no writer of its set takes a requirement"
+        " on packages/lib, which holds cmake, conan, cpp: a writer takes a sibling"
+        " of its own ecosystem alone. List an extension whose manifest takes"
+        " packages/lib, or drop the dependency"
+    )
+    # The edge refuses before its contract changes.
+    with pytest.raises(Failed, match=re.escape("which holds cmake, conan, cpp")):
+        declare_edge(echo, lib, kind="runtime", floor="0.1.0")
+    # A package that lists nothing takes the writers of what its kind
+    # stands for: conan's, which leaves a consumer's recipe alone.
+    with pytest.raises(
+        Failed,
+        match=re.escape(
+            "packages/bare holds cmake, conan, cpp, and no writer of its set takes"
+            " a requirement on packages/native, which holds python, cpp, conan,"
+            " nanobind:"
+        ),
+    ):
+        _lifecycle.declare_requirement(bare, native, "0.1.0")
+    assert _tree(tmp_path) == before
+
+
+def test_each_writer_leaves_a_sibling_outside_its_ecosystem_alone(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.conan import _package as conan
+    from livery.extensions.python import _backend as python
+
+    echo, lib, native = _three_ecosystems(tmp_path)
+    before = _tree(tmp_path)
+    # Python's writer takes a sibling that holds python alone.
+    assert python.declare_requirement(echo, lib, "0.1.0") is None
+    # Conan's takes a conan package alone: neither a sibling that holds
+    # no conan, nor one whose recipe, a consumer's, names no reference.
+    assert conan.declare_requirement(lib, echo, "0.1.0") is None
+    assert conan.declare_requirement(lib, native, "0.1.0") is None
+    assert _tree(tmp_path) == before
+    # Each takes a sibling of its own ecosystem.
+    assert python.declare_requirement(native, echo, "0.1.0") == ["pyproject.toml"]
+    assert conan.declare_requirement(native, lib, "0.1.0") == ["conanfile.py"]
+
+
 def test_a_reference_nothing_reaches_is_not_written(tmp_path: Path) -> None:
     _forge_stub(tmp_path)
     _package(tmp_path, "low")
@@ -586,48 +726,100 @@ def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_projec
         _python.declare_requirement(orphan, low, "1.2.0")
 
 
-def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
+def _recipe_member(root: Path, name: str, body: str) -> Package:
+    """The conan package ``acme-<name>``, its recipe *body*."""
+    return _member(root, name, "cpp-conan", {"conanfile.py": body}, ("cmake", "conan"))
+
+
+def test_the_conan_requirement_refuses_a_recipe_it_cannot_place_the_tuple_in(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._backends import _cpp_conan
-    from livery.workshop._packages import Package
+    from livery.extensions.conan import _package as conan
 
-    def recipe(name: str, body: str) -> Package:
-        directory = tmp_path / "packages" / name
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "conanfile.py").write_text(body)
-        return Package(
-            directory=directory,
-            path=f"packages/{name}",
-            name=f"acme-{name}",
-            kind="cpp-conan",
-            depends=(),
-        )
+    low = _recipe_member(tmp_path, "low", _recipe("low"))
+    called = _recipe_member(
+        tmp_path,
+        "called",
+        "from conan import ConanFile\n\n\nclass Called(ConanFile):\n"
+        '    name = "acme-called"\n\n    def requirements(self):\n'
+        '        self.requires("fmt/[>=11.0]")\n',
+    )
+    with pytest.raises(
+        _FAILURES,
+        match=re.escape(
+            "declares its requirements without a `requires = (...)` tuple to add"
+            ' "acme-low/[>=0.3.0]" to; add the requirement by hand'
+        ),
+    ):
+        conan.declare_requirement(called, low, "0.3.0")
+    # No class derives from ConanFile, or the recipe class's body shares
+    # its line: nothing marks where the tuple goes.
+    for name, body in (
+        ("plain", 'class Plain:\n    name = "acme-plain"\n'),
+        (
+            "inline",
+            'from conan import ConanFile\n\n\nclass Inline(ConanFile): name = "x"\n',
+        ),
+    ):
+        refused = _recipe_member(tmp_path, name, body)
+        with pytest.raises(_FAILURES, match=re.escape("defines no recipe class")):
+            conan.declare_requirement(refused, low, "0.3.0")
+        assert (refused.directory / "conanfile.py").read_text() == body
 
-    low = recipe("low", 'class Low:\n    name = "acme-low"\n')
-    seeded = recipe(
+
+def test_the_conan_requirement_joins_the_tuple_or_opens_one(tmp_path: Path) -> None:
+    from livery.extensions.conan import _package as conan
+
+    low = _recipe_member(tmp_path, "low", _recipe("low"))
+    seeded = _recipe_member(
+        tmp_path,
         "seeded",
         'class Seeded:\n    name = "acme-seeded"\n    requires = ("fmt/[>=11.0]",)\n',
     )
-    assert _cpp_conan.declare_requirement(seeded, low, "0.3.0") == ["conanfile.py"]
+    assert conan.declare_requirement(seeded, low, "0.3.0") == ["conanfile.py"]
     assert (
         'requires = ("fmt/[>=11.0]", "acme-low/[>=0.3.0]")'
         in (seeded.directory / "conanfile.py").read_text()
     )
-    assert _cpp_conan.declare_requirement(seeded, low, "0.4.0") == []
-    empty = recipe(
-        "empty", 'class Empty:\n    name = "acme-empty"\n    requires = ()\n'
+    assert conan.declare_requirement(seeded, low, "0.4.0") == []
+    empty = _recipe_member(
+        tmp_path, "empty", 'class Empty:\n    name = "acme-empty"\n    requires = ()\n'
     )
-    _cpp_conan.declare_requirement(empty, low, "0.3.0")
+    conan.declare_requirement(empty, low, "0.3.0")
     assert (
         'requires = ("acme-low/[>=0.3.0]",)'
         in (empty.directory / "conanfile.py").read_text()
     )
-    bare = recipe("bare", 'class Bare:\n    name = "acme-bare"\n')
-    with pytest.raises(
-        _FAILURES, match=re.escape("declares no `requires = (...)` tuple")
+    # A recipe that declares no requirement gets the tuple after the
+    # attributes of its recipe class, or first in a class that starts
+    # with a method.
+    opened = '    requires = ("acme-low/[>=0.3.0]",)\n'
+    head = "from conan import ConanFile\n\n\n"
+    for name, body, written in (
+        (
+            "methods",
+            f'{head}class Methods(ConanFile):\n    """Doc."""\n\n'
+            '    name = "x"\n\n    def build(self):\n        pass\n',
+            f'{head}class Methods(ConanFile):\n    """Doc."""\n\n'
+            f'    name = "x"\n{opened}\n    def build(self):\n        pass\n',
+        ),
+        (
+            "attributes",
+            f'{head}class Attributes(ConanFile):\n    name = "x"\n    version = "1"',
+            f"{head}class Attributes(ConanFile):\n"
+            f'    name = "x"\n    version = "1"\n{opened}',
+        ),
+        (
+            "decorated",
+            f"{head}class Decorated(ConanFile):\n    @property\n"
+            "    def build(self):\n        pass\n",
+            f"{head}class Decorated(ConanFile):\n{opened}\n    @property\n"
+            "    def build(self):\n        pass\n",
+        ),
     ):
-        _cpp_conan.declare_requirement(bare, low, "0.3.0")
+        bare = _recipe_member(tmp_path, name, body)
+        assert conan.declare_requirement(bare, low, "0.3.0") == ["conanfile.py"]
+        assert (bare.directory / "conanfile.py").read_text() == written
 
 
 # The one parse, and the rules an extension registers into it.
@@ -749,6 +941,47 @@ def test_the_sibling_fix_rewrites_then_locks_a_moved_manifest_then_judges(
         f"uv lock at {tmp_path.name}",
         "judge sibling-references",
     ]
+
+
+def test_the_sibling_fix_judges_the_contracts_it_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import step_for
+
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(
+        tmp_path,
+        "mid",
+        contract_extra=_edge("packages/low", "runtime", "1.2.0"),
+        dependencies=("livery-low>=1.2.0",),
+    )
+    _sourced(tmp_path, "mid", "livery/mid/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/mid", "runtime", "0.1.0"),
+        dependencies=("livery-mid>=0.1.0",),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    locked: list[str] = []
+
+    def lock(*args: str, root: Path) -> None:
+        locked.append(f"uv {' '.join(args)} at {root.name}")
+
+    monkeypatch.setattr("livery.workshop._uv.run_uv", lock)
+    record = step_for("layering.sibling-references")
+    assert record.fix is not None
+    # The run's packages are read before the fix writes: the judge that
+    # follows the fix takes the edge it wrote.
+    record.fix(
+        PhaseContext(root=tmp_path, packages=discover_packages(tmp_path), fix=True)
+    )
+    contract = (tmp_path / "packages" / "high" / "workshop.toml").read_text()
+    assert _edge("packages/low", "runtime", "1.2.0") in contract
+    assert locked == [f"uv lock at {tmp_path.name}"]
 
 
 def test_a_src_at_the_workspace_root_refuses_naming_the_move(tmp_path: Path) -> None:

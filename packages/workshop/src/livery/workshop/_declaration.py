@@ -5,12 +5,11 @@ package its ``workshop.extensions`` entry point names: the workshop API
 version it is written for, the levels it may be listed at, its plugin,
 the extensions it requires, the phases it declares and the steps it
 adds to a package's lifecycle phases and to the gate's phases, the
-queries it declares and the ones it answers, the tools its verbs
-need, its CI jobs, the contract keys it owns, what it adds to
-another extension while that one is listed, and the earlier
-extensions' shipped files it replaces or deletes. The file is a
-contract, read as ``workshop.toml`` is: kebab-case keys, every key
-judged, every refusal naming the file.
+queries it declares and the ones it answers, the tools it runs, its
+CI jobs, the contract keys it owns, what it adds to another extension
+while that one is listed, and the earlier extensions' shipped files it
+replaces or deletes. The file is a contract, read as ``workshop.toml``
+is: kebab-case keys, every key judged, every refusal naming the file.
 
 A ``[phases.<phase>]`` table declares the phase when it carries
 ``level``, ``gated``, ``after``, ``verb`` or ``keys``
@@ -209,7 +208,8 @@ class Declaration:
         dormant_until: What another extension does for this one by
             declaring a ``[for.<this>]`` table, a verb; empty for an
             extension that is never dormant.
-        tools: The tools its verbs need, as requirement strings.
+        tools: The tools it runs, its verbs' and its steps', as
+            requirement strings.
         additions: What it adds whenever it is mounted.
         targets: What it adds to each target while the target is listed.
         target_tables: Each ``[for.<target>]`` table as the file holds it.
@@ -1279,12 +1279,14 @@ class _Reader:
     ) -> Reference | DeclaredValue:
         """The answer to the query *name*: a function, resolved, or a literal.
 
-        The name is a declared query, and the extension's levels hold
-        the query's: a package-level query is answered by an extension
-        a package may list, a workspace-level one by an extension the
-        workspace may list. A literal answer is one of the query's
-        values when it declares them. *prefix* is the ``[for.<target>]``
-        table the answer is under, empty for the top level.
+        The name is a declared query. A package-level query is answered
+        by the package's set alone, so an extension answers one only
+        when a package may list it. A workspace-level query is asked of
+        every extension the workspace mounts, a package-level one while
+        a package holds it, so an extension of either level answers one.
+        A literal answer is one of the query's values when it declares
+        them. *prefix* is the ``[for.<target>]`` table the answer is
+        under, empty for the top level.
         """
         from livery.workshop._queries import PACKAGE_LEVEL
 
@@ -1298,13 +1300,12 @@ class _Reader:
                 f"names no query; the queries are {', '.join(self.query_specs)}{hint}",
             )
         levels = tuple(str(level) for level in identity.get("levels", ("workspace",)))
-        if spec.level not in levels:
-            about = "a package" if spec.level == PACKAGE_LEVEL else "the workspace"
+        if spec.level == PACKAGE_LEVEL and PACKAGE_LEVEL not in levels:
             raise self.refuse(
                 where,
-                f"answers a question about {about}, and this extension's levels are"
-                f" {', '.join(levels)}; add {spec.level!r} to levels, or drop the"
-                " answer",
+                "answers a question about a package, and this extension's levels"
+                f" are {', '.join(levels)}; add {PACKAGE_LEVEL!r} to levels, or drop"
+                " the answer",
             )
         if isinstance(value, dict):
             table = cast("dict[str, Any]", value)

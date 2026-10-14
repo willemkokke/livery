@@ -81,8 +81,9 @@ index = "records"
 # the time, the tests in the same, the archive restores slower, and the
 # job's wall time is longer, so the gate gains nothing from it; a nightly
 # on it is the case to come back to.
-# What this repository's own tasks run beyond the python kind's tools;
-# a tool locked here has a stub, and one that is not types as `Tool`.
+# What this repository's own tasks run beyond the base's and the
+# extensions' tools; a tool locked here has a stub, and one that is not
+# types as `Tool`.
 # conan and the cmake-conan provider are here because the workshop's
 # own tests build a native library and an extension against it, and
 # coverage because the toolroom package's tests run it and type its stub.

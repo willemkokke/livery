@@ -301,26 +301,28 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 
 #: What a workspace listing nothing requires as each seed's member joins
 #: it: each requirement's name and site, each pair once, in the order
-#: first required.
+#: first required. The base requires uv; each native tool is required by
+#: the extension in the member's set that runs it, in the mount's order.
 REQUIRED = {
-    "no member": (("uv", "kind python"),),
-    "package-python": (("uv", "kind python"),),
+    "no member": (("uv", "the base"),),
+    "package-python": (("uv", "the base"),),
     "package-python-nanobind": (
-        ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("uv", "the base"),
+        ("conan", "extension conan"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
     "package-cpp-conan": (
-        ("cmake", "kind cpp-conan"),
-        ("conan", "kind cpp-conan"),
-        ("ninja", "kind cpp-conan"),
-        ("uv", "kind python"),
-        ("cmake", "kind python-nanobind"),
-        ("ninja", "kind python-nanobind"),
-        ("conan", "kind python-nanobind"),
-        ("cmake_conan", "kind python-nanobind"),
+        ("uv", "the base"),
+        ("cmake", "extension cmake"),
+        ("ninja", "extension cmake"),
+        ("conan", "extension conan"),
+        ("cmake", "extension nanobind"),
+        ("ninja", "extension nanobind"),
+        ("conan", "extension nanobind"),
+        ("cmake_conan", "extension nanobind"),
     ),
 }
 
@@ -390,7 +392,11 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._kinds import extension_set
-    from livery.workshop._packages import workspace_suite
+    from livery.workshop._packages import (
+        RUNTIME_LANGUAGE,
+        holds_runtime_language,
+        workspace_suite,
+    )
     from livery.workshop._phases import PhaseContext
     from livery.workshop._steps import (
         PATHS,
@@ -410,6 +416,10 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     _mounted(root)
     unit = workspace_suite(root)
     assert unit is not None
+    # The runtime's language is python, and the root's own tests hold it
+    # while the library does not.
+    assert RUNTIME_LANGUAGE == "python"
+    assert [p.path for p in (lib, unit) if holds_runtime_language(p)] == ["tests"]
     # The test phase runs the root's suite beside the library's.
     assert [package.path for package in tested((lib, unit))] == [
         "packages/lib",
@@ -420,7 +430,7 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     read = {
         name: scoped_paths(ctx, name)
         for name, record in steps_by_name().items()
-        if record.narrowing == PATHS and "python" in record.extensions
+        if record.narrowing == PATHS and RUNTIME_LANGUAGE in record.extensions
     }
     assert read == ROOT_TESTS_READ
     assert (
@@ -512,10 +522,11 @@ LANDED = {
         '+    "acme-echo>=0.1.0",',
         "+]",
     ),
-    # The library's seeded recipe declares no requires tuple to join.
+    # The library's seeded recipe declares no requirement, so conan's
+    # writer opens the tuple after the recipe class's attributes.
     ("lib", "geometry"): (
-        "refused: packages/lib/conanfile.py declares no `requires = (...)` tuple"
-        ' to add "acme-geometry/[>=0.1.0]" to; add the requirement by hand',
+        "conanfile.py:",
+        '+    requires = ("acme-geometry/[>=0.1.0]",)',
     ),
 }
 
@@ -567,32 +578,50 @@ def _declared(package: Package, sibling: Package) -> tuple[str, ...]:
 # The release wave and the lifecycle.
 
 
-def test_the_entry_installs_a_native_member_after_the_tools(tmp_path: Path) -> None:
+def test_the_entry_installs_the_job_built_uv_members_after_the_tools(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._entry import entry_script, native_members
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     root = _workspace(tmp_path / "acme")
     _born(root, *THREE)
-    # The nanobind member alone builds at install: the entry's first uv
+    # The wheels job builds the nanobind member and the conan library
+    # before the wave.
+    assert answer(root, JOB_BUILT_MEMBERS) == {
+        "packages/lib": "wheels",
+        "packages/native": "wheels",
+    }
+    # Of those, uv installs the nanobind member alone: the entry's first uv
     # sync leaves it out, and the workshop's sync after the tools builds it.
     assert native_members(root) == ("acme-native",)
     lines = entry_script(root).split("\n")
     assert "_native=(--no-install-package acme-native)" in lines
 
 
-def test_the_find_links_name_the_wheel_building_members(tmp_path: Path) -> None:
+def test_the_find_links_are_the_set_s_existing_dist_directories(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._release_driver import MemberPlan, _wheel_dists
 
     root = _workspace(tmp_path / "acme")
     members = _born(root, *THREE)
     plans = tuple(MemberPlan(package, "0.1.0") for package in members.values())
+    # Before any build, no member has a dist/ to name.
+    assert _wheel_dists(plans) == ()
+    # The python and nanobind builds write theirs; conan's writes none.
+    for tree in ("package-python", "package-python-nanobind"):
+        (members[tree].directory / "dist").mkdir()
     assert [path.relative_to(root).as_posix() for path in _wheel_dists(plans)] == [
         "packages/echo/dist",
         "packages/native/dist",
     ]
 
 
-#: Where python's backend and the nanobind kind's are defined.
+#: Where python's backend, conan's recipe code and the nanobind kind's
+#: backend are defined.
 PYTHON = "livery.extensions.python._backend"
+CONAN = "livery.extensions.conan._package"
 NANOBIND = "livery.workshop._backends._python_nanobind"
 
 #: The function each lifecycle entry ran for a nanobind member, which lists
@@ -608,7 +637,12 @@ NANOBIND_BODIES = {
     # The answer is whether the backend has an isolated test; none runs.
     "has_isolated_test": (),
     "stamp": (f"{PYTHON}:stamp_version",),
-    "declare_requirement": (f"{NANOBIND}:declare_requirement",),
+    # Every writer of what the kind stands for is called, in composition
+    # order: conan's leaves the python sibling alone, and python's takes it.
+    "declare_requirement": (
+        f"{CONAN}:declare_requirement",
+        f"{PYTHON}:declare_requirement",
+    ),
     "build": (f"{NANOBIND}:build",),
     "publish": (f"{PYTHON}:publish_artifact",),
     "isolated_test": (f"{PYTHON}:isolated_test",),
@@ -681,7 +715,9 @@ class _Bodies:
 def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.extensions.conan import _package as conan_package
     from livery.extensions.conan import _steps as conan_steps
+    from livery.extensions.python import _backend as python_backend
     from livery.workshop._backends import _python_nanobind
     from livery.workshop._registries import RegistryTarget
 
@@ -695,13 +731,16 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
         "current_version",
         "stamp_version",
         "declared_requirements",
-        "declare_requirement",
         "module_roots",
         "public_modules",
         "compile_commands",
         "references",
     ):
         bodies.record(monkeypatch, _python_nanobind, name)
+    # The requirement writers are the extensions' own, which their answers
+    # name.
+    for module in (python_backend, conan_package):
+        bodies.record(monkeypatch, module, "declare_requirement")
     stand_ins: dict[str, object] = {
         "build": native.directory / "dist",
         "publish_artifact": True,

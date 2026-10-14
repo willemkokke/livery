@@ -23,7 +23,12 @@ from livery import git
 from livery.footman import doc, fail, group
 from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._extensions import workspace_root
-from livery.workshop._packages import Package, discover_packages, release_tag
+from livery.workshop._packages import (
+    Package,
+    discover_packages,
+    holds_runtime_language,
+    release_tag,
+)
 from livery.workshop._versions import derive_version
 
 release = group("release", help="The release train's CI entries")
@@ -58,14 +63,13 @@ def verify_release(
 
     The agreements checked: the tag names an existing package; the
     kind's own version homes (pyproject, and one ``__version__`` for
-    a python kind with a root module, the recipe's ``version`` for
-    conan) carry the tag's version; the release notes provider, when one is mounted,
-    finds the version's notes sound; and
-    every ``[[depends]]`` floor names a version whose release tag
-    exists, so nothing ships depending on an unreleased floor.
+    a package holding the runtime's language with a root module, the
+    recipe's ``version`` for conan) carry the tag's version; the
+    release notes provider, when one is mounted, finds the version's
+    notes sound; and every ``[[depends]]`` floor names a version whose
+    release tag exists, so nothing ships depending on an unreleased
+    floor.
     """
-    from livery.workshop._kinds import requires_pyproject
-
     found = release_tag(tag)
     if found is None:
         fail(f"tag {tag!r} does not match packages/<member>/v<semver>")
@@ -81,7 +85,7 @@ def verify_release(
     notes = _release_notes.release_notes(root)
     if notes is not None:
         problems += notes.verify(package, version)
-    if requires_pyproject(package.kind):
+    if holds_runtime_language(package):
         # The modules the kind's stamper writes the version into: a
         # package's __init__.py. A package with none, a namespace with
         # no public names, carries its version in its manifest alone.

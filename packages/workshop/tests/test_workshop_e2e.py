@@ -1301,15 +1301,16 @@ def test_a_wave_whose_publish_job_never_names_the_member_fails_naming_the_run() 
     with pytest.raises(_FAILURES, match=r"run 18's publish job did not say") as caught:
         _prove_the_wave("success", "  wave: 1 member(s) published\n")
     assert "http://forge/livery/loop/actions/runs/18" in str(caught.value)
-    # The wheels job fed the wave another member's wheels alone.
+    # The wheels job fed the wave another member alone.
     with pytest.raises(_FAILURES, match=r"run 18's publish job did not say"):
         _prove_the_wave(
-            "success", "  prebuilt: the run collected wheels for acme-other\n"
+            "success",
+            "  prebuilt: acme-other: the run collected what the wheels job built\n",
         )
 
 
 def test_a_wave_whose_publish_job_did_not_end_green_fails_naming_how_it_ended() -> None:
-    line = f"  prebuilt: the run collected wheels for {_NATIVE}\n"
+    line = f"  prebuilt: {_NATIVE}: the run collected what the wheels job built\n"
     # The line came and the job went red after it: the line proves nothing.
     with pytest.raises(_FAILURES, match=r"run 18's publish job ended failure"):
         _prove_the_wave("failure", line)
@@ -1326,8 +1327,8 @@ def test_a_wave_that_published_the_wheels_jobs_wheels_passes_and_says_so(
         "success",
         "2026-10-12T10:00:00.0000000Z   release/publish: workflow.release.publish"
         " (builtin)\n"
-        "2026-10-12T10:00:01.0000000Z   prebuilt: the run collected wheels for"
-        f" {_NATIVE}\n"
+        f"2026-10-12T10:00:01.0000000Z   prebuilt: {_NATIVE}: the run collected"
+        " what the wheels job built\n"
         "2026-10-12T10:00:09.0000000Z   wave: 1 member(s) published\n",
     )
     assert (

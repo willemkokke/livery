@@ -117,8 +117,8 @@ spelling. Every key is optional:
   to; `local` for files that belong to this checkout alone. A
   package-level extension's fragment lives while a package lists it,
   and two extensions writing one path refuse;
-- `[toolroom] requires`, the tools its own verbs need,
-  `["docker?>=27"]`, one of the sites the tool profile reads;
+- `[toolroom] requires`, the tools it runs, its verbs' and its
+  steps', `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
   table with its `types`, and its `values` and `doc` where it has them;
 - `[phases.<phase>.<step>]`, each step it adds to a phase of the gate,
@@ -343,8 +343,9 @@ in its own; a handle, `Query("docs.members")`, names it and types its
 answer. A package-level query is asked with a package,
 `answer(package, query)`, and each extension of the package's set that
 answers is asked in composition order; a workspace-level one is asked
-with the workspace root, `answer(root, query)`, and the listed
-extensions answer in list order. The answers combine by the query's
+with the workspace root, `answer(root, query)`, and the extensions the
+workspace mounts answer in mount order: the package-level ones its
+packages hold, then its list. The answers combine by the query's
 rule, and with nobody answering the query's declared default stands,
 or the rule's answer over nothing. The base declares:
 
@@ -356,19 +357,26 @@ or the rule's answer over nothing. The base declares:
 | `version-files` | package | the files `stamp` may write a version into | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
+| `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
+| `host-tools` | package | what the host must provide and no store installs, such as a C compiler; `fm doctor` and `fm env.check` name each one that does not resolve | the union |
 | `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
 | `python.docs-group` | workspace | the lines of the root project file's `docs` dependency group | the union |
 | `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
+| `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
 
 A name no extension declares refuses with the nearest one; an answer
-refuses when the extension's levels lack the query's, and when it is
-off the query's `values`.
+refuses when it is off the query's `values`. A package-level query is
+asked of the package's set alone, so an extension that a package may
+not list refuses to answer one. A workspace-level query is asked of
+every extension the workspace mounts, a package-level one while a
+package holds it: nanobind, a package-level extension, answers
+`job-built-members`.
 
 An extension also answers under `[for.<target>.queries]`, in the same
 grammar. That answer is asked only while the target is listed and the
@@ -717,8 +725,9 @@ followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
 pytest extension's `examples.pytest` step runs each file as one test
-through the kind's runner, pytest for python, from the workspace root;
-a failure reports the example's own file and line. An example is
+through the function the python extension answers
+`python.examples.runner` with, which starts pytest from the workspace
+root; a failure reports the example's own file and line. An example is
 never a test module: pytest's own collector leaves it alone, named or
 not, so a `test_*` function in it is code a reader sees and never a
 test the workspace runs. A run over named files runs the named
@@ -822,6 +831,18 @@ or every source:
 
 A step's fix runs inside the gate's rewrite, before the judges.
 
+The sibling references' fix writes each edge's requirement before the
+edge. The package's set answers `requirement-writers` with its
+writers, and every one is called. Each takes a sibling of its own
+ecosystem alone: python writes into `pyproject.toml` for a sibling that
+holds python, and conan writes into `conanfile.py` for a conan package,
+a sibling that holds conan and whose recipe names a reference. Conan
+opens the recipe's `requires` tuple when the recipe declares no
+requirement. A sibling no writer takes refuses, naming the sibling's
+set, and nothing is written. A requirement written into a member's
+`pyproject.toml` moves the uv lock, so the fix locks again, and the
+fix's judge reads the contracts as the fix left them.
+
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into
 `.claude/` as links (a local override is kept and named), and the
@@ -865,19 +886,23 @@ leading `!`, so `tea@!windows-arm` is every locked host but one. `?`
 marks a tool optional: the lock takes it where the catalogue can serve
 it and never refuses it, its entry says `optional`, and what it left
 out is printed when the lock is written; `fm toolroom.sync` names an
-optional tool its host lacks. The sites: a package kind, in its record,
-for what operates it, uv for the python kind; the steps that judge a
-present package, each naming its tools, which is how ruff, pytest and
-the checkers reach a python workspace; a listed extension, as `[toolroom] requires`
-in its `extension.toml`, for what its own verbs need, and in a `[for.<target>]`
-table, for what it needs while that table applies; a plugin the project mounts
-through its direct dependencies, as a tuple in a data module its
+optional tool its host lacks. The sites: the base, in its contract
+file's `[toolroom] requires`, for uv, which makes the venv every step
+runs in, so a workspace with no package requires it too; the steps that
+judge a present package, each naming its tools, which is how ruff,
+pytest and the checkers reach a python workspace; a listed extension,
+the workspace's or one a package's set holds, as `[toolroom] requires`
+in its `extension.toml`, for the tools it runs, which is how cmake
+brings cmake and ninja, conan brings conan, and nanobind brings cmake,
+ninja, conan and the cmake-conan provider, and in a `[for.<target>]`
+table, for what it needs while that table applies; a plugin the project
+mounts through its direct dependencies, as a tuple in a data module its
 `workshop.tools` entry point names under the plugin's own name, loaded
 without the plugin's tasks, which is how forge's dev verbs bring
-`docker?`; a package instance, in its
-`workshop.toml` under `[toolroom] requires`, for what its kind cannot
-know; and the project, in the root contract's `[toolroom] requires`, for
-what belongs to the repository. The root contract's `[toolroom] index` names where the
+`docker?`; a package instance, in its `workshop.toml` under
+`[toolroom] requires`, for what its extensions cannot know; and the
+project, in the root contract's `[toolroom] requires`, for what belongs
+to the repository. The root contract's `[toolroom] index` names where the
 catalogue is read from, the published index's URL or a directory
 holding the index or the records that build one. The repository that
 authors the records reads them directly.
@@ -932,9 +957,9 @@ take `none`, unless the record or the root contract's `[toolroom] modes`
 says otherwise; every installer's kind takes `path`. A system tool is the machine's own: the store installs
 nothing for it and holds the copy on PATH to the highest of the
 record's floor and the sites' floors, naming the site whose floor it
-is under. A tool named in the root contract's `[toolroom] host-allowed`,
-or in a kind's own allowance, may be served by a copy already on the
-machine: `fm sync` looks on PATH first, and a copy that satisfies the
+is under. A tool named in the root contract's `[toolroom] host-allowed`
+may be served by a copy already on the machine: `fm sync` looks on PATH
+first, and a copy that satisfies the
 floor (the requirement's, else the record's minimum, else any
 version) serves with nothing installed, while one that is absent or
 below the floor is passed over with a note and the locked version

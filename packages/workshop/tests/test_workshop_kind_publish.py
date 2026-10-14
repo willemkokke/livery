@@ -1,9 +1,10 @@
-"""Publish across kinds: the identity guard, conan seam, matrix emit."""
+"""Publish across kinds: the conan seam, the prebuilt wave, the matrix emit."""
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from livery.footman import Failed
 from livery.workshop import _publish
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._packages import Package
-from livery.workshop._publish import assert_wheel_identity, publish_release
+from livery.workshop._publish import publish_release
 from livery.workshop._registries import RegistryTarget
 
 # The wheels job is nanobind's, added as the mount adds it.
@@ -32,50 +33,6 @@ def _package(directory: Path, name: str, kind_name: str) -> Package:
         kind=kind_name,
         depends=(),
     )
-
-
-# The identity guard, both ways, first.
-
-
-def test_a_pure_kind_with_a_platform_wheel_refuses(tmp_path: Path) -> None:
-    package = _package(tmp_path / "packages" / "plain", "acme-plain", "python")
-    dist = package.directory / "dist"
-    dist.mkdir()
-    (dist / "acme_plain-0.1.0-cp314-cp314-macosx_11_0_arm64.whl").touch()
-    with pytest.raises(_FAILURES) as caught:
-        assert_wheel_identity(package)
-    message = str(caught.value)
-    assert "python" in message and "platform tag" in message
-    assert "cp314-cp314-macosx_11_0_arm64" in message
-
-
-def test_a_native_kind_with_a_pure_wheel_refuses(tmp_path: Path) -> None:
-    package = _package(tmp_path / "packages" / "ext", "acme-ext", "python-nanobind")
-    dist = package.directory / "dist"
-    dist.mkdir()
-    (dist / "acme_ext-0.1.0-py3-none-any.whl").touch()
-    with pytest.raises(_FAILURES) as caught:
-        assert_wheel_identity(package)
-    message = str(caught.value)
-    assert "python-nanobind" in message and "pure-tagged" in message
-
-
-def test_the_guard_skips_a_kind_without_wheels(tmp_path: Path) -> None:
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
-    assert_wheel_identity(package)  # no dist at all, and no complaint
-
-
-def test_matching_identities_pass(tmp_path: Path) -> None:
-    pure = _package(tmp_path / "packages" / "plain", "acme-plain", "python")
-    (pure.directory / "dist").mkdir()
-    (pure.directory / "dist" / "acme_plain-0.1.0-py3-none-any.whl").touch()
-    assert_wheel_identity(pure)
-    native = _package(tmp_path / "packages" / "ext", "acme-ext", "python-nanobind")
-    (native.directory / "dist").mkdir()
-    (
-        native.directory / "dist" / "acme_ext-0.1.0-cp314-cp314-manylinux_x86_64.whl"
-    ).touch()
-    assert_wheel_identity(native)
 
 
 # The conan version homes.
@@ -446,67 +403,66 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     assert attached == [_cpp_conan.cache_name("acme-geometry", "0.3.0")]
 
 
-def test_prebuilt_refuses_an_empty_collection(
-    cross_train, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = cross_train
+def _serving_wave(
+    monkeypatch: pytest.MonkeyPatch, order: list[str]
+) -> Callable[[Package], _Ledger]:
+    """Stand in for the wave's builds, which must not run, and its uploads.
+
+    Each upload appends the member's name to *order* and serves it.
+    Returns the registry each member is probed on.
+    """
+    from livery.workshop._backends import _cpp_conan as cpp
+    from livery.workshop._backends import _python_nanobind as nb
+
     registry = _Ledger()
     conan_registry = _Ledger()
+
+    def _no_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
+        raise AssertionError(f"the wave built {package.name}")
 
     def _fake_conan_publish(
         package: Package, target_url: str, *, version: str, local: bool, token: str = ""
     ) -> bool:
+        order.append(package.name)
         conan_registry.serve(package.name, version)
         return True
 
-    from livery.workshop._backends import _cpp_conan as cpp
+    def _fake_wheels(package: Package, **kwargs: object) -> bool:
+        order.append(package.name)
+        registry.serve(package.name, "0.3.0")
+        return True
 
-    monkeypatch.setattr(cpp, "build", lambda p, r, epoch=0: p.directory / "dist")
+    monkeypatch.setattr(cpp, "build", _no_build)
+    monkeypatch.setattr(nb, "build", _no_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
         return conan_registry if package.kind == "cpp-conan" else registry
 
-    # The library's own collection is there, so the wave reaches the
-    # extension, whose wheels no job of the run handed over.
-    saved = root / "packages" / "geometry" / "dist"
-    saved.mkdir(parents=True, exist_ok=True)
-    (saved / _cpp_conan.cache_name("acme-geometry", "0.3.0")).write_bytes(b"cache")
-    with pytest.raises(_FAILURES) as caught:
-        publish_release(
-            root,
-            registry_for,
-            ref=git.head_sha(root),
-            probe_timeout=5,
-            probe_poll=0.01,
-            prebuilt=True,
-        )
-    assert "no collected wheels" in str(caught.value)
-    assert "no job of the run fed this wave" in str(caught.value)
+    return registry_for
 
 
-def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
-    cross_train, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("collected", "refused"),
+    [("ext", "acme-geometry"), ("geometry", "acme-ext")],
+    ids=["the-library-uncollected", "the-extension-uncollected"],
+)
+def test_prebuilt_refuses_a_job_built_member_with_nothing_collected(
+    cross_train, monkeypatch: pytest.MonkeyPatch, collected: str, refused: str
 ) -> None:
-    """Creating the package again on the wave runner is not the answer.
+    """Building the member again on the wave's runner is not the answer.
 
-    Each leg of the run creates each conan member once per host and
-    saves the cache beside the wheels. With --prebuilt and nothing
-    collected, the wave stops instead of building a package only this
-    runner's host could use.
+    The wheels job builds both members before the wave, on each of its
+    legs, and the run collects what every leg made. With --prebuilt and
+    nothing collected for one of them, the wave stops instead of
+    building what only this runner's host could use.
     """
     root = cross_train
-    registry = _Ledger()
-    conan_registry = _Ledger()
-    from livery.workshop._backends import _cpp_conan as cpp
-
-    monkeypatch.setattr(
-        cpp, "build", lambda p, r, epoch=0: (_ for _ in ()).throw(AssertionError(p))
-    )
-
-    def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.kind == "cpp-conan" else registry
-
+    registry_for = _serving_wave(monkeypatch, [])
+    dist = root / "packages" / collected / "dist"
+    dist.mkdir(parents=True)
+    (dist / "collected.bin").write_bytes(b"")
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
@@ -516,8 +472,38 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
             probe_poll=0.01,
             prebuilt=True,
         )
-    assert "no saved conan cache" in str(caught.value)
-    assert "no job of the run fed this wave" in str(caught.value)
+    assert (
+        f"{refused}: --prebuilt, and dist/ holds nothing the wheels job collected;"
+        " re-run the release so that job builds it before the wave"
+    ) in str(caught.value)
+
+
+def test_prebuilt_publishes_what_the_run_collected_without_building(
+    cross_train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = cross_train
+    order: list[str] = []
+    registry_for = _serving_wave(monkeypatch, order)
+    for member, collected in (
+        ("geometry", _cpp_conan.cache_name("acme-geometry", "0.3.0", "linux-x64")),
+        ("ext", "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl"),
+    ):
+        dist = root / "packages" / member / "dist"
+        dist.mkdir(parents=True)
+        (dist / collected).write_bytes(b"")
+    receipts = publish_release(
+        root,
+        registry_for,
+        ref=git.head_sha(root),
+        probe_timeout=5,
+        probe_poll=0.01,
+        prebuilt=True,
+    )
+    assert order == ["acme-geometry", "acme-ext"]
+    assert [r.tag for r in receipts] == [
+        "packages/geometry/v0.3.0",
+        "packages/ext/v0.3.0",
+    ]
 
 
 # The emitted matrix: nanobind's wheels job, added as the mount adds it

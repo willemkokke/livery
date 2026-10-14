@@ -165,20 +165,24 @@ def entry_script(root: Path) -> str:
 
 
 def native_members(root: Path) -> tuple[str, ...]:
-    """The distribution names of the members whose install builds an extension.
+    """The distribution names of the job-built members uv installs, in path order.
 
-    A kind whose wheel is a platform wheel builds at install against
-    the store's tools, so the entry installs it after the tools are
-    in the environment; every other member installs in the first
-    sync.
+    A member a job of the release point builds before the wave, the
+    workspace's ``job-built-members`` answer, carries native code its
+    install builds against the store's tools, so the entry installs it
+    after the tools are in the environment; every other member installs
+    in the first sync. A job-built member the uv workspace does not hold,
+    a conan package, is no uv install and is left out.
     """
-    from livery.workshop._kinds import kind_for
-    from livery.workshop._packages import discover_packages
+    from livery.workshop._identity import roster
+    from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
 
     if not (root / "packages").is_dir():
         return ()
+    built = answer(root, JOB_BUILT_MEMBERS)
+    # The roster's dev entry marks a member of the uv workspace.
     return tuple(
-        package.name
-        for package in discover_packages(root)
-        if kind_for(package.kind).wheel_identity == "platform"
+        entry["name"]
+        for entry in roster(root)
+        if "dev" in entry and f"packages/{entry['dir']}" in built
     )

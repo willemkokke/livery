@@ -1,4 +1,4 @@
-"""The three declaration sites and the lock: refusals, resolution, then the verbs."""
+"""The declaration sites and the lock: refusals, resolution, then the verbs."""
 
 from __future__ import annotations
 
@@ -136,7 +136,7 @@ def _records(root: Path, *records: Record) -> None:
 
 
 def _python_tools(*versions: str) -> list[Record]:
-    """A record per tool the python kind requires, at *versions*."""
+    """A record per tool a python workspace requires, at *versions*."""
     return [
         Record(name, kind="pypi", deltas=_read(*versions))
         for name in (
@@ -294,20 +294,115 @@ def test_a_contract_off_the_shape_refuses_naming_the_key(
 
 # --- resolution ---------------------------------------------------------------------
 
+#: The tools a native build runs, which no python workspace requires.
+NATIVE_TOOLS = {"cmake", "ninja", "conan", "cmake_conan"}
 
-def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
+
+def test_a_workspace_without_a_native_member_requires_no_cmake_ninja_or_conan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One member lists nothing and holds what its kind stands for, python;
+    # the other lists python. Neither set holds an extension that runs a
+    # native build.
+    root = _workspace(tmp_path, monkeypatch)
+    listed = root / "packages" / "listed"
+    listed.mkdir()
+    (listed / "workshop.toml").write_text(
+        'kind = "python"\nname = "acme-listed"\nextensions = ["python"]\n'
+    )
+    (listed / "pyproject.toml").write_text('[project]\nname = "acme-listed"\n')
+    declared = _tools.requirements(root)
+    assert not NATIVE_TOOLS & {r.name for r in declared}
+    assert not [r.site for r in declared if r.site.startswith("kind ")]
+
+
+def test_a_workspace_with_no_package_requires_uv_from_the_base(
+    tmp_path: Path,
+) -> None:
+    import tomllib
+
+    from livery.workshop._contract_keys import BASE_FILE, judge
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    # The base's uv first, then the tools of the steps that judge the
+    # root's own files, in their registration order.
+    assert [(r.name, r.site) for r in _tools.requirements(tmp_path)] == [
+        ("uv", "the base"),
+        ("pytest", "step test.pytest"),
+    ]
+    # The base writes the tools it runs as an extension's extension.toml
+    # does.
+    table = tomllib.loads(BASE_FILE.read_text("utf-8"))["toolroom"]
+    assert (
+        judge(
+            {"toolroom": table}, contract="extension", where=str(BASE_FILE), listed=None
+        )
+        == []
+    )
+
+
+#: Each native tool, to the extensions that require it.
+NATIVE_SITES = {
+    "cmake": {"extension cmake", "extension nanobind"},
+    "ninja": {"extension cmake", "extension nanobind"},
+    "conan": {"extension conan", "extension nanobind"},
+    "cmake_conan": {"extension nanobind"},
+}
+
+
+def test_each_native_tool_names_the_extension_that_requires_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._extensions import installed_declaration
+
+    root = _workspace(tmp_path, monkeypatch)
+    # A C++ library that lists cmake and conan, and a nanobind package
+    # that lists nothing and holds nanobind, python, cpp and conan through
+    # its kind: each tool is its extensions', whichever way the set is
+    # held.
+    for member, contract in (
+        (
+            "lib",
+            'kind = "cpp-conan"\nname = "acme-lib"\nextensions = ["cmake", "conan"]\n',
+        ),
+        ("native", 'kind = "python-nanobind"\nname = "acme-native"\n'),
+    ):
+        (root / "packages" / member).mkdir()
+        (root / "packages" / member / "workshop.toml").write_text(contract)
+    (root / "packages" / "native" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-native"\n'
+    )
+    sites: dict[str, set[str]] = {}
+    for found in _tools.requirements(root):
+        if found.name in NATIVE_TOOLS:
+            sites.setdefault(found.name, set()).add(found.site)
+    assert sites == NATIVE_SITES
+    # The extensions declare them, so a set holding one brings its tools.
+    declared = {
+        name: declaration.tools
+        for name in ("cmake", "conan", "nanobind")
+        if (declaration := installed_declaration(name)) is not None
+    }
+    assert declared == {
+        "cmake": ("cmake", "ninja"),
+        "conan": ("conan",),
+        "nanobind": ("cmake", "ninja", "conan", "cmake_conan"),
+    }
+
+
+def test_a_python_package_with_no_tool_of_its_own_resolves_uv_and_its_steps_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     declared = _tools.requirements(root)
     assert {r.name for r in declared} == {"uv", "pytest"}
-    # uv is the python kind's own, and every checker names its step.
+    # uv is the base's own, and every checker names its step.
     sites = {(r.name, r.site) for r in declared}
-    assert ("uv", "kind python") in sites
+    assert ("uv", "the base") in sites
     assert {
         ("pytest", "step test.pytest"),
     } <= sites
-    assert {r.name for r in declared if r.site == "kind python"} == {"uv"}
+    assert {r.name for r in declared if r.site == "the base"} == {"uv"}
     lock = _tools.write_lock(root)
     assert {name: entry.version for name, entry in lock.tools.items()} == dict.fromkeys(
         {r.name for r in declared}, "1.1.0"
@@ -351,29 +446,23 @@ def test_the_three_sites_union_and_each_names_itself(
     assert lock.tools["bun"].version == "1.3.0" and set(lock.tools["bun"].hosts) == set(
         THREE
     )
-    # The kinds first, as declared: python's own, then its steps'.
+    # The base's first, then the steps'.
     assert _tools.tool_names(root)[:2] == ("uv", "pytest")
 
 
-def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
-    assert _tools.tool_names(tmp_path) == (
-        "uv",  # the python kind's own
-        "pytest",  # then the steps' tools, in their registration order
-    )
-
-
-def test_the_root_keeps_its_kinds_tools_when_the_last_member_of_it_goes(
+def test_the_root_keeps_its_python_tools_beside_a_native_member_alone(
     tmp_path: Path,
 ) -> None:
     # The root's tasks.py and tests are python whatever the members are,
     # and the python steps judge them, so their tools stay required
     # beside a native member alone.
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
     (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
     names = _tools.tool_names(tmp_path)
     assert {"uv", "pytest"} <= set(names)
-    assert "conan" in names  # the native member's own kind still counts
+    assert "conan" in names  # the native member's own extensions still count
 
 
 # --- the verbs -----------------------------------------------------------------------
@@ -403,7 +492,7 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [toolroom] requires git-cliff>=2.0" in out
-    # The python kind's two, and this one.
+    # The base's uv, the step's pytest, and this one.
     assert "git-cliff 2.1.0" in out and "toolroom.lock: 3 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
@@ -1061,9 +1150,9 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
 ) -> None:
     """The refusal a newborn meets, and it names both halves.
 
-    A workspace requires tools whatever its contract says, because a
-    kind brings its own: a project with no packages still runs on the
-    python kind. Nothing is supplied until a lock names versions, and
+    A workspace requires tools whatever its contract says, because the
+    base requires uv: a project with no packages still runs in the venv
+    uv makes. Nothing is supplied until a lock names versions, and
     nothing is locked until the contract names a catalogue, so the
     answer has to carry both or a reader fixes one and hits the other.
     """

@@ -12,6 +12,54 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_python_s_build_refuses_a_platform_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A platform tag is compiled code no leg built for any other platform."""
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _backend
+    from livery.footman import Failed
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    directory.mkdir(parents=True)
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        kind="python",
+        depends=(),
+        extensions=("python",),
+    )
+    # What uv build writes into the directory it is handed, by file name.
+    wrote = ["acme_core-1.0.0-cp314-cp314-macosx_11_0_arm64.whl"]
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            out = Path(args[args.index("--out-dir") + 1])
+            out.mkdir(parents=True, exist_ok=True)
+            for name in wrote:
+                (out / name).write_bytes(b"")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    with pytest.raises(Failed) as refused:
+        _backend.build(package, tmp_path)
+    assert str(refused.value) == (
+        "acme-core: the build produced a wheel tagged for a platform,"
+        " acme_core-1.0.0-cp314-cp314-macosx_11_0_arm64.whl; python's build ships"
+        " a pure wheel, tagged none-any, so a package with compiled code lists the"
+        " extension that builds its platform wheels"
+    )
+    # A pure wheel beside the sdist is the build's answer.
+    wrote[:] = ["acme_core-1.0.0-py3-none-any.whl", "acme_core-1.0.0.tar.gz"]
+    assert _backend.build(package, tmp_path) == directory / "dist"
+
+
 def test_the_python_extension_imported_before_the_base_registers_the_kind() -> None:
     """The extension loads first and the kind still registers with its code.
 
@@ -89,6 +137,52 @@ def test_the_extension_answers_each_python_package_as_the_kind_backend_does() ->
             _backend.public_modules(package)
         )
         assert answer(package, REFERENCES) == _backend.references(package)
+
+
+def test_python_answers_its_runners_while_pytest_is_listed_and_a_package_holds_it(
+    tmp_path: Path,
+) -> None:
+    """Pytest's steps ask for the functions that run the suites and the examples."""
+    from livery.extensions.python import _backend
+    from livery.workshop import Query, answer
+    from workshop_extension_fakes import package_contract, root_contract
+
+    suites: Query[object] = Query("python.test.runner")
+    examples: Query[object] = Query("python.examples.runner")
+    # The fallbacks first: no package holds python, then a package holds
+    # it and pytest is not listed, and nothing answers either way.
+    root_contract(tmp_path, '["pytest"]')
+    package_contract(tmp_path, "lib", '["cmake"]')
+    assert answer(tmp_path, suites) is None
+    assert answer(tmp_path, examples) is None
+    package_contract(tmp_path, "core", '["python"]')
+    root_contract(tmp_path, "[]")
+    assert answer(tmp_path, suites) is None
+    assert answer(tmp_path, examples) is None
+    # Listed beside a package that holds python, pytest is answered.
+    root_contract(tmp_path, '["pytest"]')
+    assert answer(tmp_path, suites) is _backend.run_test
+    assert answer(tmp_path, examples) is _backend.run_examples
+
+
+def test_a_member_listing_nothing_takes_its_kind_s_runners(tmp_path: Path) -> None:
+    """A package that lists no extension holds what its kind stands for."""
+    from livery.extensions.python import _backend
+    from livery.workshop import Query, answer
+    from workshop_extension_fakes import root_contract
+
+    suites: Query[object] = Query("python.test.runner")
+    root_contract(tmp_path, '["pytest"]')
+    # The fallback first: the C++ library's kind stands for no python.
+    lib = tmp_path / "packages" / "lib"
+    lib.mkdir(parents=True)
+    (lib / "workshop.toml").write_text('kind = "cpp-conan"\n')
+    assert answer(tmp_path, suites) is None
+    # The binary extension's kind stands for python among others.
+    native = tmp_path / "packages" / "native"
+    native.mkdir(parents=True)
+    (native / "workshop.toml").write_text('kind = "python-nanobind"\n')
+    assert answer(tmp_path, suites) is _backend.run_test
 
 
 def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(

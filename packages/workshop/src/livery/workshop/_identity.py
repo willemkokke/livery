@@ -69,25 +69,18 @@ def identity(root: Path) -> dict[str, Any]:
     }
 
 
-def _python_based(kind: str) -> bool:
-    """Whether a package of *kind* is a uv workspace member: python down its chain."""
-    from livery.workshop._kinds import is_python_kind, kind_names
-
-    return kind in kind_names() and is_python_kind(kind)
-
-
 def roster(root: Path) -> list[dict[str, Any]]:
     """Each member as the project file lists it, in path order.
 
     Each carries `extensions`, the package-level extensions it holds in
-    composition order. A python member carries `dev`, the dev-group
-    entry with its `dev-extras`; a native one carries none and stays out
-    of the uv workspace.
+    composition order. A member holding the runtime's language carries
+    `dev`, the dev-group entry with its `dev-extras`; any other carries
+    none and stays out of the uv workspace.
     """
     from livery.workshop._composition import order_or_sorted
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._kinds import extension_set
-    from livery.workshop._packages import discover_packages
+    from livery.workshop._packages import discover_packages, holds_runtime_language
 
     if not (root / "packages").is_dir():
         return []
@@ -101,7 +94,7 @@ def roster(root: Path) -> list[dict[str, Any]]:
                 order_or_sorted(extension_set(package), installed_declaration)
             ),
         }
-        if _python_based(package.kind):
+        if holds_runtime_language(package):
             contract = load_contract(package.directory / "workshop.toml")
             extras = cast("list[str]", contract.get("dev-extras") or [])
             entry["dev"] = (
@@ -112,19 +105,20 @@ def roster(root: Path) -> list[dict[str, Any]]:
 
 
 def python_dirs(root: Path) -> list[str]:
-    """Each python member's ``src`` and ``tests`` that hold a python file.
+    """The ``src`` and ``tests`` directories that hold a python file.
 
-    Root-relative posix paths, in path order. An extension's ``src`` may
+    Those of each member holding the runtime's language, as
+    root-relative posix paths in path order. An extension's ``src`` may
     hold data alone, and a checker such as mypy refuses a named
     directory with no ``.py`` or ``.pyi`` file in it.
     """
-    from livery.workshop._packages import discover_packages
+    from livery.workshop._packages import discover_packages, holds_runtime_language
 
     if not (root / "packages").is_dir():
         return []
     found: list[str] = []
     for package in discover_packages(root):
-        if not _python_based(package.kind):
+        if not holds_runtime_language(package):
             continue
         for name in ("src", "tests"):
             directory = package.directory / name

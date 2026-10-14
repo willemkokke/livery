@@ -841,7 +841,7 @@ def _leave_residue(root: Path, name: str) -> Path:
 
 
 def _no_contract_named(root: Path) -> str:
-    with pytest.raises(ValueError, match="packages missing their contracts") as caught:
+    with pytest.raises(ValueError, match="packages missing a file they need") as caught:
         discover_packages(root)
     return str(caught.value).splitlines()[-1].strip()
 

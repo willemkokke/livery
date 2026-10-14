@@ -7,11 +7,13 @@ api-version = 1
 # Listed in a package's extensions.
 levels = ["package"]
 
-# The questions about a package this extension answers.
+# The questions about a package this extension answers. Its requirement
+# writer writes into the pyproject for a sibling that holds python.
 [queries]
 current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
 requirements = "livery.extensions.python._answers:requirements"
+requirement-writers = "livery.extensions.python._answers:requirement_writers"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"
@@ -21,6 +23,19 @@ references = "livery.extensions.python._answers:references"
 # the workspace root and the packages the run tested: one answer, the
 # nearest. With no answer, a machine's run prints no preview.
 [queries."python.test.preview"]
+level = "workspace"
+combine = "nearest"
+
+# How the python packages' suites run, several packages in one call,
+# and how one package's documentation examples run: two questions
+# about the workspace, each answered with the function that runs them,
+# the nearest answer. pytest's test and examples steps ask them, and
+# with no answer they run nothing and say so.
+[queries."python.test.runner"]
+level = "workspace"
+combine = "nearest"
+
+[queries."python.examples.runner"]
 level = "workspace"
 combine = "nearest"
 
@@ -108,3 +123,12 @@ doc = "one allowed reach: the distribution that reaches, the private it reaches,
 from = { types = ["str"], doc = "the distribution whose source reaches" }
 reaches = { types = ["str"], doc = "the private it reaches, by its dotted path" }
 reason = { types = ["str"], doc = "why the reach stays, and the public seam that will replace it" }
+
+# While pytest is listed, its steps run the suites and the examples
+# through this extension's functions, which call pytest from the
+# workspace's environment. The answers sit in this table, not under
+# [queries]: there each name already holds its declaration's table, and
+# one key cannot hold both.
+[for.pytest.queries]
+"python.test.runner" = "livery.extensions.python._answers:suite_runner"
+"python.examples.runner" = "livery.extensions.python._answers:examples_runner"

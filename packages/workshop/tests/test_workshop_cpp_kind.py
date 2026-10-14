@@ -18,12 +18,11 @@ from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     KindRecord,
-    is_python_kind,
     kind_for,
     register_kind,
     template_chain,
 )
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._registries import RegistryTarget
 from livery.workshop._steps import (
@@ -395,9 +394,6 @@ def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
     assert category("include/acme/native.hpp") == SOURCE
     assert category("CMakeLists.txt") == CONFIGURATION
     assert category("conanfile.py") == CONFIGURATION
-    # The kind's tests run on a build; python's run on source.
-    assert kind_for("cpp-conan").tests_need_build
-    assert not kind_for("python").tests_need_build
 
 
 @needs_toolchain
@@ -457,23 +453,6 @@ def test_the_cpp_template_seeds_no_floor_and_the_default_judges_it(
     assert coverage_floors.coverage_policy(package) == coverage_floors.FloorPolicy(
         100.0, False, 0.5, default=True
     )
-
-
-def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> None:
-    packages_dir = tmp_path / "packages"
-    (packages_dir / "native").mkdir(parents=True)
-    (packages_dir / "native" / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-native"\n'
-    )
-    found = discover_packages(tmp_path)
-    assert [package.name for package in found] == ["acme-native"]
-    # A python member without its pyproject still refuses.
-    (packages_dir / "member").mkdir(parents=True)
-    (packages_dir / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n'
-    )
-    with pytest.raises(ValueError, match=r"member: no pyproject\.toml"):
-        discover_packages(tmp_path)
 
 
 def test_python_steps_skip_a_native_member_by_name(
@@ -655,8 +634,9 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
     assert workspace.read_text() == "packages: []\n" and not aside.exists()
 
 
-def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
-
+def test_a_member_listing_nothing_takes_its_kind_s_host_tools(
+    restored_registry, tmp_path: Path
+) -> None:
     from livery.workshop._env_tasks import missing_host_tools
 
     (tmp_path / "packages" / "member").mkdir(parents=True)
@@ -746,13 +726,10 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    assert not is_python_kind("cpp-conan")
-    assert is_python_kind("python")
-    # The build tools are the kind's; a native tool an extension brings
-    # rides its step record, which is where the profile reads it, and
-    # the measurer of a build made with MSVC rides cmake's [for.coverage]
-    # table.
-    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
+    # The build tools come from the [toolroom] tables of the extensions
+    # the kind stands for, cmake's and conan's, and the measurer of a
+    # build made with MSVC from cmake's [for.coverage] table; the steps
+    # those extensions hold run no tool of their own.
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._steps import tools_for
 

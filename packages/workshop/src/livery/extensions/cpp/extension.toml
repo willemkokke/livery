@@ -1,6 +1,7 @@
 # C and C++: what the languages tell the workshop about a package's
-# files. Optional for a build; it sharpens what a change runs and what
-# the formatter and the linter judge.
+# files, and the compilers the host must provide. Optional for a build;
+# it sharpens what a change runs, what the formatter and the linter
+# judge, and what fm doctor and fm env.check look for on the host.
 
 [extension]
 api-version = 1
@@ -20,3 +21,9 @@ source = ["src/**", "include/**"]
 [queries]
 module-roots = "livery.extensions.cpp._language:module_roots"
 public-modules = "livery.extensions.cpp._language:public_modules"
+
+# The C and C++ compilers a build runs, which the host provides and no
+# store installs: fm doctor and fm env.check name either one that does
+# not resolve on PATH.
+[queries.host-tools]
+value = ["cc", "c++"]

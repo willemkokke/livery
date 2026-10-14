@@ -15,9 +15,7 @@ from livery.extensions.python import _backend as _python
 from livery.workshop._backends import _python_nanobind
 from livery.workshop._identity import project_facts
 from livery.workshop._kinds import (
-    is_python_kind,
     kind_for,
-    kind_tools,
     template_chain,
 )
 from livery.workshop._packages import Package
@@ -154,22 +152,10 @@ def test_the_kind_chains_from_python(python_steps: object) -> None:
         "package-python",
         "package-python-nanobind",
     )
-    assert is_python_kind("python-nanobind")
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     # The native configs are rendered from the step records, so the kind
     # manages them.
-    # The chain's union of what operates the kinds: python's beneath
-    # the kind's own build tools; the checkers, the
-    # formatter, the test runner and the two clang tools ride their
-    # step records, which the chain reaches the same way.
-    assert kind_tools({"python-nanobind"}) == (
-        "cmake",
-        "cmake_conan",
-        "conan",
-        "ninja",
-        "uv",
-    )
     from livery.workshop._kinds import kind_stands_for
     from livery.workshop._steps import tools_for
 

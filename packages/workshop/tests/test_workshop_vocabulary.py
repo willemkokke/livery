@@ -9,7 +9,8 @@ scans the base's sources for each, and every extension's
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
-interpreter, the venv), each with its reason; those stay. ``ALLOWANCE``
+interpreter, the venv, the runtime's language and the project file of
+a member holding it), each with its reason; those stay. ``ALLOWANCE``
 holds what the base still knows of a kind today, one count per module
 and word. A count may only fall: a finding above it refuses, and a
 module that now finds fewer refuses until its count is lowered here,
@@ -33,6 +34,14 @@ BACKEND_IMPORT = "import a backend"
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
+    ("_packages", "python"): (
+        1,
+        "the runtime's language, the extension the root's own files hold",
+    ),
+    ("_packages", "pyproject.toml"): (
+        1,
+        "the project file a member holding the runtime's language carries",
+    ),
     ("_points", "python"): (1, "a runner's interpreter version"),
     ("_pythons", "pyproject.toml"): (1, "the root's requires-python"),
     ("_shipped_files", "pyproject.toml"): (
@@ -42,6 +51,10 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_pythons", "python"): (1, "the venv's interpreter"),
     ("_reconcile", "pyproject.toml"): (2, "the uv workspace the venv follows"),
     ("_speed", "python"): (1, "a runner's interpreter version"),
+    ("_steps", "pyproject.toml"): (
+        1,
+        "a uv member's manifest the sibling fix wrote, which moves the lock",
+    ),
     ("_sync", "pyproject.toml"): (2, "the uv workspace the lock follows"),
     ("testing._conformance", "pyproject.toml"): (3, "the root pyproject's fragments"),
 }
@@ -54,12 +67,11 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_e2e", "conan"): 4,
     ("_e2e", "pyproject.toml"): 1,
     ("_kinds", BACKEND_IMPORT): 1,
-    ("_kinds", "conan"): 3,
+    ("_kinds", "conan"): 1,
     ("_kinds", "cpp-conan"): 1,
-    ("_kinds", "python"): 5,
+    ("_kinds", "python"): 4,
     ("_kinds", "python-nanobind"): 1,
-    ("_packages", "pyproject.toml"): 1,
-    ("_publish", "conan"): 4,
+    ("_publish", "conan"): 3,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
@@ -71,9 +83,7 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "pyproject.toml"): 2,
     ("_release_driver", "python"): 2,
     ("_steps", BACKEND_IMPORT): 1,
-    ("_steps", "pyproject.toml"): 1,
     ("_templates", "python"): 1,
-    ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 
@@ -207,9 +217,79 @@ def test_no_extension_imports_a_backend() -> None:
     assert found == []
 
 
-#: The tools an extension's steps bring that the base still names:
-#: (module, tool) to (count, reason).
+#: The tools an extension's steps and tables bring that the base still
+#: names: (module, tool) to (count, reason). A row that goes names what
+#: removes it: a part of the kinds' removal (#1614), an issue, or a phase
+#: of the destination note.
 TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
+    ("_backends._cpp_conan", "cmake"): (
+        1,
+        "the cpp-conan kind's set; #1614's P5 deletes _backends",
+    ),
+    ("_backends._cpp_conan", "conan"): (
+        1,
+        "the cpp-conan kind's set; #1614's P5 deletes _backends",
+    ),
+    ("_backends._python_nanobind", "cmake"): (
+        1,
+        "the nanobind backend's build; #1614's P2 moves it into nanobind",
+    ),
+    ("_backends._python_nanobind", "cmake_conan"): (
+        1,
+        "the nanobind backend's build; #1614's P2 moves it into nanobind",
+    ),
+    ("_backends._python_nanobind", "conan"): (
+        16,
+        "the nanobind backend's build; #1614's P2 moves it into nanobind",
+    ),
+    ("_ci_generate", "conan"): (
+        1,
+        "a GitHub job's conan home; the CI placement review, #1534",
+    ),
+    ("_devenv", "conan"): (1, "a loop environment's conan home; phase 15"),
+    ("_e2e", "cmake"): (
+        1,
+        "the loop's host allowance; phase 15 moves _e2e out of the base",
+    ),
+    ("_e2e", "conan"): (
+        5,
+        "the loop's registry probe, #1624 (P1a), and its conan home, phase 15",
+    ),
+    ("_e2e", "ninja"): (
+        1,
+        "the loop's host allowance; phase 15 moves _e2e out of the base",
+    ),
+    ("_entry", "conan"): (
+        1,
+        "the entry script's note on what a native member builds with;"
+        " the toolchains, phase 14",
+    ),
+    ("_env_tasks", "conan"): (
+        1,
+        "a GitHub job's conan home; the CI placement review, #1534",
+    ),
+    ("_kinds", "conan"): (1, "the cpp-conan kind's artifact; #1614's P3"),
+    ("_packages", "cmake"): (
+        2,
+        "BASE_EXTENSION_IMPORTS' cmake row; #1614's P5 deletes it",
+    ),
+    ("_packages", "conan"): (
+        2,
+        "BASE_EXTENSION_IMPORTS' conan row; #1614's P5 deletes it",
+    ),
+    ("_publish", "conan"): (
+        3,
+        "the wave's conan target; #1624 (P1a), then the registries, phase 13",
+    ),
+    ("_registries", "conan"): (6, "the registry tables; phase 13"),
+    ("_release_driver", "conan"): (
+        2,
+        "the wave's conan registry probe; #1624 (P1a)",
+    ),
+    ("_steps", "cmake"): (
+        3,
+        "the base's cmake build and test steps; #1614's P5 moves them",
+    ),
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
     ("_new_project", "basedpyright"): (
         1,
@@ -296,6 +376,13 @@ def test_the_base_names_no_tool_an_extension_brings() -> None:
     found = tool_scan(SRC, tools)
     allowed = {key: count for key, (count, _reason) in TOOL_ALLOWANCE.items()}
     assert dict(found) == allowed
+
+
+@pytest.mark.parametrize("key", sorted(TOOL_ALLOWANCE))
+def test_every_tool_allowance_entry_states_its_reason(key: tuple[str, str]) -> None:
+    count, reason = TOOL_ALLOWANCE[key]
+    assert count > 0
+    assert reason
 
 
 #: The coverage extension's verbs the base still names:

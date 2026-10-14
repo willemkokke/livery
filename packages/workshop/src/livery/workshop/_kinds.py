@@ -1,11 +1,10 @@
 """The kind registry: what a package kind is, in one record.
 
-A kind answers three questions through one registration: how to
-build (the backend, three callables), what a birth writes (the seed
-tree, with a parent chain written beneath it), and what the machine
-needs (the tools it contributes to the derived profile). What the gate
-runs over a package is the steps' to say: each names the kinds it
-judges, and a package of another kind skips it by name.
+A kind answers two questions through one registration: how to
+build (the backend) and what a birth writes (the seed tree, with a
+parent chain written beneath it). The extensions a package holds
+require the tools it needs, and the steps say what the gate runs over
+it: each names the extensions it judges.
 
 Adding a kind means one call: ``register_kind`` with the record.
 The workshop registers ``base`` and ``python`` at import; an extension's
@@ -17,14 +16,13 @@ is worse than a stop.
 ``base`` is abstract: the record behind the ``package-base`` template
 every package template renders first. It heads every kind's chain,
 so what it carries reaches every kind without a leaf restating it.
-It requires no tool: what a release writes beside its version is
-an extension's. A package's ``kind`` never names it: the
-vocabulary a contract may use is the concrete kinds.
+A package's ``kind`` never names it: the vocabulary a contract may
+use is the concrete kinds.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -70,22 +68,6 @@ class Stamper(Protocol):
         ...
 
 
-class SuiteRunner(Protocol):
-    """How a kind runs the test suites of several packages in one call."""
-
-    def __call__(
-        self,
-        *arguments: str,
-        packages: tuple[Package, ...],
-        root: Path,
-        selection: Mapping[str, tuple[str, ...]] | None = None,
-        point: str = "",
-        measured: bool = False,
-    ) -> None:
-        """Run *packages*' suites, metered when *measured*; a refusal is the verdict."""
-        ...
-
-
 class Backend(Protocol):
     """The callables every kind's backend module exposes.
 
@@ -126,19 +108,6 @@ class Backend(Protocol):
         """What the package declares natively, name to constraint."""
         ...
 
-    def declare_requirement(
-        self, package: Package, dependency: Package, floor: str
-    ) -> list[str]:
-        """Write *dependency* at *floor* into the package's native manifest.
-
-        The files changed, relative to the package; empty when the
-        manifest already names the dependency. Which file that is, and
-        how a requirement is spelled there, is the kind's knowledge:
-        the fix mode of ``layering.sibling-references`` calls this for a sibling the
-        graph already reaches, at the floor the graph carries.
-        """
-        ...
-
     def module_roots(self, package: Package) -> tuple[str, ...]:
         """The names other packages reference this one's code by."""
         ...
@@ -164,8 +133,7 @@ class Backend(Protocol):
         """Build what the kind's tests run on, into the gate's build directory.
 
         Incremental, so a rebuild after one edit costs that edit. A
-        kind whose tests run on source does nothing here, and its
-        record says so in ``tests_need_build``.
+        kind whose tests run on source does nothing here.
         """
         ...
 
@@ -198,42 +166,16 @@ class KindRecord:
             or empty for a kind with no seeds of its own.
         parent: The kind this one extends; a birth writes the
             parent's seeds first, then this kind's over them.
-        tools: The tools the kind requires by existing in a
-            workspace, each spelled `name` or `name>=floor`; the
-            lock resolves them beside the packages' and the
-            project's own.
         host_tools: What the host must already provide and no cache
             will ever install (a C compiler); ``fm doctor`` and
             ``fm env.check`` name an absence instead of letting a
             build fail midway.
-        host_allowed: The kind's tools whose copy already on the
-            machine may serve when it satisfies the floor, so a
-            workspace of this kind installs them only where the
-            machine has none; the union along the chain joins the
-            root contract's `[toolroom] host-allowed`.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        wheel_identity: What a built wheel's tag must say:
-            ``pure`` refuses a platform tag, ``platform`` refuses
-            ``none-any``, empty skips the guard (no wheels).
-        tests_need_build: Whether the kind's tests run on a build
-            rather than on source, so a test step is preceded by the
-            backend's ``gate_build``.
-        examples: How the kind runs a package's documentation
-            examples, the files under ``docs/examples/``, given the
-            package, the workspace root, the named example files (empty
-            for all of them) and the arguments for its tool; None for a
-            kind that runs
-            none, which the examples step says by name. A child kind
-            takes the nearest ancestor's.
-        suites: How the kind runs the test suites of several packages
-            in one call ([livery.workshop.run_suites][]); None for
-            a kind that runs none that way. A child kind takes the
-            nearest ancestor's.
         abstract: Whether the kind exists for its children alone: it
-            heads their chains with its tools and seed tree, builds
-            nothing, and is never a package's ``kind``. A concrete
+            heads their chains with its seed tree, builds nothing,
+            and is never a package's ``kind``. A concrete
             kind needs a backend; an abstract one has none.
         stands_for: The package-level extensions a package of the kind
             that lists none is taken to hold: their categories, root
@@ -250,16 +192,8 @@ class KindRecord:
     backend: Backend | None = None
     template: str = ""
     parent: str = ""
-    tools: tuple[str, ...] = ()
     host_tools: tuple[str, ...] = ()
-    host_allowed: tuple[str, ...] = ()
     artifact: str = "python"
-    wheel_identity: str = "pure"
-    tests_need_build: bool = False
-    examples: (
-        Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
-    ) = None
-    suites: SuiteRunner | None = None
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
     host_build: Callable[[Path], None] | None = None
@@ -375,15 +309,6 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     return chain
 
 
-def kind_tools(present_types: set[str]) -> tuple[str, ...]:
-    """The union of tool requirements the present kinds declare, sorted."""
-    tools: set[str] = set()
-    for kind_name in present_types:
-        for record in kind_chain(kind_name):
-            tools.update(record.tools)
-    return tuple(sorted(tools))
-
-
 def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     """The union of host requirements the present kinds name, sorted."""
     tools: set[str] = set()
@@ -391,59 +316,6 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
         for record in kind_chain(kind_name):
             tools.update(record.host_tools)
     return tuple(sorted(tools))
-
-
-def kind_examples(
-    kind_name: str,
-) -> Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None:
-    """The examples runner *kind_name* uses: its own, else its nearest ancestor's.
-
-    The runner takes the package, the workspace root, the example
-    files a run names (empty for all of them) and the arguments for its
-    tool. None for a kind that runs no examples.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.examples is not None:
-            return record.examples
-    return None
-
-
-def run_suites(
-    kind_name: str,
-    *arguments: str,
-    packages: tuple[Package, ...],
-    root: Path,
-    selection: Mapping[str, tuple[str, ...]] | None = None,
-    point: str = "",
-    measured: bool = False,
-) -> None:
-    """Run the test suites of *packages* in one call of *kind_name*'s runner.
-
-    The kind's own runner, else its nearest ancestor's. *arguments* go
-    to the runner unchanged. The call collects each package's own
-    tests and nothing else, the workspace's own among them when
-    [livery.workshop.workspace_suite][] is in *packages*.
-    *selection* names, per package path, the test files that stand for
-    the package's suite, and *point* selects that CI point's tests.
-    *measured* runs the suites metered, which the test extension asks
-    for while a listed extension judges what it measures; unmeasured,
-    the suites run with no meter.
-
-    Raises:
-        Failed: when the kind runs no suites, or when a suite fails.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.suites is not None:
-            record.suites(
-                *arguments,
-                packages=packages,
-                root=root,
-                selection=selection,
-                point=point,
-                measured=measured,
-            )
-            return
-    fail(f"kind {kind_name!r} runs no test suites")
 
 
 def kind_stands_for(kind_name: str) -> tuple[str, ...]:
@@ -481,36 +353,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
-    """The union of host allowances the present kinds grant, sorted."""
-    tools: set[str] = set()
-    for kind_name in present_types:
-        for record in kind_chain(kind_name):
-            tools.update(record.host_allowed)
-    return tuple(sorted(tools))
-
-
-def is_python_kind(kind_name: str) -> bool:
-    """Whether the kind is a Python distribution, by its chain.
-
-    True when ``python`` sits anywhere in the chain: a child kind (a
-    binary extension) is still a wheel with a ``pyproject.toml``,
-    while a kind outside the chain (``cpp-conan``) is not and never
-    joins the uv workspace.
-    """
-    return any(record.name == "python" for record in kind_chain(kind_name))
-
-
-def requires_pyproject(kind_name: str) -> bool:
-    """Whether a package of this declared kind must carry a pyproject.
-
-    An unregistered kind answers False so discovery can finish and
-    the backend refusal can name the vocabulary; a missing file
-    would otherwise mask the real problem, the typo.
-    """
-    if kind_name not in _KINDS:
-        return False
-    return is_python_kind(kind_name)
 
 
 def _register_builtin() -> None:
@@ -518,36 +360,24 @@ def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan, _python_nanobind
 
     # The base every kind derives from: abstract, the record behind the
-    # package-base template. It requires no tool: the release notes'
-    # writer and its configuration are an extension's.
+    # package-base template.
     register_kind(
         KindRecord(
             name="base",
             template=BASE_TEMPLATE,
-            tools=(),
             artifact="",
-            wheel_identity="",
             abstract=True,
         )
     )
     # Two contract kinds exist today. The extension package template
     # (package-extension) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
-    # The python kind's one tool is uv, which makes the venv the steps
-    # run in. Declared here as data, so a workspace's lock takes it
-    # from the kind like any other requirement and no branch in code
-    # knows the list.
     register_kind(
         KindRecord(
             name="python",
             backend=_python,
             template="package-python",
             parent="base",
-            # uv operates the workspace; the checkers, the formatter and
-            # the test runner ride their step records.
-            tools=("uv",),
-            examples=_python.run_examples,
-            suites=_python.run_test,
             # A package that lists no extension is taken to hold the
             # python extension: its categories and steps are the same.
             stands_for=("python",),
@@ -555,21 +385,14 @@ def _register_builtin() -> None:
     )
     # The binary extension: a python distribution in every checker's
     # eyes (the chain says so), built through cibuildwheel so the
-    # wheel carries its platform tag. cmake, ninja, conan and the
-    # cmake-conan provider join the profile; nanobind and
-    # scikit-build-core arrive through the package's own build-system
-    # requires, never the machine.
+    # wheel carries its platform tag.
     register_kind(
         KindRecord(
             name="python-nanobind",
             backend=_python_nanobind,
             template="package-python-nanobind",
             parent="python",
-            # The build tools; the native format and lint tools ride
-            # their step records.
-            tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
-            wheel_identity="platform",
             # Beside python's, the extension module's C++ sources, the
             # provider that resolves their dependencies, and nanobind's
             # wheels job: a nanobind package consumes conan and is never
@@ -594,14 +417,8 @@ def _register_builtin() -> None:
             backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            # The build tools; the measurer of a build made with MSVC
-            # rides cmake's [for.coverage] table, required while the
-            # workspace lists coverage.
-            tools=("cmake", "conan", "ninja"),
             host_tools=("cc", "c++"),
             artifact="conan",
-            wheel_identity="",
-            tests_need_build=True,
             # A package that lists no extension is taken to hold the
             # three a new one lists: one category table, one conan
             # workspace and the same steps either way.
