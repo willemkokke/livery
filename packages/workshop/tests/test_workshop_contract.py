@@ -36,7 +36,7 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
     assert "[ci] has no key 'runner': it takes affected-legs, automerge" in message
     assert "; did you mean 'runners'?" in message
     # A package's dead table refuses the same way, at its top level.
-    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n[verbs]\n')
+    member = _workspace(tmp_path, "", 'extensions = ["python"]\nname = "m"\n[verbs]\n')
     assert "the top level has no key 'verbs': it takes categories" in _refusal(
         lambda: _contract.load_contract(member)
     )
@@ -51,7 +51,9 @@ def test_the_old_tools_table_refuses_naming_toolroom(tmp_path: Path) -> None:
     assert "; did you mean 'toolroom'?" in message
     # A package's requirements refuse the same way.
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n[tools]\nrequires = ["ruff"]\n'
+        tmp_path,
+        "",
+        'extensions = ["python"]\nname = "m"\n[tools]\nrequires = ["ruff"]\n',
     )
     assert "; did you mean 'toolroom'?" in _refusal(
         lambda: _contract.load_contract(member)
@@ -72,7 +74,7 @@ def test_read_contract_judges_the_contract_in_a_directory(tmp_path: Path) -> Non
     assert message.startswith(f"{path}:\n") and "no key 'runner'" in message
     # Then a root's keys, and a package's, by the directory each sits in.
     member = _workspace(
-        tmp_path, "[ci]\nautomerge = true\n", 'kind = "python"\nname = "m"\n'
+        tmp_path, "[ci]\nautomerge = true\n", 'extensions = ["python"]\nname = "m"\n'
     )
     assert read_contract(tmp_path)["ci"] == {"automerge": True}
     assert read_contract(member.parent)["name"] == "m"
@@ -89,7 +91,7 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
     ) in _refusal(lambda: _contract.load_contract(path))
     # A package's table of that extension refuses against its root's list.
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n[docs]\nextra-css = []\n'
+        tmp_path, "", 'extensions = ["python"]\nname = "m"\n[docs]\nextra-css = []\n'
     )
     assert (
         "docs is a key of docs, which [workspace] extensions does not list"
@@ -128,8 +130,10 @@ def test_the_release_resolutions_refuse_another_word_and_one_listed_twice(
         "  release.prove lists 'head' twice; it takes each of floor, latest, head once",
     ]
     # A package's list is judged the same way.
-    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n')
-    member.write_text('kind = "python"\nname = "m"\n\n[release]\nprove = ["late"]\n')
+    member = _workspace(tmp_path, "", 'extensions = ["python"]\nname = "m"\n')
+    member.write_text(
+        'extensions = ["python"]\nname = "m"\n\n[release]\nprove = ["late"]\n'
+    )
     assert "release.prove lists 'late'; it takes floor, latest, head" in _refusal(
         lambda: _contract.load_contract(member)
     )
@@ -151,7 +155,9 @@ def test_prove_floors_refuses_naming_the_prove_list(tmp_path: Path) -> None:
     path = _workspace(tmp_path, "\n[release]\nprove-floors = false\n")
     assert _refusal(lambda: _contract.load_contract(path)) == f"{path}:\n{refusal}"
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n\n[release]\nprove-floors = true\n'
+        tmp_path,
+        "",
+        'extensions = ["python"]\nname = "m"\n\n[release]\nprove-floors = true\n',
     )
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
 
@@ -165,13 +171,13 @@ def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> N
     member = _workspace(
         tmp_path,
         "",
-        'kind = "python"\nname = "m"\nextensions = ["nanobind"]\n\n[ci]\n'
+        'name = "m"\nextensions = ["nanobind"]\n\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
     # The key in nanobind's table loads: the package lists nanobind.
     member.write_text(
-        'kind = "python"\nname = "m"\nextensions = ["nanobind"]\n\n[nanobind]\n'
+        'name = "m"\nextensions = ["nanobind"]\n\n[nanobind]\n'
         'wheel-platforms = ["ubuntu-latest", "windows-latest"]\n'
     )
     assert _contract.load_contract(member)["nanobind"] == {
@@ -179,24 +185,163 @@ def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> N
     }
 
 
-def test_a_contract_naming_the_nanobind_kind_refuses_naming_the_list_to_write(
+#: The line refusing ``kind`` in a contract that lists nothing, for each
+#: kind the table names: the list to write in its place.
+WRITE_INSTEAD = {
+    "python": '["python"]',
+    "python-nanobind": '["nanobind"]',
+    "cpp-conan": '["cmake", "conan"]',
+}
+
+
+def test_a_contract_writing_kind_refuses_naming_the_list_to_write(
     tmp_path: Path,
 ) -> None:
-    refusal = (
-        '  kind = "python-nanobind" is not a kind a package names: a package holds'
-        ' nanobind by listing it, kind = "python" and extensions = ["nanobind"]'
+    member = _workspace(tmp_path, "", 'name = "m"\n')
+    for kind, listed in WRITE_INSTEAD.items():
+        member.write_text(f'kind = "{kind}"\nname = "m"\n')
+        assert _refusal(lambda: _contract.load_contract(member)) == (
+            f'{member}:\n  kind = "{kind}" is not a key: a package lists the'
+            f" extensions it is made of; write extensions = {listed} in its place"
+        )
+    # A kind the table does not name: the line names the installed
+    # extensions a package may list, and the contract's own keys wait.
+    member.write_text('kind = "rust"\nname = "m"\n\n[nanobind]\nwheel-platforms = []\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f'{member}:\n  kind = "rust" is not a key: a package lists the extensions'
+        " it is made of, from the installed ones a package may list, cmake, conan,"
+        " cpp, nanobind, python; write extensions = [...] with those it holds in"
+        " its place"
     )
-    member = _workspace(tmp_path, "", 'kind = "python-nanobind"\nname = "m"\n')
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # A contract that lists nanobind beside the kind refuses the same way,
-    # and so does one carrying nanobind's own table.
-    member.write_text(
+    # Nothing rewrites it.
+    assert member.read_text().startswith('kind = "rust"\n')
+    # A value that is no string is spelled as the contract holds it.
+    member.write_text('kind = 3\nname = "m"\n')
+    assert _refusal(lambda: _contract.load_contract(member)).startswith(
+        f"{member}:\n  kind = 3 is not a key: a package lists the extensions it is"
+        " made of, from the installed ones a package may list,"
+    )
+
+
+def test_a_contract_writing_kind_beside_extensions_refuses_naming_its_list(
+    tmp_path: Path,
+) -> None:
+    member = _workspace(
+        tmp_path,
+        "",
         'kind = "python-nanobind"\nname = "m"\nextensions = ["nanobind"]\n\n'
+        '[nanobind]\nwheel-platforms = ["ubuntu-latest"]\n',
+    )
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f'{member}:\n  kind = "python-nanobind" is not a key: the package lists'
+        ' its extensions already, extensions = ["nanobind"]; delete kind'
+    )
+    # A list that names nothing is a list too, and so is a kind the table
+    # names beside it.
+    member.write_text('kind = "python"\nname = "m"\nextensions = []\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f'{member}:\n  kind = "python" is not a key: the package lists its'
+        " extensions already, extensions = []; delete kind"
+    )
+    # An extensions that is no list is named as the contract spells it.
+    member.write_text('kind = "python"\nname = "m"\nextensions = "python"\n')
+    assert _refusal(lambda: _contract.load_contract(member)) == (
+        f'{member}:\n  kind = "python" is not a key: the package lists its'
+        " extensions already, extensions = 'python'; delete kind"
+    )
+    # Deleted, the contract loads.
+    member.write_text('name = "m"\nextensions = ["nanobind"]\n')
+    assert _contract.load_contract(member)["extensions"] == ["nanobind"]
+
+
+def _members(root: Path, **contracts: str) -> None:
+    """Write each member's contract under *root*, by its directory name."""
+    for name, text in contracts.items():
+        directory = root / "packages" / name
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "workshop.toml").write_text(text)
+
+
+def test_every_contract_writing_kind_is_named_in_one_refusal(tmp_path: Path) -> None:
+    from livery.workshop._packages import discover_packages
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _members(
+        tmp_path,
+        lib='kind = "cpp-conan"\nname = "acme-lib"\n',
+        echo='name = "acme-echo"\n',
+        core='kind = "python"\nname = "acme-core"\nextensions = ["python"]\n',
+        odd='kind = "rust"\nname = "acme-odd"\n',
+    )
+    assert _refusal(lambda: discover_packages(tmp_path)).splitlines() == [
+        "these package contracts write kind, which nothing rewrites; edit each as"
+        " its line says:",
+        '  packages/core/workshop.toml: kind = "python" is not a key: the package'
+        ' lists its extensions already, extensions = ["python"]; delete kind',
+        '  packages/lib/workshop.toml: kind = "cpp-conan" is not a key: a package'
+        ' lists the extensions it is made of; write extensions = ["cmake",'
+        ' "conan"] in its place',
+        '  packages/odd/workshop.toml: kind = "rust" is not a key: a package lists'
+        " the extensions it is made of, from the installed ones a package may"
+        " list, cmake, conan, cpp, nanobind, python; write extensions = [...]"
+        " with those it holds in its place",
+    ]
+    # Another refusal stands alone: discovery names it, and no contract
+    # is read for a kind.
+    for name in ("core", "lib", "odd"):
+        (tmp_path / "packages" / name / "workshop.toml").write_text(
+            f'name = "acme-{name}"\n'
+        )
+    (tmp_path / "packages" / "echo" / "workshop.toml").write_text(
+        'name = "acme-echo"\nverbs = 1\n'
+    )
+    assert "the top level has no key 'verbs'" in _refusal(
+        lambda: discover_packages(tmp_path)
+    )
+
+
+def test_a_package_listing_no_extensions_mounts_none_and_is_judged_against_no_package_level_contract(  # noqa: E501
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._extensions import package_extensions
+
+    member = _workspace(tmp_path, "", 'name = "m"\n')
+    # A package that lists nothing holds nothing: the mount takes no
+    # package-level extension for it.
+    assert package_extensions(tmp_path) == ()
+    # Its contract takes no package-level extension's keys: nanobind's
+    # table refuses, naming the extension.
+    member.write_text('name = "m"\n\n[nanobind]\nwheel-platforms = ["ubuntu-latest"]\n')
+    assert "nanobind is a key of nanobind" in _refusal(
+        lambda: _contract.load_contract(member)
+    )
+    # Listing it, the table loads, and the mount takes the set.
+    member.write_text(
+        'name = "m"\nextensions = ["nanobind"]\n\n'
         '[nanobind]\nwheel-platforms = ["ubuntu-latest"]\n'
     )
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # Nothing rewrites it.
-    assert member.read_text().startswith('kind = "python-nanobind"\n')
+    assert _contract.load_contract(member)["nanobind"] == {
+        "wheel-platforms": ["ubuntu-latest"]
+    }
+    assert package_extensions(tmp_path) == ("cpp", "conan", "python", "nanobind")
+
+
+def test_a_depends_edge_and_the_forge_keep_their_kind(tmp_path: Path) -> None:
+    from livery.workshop._packages import discover_packages
+
+    member = _workspace(
+        tmp_path,
+        '\n[forge]\nkind = "github"\nowner = "acme"\n',
+        'name = "m"\n\n[[depends]]\npath = "packages/other"\nkind = "test"\n',
+    )
+    assert _contract.load_contract(tmp_path / "workshop.toml")["forge"]["kind"] == (
+        "github"
+    )
+    assert _contract.load_contract(member)["depends"] == [
+        {"path": "packages/other", "kind": "test"}
+    ]
+    (package,) = discover_packages(tmp_path)
+    assert [edge.kind for edge in package.depends] == ["test"]
 
 
 def test_qa_refuses_naming_the_coverage_table(tmp_path: Path) -> None:
@@ -206,16 +351,18 @@ def test_qa_refuses_naming_the_coverage_table(tmp_path: Path) -> None:
         " read while [workspace] extensions lists coverage"
     )
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n\n[qa]\ncoverage-floor = 90\n'
+        tmp_path,
+        "",
+        'extensions = ["python"]\nname = "m"\n\n[qa]\ncoverage-floor = 90\n',
     )
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
     # An empty table refuses the same way, and so does one in a
     # workspace that already lists coverage.
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
-    member.write_text('kind = "python"\nname = "m"\n\n[qa]\n')
+    member.write_text('extensions = ["python"]\nname = "m"\n\n[qa]\n')
     assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
     # The policy in coverage's table loads.
-    member.write_text('kind = "python"\nname = "m"\n\n[coverage]\nfloor = 90\n')
+    member.write_text('extensions = ["python"]\nname = "m"\n\n[coverage]\nfloor = 90\n')
     assert _contract.load_contract(member)["coverage"] == {"floor": 90}
 
 
@@ -223,7 +370,7 @@ def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
     tmp_path: Path,
 ) -> None:
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n\n[coverage]\nfloor = 90\n'
+        tmp_path, "", 'extensions = ["python"]\nname = "m"\n\n[coverage]\nfloor = 90\n'
     )
     assert _refusal(lambda: _contract.load_contract(member)) == (
         f"{member}:\n  coverage is a key of coverage, which [workspace] extensions"
@@ -232,7 +379,7 @@ def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
     # Each of its keys is coverage's, judged by type once it is listed.
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     member.write_text(
-        'kind = "python"\nname = "m"\n\n[coverage]\nepsilon = "wide"\n'
+        'extensions = ["python"]\nname = "m"\n\n[coverage]\nepsilon = "wide"\n'
         'required = "no"\nceiling = 90\n'
     )
     assert _refusal(lambda: _contract.load_contract(member)).splitlines()[1:] == [
@@ -248,7 +395,7 @@ def test_a_docs_table_while_docs_is_unlisted_refuses_naming_the_extension(
     # A package's [docs] api is the docs extension's key, as every key
     # of the table is, so the table refuses whole while docs is unlisted.
     member = _workspace(
-        tmp_path, "", 'kind = "python"\nname = "m"\n\n[docs]\napi = false\n'
+        tmp_path, "", 'extensions = ["python"]\nname = "m"\n\n[docs]\napi = false\n'
     )
     assert _refusal(lambda: _contract.load_contract(member)) == (
         f"{member}:\n  docs is a key of docs, which [workspace] extensions"
@@ -257,7 +404,7 @@ def test_a_docs_table_while_docs_is_unlisted_refuses_naming_the_extension(
     # Listed, the key loads, and its value is judged by its type.
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     assert _contract.load_contract(member)["docs"] == {"api": False}
-    member.write_text('kind = "python"\nname = "m"\n\n[docs]\napi = "no"\n')
+    member.write_text('extensions = ["python"]\nname = "m"\n\n[docs]\napi = "no"\n')
     assert _refusal(lambda: _contract.load_contract(member)).splitlines()[1:] == [
         "  docs.api is a string ('no'); it takes true or false"
     ]
@@ -370,7 +517,7 @@ def test_a_contract_is_parsed_once_until_it_or_a_sibling_changes(
     # process until a file the judgement read changes.
     import os
 
-    member = _workspace(tmp_path, "", 'kind = "python"\nname = "m"\n')
+    member = _workspace(tmp_path, "", 'extensions = ["python"]\nname = "m"\n')
     root = tmp_path / "workshop.toml"
     parsed: list[str] = []
     real = _contract.parse_contract

@@ -27,8 +27,9 @@ Each verb is timed in three states:
 
 The generated python members form a binary tree of runtime
 dependencies: member ``i`` depends on member ``(i - 1) // 2``,
-declared as a ``[[depends]]`` edge and as the kind's own
-requirement, so the graph the gate walks has depth as well as width.
+declared as a ``[[depends]]`` edge and as a requirement in its
+``pyproject.toml``, so the graph the gate walks has depth as well as
+width.
 
 This is development tooling of this repository, not part of the
 workshop a project uses.

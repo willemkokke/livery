@@ -149,9 +149,8 @@ HELD = {
 
 
 def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
-    from livery.workshop._composition import order
+    from livery.workshop._composition import extension_set, order
     from livery.workshop._extensions import installed_declaration, package_extensions
-    from livery.workshop._kinds import extension_set
 
     root = _workspace(tmp_path / "acme")
     members = _born(root, *TREES)
@@ -165,13 +164,13 @@ def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
 
 
 #: The lines of each tree's contract that say what its member is, by key.
-#: The golden holds ``<key> = ...`` in their place.
+#: The golden holds ``<key> = ...`` in their place. A contract writes no
+#: kind: its list says what the member holds.
 IDENTIFYING = {
-    "package-python": {"kind": '"python"', "extensions": '["python"]'},
-    "package-python-nanobind": {"kind": '"python"', "extensions": '["nanobind"]'},
-    "package-cpp-conan": {"kind": '"cpp-conan"', "extensions": '["cmake", "conan"]'},
+    "package-python": {"extensions": '["python"]'},
+    "package-python-nanobind": {"extensions": '["nanobind"]'},
+    "package-cpp-conan": {"extensions": '["cmake", "conan"]'},
     "package-extension": {
-        "kind": '"python"',
         "extensions": '["python"]',
         "template": '"package-extension"',
     },
@@ -393,7 +392,7 @@ ROOT_IGNORES = (
 def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import (
         RUNTIME_LANGUAGE,
         holds_runtime_language,
@@ -647,8 +646,8 @@ NANOBIND_BODIES = {
         f"{PYTHON}:public_modules",
         f"{PYTHON}:module_roots",
     ),
-    # No extension of the set answers it, so the python kind's backend does.
-    "compile_commands": (f"{PYTHON}:compile_commands",),
+    # No extension of the set answers it, and nothing else does.
+    "compile_commands": (),
     "references": (f"{PYTHON}:references",),
     # The answer is whether the set has an isolated test; none runs.
     "has_isolated_test": (),
@@ -755,7 +754,6 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
                 "declared_requirements",
                 "module_roots",
                 "public_modules",
-                "compile_commands",
                 "references",
                 "declare_requirement",
             ),

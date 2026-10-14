@@ -258,7 +258,9 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     assert "not a workspace package" in str(caught.value)
     thing = root / "packages" / "thing"
     thing.mkdir()
-    (thing / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (thing / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-thing"\n'
+    )
     (thing / "pyproject.toml").write_text(
         '[project]\nname = "livery-thing"\nversion = "0.1.0"\ndependencies = []\n'
     )
@@ -279,7 +281,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     package_dir = tmp_path / "packages" / "thing"
     (package_dir / "src").mkdir(parents=True)
     (package_dir / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-thing"\n[coverage]\nfloor = 50\n'
+        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 50\n'
     )
     module = package_dir / "src" / "mod.py"
     module.write_text("def run():\n    return 1\n\nrun()\n")
@@ -312,12 +314,13 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
         name="livery-thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     measured = coverage_floors.measured_coverage(tmp_path, (package,))
     assert measured["packages/thing"] > 0
     coverage_floors.enforce_coverage(tmp_path, (package,))  # above its floor
     (package_dir / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
+        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
     )
     with pytest.raises(_FAILURES):
         coverage_floors.enforce_coverage(tmp_path, (package,))

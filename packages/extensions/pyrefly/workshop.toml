@@ -4,7 +4,6 @@
 # The package contract: everything the workshop knows about this
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
-kind = "python"
 # The package-level extensions this package is composed of.
 extensions = ["python"]
 name = "livery-extensions-pyrefly"

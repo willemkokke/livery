@@ -7,8 +7,8 @@ another only when its extension.toml requires it. A member's source is
 held to that; tests are exempt, as the reach test exempts them. The
 one exception is the workshop's own: the base modules that
 ``livery.workshop._packages.BASE_EXTENSION_IMPORTS`` names import the
-python extension until the package kinds go, and the layering phase
-reads the same list.
+extensions it names beside them, and the layering phase reads the same
+list.
 
 An extension is the module a member's ``workshop.extensions`` entry
 point names; its own modules are the ones under that module's

@@ -131,9 +131,9 @@ registry serves through the probe the same extension answers to the
 `registry` query: python's reads the simple index the ladder below
 resolves, with its credential, and conan's reads the conan target. A
 member whose extensions release it to no registry, or to more than
-one, refuses the wave before anything uploads, naming the member; a
-member that lists no extension is answered by what its kind stands
-for.
+one, refuses the wave before anything uploads, naming the member. A
+member that lists no extension releases to no registry, and refuses
+the same way.
 
 Where the built wheel goes depends on the forge kind the workspace
 renders:

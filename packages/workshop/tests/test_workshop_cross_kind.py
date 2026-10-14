@@ -1,4 +1,4 @@
-"""The cross-kind dependency: extractors, agreement, affected, order."""
+"""A python member's dependency on a C++ library: agreement, affected, order."""
 
 from __future__ import annotations
 
@@ -13,29 +13,28 @@ from livery.workshop._graph import (
     dependents_closure,
     order_topologically,
 )
-from livery.workshop._kinds import kind_for, kind_names
 from livery.workshop._packages import Package, verify_workspace
 
 _FAILURES = (BaseException,)
 
 
-#: The line a member listing nanobind writes beside its kind.
+#: The line a member listing nanobind writes.
 NANOBIND = 'extensions = ["nanobind"]\n'
+
+#: The line the C++ library writes.
+LIBRARY = 'extensions = ["cmake", "conan"]\n'
 
 
 def _member(
     root: Path,
     name: str,
     *,
-    kind_name: str,
     contract_tail: str = "",
     files: dict[str, str] | None = None,
 ) -> Path:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
-    (directory / "workshop.toml").write_text(
-        f'kind = "{kind_name}"\nname = "acme-{name}"\n{contract_tail}'
-    )
+    (directory / "workshop.toml").write_text(f'name = "acme-{name}"\n{contract_tail}')
     for filename, body in (files or {}).items():
         (directory / filename).write_text(body)
     return directory
@@ -45,7 +44,7 @@ def _library(root: Path, *, requires: str = "") -> Path:
     return _member(
         root,
         "geometry",
-        kind_name="cpp-conan",
+        contract_tail=LIBRARY,
         files={"conanfile.py": f'requires = ({requires})\nname = "acme-geometry"\n'},
     )
 
@@ -59,21 +58,7 @@ def _extension(root: Path, *, conan_ref: str, floor: str = "0.1.0") -> Path:
     }
     if conan_ref:
         files["conanfile.py"] = f'requires = "{conan_ref}"\n'
-    return _member(
-        root, "ext", kind_name="python", contract_tail=NANOBIND + tail, files=files
-    )
-
-
-# The pin: every registered kind carries an extractor.
-
-
-def test_every_kind_has_a_declared_requirements_extractor() -> None:
-    missing = [
-        name
-        for name in kind_names()
-        if not callable(getattr(kind_for(name).backend, "declared_requirements", None))
-    ]
-    assert missing == []
+    return _member(root, "ext", contract_tail=NANOBIND + tail, files=files)
 
 
 # The refusals first.
@@ -111,7 +96,6 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "ext",
-        kind_name="python",
         contract_tail=NANOBIND,
         files={
             "pyproject.toml": '[project]\nname = "acme-ext"\ndependencies = []\n',
@@ -122,29 +106,7 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
         verify_workspace(tmp_path)
 
 
-def test_an_unextractable_kind_refuses_in_the_lint(tmp_path: Path) -> None:
-    _member(tmp_path, "mystery", kind_name="carrier-pigeon")
-    with pytest.raises(ValueError, match="not a registered kind"):
-        verify_workspace(tmp_path)
-
-
-def test_affected_fails_open_on_an_unknown_kind(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _member(tmp_path, "mystery", kind_name="carrier-pigeon")
-
-    monkeypatch.setattr(
-        git, "changed_paths", lambda root, base: ["packages/mystery/file.txt"]
-    )
-    assert affected_packages(tmp_path) is None
-    out = capsys.readouterr().out
-    assert "carrier-pigeon" in out
-    assert "failing open" in out
-
-
-# Agreement holds, the graph crosses kinds, the order is stable.
+# Agreement holds, the graph crosses ecosystems, the order is stable.
 
 
 def test_agreeing_floors_pass(tmp_path: Path) -> None:
@@ -166,7 +128,7 @@ def test_touching_the_library_marks_the_extension(
     affected = affected_packages(tmp_path)
     assert affected is not None
     assert {p.name for p in affected} == {"acme-geometry", "acme-ext"}
-    # And the closure alone answers the same across kinds.
+    # And the closure alone answers the same across ecosystems.
     packages = tuple(sorted(affected, key=lambda p: p.path))
     closure = dependents_closure(packages, {"packages/geometry"})
     assert {p.name for p in closure} == {"acme-geometry", "acme-ext"}
@@ -208,7 +170,6 @@ def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
     directory = _member(
         tmp_path,
         "ext",
-        kind_name="python",
         contract_tail=NANOBIND,
         files={
             "pyproject.toml": (

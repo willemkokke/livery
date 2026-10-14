@@ -125,7 +125,9 @@ def test_a_withdrawn_steps_file_is_kept_when_edited_and_removed_when_unedited(
     member = root / "packages" / "native"
     member.mkdir(parents=True)
     (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+    )
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )

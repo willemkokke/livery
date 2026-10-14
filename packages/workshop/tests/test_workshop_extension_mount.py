@@ -272,9 +272,7 @@ def test_an_extension_listed_at_the_wrong_level_refuses(
     root_contract(tmp_path, "[]")
     member = tmp_path / "packages" / "core"
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text(
-        'kind = "python"\nextensions = ["acme.site"]\n'
-    )
+    (member / "workshop.toml").write_text('extensions = ["acme.site"]\n')
     assert _extensions.closure_problems(tmp_path) == [
         "packages/core: `extensions` lists acme.site, which is listed in"
         " [workspace] extensions alone; move it there"

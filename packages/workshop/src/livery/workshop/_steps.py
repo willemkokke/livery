@@ -157,7 +157,7 @@ class StepRecord:
             step that only judges.
         extensions: The package-level extensions whose packages the
             step judges: a package whose set holds one of them
-            ([livery.workshop._kinds.extension_set][]). A package step
+            ([livery.workshop._composition.extension_set][]). A package step
             runs per such member; a workspace step names them so its
             tools and claims reach those packages, or leaves them empty.
         tests_only: Whether a package step still runs when the
@@ -688,7 +688,7 @@ def judged_by(
     is visible in the output and never passes silently. *quiet* counts
     without printing.
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     kept: list[Package] = []
     for package in packages:
@@ -702,7 +702,7 @@ def judged_by(
 
 def _applies(record: StepRecord, package: Package) -> bool:
     """Whether a package step judges *package*, by the extensions it holds."""
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     return bool(set(record.extensions) & set(extension_set(package)))
 
@@ -1537,11 +1537,10 @@ def _register_builtin() -> None:
 
     The workspace steps judge the whole tree; the cmake build and test
     steps judge one package at a time, each package holding the cmake
-    extension. The base registers those three until the package kinds
-    go, since a package that lists no extension holds cmake through its
-    kind alone and never mounts the extension. A body resolves its
-    backend function on the module when it runs, never at registration,
-    so a test that patches ``_cpp_conan.test`` sees its fake run.
+    extension. The base registers those three, which call cmake's code
+    through the module that gathers it. A body resolves its function on
+    the module when it runs, never at registration, so a test that
+    patches ``_cpp_conan.test`` sees its fake run.
     """
     from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs

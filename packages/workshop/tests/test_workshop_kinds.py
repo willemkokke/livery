@@ -1,33 +1,18 @@
-"""The kind registry: vocabulary, dispatch, chain, and guards."""
+"""The kind registry: the seed trees a birth writes, their chain, and its guards."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
 from livery.workshop._kinds import (
     KindRecord,
-    backend_for,
     kind_chain,
     kind_for,
     kind_names,
     register_kind,
 )
-from livery.workshop._packages import Package
-from livery.workshop._registries import RegistryTarget
 
 _FAILURES = (BaseException,)
-
-
-class _FakeStamper:
-    """A stamper that changes nothing; the fakes' version home."""
-
-    def homes(self) -> list[Path]:
-        return []
-
-    def stamp(self, version: str) -> list[str]:
-        return []
 
 
 @pytest.fixture
@@ -40,161 +25,57 @@ def restored_registry():
     _kinds._KINDS.update(before)
 
 
-class _FakeBackend:
-    """A future kind's backend, the fake the guards are forced with."""
-
-    def __init__(self) -> None:
-        self.built: list[str] = []
-
-    def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-        self.built.append(package.name)
-        return package.directory / "dist"
-
-    def module_roots(self, package: Package) -> tuple[str, ...]:
-        return ()
-
-    def public_modules(self, package: Package) -> tuple[str, ...]:
-        return ()
-
-    def compile_commands(self, package: Package) -> Path | None:
-        return None
-
-    def publish_artifact(
-        self,
-        package: Package,
-        root: Path,
-        *,
-        version: str,
-        target: RegistryTarget,
-    ) -> bool:
-        return True
-
-    def check(self, package: Package, root: Path) -> None:
-        return None
-
-    def classify(self, package: Package, path: str) -> str:
-        return "source"
-
-    def gate_build(self, package: Package, root: Path) -> None:
-        return None
-
-    def test(
-        self,
-        package: Package,
-        root: Path,
-        *,
-        selection: tuple[str, ...] = (),
-        arguments: tuple[str, ...] = (),
-        pages: tuple[str, ...] = (),
-    ) -> None:
-        return None
-
-    def current_version(self, package: Package) -> str:
-        return "0.0.1"
-
-    def stamp_version(self, package: Package) -> _FakeStamper:
-        return _FakeStamper()
-
-    def declared_requirements(self, package: Package) -> dict[str, str]:
-        return {}
-
-    def declare_requirement(
-        self, package: Package, dependency: Package, floor: str
-    ) -> list[str]:
-        return []
-
-
-def _package(tmp_path: Path, kind_name: str) -> Package:
-    directory = tmp_path / "packages" / "thing"
-    directory.mkdir(parents=True, exist_ok=True)
-    return Package(
-        directory=directory,
-        path="packages/thing",
-        name="acme-thing",
-        kind=kind_name,
-        depends=(),
-    )
-
-
 # The refusals first.
 
 
-def test_an_unknown_kind_refuses_naming_the_vocabulary(tmp_path: Path) -> None:
-    with pytest.raises(_FAILURES, match="not a registered package kind"):
-        backend_for(_package(tmp_path, "conan"))
-    with pytest.raises(_FAILURES, match="python"):
+def test_an_unknown_kind_refuses_naming_the_kinds() -> None:
+    with pytest.raises(
+        _FAILURES, match="not a registered package kind; kinds: cpp-conan, python"
+    ):
         kind_for("carrier-pigeon")
-
-
-def test_a_concrete_kind_without_a_backend_refuses(restored_registry) -> None:
-    with pytest.raises(_FAILURES, match="has no backend"):
-        register_kind(KindRecord(name="python-hollow", parent="python"))
-    # An abstract kind is the one shape that carries none.
-    register_kind(KindRecord(name="hollow", abstract=True))
-    assert "hollow" not in kind_names()
-
-
-def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None:
-    """Every chain starts at the base, which builds nothing."""
-    assert "base" not in kind_names()
-    for name in ("python", "python-nanobind", "cpp-conan"):
-        assert kind_chain(name)[0].name == "base", name
-    with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
-        backend_for(_package(tmp_path, "base"))
 
 
 def test_a_child_of_an_unregistered_parent_refuses(restored_registry) -> None:
     with pytest.raises(_FAILURES, match="register the parent first"):
-        register_kind(
-            KindRecord(name="python-orphan", backend=_FakeBackend(), parent="cpp")
-        )
+        register_kind(KindRecord(name="python-orphan", parent="cpp"))
 
 
 def test_a_chain_cycle_refuses_naming_it(restored_registry) -> None:
     from livery.workshop import _kinds
 
-    fake = _FakeBackend()
-    register_kind(KindRecord(name="a", backend=fake))
-    register_kind(KindRecord(name="b", backend=fake, parent="a"))
-    _kinds._KINDS["a"] = KindRecord(name="a", backend=fake, parent="b")
+    register_kind(KindRecord(name="a"))
+    register_kind(KindRecord(name="b", parent="a"))
+    _kinds._KINDS["a"] = KindRecord(name="a", parent="b")
     with pytest.raises(_FAILURES, match="cycles"):
         kind_chain("b")
 
 
-# The fake future kind registers and dispatches.
+# The registry's records and their chains.
 
 
-def test_a_registered_kind_dispatches_and_chains(
-    restored_registry, tmp_path: Path
-) -> None:
-    fake = _FakeBackend()
+def test_the_base_kind_is_abstract_and_heads_every_chain() -> None:
+    assert "base" not in kind_names()
+    for name in ("python", "python-nanobind", "cpp-conan"):
+        assert kind_chain(name)[0].name == "base", name
+
+
+def test_a_registered_kind_chains_under_its_parent(restored_registry) -> None:
     register_kind(
-        KindRecord(
-            name="python-fake",
-            backend=fake,
-            template="package-python-fake",
-            parent="python",
-        )
+        KindRecord(name="python-fake", template="package-python-fake", parent="python")
     )
     assert "python-fake" in kind_names()
-    package = _package(tmp_path, "python-fake")
-    backend_for(package).build(package, tmp_path)
-    assert fake.built == ["acme-thing"]
     chain = kind_chain("python-fake")
     assert [record.name for record in chain] == ["base", "python", "python-fake"]
+    # An abstract record is in no refusal's list.
+    register_kind(KindRecord(name="hollow", abstract=True))
+    assert "hollow" not in kind_names()
 
 
 def test_template_chain_orders_parent_first(restored_registry) -> None:
     from livery.workshop._kinds import template_chain
 
-    fake = _FakeBackend()
     register_kind(
-        KindRecord(
-            name="python-fake",
-            backend=fake,
-            template="package-python-fake",
-            parent="python",
-        )
+        KindRecord(name="python-fake", template="package-python-fake", parent="python")
     )
     assert template_chain("package-python-fake") == (
         "package-base",

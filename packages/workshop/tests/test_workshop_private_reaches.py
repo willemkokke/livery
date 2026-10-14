@@ -23,7 +23,7 @@ def _member(root: Path, name: str, modules: list[str], files: dict[str, str]) ->
     directory.mkdir(parents=True)
     names = ", ".join(f'"{module}"' for module in modules)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nextensions = ["python"]\nname = "acme-{name}"\n',
+        f'extensions = ["python"]\nname = "acme-{name}"\n',
         encoding="utf-8",
     )
     (directory / "pyproject.toml").write_text(

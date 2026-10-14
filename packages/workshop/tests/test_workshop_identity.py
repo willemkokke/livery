@@ -61,39 +61,35 @@ def test_the_roster_is_discovery_with_each_members_set_and_python_extras(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "workshop.toml").write_text('[workspace]\nname = "acme"\n')
-    _member(tmp_path, "zeta", 'kind = "python"\nname = "acme-zeta"\n')
+    _member(tmp_path, "zeta", 'extensions = ["python"]\nname = "acme-zeta"\n')
     _member(
         tmp_path,
         "alpha",
-        'kind = "python"\nname = "acme-alpha"\ndev-extras = ["test", "docs"]\n',
+        'extensions = ["python"]\nname = "acme-alpha"\ndev-extras = ["test", "docs"]\n',
     )
     _member(
         tmp_path,
         "native",
-        'kind = "cpp-conan"\nname = "acme-native"\nextensions = ["cmake", "conan"]\n',
+        'name = "acme-native"\nextensions = ["cmake", "conan"]\n',
         "conanfile.py",
     )
     # Each member names the package-level extensions it holds, in
-    # composition order: what it lists and what they require, or what its
-    # kind stands for while it lists none.
+    # composition order: what it lists and what they require.
     assert roster(tmp_path) == [
         {
             "dir": "alpha",
             "name": "acme-alpha",
-            "kind": "python",
             "extensions": ["python"],
             "dev": "acme-alpha[test,docs]",
         },
         {
             "dir": "native",
             "name": "acme-native",
-            "kind": "cpp-conan",
             "extensions": ["cmake", "cpp", "conan"],
         },
         {
             "dir": "zeta",
             "name": "acme-zeta",
-            "kind": "python",
             "extensions": ["python"],
             "dev": "acme-zeta",
         },
@@ -107,7 +103,7 @@ def test_a_members_facts_come_from_its_contract_and_the_projects(
         '[workspace]\nname = "acme"\nnamespace = "acme"\n'
         'authors = [{ name = "A", email = "a@e" }]\ncopyright-year = "2026"\n'
     )
-    plain = _member(tmp_path, "plain", 'kind = "python"\nname = "acme-plain"\n')
+    plain = _member(tmp_path, "plain", 'extensions = ["python"]\nname = "acme-plain"\n')
     facts = package_facts(tmp_path, plain)
     assert facts["package_name"] == "acme-plain"
     assert facts["package_description"] == "acme-plain: a acme workspace package."
@@ -119,7 +115,7 @@ def test_a_members_facts_come_from_its_contract_and_the_projects(
     variant = _member(
         tmp_path,
         "brand",
-        'kind = "python"\nname = "acme-brand"\ndescription = "The brand."\n'
+        'extensions = ["python"]\nname = "acme-brand"\ndescription = "The brand."\n'
         'template = "package-extension"\n',
     )
     assert package_facts(tmp_path, variant)["package_description"] == "The brand."

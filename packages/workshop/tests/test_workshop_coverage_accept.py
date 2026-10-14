@@ -36,7 +36,8 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{name}"\n\n[coverage]\nfloor = {floor}\n'
+            f'extensions = ["python"]\nname = "livery-{name}"\n\n'
+            f"[coverage]\nfloor = {floor}\n"
         )
         members.append(
             Package(
@@ -45,6 +46,7 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
                 name=f"livery-{name}",
                 kind="python",
                 depends=(),
+                extensions=("python",),
             )
         )
     monkeypatch.setattr(coverage_tasks, "workspace_root", lambda: tmp_path)

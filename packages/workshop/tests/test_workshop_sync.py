@@ -151,11 +151,44 @@ def test_the_sync_phase_runs_after_the_tools_and_before_uv(
     assert "the default profile was detected again" in capsys.readouterr().out
 
 
-def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
+def test_a_sync_refuses_contracts_writing_kind_before_it_writes_anything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every contract writing kind is named, and the tree is left as it was."""
+    from livery.footman import Failed
+    from livery.workshop import _sync
+
+    root = _workspace(tmp_path)
+    for name, contract in (
+        ("core", 'kind = "python"\nname = "acme-core"\n'),
+        ("lib", 'kind = "cpp-conan"\nname = "acme-lib"\n'),
+    ):
+        (root / "packages" / name).mkdir(parents=True)
+        (root / "packages" / name / "workshop.toml").write_text(contract)
+    (root / "packages" / "core" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n'
+    )
+    before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    monkeypatch.chdir(root)
+    with pytest.raises(Failed) as refused:
+        _sync.sync()
+    assert str(refused.value).splitlines()[1:] == [
+        '  packages/core/workshop.toml: kind = "python" is not a key: a package'
+        ' lists the extensions it is made of; write extensions = ["python"] in'
+        " its place",
+        '  packages/lib/workshop.toml: kind = "cpp-conan" is not a key: a package'
+        ' lists the extensions it is made of; write extensions = ["cmake",'
+        ' "conan"] in its place',
+    ]
+    after = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    assert after == before
+
+
+def test_the_sync_phase_runs_the_listed_extensions_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A listed extension's sync step runs; a kind standing for it runs it too."""
-    from livery.workshop import _kinds, _lifecycle
+    """A listed extension's sync step runs; a package listing none runs nothing."""
+    from livery.workshop import _lifecycle
     from livery.workshop._packages import Package
     from workshop_extension_fakes import fake_extensions, fake_steps
 
@@ -164,6 +197,7 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
         monkeypatch,
         prof='[extension]\nlevels = ["package"]\n\n[phases.sync.prof]\n'
         'main = "{package}._steps:main"\n',
+        over='[extension]\nlevels = ["package"]\nrequires = ["acme.prof"]\n',
     )
     fake_steps(
         tmp_path,
@@ -174,31 +208,24 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
         """,
     )
 
-    def member(name: str, kind: str, *extensions: str) -> Package:
+    def member(name: str, *extensions: str) -> Package:
         return Package(
             directory=tmp_path / name,
             path=f"packages/{name}",
             name=name,
-            kind=kind,
+            kind="",
             depends=(),
             extensions=extensions,
         )
 
-    # The bridge: a kind standing for the fake, as cpp-conan stands for conan.
-    monkeypatch.setattr(
-        _kinds,
-        "kind_stands_for",
-        lambda kind: ("acme.prof",) if kind == "cpp-conan" else (),
-    )
-    # Nothing first: a package listing nothing of a kind standing for
-    # nothing, and a package of a kind nothing registers, run no step.
-    _lifecycle.sync(
-        (member("plain", "python"), member("odd", "acme-unknown")), tmp_path
-    )
+    # Nothing first: a package listing nothing, and one listing an
+    # extension that adds no sync step, run no step.
+    _lifecycle.sync((member("plain"), member("other", "python")), tmp_path)
     assert capsys.readouterr().out == ""
+    # The step runs for a package listing its extension, and for one
+    # listing an extension that requires it.
     _lifecycle.sync(
-        (member("listed", "python", "acme.prof"), member("lib", "cpp-conan")),
-        tmp_path,
+        (member("listed", "acme.prof"), member("over", "acme.over")), tmp_path
     )
     # The step's own lines; the walk's and footman's receipts are its.
     said = [
@@ -208,7 +235,7 @@ def test_the_sync_phase_runs_the_listed_steps_and_the_kinds_bridge(
     ]
     assert said == [
         "prof.main for packages/listed",
-        "prof.main for packages/lib",
+        "prof.main for packages/over",
     ]
 
 

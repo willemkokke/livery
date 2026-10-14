@@ -41,15 +41,16 @@ def restored_registries():
     _kinds._KINDS.update(kinds)
 
 
-def _package(tmp_path: Path, name: str, kind: str) -> Package:
+def _package(tmp_path: Path, name: str, *extensions: str) -> Package:
     directory = tmp_path / "packages" / name
     directory.mkdir(parents=True, exist_ok=True)
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"acme-{name}",
-        kind=kind,
+        kind="",
         depends=(),
+        extensions=extensions,
     )
 
 
@@ -154,7 +155,7 @@ def test_a_registered_step_runs_narrows_and_is_replaced_by_name(
     assert "lint.spy" not in step_names()
 
 
-def test_a_package_step_runs_for_its_kinds_alone_and_skips_by_name(
+def test_a_package_step_runs_for_its_extensions_alone_and_skips_by_name(
     restored_registries,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -170,7 +171,7 @@ def test_a_package_step_runs_for_its_kinds_alone_and_skips_by_name(
 
     register_step(StepRecord("probe", "lint", spy, scope=PACKAGE, extensions=("cpp",)))
     py = _package(tmp_path, "member", "python")
-    native = _package(tmp_path, "native", "cpp-conan")
+    native = _package(tmp_path, "native", "cmake", "conan")
     # The probe judges the native package alone, announcing it by name;
     # a workspace of python packages schedules no probe at all.
     assert "lint.probe" in judges(PhaseContext(root=tmp_path, packages=(py, native)))
@@ -386,7 +387,7 @@ def _member_with(tmp_path: Path, tables: str) -> Package:
     member = tmp_path / "packages" / "x"
     member.mkdir(parents=True, exist_ok=True)
     member.joinpath("workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-x"\n{tables}'
+        f'extensions = ["python"]\nname = "livery-x"\n{tables}'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     (package,) = discover_packages(tmp_path)
@@ -525,7 +526,7 @@ def test_a_phases_table_off_the_shape_refuses(tmp_path: Path) -> None:
     member = tmp_path / "packages" / "x"
     member.mkdir(parents=True)
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\nphases = 3\n'
+        'extensions = ["python"]\nname = "livery-x"\nphases = 3\n'
     )
     member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     with pytest.raises(
@@ -533,7 +534,7 @@ def test_a_phases_table_off_the_shape_refuses(tmp_path: Path) -> None:
     ):
         discover_packages(tmp_path)
     member.joinpath("workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[phases]\ntest = 3\n'
+        'extensions = ["python"]\nname = "livery-x"\n[phases]\ntest = 3\n'
     )
     with pytest.raises(
         _FAILURES, match=r"phases.test is an integer \(3\); it takes a table"

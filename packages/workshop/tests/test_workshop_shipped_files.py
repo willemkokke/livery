@@ -107,7 +107,7 @@ def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the
     member = root / "packages" / "geometry"
     member.mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-geometry"\n'
+        'extensions = ["cmake", "conan"]\nname = "acme-geometry"\n'
     )
     # The recipe's reference is what the workspace lists a member by.
     (member / "conanfile.py").write_text('name = "acme-geometry"\nversion = "0.0.0"\n')
@@ -119,7 +119,7 @@ def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the
     listing = root / "packages" / "mesh"
     listing.mkdir(parents=True)
     (listing / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-mesh"\nextensions = ["cmake", "conan"]\n'
+        'name = "acme-mesh"\nextensions = ["cmake", "conan"]\n'
     )
     (listing / "conanfile.py").write_text('name = "acme-mesh"\nversion = "0.0.0"\n')
     deliver(root)

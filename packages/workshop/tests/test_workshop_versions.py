@@ -121,7 +121,7 @@ def _repository(tmp_path: Path, baseline: str, steps: list[Step]) -> Path:
     other = root / "packages" / "other"
     other.mkdir(parents=True)
     (other / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-other"\n', encoding="utf-8"
+        'extensions = ["python"]\nname = "livery-other"\n', encoding="utf-8"
     )
     for name, directory in (("member", member), ("other", other)):
         (directory / "pyproject.toml").write_text(
@@ -131,7 +131,7 @@ def _repository(tmp_path: Path, baseline: str, steps: list[Step]) -> Path:
     (root / "workshop.toml").write_text("[workspace]\n", encoding="utf-8")
     release = f'\n[release]\nbaseline = "{baseline}"\n' if baseline else ""
     (member / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-member"\n{release}', encoding="utf-8"
+        f'extensions = ["python"]\nname = "livery-member"\n{release}', encoding="utf-8"
     )
     _git(root, "init", "-q", "-b", "main")
     _git(root, "config", "commit.gpgsign", "false")

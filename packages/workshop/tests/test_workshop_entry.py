@@ -302,7 +302,7 @@ def test_a_native_member_is_left_to_the_workshop_sync(tmp_path: Path) -> None:
     member = root / "packages" / "ext"
     member.mkdir(parents=True)
     (member / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-ext"\nextensions = ["nanobind"]\n'
+        'name = "acme-ext"\nextensions = ["nanobind"]\n'
     )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-ext"\n')
     assert native_members(root) == ("acme-ext",)

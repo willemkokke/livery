@@ -7,25 +7,23 @@ writing a version, testing the built artifact in isolation, publishing
 what it built and the registry it goes to, verifying a released
 version, its declared requirements, writing one, the names other
 packages reference its code by, and what its sources reference. A
-question that is a query
-([livery.workshop._queries.Query][]) is answered by the package's
-extensions when one of them answers it, and a build, a stamp, an
-isolated test, a publish or a verification runs as the package's phase
-([livery.workshop._phases.run_phase][]) when its extensions add steps
-to it; anything else, and any package whose extensions do neither, is
-answered by the package's kind backend
-([livery.workshop._kinds.backend_for][]). A requirement on a sibling
-is the exception: every writer of the package's set writes it, and a
-package that lists no extension takes the writers of what its kind
-stands for. So a caller never names an extension or a backend. A
-function a backend may leave out answers None or an empty tuple when
-the backend has none, and so does an abstract kind, which has no
-backend.
+question is a query ([livery.workshop._queries.Query][]) the package's
+set answers, the extensions it lists and those they require; a build,
+a stamp, an isolated test, a publish or a verification runs as the
+package's phase ([livery.workshop._phases.run_phase][]), the steps its
+set adds to it. So a caller never names an extension.
+
+A question nothing in the set answers gets the query's empty answer:
+no module roots, no requirements. The version is the one question an
+empty answer cannot serve, and it refuses naming the query. A phase
+the set adds no step to refuses the release, naming the phase. A
+package that lists no extension holds none: every question gets its
+empty answer, and every phase refuses.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -34,26 +32,20 @@ if TYPE_CHECKING:
     from livery.forge import Registry
     from livery.workshop._packages import Package, SourceReferences
     from livery.workshop._phases import PhaseContext
-    from livery.workshop._queries import Query
     from livery.workshop._registries import RegistryTarget
     from livery.workshop._steps import StepRecord
-
-T = TypeVar("T")
 
 
 def sync(packages: Iterable[Package], root: Path) -> None:
     """Run the sync phase over *packages*: what a member needs before ``uv sync``.
 
-    The steps are the set's: conan's profile step among them, which a
-    package that lists nanobind runs too, since its set holds conan.
-    A package that lists no extension runs the phase over what its
-    kind stands for ([livery.workshop._kinds.kind_stands_for][]), the
-    bridge while package kinds remain. The sync phase alone takes that
-    bridge: the lifecycle phases read the listed extensions, so the
-    kind's backend still builds such a package.
+    The steps are each package's set's: conan's profile step among
+    them, which a package that lists nanobind runs too, since its set
+    holds conan. A package whose set adds no step to the phase needs
+    nothing before the install, and the phase runs nothing for it.
     """
     for package in packages:
-        _run_steps(_held(package), "sync", root, {})
+        _run_steps(package, "sync", root, {})
 
 
 #: What the release train's build gives the build phase beside the
@@ -69,53 +61,61 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     ([livery.workshop._lifecycle.RELEASE_BUILD][]). *epoch* is the
     build's source date, so two builds of one tree are the same bytes;
     0 takes the build tool's own.
+
+    Raises:
+        Failed: naming the package, its set and the phase, when no
+            extension of the set adds a step to the build phase.
     """
     from pathlib import Path
 
-    ctx = _run_steps(package, "build", root, {**RELEASE_BUILD, "epoch": epoch})
-    if ctx is not None:
-        return cast("Path", _provided(ctx, "dist", Path))
-    from livery.workshop._kinds import backend_for
-
-    return backend_for(package).build(package, root, epoch=epoch)
+    ctx = _served(package, "build", root, {**RELEASE_BUILD, "epoch": epoch})
+    return cast("Path", _provided(ctx, "dist", Path))
 
 
 def current_version(package: Package) -> str:
-    """The version *package*'s own manifest declares."""
-    from livery.workshop._queries import CURRENT_VERSION
+    """The version *package*'s own manifest declares.
 
-    answered = _extensions_answer(package, CURRENT_VERSION)
-    if answered is not None:
-        return answered
-    from livery.workshop._kinds import backend_for
+    Raises:
+        Failed: naming the package, its set and the query, when nothing
+            in the set answers the version, since a release reads and
+            stamps it.
+    """
+    from livery.footman import fail
+    from livery.workshop._queries import CURRENT_VERSION, answer
 
-    return backend_for(package).current_version(package)
+    answered = answer(package, CURRENT_VERSION)
+    if not answered:
+        held = ", ".join(_set_of(package)) or "none"
+        fail(
+            f"{package.path}: its extensions ({held}) answer no"
+            f" {CURRENT_VERSION.name}: none of them reads a version from the"
+            " package's manifests, so the release train has no version to read"
+            " or stamp. List the extension whose manifest carries the version"
+        )
+    return answered
 
 
 def version_files(package: Package) -> tuple[Path, ...]:
     """Every file a version may be written into.
 
     A caller that writes a version for one build keeps these files
-    first, then restores them.
+    first, then restores them. Empty for a package whose set names
+    none.
     """
-    from livery.workshop._queries import VERSION_FILES
+    from livery.workshop._queries import VERSION_FILES, answer
 
-    answered = _extensions_answer(package, VERSION_FILES)
-    if answered is not None:
-        return answered
-    from livery.workshop._kinds import backend_for
-
-    return tuple(backend_for(package).stamp_version(package).homes())
+    return tuple(answer(package, VERSION_FILES))
 
 
 def stamp(package: Package, root: Path, version: str) -> list[str]:
-    """Write *version* into *package*'s version files; the files it changed."""
-    ctx = _run_steps(package, "stamp", root, {"version": version})
-    if ctx is not None:
-        return list(cast("list[str]", _provided(ctx, "changed", (list, tuple))))
-    from livery.workshop._kinds import backend_for
+    """Write *version* into *package*'s version files; the files it changed.
 
-    return backend_for(package).stamp_version(package).stamp(version)
+    Raises:
+        Failed: naming the package, its set and the phase, when no
+            extension of the set adds a step to the stamp phase.
+    """
+    ctx = _served(package, "stamp", root, {"version": version})
+    return list(cast("list[str]", _provided(ctx, "changed", (list, tuple))))
 
 
 def publish(
@@ -125,6 +125,10 @@ def publish(
 
     A re-run walks past what an earlier attempt uploaded, so False is
     a success that uploaded nothing.
+
+    Raises:
+        Failed: naming the package, its set and the phase, when no
+            extension of the set adds a step to the publish phase.
     """
     from livery.workshop._registries import target_table
 
@@ -132,26 +136,18 @@ def publish(
         "version": version,
         "registry-target": target_table(target),
     }
-    ctx = _run_steps(package, "publish", root, inputs)
-    if ctx is not None:
-        return cast("bool", _provided(ctx, "published", bool))
-    from livery.workshop._kinds import backend_for
-
-    return backend_for(package).publish_artifact(
-        package, root, version=version, target=target
-    )
+    ctx = _served(package, "publish", root, inputs)
+    return cast("bool", _provided(ctx, "published", bool))
 
 
 def distributions(package: Package) -> tuple[tuple[str, str], ...]:
     """The distributions *package* releases, each as its ecosystem and its name.
 
-    Its set's answers to the ``distributions`` query, combined; a
-    package that lists no extension is asked as holding what its kind
-    stands for, the bridge while package kinds remain.
+    Its set's answers to the ``distributions`` query, combined.
     """
     from livery.workshop._queries import DISTRIBUTIONS, answer
 
-    return answer(_held(package), DISTRIBUTIONS)
+    return answer(package, DISTRIBUTIONS)
 
 
 def ecosystem(package: Package) -> str:
@@ -194,9 +190,8 @@ def registry(package: Package) -> Registry:
     """The registry *package* releases to, as a probe of the versions it serves.
 
     Its set's answer to the ``registry`` query, from the extension that
-    releases its distribution; a package that lists no extension is
-    asked as holding what its kind stands for. The release train polls
-    the probe until a version it uploaded is served.
+    releases its distribution. The release train polls the probe until
+    a version it uploaded is served.
 
     Raises:
         Failed: naming the package when its extensions answer no
@@ -208,7 +203,7 @@ def registry(package: Package) -> Registry:
     from livery.workshop._queries import REGISTRY, answer
 
     released = ecosystem(package)
-    probe = answer(_held(package), REGISTRY)
+    probe = answer(package, REGISTRY)
     if not probe:
         fail(
             f"{package.path}: its extensions release it to {released} and answer"
@@ -221,13 +216,10 @@ def registry(package: Package) -> Registry:
 def has_isolated_test(package: Package) -> bool:
     """Whether *package*'s release tests its built artifact on the isolated side.
 
-    Through a step of its set serving the test phase's isolated side
-    where one is added, and its kind otherwise; a kind that builds no
-    wheels has no isolated test.
+    Whether its set adds a step serving the test phase's isolated side,
+    as python does for the wheel it builds.
     """
-    return bool(_isolated_tests(package)) or (
-        _optional(package, "isolated_test") is not None
-    )
+    return bool(_isolated_tests(package))
 
 
 def isolated_test(
@@ -241,26 +233,26 @@ def isolated_test(
     finds a sibling's unpublished wheel. Ask
     [livery.workshop._lifecycle.has_isolated_test][] first: a package
     with no isolated test refuses here.
+
+    Raises:
+        Failed: naming the package when its set adds no step on the test
+            phase's isolated side.
     """
     from livery.footman import fail
 
+    if not _isolated_tests(package):
+        fail(
+            f"{package.path}: nothing tests its release isolated: its extensions"
+            " add no step on the test phase's isolated side"
+        )
     inputs: dict[str, object] = {
         "isolated": True,
         "resolution": resolution,
         "release-dirs": list(release_dirs),
     }
-    if _isolated_tests(package):
-        ctx = _run_steps(package, "test", root, inputs)
-        if ctx is not None:
-            resolved = cast("dict[object, object]", _provided(ctx, "resolved", dict))
-            return {str(name): str(version) for name, version in resolved.items()}
-    reader = _optional(package, "isolated_test")
-    if reader is None:
-        fail(
-            f"{package.path}: nothing tests its release isolated: its extensions"
-            " add no step on the test phase's isolated side, and its kind has none"
-        )
-    return dict(reader(package, root, release_dirs=release_dirs, resolution=resolution))
+    ctx = _served(package, "test", root, inputs)
+    resolved = cast("dict[object, object]", _provided(ctx, "resolved", dict))
+    return {str(name): str(version) for name, version in resolved.items()}
 
 
 def verify(
@@ -278,9 +270,11 @@ def verify(
     *tree* is checked out at the release's receipt tag, *python* is the
     interpreter, *index* where the version installs from and *extras*
     the extras installed with it, comma-joined.
-    """
-    from livery.footman import fail
 
+    Raises:
+        Failed: naming the package, its set and the phase, when no
+            extension of the set adds a step to the verify phase.
+    """
     inputs: dict[str, object] = {
         "version": version,
         "tree": tree,
@@ -288,40 +282,20 @@ def verify(
         "index": index,
         "extras": extras,
     }
-    ctx = _run_steps(package, "verify", root, inputs)
-    if ctx is not None:
-        return cast("int", _provided(ctx, "exit-code", int))
-    reader = _optional(package, "verify")
-    if reader is None:
-        fail(
-            f"{package.path}: nothing verifies its released version: its extensions"
-            " add no verify step, and its kind verifies nothing"
-        )
-    return int(
-        reader(
-            package,
-            tree=tree,
-            version=version,
-            python=python,
-            index=index,
-            extras=extras,
-        )
-    )
+    ctx = _served(package, "verify", root, inputs)
+    return cast("int", _provided(ctx, "exit-code", int))
 
 
-def declared_requirements(package: Package) -> dict[str, str] | None:
-    """What *package*'s native manifest requires, each name to its constraint.
+def declared_requirements(package: Package) -> dict[str, str]:
+    """What *package*'s native manifests require, each name to its constraint.
 
-    None for a package whose kind reads no manifest, which
-    ``layering.graph`` names, since it cannot compare the package's edges.
+    Empty for a package whose set reads no manifest, which declares no
+    requirement: ``layering.graph`` names each of its edges on a
+    sibling as missing from its manifests.
     """
-    from livery.workshop._queries import REQUIREMENTS
+    from livery.workshop._queries import REQUIREMENTS, answer
 
-    answered = _extensions_answer(package, REQUIREMENTS)
-    if answered is not None:
-        return dict(answered)
-    reader = _optional(package, "declared_requirements")
-    return None if reader is None else reader(package)
+    return dict(answer(package, REQUIREMENTS))
 
 
 def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
@@ -332,28 +306,24 @@ def declare_requirement(package: Package, dependency: Package, floor: str) -> li
     ecosystem alone, so the requirement lands in the manifest of the
     dependency's ecosystem: python's ``pyproject.toml`` for a sibling
     that holds python, conan's recipe for a sibling that is a conan
-    package. A package that lists no extension takes the writers of
-    what its kind stands for. The files are relative to the package;
-    empty when the manifests name the dependency already.
+    package. The files are relative to the package; empty when the
+    manifests name the dependency already.
 
     Raises:
         Failed: when no writer of the set takes *dependency*, naming
             both sets; nothing is written then.
     """
-    from dataclasses import replace
-
     from livery.footman import fail
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
     from livery.workshop._queries import REQUIREMENT_WRITERS, answer
 
-    held = replace(package, extensions=extension_set(package))
     taken = [
         written
-        for writer in answer(held, REQUIREMENT_WRITERS)
+        for writer in answer(package, REQUIREMENT_WRITERS)
         if (written := writer(package, dependency, floor)) is not None
     ]
     if not taken:
-        own = ", ".join(held.extensions) or "no extension"
+        own = ", ".join(extension_set(package)) or "no extension"
         theirs = ", ".join(extension_set(dependency)) or "no extension"
         fail(
             f"{package.path} holds {own}, and no writer of its set takes a"
@@ -366,55 +336,40 @@ def declare_requirement(package: Package, dependency: Package, floor: str) -> li
 
 def module_roots(package: Package) -> tuple[str, ...]:
     """The names other packages reference *package*'s code by; empty for none."""
-    from livery.workshop._queries import MODULE_ROOTS
+    from livery.workshop._queries import MODULE_ROOTS, answer
 
-    answered = _extensions_answer(package, MODULE_ROOTS)
-    if answered is not None:
-        return answered
-    roots = _optional(package, "module_roots")
-    return () if roots is None else tuple(roots(package))
+    return tuple(answer(package, MODULE_ROOTS))
 
 
 def public_modules(package: Package) -> tuple[str, ...]:
     """The modules that declare *package*'s public API, by import path.
 
-    What a type-completeness step verifies. A package whose kind has
+    What a type-completeness step verifies. A package whose set names
     no importable API answers nothing.
     """
-    from livery.workshop._queries import PUBLIC_MODULES
+    from livery.workshop._queries import PUBLIC_MODULES, answer
 
-    answered = _extensions_answer(package, PUBLIC_MODULES)
-    if answered is not None:
-        return answered
-    from livery.workshop._kinds import backend_for
-
-    return backend_for(package).public_modules(package)
+    return tuple(answer(package, PUBLIC_MODULES))
 
 
 def compile_commands(package: Package) -> Path | None:
     """Where *package*'s gate build writes its compilation database.
 
-    None for a package whose build writes none. The file exists once
-    the build is configured.
+    None for a package whose set's build writes none. The file exists
+    once the build is configured.
     """
-    from livery.workshop._queries import COMPILE_COMMANDS
+    from livery.workshop._queries import COMPILE_COMMANDS, answer
 
-    answered = _extensions_answer(package, COMPILE_COMMANDS)
-    if answered is not None:
-        return answered
-    found = _optional(package, "compile_commands")
-    return None if found is None else cast("Path | None", found(package))
+    return answer(package, COMPILE_COMMANDS)
 
 
 def references(package: Package) -> tuple[SourceReferences, ...]:
     """What each of *package*'s sources references, one record per source.
 
-    The ``references`` answer of the package's extensions where one of
-    them answers it, and its kind backend's otherwise; the answers
-    combine as their union. Empty for a package nothing answers for,
-    such as one whose language no extension reads sources of. Each
-    record names a file inside the package, and one extension answers
-    for each file.
+    The ``references`` answers of the package's set, combined as their
+    union. Empty for a package nothing answers for, such as one whose
+    language no extension reads sources of. Each record names a file
+    inside the package, and one extension answers for each file.
 
     Raises:
         QueryError: when an answer names a file outside the package,
@@ -423,14 +378,7 @@ def references(package: Package) -> tuple[SourceReferences, ...]:
     """
     from livery.workshop._queries import REFERENCES, QueryError, answers
 
-    found: Mapping[str, Iterable[SourceReferences]]
-    if _answered(package, REFERENCES):
-        found = answers(package, REFERENCES)
-    else:
-        reader = _optional(package, "references")
-        if reader is None:
-            return ()
-        found = {f"the {package.kind} kind": reader(package)}
+    found: Mapping[str, Iterable[SourceReferences]] = answers(package, REFERENCES)
     owners: dict[str, str] = {}
     union: dict[SourceReferences, None] = {}
     for name, answered in found.items():
@@ -464,10 +412,9 @@ def _run_steps(
 ) -> PhaseContext | None:
     """Run *phase* over *package* with the engine's *inputs*; None without steps.
 
-    None when no extension of the package's set adds steps to the phase,
-    which leaves the call to the package's kind backend: the bridge
-    while package kinds remain. A step an extension of the set deletes
-    is none of them. The steps run through the one walk
+    None when no extension of the package's set adds steps to the
+    phase. A step an extension of the set deletes is none of them. The
+    steps run through the one walk
     ([livery.workshop._phases.run_phase][]), the context naming the
     package and the phase.
     """
@@ -478,6 +425,29 @@ def _run_steps(
 
     ctx = PhaseContext(root=root, packages=(package,), package=package, phase=phase)
     return run_phase(ctx, steps, inputs={phase: inputs})
+
+
+def _served(
+    package: Package, phase: str, root: Path, inputs: Mapping[str, object]
+) -> PhaseContext:
+    """Run *phase* over *package* as `_run_steps` does; refuse a phase with no step.
+
+    Raises:
+        Failed: naming the package, its set and the phase, when no
+            extension of the set adds a step to the phase, so nothing
+            does what the release asks of it.
+    """
+    ctx = _run_steps(package, phase, root, inputs)
+    if ctx is None:
+        from livery.footman import fail
+
+        held = ", ".join(_set_of(package)) or "none"
+        fail(
+            f"{package.path}: its extensions ({held}) add no step to the {phase}"
+            " phase, so the release has nothing to run there. List the extension"
+            f" whose steps serve the {phase} phase"
+        )
+    return ctx
 
 
 def _isolated_tests(package: Package) -> tuple[StepRecord, ...]:
@@ -498,12 +468,11 @@ def _phase_steps(package: Package, phase: str) -> tuple[StepRecord, ...]:
     """
     if not package.extensions:
         return ()
-    from livery.workshop._composition import package_set
+    from livery.workshop._composition import extension_set
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._phases import phase_steps
 
-    members = package_set(package.extensions, installed_declaration)
-    return phase_steps(phase, members, installed_declaration)
+    return phase_steps(phase, extension_set(package), installed_declaration)
 
 
 def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> object:
@@ -519,66 +488,8 @@ def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> obj
     return value
 
 
-def _extensions_answer(package: Package, query: Query[T]) -> T | None:
-    """*package*'s extensions' answer to *query*; None when none of them answers.
-
-    The bridge while package kinds remain: a package whose extensions
-    answer a query in a place asked now, at the top level or in a
-    ``[for.<target>]`` table whose target is listed, takes their
-    answer, and any other takes its kind backend's.
-    """
-    if not _answered(package, query):
-        return None
-    from livery.workshop._queries import answer
-
-    return answer(package, query)
-
-
-def _answered(package: Package, query: Query[T]) -> bool:
-    """Whether an extension of *package*'s set answers *query* in a place asked now.
-
-    The places are the ones the query asks (``answered_at``), read from
-    the declarations alone, so deciding computes no answer.
-    """
-    if not package.extensions:
-        return False
-    from livery.workshop._composition import package_set
-    from livery.workshop._extensions import installed_declaration
-    from livery.workshop._queries import answered_at
-
-    for name in package_set(package.extensions, installed_declaration):
-        declared = installed_declaration(name)
-        if declared is not None and answered_at(package, name, declared, query.name):
-            return True
-    return False
-
-
-def _held(package: Package) -> Package:
-    """*package* as its set is asked: what its kind stands for while it lists none.
-
-    The bridge while package kinds remain, which the sync phase and the
-    queries about what a package releases take. A kind the registry does
-    not know stands for nothing.
-    """
-    if package.extensions:
-        return package
-    from dataclasses import replace
-
-    from livery.workshop._kinds import kind_stands_for
-
-    return replace(package, extensions=kind_stands_for(package.kind))
-
-
 def _set_of(package: Package) -> tuple[str, ...]:
     """The package-level extensions *package*'s set holds, as its queries ask them."""
-    from livery.workshop._composition import package_set
-    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._composition import extension_set
 
-    return package_set(_held(package).extensions, installed_declaration)
-
-
-def _optional(package: Package, name: str) -> Any:
-    """The backend function *name* of *package*'s kind; None when it has none."""
-    from livery.workshop._kinds import kind_for
-
-    return getattr(kind_for(package.kind).backend, name, None)
+    return extension_set(package)

@@ -16,9 +16,9 @@ extensions = ["clang-tidy"]
 
 `fm lint` then runs it, and `fm check` runs it with the rest of the gate. It
 reads the C and C++ sources and tests its claims reach in the package, or
-the files a run names, against the compilation database the package's kind
-says its build writes. A package not configured yet has no database, and
-nothing is linted until it has.
+the files a run names, against the compilation database the package's
+extensions say its build writes. A package not configured yet has no database,
+and nothing is linted until it has.
 `fm lint.clang-tidy -- --checks=-*,bugprone-*` hands clang-tidy the words
 after `--`, in each package's call.
 

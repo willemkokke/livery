@@ -56,6 +56,7 @@ def released(seeds: Seeds) -> tuple[Path, Package]:
         name="livery-thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     return root, package
 

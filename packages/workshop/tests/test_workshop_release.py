@@ -52,7 +52,7 @@ def _build(base: Path) -> None:
         directory = root / "packages" / name
         (directory / "src" / "livery" / name).mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{name}"\n{extra}'
+            f'extensions = ["python"]\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{name}"\nversion = "0.2.0"\n'
@@ -287,6 +287,7 @@ def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
         name="acme-thing",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     # The fallback first: a workspace listing no extension that answers
     # has no provider.

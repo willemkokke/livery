@@ -24,8 +24,8 @@ from typing import Any
 
 from livery.footman import fail
 from livery.workshop import DISTRIBUTIONS, answer
+from livery.workshop._composition import extension_set
 from livery.workshop._contract import load_contract
-from livery.workshop._kinds import extension_set, kind_for, kind_names
 from livery.workshop._packages import Package, discover_packages
 
 #: The extension whose packages build platform wheels.
@@ -52,14 +52,10 @@ def releases_a_conan_package(package: Package) -> bool:
 
     Its extensions answer the ``distributions`` query, which names a
     conan package for a recipe that names a reference and nothing for
-    a consumer's recipe. A package that lists no extension is answered
-    by its kind's artifact, until the kinds go; a kind the registry
-    does not know answers no, and the graph's judge names it.
+    a consumer's recipe.
     """
-    if package.extensions:
-        released = answer(package, DISTRIBUTIONS)
-        return any(ecosystem == CONAN for ecosystem, _name in released)
-    return package.kind in kind_names() and kind_for(package.kind).artifact == CONAN
+    released = answer(package, DISTRIBUTIONS)
+    return any(ecosystem == CONAN for ecosystem, _name in released)
 
 
 def job_built_members(root: Path) -> dict[str, str]:

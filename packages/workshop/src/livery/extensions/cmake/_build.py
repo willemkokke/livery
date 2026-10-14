@@ -299,9 +299,9 @@ def compile(package: Package, arguments: tuple[str, ...] = ()) -> None:
 def gate_build(package: Package, root: Path) -> None:
     """Configure and build *package* into the gate's build directory.
 
-    What the kind's tests run on, in one call, for the affected
-    gate's test-only step; the two halves are the ``configure`` and
-    ``build`` steps the kind registers.
+    What the package's ctest runs on, in one call, for the affected
+    gate's test-only step; the two halves are the ``build.configure``
+    and ``build.compile`` steps.
     """
     del root
     configure(package)
@@ -397,8 +397,8 @@ def _run_ctest(
 def _no_ctest_named(package: Package, names: list[str]) -> NoReturn:
     """Refuse a selection no ctest answers to, naming the rule that maps them."""
     fail(
-        f"{package.name}: no ctest is named {', '.join(names)}; the cpp-conan"
-        " kind maps a test file to the ctest of its stem"
+        f"{package.name}: no ctest is named {', '.join(names)}; the test step"
+        " maps a test file to the ctest of its stem"
         " (add_test(NAME <stem> ...)), so register it or run the suite"
     )
 

@@ -165,7 +165,7 @@ def _workspace(
         f'[workspace]\n{workspace}\n[toolroom]\nindex = "records"\n{tools}'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n'
+        'extensions = ["python"]\nname = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
@@ -185,7 +185,7 @@ def test_two_floors_that_cannot_both_be_met_refuse_naming_each_and_its_site(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["ruff>=1.1"]\n')
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n\n'
+        'extensions = ["python"]\nname = "acme-member"\n\n'
         '[toolroom]\nrequires = ["ruff>=9.0"]\n'
     )
     with pytest.raises(Failed) as refused:
@@ -308,7 +308,7 @@ def test_a_workspace_without_a_native_member_requires_no_cmake_ninja_or_conan(
     listed = root / "packages" / "listed"
     listed.mkdir()
     (listed / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-listed"\nextensions = ["python"]\n'
+        'name = "acme-listed"\nextensions = ["python"]\n'
     )
     (listed / "pyproject.toml").write_text('[project]\nname = "acme-listed"\n')
     declared = _tools.requirements(root)
@@ -362,11 +362,11 @@ def test_each_native_tool_names_the_extension_that_requires_it(
     for member, contract in (
         (
             "lib",
-            'kind = "cpp-conan"\nname = "acme-lib"\nextensions = ["cmake", "conan"]\n',
+            'name = "acme-lib"\nextensions = ["cmake", "conan"]\n',
         ),
         (
             "native",
-            'kind = "python"\nname = "acme-native"\nextensions = ["nanobind"]\n',
+            'name = "acme-native"\nextensions = ["nanobind"]\n',
         ),
     ):
         (root / "packages" / member).mkdir()
@@ -428,7 +428,7 @@ def test_the_three_sites_union_and_each_names_itself(
         tmp_path, monkeypatch, tools='requires = ["git-cliff", "ruff>=1.1"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n\n'
+        'extensions = ["python"]\nname = "acme-member"\n\n'
         '[toolroom]\nrequires = ["cspell>=1.0"]\n'
     )
     _records(
@@ -461,7 +461,9 @@ def test_the_root_keeps_its_python_tools_beside_a_native_member_alone(
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+    )
     names = _tools.tool_names(tmp_path)
     assert {"uv", "pytest"} <= set(names)
     assert "conan" in names  # the native member's own extensions still count
@@ -944,7 +946,9 @@ def test_a_native_member_requires_the_msvc_measurer_only_while_coverage_is_liste
     root = _workspace(tmp_path, monkeypatch)
     native = root / "packages" / "native"
     native.mkdir()
-    (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (native / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+    )
     _records(
         root,
         *(

@@ -41,7 +41,9 @@ def _workspace(root: Path) -> None:
     (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     package = root / "packages" / "thing"
     (package / "src" / "livery" / "thing").mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (package / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-thing"\n'
+    )
     (package / "pyproject.toml").write_text(
         '[project]\nname = "livery-thing"\ndependencies = []\n'
     )
@@ -172,6 +174,7 @@ def test_check_affected_scopes_or_says_nothing(
                 name="livery-thing",
                 kind="python",
                 depends=(),
+                extensions=("python",),
             ),
             Package(
                 directory=root / "packages" / "ghost",
@@ -179,6 +182,7 @@ def test_check_affected_scopes_or_says_nothing(
                 name="livery-ghost",
                 kind="python",
                 depends=(),
+                extensions=("python",),
             ),
         ),
     )
@@ -561,7 +565,7 @@ def test_configure_if_changed_classifies_its_own_commit(
     assert "no contract or owners path changed" in capsys.readouterr().out
     (root / "workshop.toml").write_text("[workspace]\n# governed\n")
     (root / "packages" / "thing" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-thing"\n# governed\n'
+        'extensions = ["python"]\nname = "livery-thing"\n# governed\n'
     )
     _git(root, "commit", "-am", "chore: contracts")
     assert contract_changed(root) == ("packages/thing/workshop.toml", "workshop.toml")

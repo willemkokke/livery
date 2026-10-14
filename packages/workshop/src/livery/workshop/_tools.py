@@ -212,7 +212,7 @@ def _held(packages: tuple[Package, ...]) -> tuple[str, ...]:
     The root's is the runtime's language: its `tasks.py` and tests run
     on the runtime, and are judged as a package holding it is.
     """
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     held = (name for package in packages for name in extension_set(package))
     return tuple(dict.fromkeys((RUNTIME_LANGUAGE, *held)))

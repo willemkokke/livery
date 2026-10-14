@@ -134,5 +134,5 @@ def package_contract(root: Path, member: str, extensions: str) -> Path:
     directory = root / "packages" / member
     directory.mkdir(parents=True, exist_ok=True)
     contract = directory / "workshop.toml"
-    contract.write_text(f'kind = "python"\nextensions = {extensions}\n')
+    contract.write_text(f"extensions = {extensions}\n")
     return contract

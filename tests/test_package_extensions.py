@@ -1,8 +1,7 @@
 """Every package of this workspace lists its package-level extensions.
 
-A package that lists none holds only what its kind's fallback gives
-it. Each contract here lists its extensions, so none depends on that
-fallback.
+A package that lists none holds none, so no step judges it and nothing
+builds or releases it. Each contract here lists its extensions.
 """
 
 from __future__ import annotations

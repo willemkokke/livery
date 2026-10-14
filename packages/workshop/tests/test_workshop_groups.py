@@ -30,7 +30,7 @@ def _package(root: Path, member: str, *, contract_extra: str = "") -> Path:
     directory.mkdir(parents=True)
     name = "livery-" + member.replace("/", "-")
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "{name}"\n{contract_extra}'
+        f'extensions = ["python"]\nname = "{name}"\n{contract_extra}'
     )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "{name}"\ndependencies = []\n'

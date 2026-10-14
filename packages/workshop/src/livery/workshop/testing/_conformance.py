@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import inspect
 import io
 import re
 import tempfile
@@ -23,8 +22,10 @@ from livery.workshop._categories import (
     category_rules,
     matches,
 )
+from livery.workshop._composition import extension_set
+from livery.workshop._contract import REMOVED_KINDS
 from livery.workshop._fragments import Fragment, package_fragment
-from livery.workshop._kinds import Backend, KindRecord, all_kinds, extension_set
+from livery.workshop._kinds import KindRecord, all_kinds
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -52,7 +53,8 @@ class Subject:
             ``extension.toml`` sits, which the kit reads as the mount
             does.
         kinds: The kinds the extension registers; the kit judges a
-            probe package of each, which holds what the kind stands for.
+            probe package of each, which lists what a package of the
+            kind lists ([livery.workshop._contract.REMOVED_KINDS][]).
         steps: The steps the extension registers.
     """
 
@@ -86,7 +88,7 @@ class Clause:
     """One thing the gate relies on of what an extension registers.
 
     Attributes:
-        name: The clause's name, ``backend-protocol``.
+        name: The clause's name, ``fragment-owner``.
         rule: The rule in one sentence.
         judge: The violations a subject commits; empty when it conforms.
     """
@@ -96,7 +98,6 @@ class Clause:
     judge: Callable[[Subject], list[Violation]]
 
 
-BACKEND_PROTOCOL = "backend-protocol"
 FRAGMENT_OWNER = "fragment-owner"
 CATEGORY_TABLE = "category-table"
 STEP_ORDER = "step-order"
@@ -112,113 +113,6 @@ FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
 GATE_LINES = "gate-lines"
-
-
-# The backend protocol.
-
-
-def _protocol_methods() -> dict[str, inspect.Signature]:
-    """The backend protocol's methods by name, read from the protocol itself."""
-    return {
-        name: inspect.signature(member)
-        for name, member in vars(Backend).items()
-        if not name.startswith("_") and inspect.isfunction(member)
-    }
-
-
-def _signature_problems(
-    wanted: inspect.Signature, found: inspect.Signature
-) -> list[str]:
-    """How *found* fails to take every call *wanted* allows; empty when it does."""
-    problems: list[str] = []
-    wanted_params = [p for p in wanted.parameters.values() if p.name != "self"]
-    found_params = dict(found.parameters)
-    variadic = {p.kind for p in found_params.values()} & {
-        inspect.Parameter.VAR_POSITIONAL,
-        inspect.Parameter.VAR_KEYWORD,
-    }
-    positional = (
-        inspect.Parameter.POSITIONAL_ONLY,
-        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-    )
-    wanted_order = [
-        p.name
-        for p in wanted_params
-        if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    ]
-    found_order = [p.name for p in found_params.values() if p.kind in positional]
-    if found_order[: len(wanted_order)] != wanted_order and not variadic:
-        problems.append(
-            f"takes ({', '.join(found_order)}) where the protocol passes"
-            f" ({', '.join(wanted_order)}) in that order"
-        )
-    for param in wanted_params:
-        own = found_params.get(param.name)
-        if own is None:
-            if param.kind is inspect.Parameter.KEYWORD_ONLY and not variadic:
-                problems.append(
-                    f"does not take {param.name!r}, which the protocol passes"
-                )
-            continue
-        if param.kind is inspect.Parameter.KEYWORD_ONLY and own.kind is (
-            inspect.Parameter.POSITIONAL_ONLY
-        ):
-            problems.append(
-                f"takes {param.name!r} by position only; the protocol passes it by name"
-            )
-        if param.default is not inspect.Parameter.empty and (
-            own.default is inspect.Parameter.empty
-        ):
-            problems.append(
-                f"requires {param.name!r}, which the protocol lets a caller leave out"
-            )
-    names = {p.name for p in wanted_params}
-    for name, own in found_params.items():
-        if name in names or own.kind in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        ):
-            continue
-        if own.default is inspect.Parameter.empty:
-            problems.append(f"requires {name!r}, which the protocol never passes")
-    return problems
-
-
-def _backend_protocol(subject: Subject) -> list[Violation]:
-    violations: list[Violation] = []
-    methods = _protocol_methods()
-    for kind in subject.kinds:
-        if kind.abstract:
-            continue
-        where = f"kind {kind.name}"
-        backend = kind.backend
-        if backend is None:
-            violations.append(
-                Violation(
-                    BACKEND_PROTOCOL,
-                    where,
-                    "names no backend; a concrete kind builds, tests and"
-                    " releases through one",
-                )
-            )
-            continue
-        for name, wanted in methods.items():
-            found: object = getattr(backend, name, None)
-            if not callable(found):
-                violations.append(
-                    Violation(
-                        BACKEND_PROTOCOL,
-                        f"{where} backend",
-                        f"defines no {name}(), which the gate calls for the"
-                        " kind's packages",
-                    )
-                )
-                continue
-            for problem in _signature_problems(wanted, inspect.signature(found)):
-                violations.append(
-                    Violation(BACKEND_PROTOCOL, f"{where} backend {name}()", problem)
-                )
-    return violations
 
 
 # One owner for a per-package file.
@@ -310,10 +204,22 @@ def _documented_answer(held: tuple[str, ...], path: str) -> list[CategoryRule]:
     return [first]
 
 
+def _listed(kind: KindRecord) -> tuple[str, ...]:
+    """What a package of *kind* lists; none for a kind the table does not name."""
+    return REMOVED_KINDS.get(kind.name, ())
+
+
 def _category_table(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     for kind in subject.kinds:
-        probe = Package(Path("."), "packages/probe", "probe", kind.name, ())
+        probe = Package(
+            Path("."),
+            "packages/probe",
+            "probe",
+            kind.name,
+            (),
+            extensions=_listed(kind),
+        )
         held = extension_set(probe)
         for rule in category_rules(held):
             path = _representative(rule.pattern)
@@ -962,7 +868,10 @@ _UNCLAIMED = "probe/unclaimed.probe"
 
 
 def _probe_packages(root: Path) -> tuple[Package, ...]:
-    """One probe package of each concrete kind, so a package step finds its own."""
+    """One probe package of each concrete kind, listing what a package of it lists.
+
+    So a package step finds its own.
+    """
     return tuple(
         Package(
             root / "packages" / kind.name,
@@ -970,6 +879,7 @@ def _probe_packages(root: Path) -> tuple[Package, ...]:
             f"probe-{kind.name}",
             kind.name,
             (),
+            extensions=_listed(kind),
         )
         for kind in all_kinds()
         if not kind.abstract
@@ -978,7 +888,7 @@ def _probe_packages(root: Path) -> tuple[Package, ...]:
 
 def _probed(record: StepRecord, packages: tuple[Package, ...]) -> bool:
     """Whether the probe workspace gives *record* something to judge."""
-    from livery.workshop._kinds import extension_set
+    from livery.workshop._composition import extension_set
 
     if record.scope == WORKSPACE:
         return True
@@ -1132,12 +1042,6 @@ def _gate_lines(subject: Subject) -> list[Violation]:
 
 CLAUSES: tuple[Clause, ...] = (
     Clause(
-        BACKEND_PROTOCOL,
-        "A concrete kind's backend defines every method of the backend"
-        " protocol and takes every call the protocol allows.",
-        _backend_protocol,
-    ),
-    Clause(
         FRAGMENT_OWNER,
         "A per-package configuration file has one owner among the steps"
         " whose fragments name an extension.",
@@ -1217,7 +1121,8 @@ CLAUSES: tuple[Clause, ...] = (
     Clause(
         WITHDRAWN_FILE,
         "A per-package file whose step is withdrawn, and which no other step"
-        " renders for the kind, is removed when unedited and kept when edited.",
+        " renders for the package's extensions, is removed when unedited and kept"
+        " when edited.",
         _withdrawn_file,
     ),
     Clause(

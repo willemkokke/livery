@@ -43,7 +43,7 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n'
+        f'extensions = ["python"]\nname = "livery-{name}"\n'
     )
     if suite:
         (directory / "tests").mkdir()
@@ -53,6 +53,7 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
         name=f"livery-{name}",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -818,7 +819,7 @@ def test_a_prose_only_diff_says_so_and_skips(
         (root / changed).parent.mkdir(parents=True, exist_ok=True)
         (root / changed).write_text("# changed\n")
     (root / "packages" / "x" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-x"\n'
+        'extensions = ["python"]\nname = "acme-x"\n'
     )
     (root / "packages" / "x" / "pyproject.toml").write_text(
         '[project]\nname = "acme-x"\n'

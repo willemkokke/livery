@@ -50,7 +50,7 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     directory = tmp_path / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'kind = "python"\nname = "livery-{name}"\n{extra}'
+        f'extensions = ["python"]\nname = "livery-{name}"\n{extra}'
     )
     return Package(
         directory=directory,
@@ -58,6 +58,7 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
         name=f"livery-{name}",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -88,7 +89,8 @@ def test_a_package_with_coverage_not_required_is_never_judged(
     native_directory = tmp_path / "packages" / "native"
     (native_directory / "tests").mkdir(parents=True)
     (native_directory / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-native"\n[coverage]\nrequired = false\n'
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+        "[coverage]\nrequired = false\n"
     )
     native = Package(
         directory=native_directory,
@@ -96,6 +98,7 @@ def test_a_package_with_coverage_not_required_is_never_judged(
         name="acme-native",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
     unjudged = coverage_floors.FloorPolicy(None, False, 0.5, required=False)
     assert coverage_floors.coverage_policy(package) == unjudged
@@ -228,6 +231,7 @@ def _ratchet(
             name="livery-thing",
             kind="python",
             depends=(),
+            extensions=("python",),
         )
     else:
         package = _package(tmp_path, "thing", '[coverage]\nfloor = "auto-ratchet"\n')
@@ -946,6 +950,7 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
         name=top.name,
         kind="python",
         depends=(Edge(path="packages/base", kind="build", floor="0"),),
+        extensions=("python",),
     )
     (tmp_path / "tests").mkdir()
     install_meter(tmp_path, monkeypatch)
@@ -1833,7 +1838,7 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
 
     package = _suite(tmp_path, "x")
     (tmp_path / "packages" / "x" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-x"\n[coverage]\nfloor = 95\n'
+        'extensions = ["python"]\nname = "livery-x"\n[coverage]\nfloor = 95\n'
     )
     source = _name(tmp_path, "x")
     _in_ci(monkeypatch, "gate")
@@ -2027,7 +2032,8 @@ def _native_suite(tmp_path: Path, name: str) -> Package:
     (directory / "tests").mkdir()
     (directory / "src" / "x.cpp").write_text("int f() {\n  return 1;\n}\n")
     (directory / "workshop.toml").write_text(
-        f'kind = "cpp-conan"\nname = "acme-{name}"\n[coverage]\nfloor = 95\n'
+        f'extensions = ["cmake", "conan"]\nname = "acme-{name}"\n'
+        "[coverage]\nfloor = 95\n"
     )
     return Package(
         directory=directory,
@@ -2035,6 +2041,7 @@ def _native_suite(tmp_path: Path, name: str) -> Package:
         name=f"acme-{name}",
         kind="cpp-conan",
         depends=(),
+        extensions=("cmake", "conan"),
     )
 
 

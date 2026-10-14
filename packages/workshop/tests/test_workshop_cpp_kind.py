@@ -16,14 +16,9 @@ import pytest
 from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
-from livery.workshop._kinds import (
-    KindRecord,
-    register_kind,
-    template_chain,
-)
+from livery.workshop._kinds import template_chain
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
-from livery.workshop._registries import RegistryTarget
 from livery.workshop._steps import (
     judges,
     register_step,
@@ -33,16 +28,6 @@ from livery.workshop._steps import (
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
-
-
-class _FakeStamper:
-    """A stamper that changes nothing; the fakes' version home."""
-
-    def homes(self) -> list[Path]:
-        return []
-
-    def stamp(self, version: str) -> list[str]:
-        return []
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -96,13 +81,14 @@ def restored_registry():
     _steps.restore(steps)
 
 
-def _package(directory: Path, name: str, kind_name: str) -> Package:
+def _package(directory: Path, name: str, *extensions: str) -> Package:
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind=kind_name,
+        kind="",
         depends=(),
+        extensions=extensions,
     )
 
 
@@ -128,11 +114,11 @@ def _render_cpp(tmp_path: Path) -> Package:
     )
     # The native configs come from the step records, as they do at a
     # birth: the template ships none.
-    from livery.workshop._kinds import kind_stands_for
+    from livery.workshop._extensions import composed_set
     from livery.workshop._shipped_files import settle_package
 
-    settle_package(destination, kind_stands_for("cpp-conan"))
-    return _package(destination, "acme-native", "cpp-conan")
+    settle_package(destination, composed_set(("cmake", "conan")))
+    return _package(destination, "acme-native", "cmake", "conan")
 
 
 # The refusals and the skips first.
@@ -149,7 +135,9 @@ def test_build_refuses_without_conan(
     empty = tmp_path / "empty-path"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
-    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package = _package(
+        tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
+    )
     package.directory.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="conan is not on PATH"):
         _cpp_conan.build(package, tmp_path)
@@ -292,7 +280,9 @@ def test_conan_create_runs_once_the_profile_names_a_compiler(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     calls = _profile_conan(monkeypatch, [_COMPILERLESS, _DETECTED])
-    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package = _package(
+        tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
+    )
     package.directory.mkdir(parents=True)
     assert _cpp_conan.build(package, tmp_path) == package.directory / "build"
     assert calls == [_EXIST_OK, _SHOW, _FORCE, _SHOW, ("create", ".")]
@@ -307,7 +297,9 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
     empty = tmp_path / "empty-path"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
-    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package = _package(
+        tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
+    )
     package.directory.mkdir(parents=True)
     with pytest.raises(_FAILURES, match="ctest is not on PATH"):
         _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
@@ -334,9 +326,11 @@ def test_a_native_build_without_coverage_is_not_instrumented(
 
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+    )
     (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    package = _package(member, "acme-native", "cpp-conan")
+    package = _package(member, "acme-native", "cmake", "conan")
     configured: list[tuple[str, ...]] = []
     ran: list[dict[str, str]] = []
 
@@ -382,7 +376,9 @@ def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
     from livery.workshop._categories import category_of
     from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
 
-    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package = _package(
+        tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
+    )
 
     def category(path: str) -> str:
         return category_of(package, path).name
@@ -460,7 +456,7 @@ def test_python_steps_skip_a_native_member_by_name(
     from livery.workshop._steps import judged_by
 
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
-    native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    native = _package(tmp_path / "packages" / "native", "acme-native", "cmake", "conan")
     for name in ("typecheck.fake", "test.fake"):
         assert judged_by(step_for(name), (py, native)) == (py,)
         out = capsys.readouterr().out
@@ -511,7 +507,7 @@ def test_the_native_steps_run_per_package_in_order(
             ran.append((name, ctx.package.name, ctx.selection))
 
         register_step(replace(record, run=spy, fix=None))
-    native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    native = _package(tmp_path / "packages" / "native", "acme-native", "cmake", "conan")
 
     def run_package(ctx: PhaseContext) -> str:
         for name in judges(ctx):
@@ -565,7 +561,7 @@ def test_the_native_steps_hand_their_tool_the_words_after_the_dashes(
     monkeypatch.setattr(_cpp_conan, "configure", configure)
     monkeypatch.setattr(_cpp_conan, "compile", compile_)
     monkeypatch.setattr(_cpp_conan, "test", ctest)
-    native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    native = _package(tmp_path / "packages" / "native", "acme-native", "cmake", "conan")
     words = ("-j", "4")
     ctx = PhaseContext(
         root=tmp_path, packages=(native,), package=native, arguments=words
@@ -577,16 +573,13 @@ def test_the_native_steps_hand_their_tool_the_words_after_the_dashes(
     assert handed == [("configure", words), ("compile", words), ("ctest", words)]
 
 
-def test_a_cpp_conan_package_is_categorised_alike_listing_the_extensions_or_not(
+def test_a_package_listing_cmake_and_conan_is_categorised_by_cpp_s_table(
     tmp_path: Path,
 ) -> None:
-    """One table, the cpp extension's, answers for a package listing it or not."""
-    from dataclasses import replace
-
+    """Conan requires cpp, so a package listing cmake and conan reads cpp's table."""
     from livery.workshop._categories import category_of
 
-    plain = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
-    listing = replace(plain, extensions=("cmake", "conan"))
+    listing = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     expected = {
         "tests/test_geometry.cpp": "test",
         "tests/geometry_test.c": "test",
@@ -596,11 +589,8 @@ def test_a_cpp_conan_package_is_categorised_alike_listing_the_extensions_or_not(
         "conanfile.py": "configuration",
         "docs/index.md": "prose",
     }
-    for package in (plain, listing):
-        found = {path: category_of(package, path).name for path in expected}
-        assert found == expected, package.extensions
-    # conan requires cpp, so a package listing cmake and conan reads cpp's.
-    assert category_of(plain, "src/geometry.cpp").supplier == "cpp"
+    found = {path: category_of(listing, path).name for path in expected}
+    assert found == expected
     assert category_of(listing, "src/geometry.cpp").supplier == "cpp"
 
 
@@ -633,88 +623,6 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
     assert workspace.read_text() == "packages: []\n" and not aside.exists()
 
 
-def test_a_member_listing_nothing_takes_its_kind_s_host_tools(
-    restored_registry, tmp_path: Path
-) -> None:
-    from livery.workshop._env_tasks import missing_host_tools
-
-    (tmp_path / "packages" / "member").mkdir(parents=True)
-    (tmp_path / "packages" / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n'
-    )
-    (tmp_path / "packages" / "member" / "pyproject.toml").write_text(
-        '[project]\nname = "acme-member"\n'
-    )
-    assert missing_host_tools(tmp_path) == ()
-
-    class _Idle:
-        def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-            return package.directory
-
-        def module_roots(self, package: Package) -> tuple[str, ...]:
-            return ()
-
-        def public_modules(self, package: Package) -> tuple[str, ...]:
-            return ()
-
-        def compile_commands(self, package: Package) -> Path | None:
-            return None
-
-        def publish_artifact(
-            self,
-            package: Package,
-            root: Path,
-            *,
-            version: str,
-            target: RegistryTarget,
-        ) -> bool:
-            return True
-
-        def gate_build(self, package: Package, root: Path) -> None:
-            return None
-
-        def test(
-            self,
-            package: Package,
-            root: Path,
-            *,
-            selection: tuple[str, ...] = (),
-            arguments: tuple[str, ...] = (),
-            pages: tuple[str, ...] = (),
-        ) -> None:
-            return None
-
-        def check(self, package: Package, root: Path) -> None:
-            return None
-
-        def current_version(self, package: Package) -> str:
-            return "0.0.1"
-
-        def stamp_version(self, package: Package) -> _FakeStamper:
-            return _FakeStamper()
-
-        def declared_requirements(self, package: Package) -> dict[str, str]:
-            return {}
-
-        def declare_requirement(
-            self, package: Package, dependency: Package, floor: str
-        ) -> list[str]:
-            return []
-
-    register_kind(
-        KindRecord(
-            name="cpp-fake",
-            backend=_Idle(),
-            host_tools=("surely-absent-compiler",),
-        )
-    )
-    (tmp_path / "packages" / "native").mkdir(parents=True)
-    (tmp_path / "packages" / "native" / "workshop.toml").write_text(
-        'kind = "cpp-fake"\nname = "acme-native"\n'
-    )
-    assert missing_host_tools(tmp_path) == ("surely-absent-compiler",)
-
-
 # The registry facts.
 
 
@@ -726,21 +634,24 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-cpp-conan",
     )
     # The build tools come from the [toolroom] tables of the extensions
-    # the kind stands for, cmake's and conan's, and the measurer of a
-    # build made with MSVC from cmake's [for.coverage] table; the steps
-    # those extensions hold run no tool of their own.
-    from livery.workshop._kinds import kind_stands_for
+    # a package born from the seeds holds, cmake's and conan's, and the
+    # measurer of a build made with MSVC from cmake's [for.coverage]
+    # table; the steps those extensions hold run no tool of their own.
     from livery.workshop._steps import tools_for
 
-    assert {tool for tool, _ in tools_for(kind_stands_for("cpp-conan"))} == set()
+    assert {tool for tool, _ in tools_for(("cmake", "conan", "cpp"))} == set()
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
     # The members are what discovery finds: a python one and a cpp one.
     for member, contract, manifest in (
-        ("alpha", 'kind = "python"\nname = "acme-alpha"\n', "pyproject.toml"),
-        ("native", 'kind = "cpp-conan"\nname = "acme-native"\n', "conanfile.py"),
+        ("alpha", 'extensions = ["python"]\nname = "acme-alpha"\n', "pyproject.toml"),
+        (
+            "native",
+            'extensions = ["cmake", "conan"]\nname = "acme-native"\n',
+            "conanfile.py",
+        ),
     ):
         (destination / "packages" / member).mkdir(parents=True)
         (destination / "packages" / member / "workshop.toml").write_text(contract)

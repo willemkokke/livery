@@ -10,10 +10,15 @@ below arrives through that dependency.
 The workspace contract (`workshop.toml` at the root) lists the
 workspace's extensions in `[workspace] extensions`, in precedence
 order, and each package's contract lists the package-level extensions
-the package is composed of in its own `extensions`. Those lists are
-the whole of discovery: a package installed by accident never changes
-a repository. The root's list is required; a contract without it
-refuses at mount and prints the line to add. The base,
+the package is composed of in its own `extensions`; a package that
+lists none holds none. Those lists are the whole of discovery: a
+package installed by accident never changes a repository. A package's
+contract writes no `kind`: one that does refuses, naming the list to
+write in its place, `extensions = ["python"]` for `python` and
+`extensions = ["cmake", "conan"]` for `cpp-conan`, and the refusal
+names every member's contract that writes it. Nothing rewrites them.
+The root's list is required; a contract without it refuses at mount
+and prints the line to add. The base,
 `livery.workshop`, is never listed: importing its plugin registers
 its task surface and then mounts the listed extensions, the
 package-level ones first and then the root's list in its order.
@@ -109,8 +114,8 @@ spelling. Every key is optional:
   answer to a query nobody declares refuses naming the declared ones;
 - `[categories]`, the categories a package-level extension gives its
   packages' paths, each category to the patterns it takes; a package
-  whose extensions declare categories is answered by them and the base
-  kind's rules, and its own `[categories]` wins over both;
+  whose extensions declare categories is answered by them and the base's
+  rules, and its own `[categories]` wins over both;
 - `[fragments."<target>"]`, a file the extension's code writes, or a
   directory of them when the target ends in `/`: `render`, the
   `"module:function"` called with the workspace root, which answers
@@ -159,9 +164,8 @@ claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
 `extensions` names the package-level extensions whose packages the
 step judges: a package whose set, its list and what the list
 requires, holds one of them. A package that lists no extension holds
-what its kind stands for, `python` for the python kind and `cmake`,
-`conan` and `cpp` for `cpp-conan`, until the kinds go. A step that
-names none judges the workspace.
+none, so no such step judges it. A step that names none judges the
+workspace.
 
 `main` is the template: the tool's name, as `tools` names it, and the
 arguments that judge; `fix` and `safe-fix` are the templates that
@@ -347,10 +351,13 @@ release train runs it, once per resolution `[release] prove` lists
 ([Releases](releases.md)).
 
 The release train stamps, builds, tests and publishes a package, and
-`fm release.verify` verifies a released version, through these phases
-when its extensions add steps to them, and through the package's kind
-otherwise. A phase whose steps provide nothing under the key the train
-reads back refuses, naming the phase and the key. The registry it
+`fm release.verify` verifies a released version, through these phases:
+the steps the package's extensions add to them. A phase its extensions
+add no step to refuses the release, naming the phase, and a phase whose
+steps provide nothing under the key the train reads back refuses,
+naming the phase and the key. The version the train reads and stamps is
+its extensions' answer to the `current-version` query, and a package
+whose extensions answer none refuses, naming the query. The registry it
 publishes a package to is its extensions' answer: the one ecosystem
 their `distributions` answer names, and the probe of that registry
 their `registry` answer gives, which the train polls until an upload is
@@ -640,8 +647,7 @@ An extension's kinds and steps are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names what the extension registers,
 each clause in `CLAUSES` returns the violations the subject commits,
 each naming its clause, and an extension's own suite runs every clause on
-its subject. The clauses so far: a concrete kind's backend takes every
-call of the backend protocol; a per-package configuration file has one
+its subject. The clauses so far: a per-package configuration file has one
 owner among the steps whose fragments name an extension; a path's
 category is the most specific rule's, the nearer table winning a tie
 between tables and two rules of one table never tying; every step a
@@ -659,7 +665,8 @@ fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
 once a step is withdrawn and no other step renders its per-package
-file for the kind, an unedited copy is removed and an edited one kept;
+file for the package's extensions, an unedited copy is removed and an
+edited one kept;
 and in the gate's walk over a probe workspace, with the step bodies
 recording instead of running, every step that can fix rewrites
 before any judge starts and is not judged again, every step names the
@@ -881,9 +888,9 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
-While the workspace has a member that lists the `conan` extension,
-or whose kind stands for conan, `fm sync` also writes
-`conanws.yml` at the root, the conan extension's fragment, listing
+While the workspace has a member whose set holds the `conan`
+extension, listing it or an extension that requires it, `fm sync`
+also writes `conanws.yml` at the root, the conan extension's fragment, listing
 each such member by its path. A conan command run inside the checkout
 resolves a member from its source tree through that file, and nothing
 is registered in the conan home. So each checkout of a repository, a
@@ -1070,7 +1077,7 @@ absence.
   branch pays for what the tenth commit touched and a tree the record
   already proves runs nothing; `--full` runs everything. A delta
   confined to a package's test files runs the package's whole suite
-  and no dependent's, since nothing imports a test, after the kind's
+  and no dependent's, since nothing imports a test, after the package's
   gate build when its tests run on a build (a C++ package's ctest); a
   changed conftest or helper, and a source change, run the suite and
   its dependents'. A suite is never narrowed to the changed test

@@ -17,7 +17,6 @@ import livery.toolroom.tools as tools
 from livery.extensions.clang.tidy import _steps as clang_tidy
 from livery.workshop import Package, PhaseContext
 from livery.workshop import _steps as registry
-from livery.workshop._kinds import kind_stands_for
 
 # The workshop's test helper: pytest's pythonpath carries every tests
 # directory, which basedpyright's search path does not.
@@ -50,18 +49,17 @@ def _supplied() -> bool:
 
 
 @pytest.mark.parametrize(
-    ("tree", "kind", "listed", "name"),
+    ("tree", "listed", "name"),
     [
-        ("package-cpp-conan", "cpp-conan", ("cmake", "conan"), "acme-native"),
-        ("package-python-nanobind", "python", ("nanobind",), "ci-e2e-loop-loop-native"),
-        ("package-python-nanobind", "python", ("nanobind",), "x-y"),
+        ("package-cpp-conan", ("cmake", "conan"), "acme-native"),
+        ("package-python-nanobind", ("nanobind",), "ci-e2e-loop-loop-native"),
+        ("package-python-nanobind", ("nanobind",), "x-y"),
     ],
 )
 def test_a_member_born_from_the_native_seeds_is_in_style(
     tmp_path: Path,
     registered: None,
     tree: str,
-    kind: str,
     listed: tuple[str, ...],
     name: str,
 ) -> None:
@@ -87,7 +85,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
         directory=destination,
         path="packages/native",
         name=name,
-        kind=kind,
+        kind="",
         depends=(),
         extensions=listed,
     )
@@ -127,6 +125,7 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
 ) -> None:
     from livery.workshop import compile_commands
     from livery.workshop._backends import _cpp_conan
+    from livery.workshop._extensions import composed_set
     from livery.workshop._shipped_files import settle_package
 
     destination = tmp_path / "packages" / "native"
@@ -140,13 +139,14 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
             "project_name": "acme",
         },
     )
-    settle_package(destination, kind_stands_for("cpp-conan"))
+    settle_package(destination, composed_set(("cmake", "conan")))
     package = Package(
         directory=destination,
         path="packages/native",
         name="acme-native",
-        kind="cpp-conan",
+        kind="",
         depends=(),
+        extensions=("cmake", "conan"),
     )
     source = destination / "src" / "native.cpp"
     source.write_text(

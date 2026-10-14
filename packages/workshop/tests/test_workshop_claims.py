@@ -47,7 +47,12 @@ def _native(root: Path) -> Package:
     """A cpp-conan member in a fresh repository at *root*, its files untracked."""
     tools.git.opts(cwd=root)("init", "-q")
     native = Package(
-        root / "packages" / "cpp", "packages/cpp", "acme-cpp", "cpp-conan", ()
+        root / "packages" / "cpp",
+        "packages/cpp",
+        "acme-cpp",
+        "cpp-conan",
+        (),
+        extensions=("cmake", "conan"),
     )
     _files(
         native.directory,
@@ -82,7 +87,12 @@ def test_a_step_judges_the_files_its_claims_reach_and_no_other(
 ) -> None:
     native = _native(tmp_path)
     python = Package(
-        tmp_path / "packages" / "py", "packages/py", "livery-py", "python", ()
+        tmp_path / "packages" / "py",
+        "packages/py",
+        "livery-py",
+        "python",
+        (),
+        extensions=("python",),
     )
     _files(
         python.directory,
@@ -153,6 +163,7 @@ def test_a_scoped_run_hands_a_native_member_the_files_its_claims_reach(
         name="acme-py",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
     ctx = PhaseContext(root=tmp_path, packages=(native, other), subset=(native,))
     step_for("format.fake").run(ctx)

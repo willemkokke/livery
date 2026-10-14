@@ -2,9 +2,9 @@
 
 The workshop runs on python, and one constant in the base names that
 language's extension. A member holds it when the extensions it lists,
-and those they require, include it, or, while it lists none, when its
-kind stands for it. A member holding it carries a ``pyproject.toml``
-and joins the uv workspace; any other member does neither.
+and those they require, include it. A member holding it carries a
+``pyproject.toml`` and joins the uv workspace; any other member does
+neither.
 """
 
 from __future__ import annotations
@@ -43,19 +43,15 @@ def test_a_member_holding_the_runtime_s_language_without_a_pyproject_refuses_nam
         binding='[extension]\nlevels = ["package"]\nrequires = ["python"]\n',
     )
     root = tmp_path / "acme"
-    # No member here has a pyproject.toml. Three hold the runtime's
-    # language: one through its kind while it lists nothing, one by its
-    # list with no kind at all, and one through what its list requires.
-    _member(root, "by-kind", 'kind = "python"\n')
+    # No member here has a pyproject.toml. Two hold the runtime's
+    # language: one by its list, and one through what its list requires.
     _member(root, "by-list", 'extensions = ["python"]\n')
     _member(root, "by-requirement", 'extensions = ["acme.binding"]\n')
-    # Three hold something else: a list without it, whatever the kind
-    # says; a native kind that lists nothing; and a kind nothing
-    # registers, which discovery passes so the graph's check names it.
-    _member(root, "listed-native", 'kind = "python"\nextensions = ["cmake", "conan"]\n')
-    _member(root, "native", 'kind = "cpp-conan"\n')
-    _member(root, "unknown", 'kind = "nonesuch"\n')
-    holding = ("by-kind", "by-list", "by-requirement")
+    # Two hold something else: a list without it, and a member that
+    # lists nothing and holds nothing.
+    _member(root, "listed-native", 'extensions = ["cmake", "conan"]\n')
+    _member(root, "plain", "")
+    holding = ("by-list", "by-requirement")
     with pytest.raises(ValueError) as refused:
         discover_packages(root)
     assert str(refused.value).splitlines() == [
@@ -67,8 +63,7 @@ def test_a_member_holding_the_runtime_s_language_without_a_pyproject_refuses_nam
     assert [package.member for package in discover_packages(root)] == [
         *holding,
         "listed-native",
-        "native",
-        "unknown",
+        "plain",
     ]
 
 
@@ -78,27 +73,23 @@ def test_a_member_not_holding_it_joins_no_uv_workspace(tmp_path: Path) -> None:
     root = tmp_path / "acme"
     root.mkdir()
     (root / "workshop.toml").write_text('[workspace]\nname = "acme"\nextensions = []\n')
-    # Two members hold the runtime's language: one by its list, one
-    # through its kind while it lists nothing.
+    # Two members hold the runtime's language, each by its list.
+    _member(root, "echo", 'extensions = ["python"]\n', "pyproject.toml", "src/echo.py")
     _member(
         root,
-        "echo",
-        'kind = "python"\nextensions = ["python"]\n',
+        "plain",
+        'extensions = ["python"]\n',
         "pyproject.toml",
-        "src/echo.py",
+        "tests/test_plain.py",
     )
-    _member(root, "plain", 'kind = "python"\n', "pyproject.toml", "tests/test_plain.py")
-    # Three do not, each with python files of its own: a list without it,
-    # whatever the kind says; a native kind that lists nothing; and the
-    # C++ library's list.
-    _member(
-        root, "listed-native", 'kind = "python"\nextensions = ["cpp"]\n', "src/a.py"
-    )
-    _member(root, "native", 'kind = "cpp-conan"\n', "conanfile.py", "tests/test_n.py")
+    # Three do not, each with python files of its own: a list without it;
+    # a member that lists nothing; and the C++ library's list.
+    _member(root, "listed-native", 'extensions = ["cpp"]\n', "src/a.py")
+    _member(root, "native", "", "conanfile.py", "tests/test_n.py")
     _member(
         root,
         "lib",
-        'kind = "cpp-conan"\nextensions = ["cmake", "conan"]\n',
+        'extensions = ["cmake", "conan"]\n',
         "conanfile.py",
         "src/b.py",
     )

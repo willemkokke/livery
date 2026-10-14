@@ -35,15 +35,15 @@ FORGES = ("github", "gitea", "gitlab")
 #: wheels build on, beside a C++ library that lists cmake and conan.
 NATIVE = {
     "native": (
-        'kind = "python"\nname = "acme-native"\nextensions = ["nanobind"]\n\n'
+        'name = "acme-native"\nextensions = ["nanobind"]\n\n'
         "[nanobind]\n"
         'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n'
     ),
-    "lib": 'kind = "cpp-conan"\nname = "acme-lib"\nextensions = ["cmake", "conan"]\n',
+    "lib": 'name = "acme-lib"\nextensions = ["cmake", "conan"]\n',
 }
 
 #: One python member, whose one wheel installs everywhere.
-PURE = {"pure": 'kind = "python"\nname = "acme-pure"\n'}
+PURE = {"pure": 'extensions = ["python"]\nname = "acme-pure"\n'}
 
 
 @pytest.fixture(autouse=True)

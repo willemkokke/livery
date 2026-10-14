@@ -64,7 +64,7 @@ def _workspace(
         (member / "src" / "acme" / name).mkdir(parents=True)
         (member / "src" / "acme" / name / "__init__.py").write_text("")
         (member / "workshop.toml").write_text(
-            f'kind = "python"\nname = "acme-{name}"\n'
+            f'extensions = ["python"]\nname = "acme-{name}"\n'
         )
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         if pages_:
@@ -167,7 +167,7 @@ def test_python_paths_in_the_docs_table_refuses_naming_the_step_option(
     member = root / "packages" / "core"
     contract = member / "workshop.toml"
     contract.write_text(
-        'kind = "python"\nname = "acme-core"\n\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n'
         '[docs]\npython-paths = ["docs/_generated/stubs"]\n'
     )
     with pytest.raises(_FAILURES) as refused:
@@ -180,7 +180,7 @@ def test_python_paths_in_the_docs_table_refuses_naming_the_step_option(
     )
     # A value of another type refuses naming the option.
     contract.write_text(
-        'kind = "python"\nname = "acme-core"\n\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n'
         '[phases.docs.mkdocstrings]\npaths = "docs/_generated/stubs"\n'
     )
     with pytest.raises(
@@ -191,7 +191,7 @@ def test_python_paths_in_the_docs_table_refuses_naming_the_step_option(
         declared_paths(_member(root, "core"))
     # The step option reaches the handler, after the package's sources.
     contract.write_text(
-        'kind = "python"\nname = "acme-core"\n\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n'
         '[phases.docs.mkdocstrings]\npaths = ["docs/_generated/stubs"]\n'
     )
     core = _member(root, "core")
@@ -210,7 +210,7 @@ def test_a_package_that_declines_gets_no_pages_and_no_handler_path(
     generated = root / "packages" / "core" / "docs" / GENERATED_DIR
     assert (generated / API_DIR / "index.md").is_file()
     (root / "packages" / "core" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-core"\n\n[docs]\napi = false\n'
+        'extensions = ["python"]\nname = "acme-core"\n\n[docs]\napi = false\n'
     )
     core = _member(root, "core")
     assert pages(core) == []
@@ -233,7 +233,9 @@ def test_a_cpp_package_is_never_asked_by_the_python_reference(
     (native / "src" / "geometry.cpp").write_text("int x;\n")
     (native / "docs").mkdir()
     (native / "docs" / "index.md").write_text("# native\n")
-    (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "native"\n')
+    (native / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "native"\n'
+    )
     asked: list[str] = []
     writer = _pages.write_reference
 

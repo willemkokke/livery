@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import types
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -13,7 +12,7 @@ import pytest
 import livery.workshop.testing
 from livery.workshop import _categories, _kinds, _steps
 from livery.workshop._fragments import Fragment, package_fragment
-from livery.workshop._kinds import Backend, KindRecord, kind_for, register_kind
+from livery.workshop._kinds import KindRecord, kind_for, register_kind
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -61,55 +60,6 @@ def _names(subject: Subject, clause: str) -> list[str]:
 
 
 # The refusals first: a broken subject fails each clause with the clause named.
-
-
-def test_a_backend_missing_a_method_or_taking_the_wrong_call_breaks_the_protocol(
-    acme: None,
-) -> None:
-    python = kind_for("python")
-    members: dict[str, object] = {
-        name: getattr(python.backend, name)
-        for name in dir(python.backend)
-        if not name.startswith("_")
-    }
-    del members["gate_build"]
-
-    def build(package: object, *, epoch: int = 0) -> Path:
-        del package, epoch
-        return Path()
-
-    def test(package: object, root: Path, selection: tuple[str, ...]) -> None:
-        del package, root, selection
-
-    def current_version(package: object, strict: bool) -> str:
-        del package, strict
-        return ""
-
-    members.update(build=build, test=test, current_version=current_version)
-    # A namespace stands in for a backend module; the kit reads it the
-    # way the gate reads a module, by attribute.
-    broken = cast("Backend", types.SimpleNamespace(**members))
-    kind = replace(python, name="acme-broken", backend=broken)
-    found = _names(Subject(EXTENSION, kinds=(kind,)), "backend-protocol")
-    assert any("defines no gate_build()" in line for line in found)
-    assert any(
-        "build(): takes (package) where the protocol passes (package, root)" in line
-        for line in found
-    )
-    assert any(
-        "test(): requires 'selection', which the protocol lets a caller leave out"
-        in line
-        for line in found
-    )
-    assert any(
-        "current_version(): requires 'strict', which the protocol never passes" in line
-        for line in found
-    )
-    concrete = replace(python, name="acme-none", backend=None)
-    assert any(
-        "kind acme-none: names no backend" in line
-        for line in _names(Subject(EXTENSION, kinds=(concrete,)), "backend-protocol")
-    )
 
 
 def test_two_steps_carrying_one_file_for_one_extension_break_the_fragment_owner(
@@ -704,15 +654,15 @@ def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
         early=declared.format("generated"),
         late=declared.format("source"),
     )
-    child = replace(
-        kind_for("python"),
-        name="acme-child",
-        parent="python",
-        template="",
-        stands_for=("acme.early", "acme.late"),
-    )
+    from livery.workshop import _contract
+
+    child = replace(kind_for("python"), name="acme-child", parent="python", template="")
     register_kind(child)
-    found = _categories.category_of(_checks_package("acme-child"), "gen/a")
+    # A package of the kind lists the two, which the kit's probe lists too.
+    monkeypatch.setitem(
+        _contract.REMOVED_KINDS, "acme-child", ("acme.early", "acme.late")
+    )
+    found = _categories.category_of(_checks_package("acme.early", "acme.late"), "gen/a")
     assert (found.name, found.supplier) == ("source", "acme.late")
     assert _names(Subject(EXTENSION, kinds=(child,)), "category-table") == []
     # The rules come nearest table first: the later composed extension's.
@@ -720,8 +670,8 @@ def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
     assert rules[0].table == "acme.late"
 
 
-def _checks_package(kind: str) -> Package:
-    return Package(Path("."), "packages/probe", "probe", kind, ())
+def _checks_package(*extensions: str) -> Package:
+    return Package(Path("."), "packages/probe", "probe", "", (), extensions=extensions)
 
 
 # Then the builtins, and the kit's own shape.
@@ -744,7 +694,6 @@ def test_the_builtin_kinds_and_steps_pass_every_clause() -> None:
 def test_the_clauses_are_named_once_and_state_their_rule() -> None:
     names = [clause.name for clause in CLAUSES]
     assert names == [
-        "backend-protocol",
         "fragment-owner",
         "category-table",
         "step-order",

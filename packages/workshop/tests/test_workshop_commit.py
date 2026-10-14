@@ -29,7 +29,9 @@ def _workspace(root: Path) -> None:
     )
     package = root / "packages" / "x"
     package.mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-x"\n')
+    (package / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-x"\n'
+    )
     (package / "pyproject.toml").write_text(
         '[project]\nname = "livery-x"\nversion = "0.1.0"\n'
     )
@@ -107,7 +109,7 @@ def test_the_scope_is_the_packages_the_staged_change_touches(
     root = _rig(seeds, monkeypatch)
     (root / "packages" / "y").mkdir()
     (root / "packages" / "y" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-y"\n'
+        'extensions = ["python"]\nname = "livery-y"\n'
     )
     (root / "packages" / "y" / "pyproject.toml").write_text(
         '[project]\nname = "livery-y"\nversion = "0.1.0"\n'
@@ -132,7 +134,7 @@ def test_a_package_touched_only_by_its_composed_files_leaves_the_scope(
     _git(root, "commit", "-qm", "chore: render")
     (root / "packages" / "y").mkdir()
     (root / "packages" / "y" / "workshop.toml").write_text(
-        'kind = "python"\nname = "livery-y"\n'
+        'extensions = ["python"]\nname = "livery-y"\n'
     )
     (root / "packages" / "y" / "pyproject.toml").write_text(
         '[project]\nname = "livery-y"\nversion = "0.1.0"\n'

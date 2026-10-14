@@ -24,14 +24,15 @@ from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
 _FAILURES = (SystemExit, Failed)
 
 
-def _package(directory: Path, name: str, kind_name: str) -> Package:
+def _package(directory: Path, name: str, *extensions: str) -> Package:
     directory.mkdir(parents=True, exist_ok=True)
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind=kind_name,
+        kind="",
         depends=(),
+        extensions=extensions,
     )
 
 
@@ -39,7 +40,7 @@ def _package(directory: Path, name: str, kind_name: str) -> Package:
 
 
 def test_the_conan_stamp_writes_and_refuses(tmp_path: Path) -> None:
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     conanfile = package.directory / "conanfile.py"
     conanfile.write_text('class L:\n    name = "acme-lib"\n    version = "0.1.0"\n')
     assert _cpp_conan.current_version(package) == "0.1.0"
@@ -70,7 +71,7 @@ def test_conan_publish_refuses_without_conan(
     empty = tmp_path / "empty-path"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     with pytest.raises(_FAILURES, match="conan is not on"):
         _cpp_conan.publish(
             package, str(tmp_path / "share"), version="0.1.0", local=True
@@ -124,7 +125,7 @@ def test_conans_own_login_wins_over_the_registry_token(
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     monkeypatch.setenv(own, "chosen")
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     assert _cpp_conan.publish(
         package, _REMOTE, version="0.1.0", local=False, token="lane"
     )
@@ -135,7 +136,7 @@ def test_an_upload_without_a_token_adds_no_login(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _recorded_conan(monkeypatch)
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     assert _cpp_conan.publish(package, _REMOTE, version="0.1.0", local=False)
     assert _upload_logins(calls) == [{}]
 
@@ -144,7 +145,7 @@ def test_the_registry_token_logs_in_to_the_workshop_remote_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _recorded_conan(monkeypatch)
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     assert _cpp_conan.publish(
         package, _REMOTE, version="0.1.0", local=False, token="lane"
     )
@@ -167,7 +168,7 @@ def test_the_publish_seam_hands_the_targets_token_to_the_upload(
         return True
 
     monkeypatch.setattr(_conan, "publish", _publish)
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
     assert _cpp_conan.publish_artifact(
         package, tmp_path, version="0.1.0", target=target
@@ -204,7 +205,9 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     (root / "workshop.toml").write_text("[workspace]\n")
     lib = root / "packages" / "geometry"
     lib.mkdir(parents=True)
-    (lib / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-geometry"\n')
+    (lib / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-geometry"\n'
+    )
     (lib / "conanfile.py").write_text(
         'class G:\n    name = "acme-geometry"\n    version = "0.3.0"\n'
     )
@@ -212,7 +215,7 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     ext = root / "packages" / "ext"
     (ext / "src" / "acme" / "ext").mkdir(parents=True)
     (ext / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-ext"\nextensions = ["nanobind"]\n'
+        'name = "acme-ext"\nextensions = ["nanobind"]\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.3.0"\n'
     )
@@ -254,7 +257,12 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def _lists(root: Path, member: str, extensions: str) -> None:
     """Make ``packages/<member>``'s contract list *extensions*, a TOML list."""
     contract = root / "packages" / member / "workshop.toml"
-    contract.write_text(f"{contract.read_text()}extensions = {extensions}\n")
+    kept = [
+        line
+        for line in contract.read_text().splitlines()
+        if not line.startswith("extensions = ")
+    ]
+    contract.write_text("\n".join([f"extensions = {extensions}", *kept]) + "\n")
 
 
 def _handed(
@@ -318,9 +326,8 @@ def test_the_wave_resolves_each_member_s_target_from_its_distributions(
 ) -> None:
     """Conan's target for the library that lists conan, python's for the extension.
 
-    The extension lists nothing, so it is asked as its kind stands for:
-    python releases its wheel, and its consumer's recipe releases
-    nothing.
+    The extension lists nanobind: python releases its wheel, and its
+    consumer's recipe releases nothing.
     """
     root = cross_train
     _lists(root, "geometry", '["cmake", "conan"]')
@@ -374,15 +381,14 @@ def test_the_cross_kind_wave_orders_and_dispatches(
         return True
 
     from livery.extensions.nanobind import _build as nb
-    from livery.workshop._backends import _cpp_conan as cpp
 
-    monkeypatch.setattr(cpp, "build", _fake_build)
+    monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.kind == "cpp-conan" else registry
+        return conan_registry if "conan" in package.extensions else registry
 
     receipts = publish_release(
         root,
@@ -446,15 +452,14 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         return True
 
     from livery.extensions.nanobind import _build as nb
-    from livery.workshop._backends import _cpp_conan as cpp
 
-    monkeypatch.setattr(cpp, "build", _fake_build)
+    monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
     conan_registry = _cpp_conan.ConanRegistry(target, root=root)
 
     def registry_for(package: Package):
-        return conan_registry if package.kind == "cpp-conan" else registry
+        return conan_registry if "conan" in package.extensions else registry
 
     # The upload dies after the tag is cut.
     def _refuse(*_args: object, **_kwargs: object) -> None:
@@ -482,7 +487,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         "livery.workshop._registries.resolve_registry", lambda _root, _kind: target
     )
     monkeypatch.setattr(_publish, "cut_tag", _cut_and_push_to_the_forge)
-    monkeypatch.setattr(cpp, "build", _fake_build)
+    monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
@@ -506,7 +511,6 @@ def _serving_wave(
     Returns the registry each member is probed on.
     """
     from livery.extensions.nanobind import _build as nb
-    from livery.workshop._backends import _cpp_conan as cpp
 
     registry = _Ledger()
     conan_registry = _Ledger()
@@ -526,13 +530,13 @@ def _serving_wave(
         registry.serve(package.name, "0.3.0")
         return True
 
-    monkeypatch.setattr(cpp, "build", _no_build)
+    monkeypatch.setattr(_conan, "build", _no_build)
     monkeypatch.setattr(nb, "build_dist", _no_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.kind == "cpp-conan" else registry
+        return conan_registry if "conan" in package.extensions else registry
 
     return registry_for
 
@@ -668,16 +672,15 @@ def test_the_gitea_release_matrix_rides_the_declared_wheel_platforms() -> None:
     assert "--prebuilt" not in native
 
 
-def test_validate_member_skips_a_wheelless_kind(
+def test_validate_member_skips_a_member_with_no_isolated_test(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._release_driver import MemberPlan, validate_member
 
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cpp-conan")
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     validate_member(tmp_path, MemberPlan(package=package, version="0.1.0"), ())
     out = capsys.readouterr().out
-    assert "isolated legs skip" in out
-    assert "cpp-conan" in out
+    assert "isolated legs skip (its extensions add no isolated test" in out
 
 
 # The armed proofs: a real conan against the folder target and the
@@ -715,7 +718,7 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
             "project_name": "acme",
         },
     )
-    package = _package(destination, "acme-geometry", "cpp-conan")
+    package = _package(destination, "acme-geometry", "cmake", "conan")
     from livery.workshop._backends import _cpp_conan as cpp
 
     cpp.build(package, tmp_path)

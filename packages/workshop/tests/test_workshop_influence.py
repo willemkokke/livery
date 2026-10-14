@@ -57,7 +57,9 @@ def test_a_steps_own_code_is_found_through_the_name_it_is_listed_by(
     member = tmp_path / "packages" / "site"
     (member / "src" / "acme_site").mkdir(parents=True)
     (member / "src" / "acme_site" / "__init__.py").write_text("")
-    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-site"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-site"\n'
+    )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-site"\n')
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     monkeypatch.syspath_prepend(str(member / "src"))
@@ -225,7 +227,9 @@ def test_the_rule_steps_judge_the_files_they_were_handed(
 
     member = tmp_path / "packages" / "tool"
     (member / "src").mkdir(parents=True)
-    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-tool"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-tool"\n'
+    )
     (member / "pyproject.toml").write_text('[project]\nname = "acme-tool"\n')
     (member / "src" / "a.py").write_text("x = 1\n")
     (member / "src" / "b.py").write_text("y = 1\n")

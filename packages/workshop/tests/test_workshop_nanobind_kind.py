@@ -61,15 +61,14 @@ def _package(
     directory: Path,
     name: str,
     *,
-    kind: str = "python",
     extensions: tuple[str, ...] = ("nanobind",),
 ) -> Package:
-    """A package listing nanobind, or the *kind* and *extensions* given."""
+    """A package listing nanobind, or the *extensions* given."""
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        kind=kind,
+        kind="",
         depends=(),
         extensions=extensions,
     )
@@ -161,11 +160,9 @@ def test_the_seed_chain_runs_from_python_s_and_no_package_names_its_record() -> 
         "package-python",
         "package-python-nanobind",
     )
-    # The record holds the seed chain alone: it builds nothing, and no
-    # contract's kind names it.
+    # The record holds the seed chain alone, and no refusal names it.
     record = kind_for("python-nanobind")
-    assert (record.parent, record.abstract, record.backend) == ("python", True, None)
-    assert record.stands_for == ()
+    assert (record.parent, record.abstract) == ("python", True)
     assert "python-nanobind" not in kind_names()
 
 
@@ -230,9 +227,9 @@ def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
     # The build is keyed on the commit, so a fresh checkout at the same
     # commit reuses it instead of rebuilding on new modification times.
     assert "cache-keys = [{ git = { commit = true } }]" in pyproject
-    # The contract is of the python kind and lists nanobind.
+    # The contract lists nanobind and names no kind.
     contract = (directory / "workshop.toml").read_text()
-    assert 'kind = "python"' in contract
+    assert "kind = " not in contract
     assert 'extensions = ["nanobind"]' in contract
     # The leaf's __init__ re-exports the compiled surface.
     init = (directory / "src" / "acme" / "ext" / "__init__.py").read_text()
@@ -260,9 +257,7 @@ def _render_library(tmp_path: Path) -> Package:
             "project_name": "acme",
         },
     )
-    return _package(
-        destination, "acme-geometry", kind="cpp-conan", extensions=("cmake", "conan")
-    )
+    return _package(destination, "acme-geometry", extensions=("cmake", "conan"))
 
 
 def _consume_the_library(package: Package) -> None:
@@ -593,12 +588,17 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
     (root / "packages" / "geometry").mkdir(parents=True)
     (root / "workshop.toml").write_text("[workspace]\n")
     (root / "packages" / "geometry" / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-geometry"\n'
+        'extensions = ["cmake", "conan"]\nname = "acme-geometry"\n'
+    )
+    # The library's recipe names its reference, so it releases a conan
+    # package whose floor a leg proves.
+    (root / "packages" / "geometry" / "conanfile.py").write_text(
+        'class R:\n    name = "acme-geometry"\n    version = "0.1.0"\n'
     )
     extension = root / "packages" / "ext"
     extension.mkdir(parents=True)
     (extension / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-ext"\nextensions = ["nanobind"]\n'
+        'name = "acme-ext"\nextensions = ["nanobind"]\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.1.0"\n'
     )
@@ -928,9 +928,9 @@ def test_the_workspace_file_lists_the_members_with_a_recipe_alone(
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
         held = (
-            'kind = "cpp-conan"\n'
+            'extensions = ["cmake", "conan"]\n'
             if recipe
-            else 'kind = "python"\nextensions = ["nanobind"]\n'
+            else 'extensions = ["nanobind"]\n'
         )
         (directory / "workshop.toml").write_text(f'{held}name = "{name}"\n')
         if not recipe:

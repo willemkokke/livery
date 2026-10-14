@@ -44,12 +44,12 @@ def test_a_base_module_importing_a_extension_refuses_naming_both() -> None:
 
 
 def test_an_allowed_base_module_importing_another_extension_refuses() -> None:
-    # The allowance names one extension per module: _kinds may import the
-    # python extension and nothing else under the namespace.
+    # The allowance names the extensions a module may import: _cpp_conan
+    # may import cmake, conan and cpp, and nothing else under the namespace.
     modules = (
         _module(
-            "livery.workshop._kinds",
-            ("livery.extensions.python._backend", "livery.extensions.docs._site"),
+            "livery.workshop._backends._cpp_conan",
+            ("livery.extensions.cmake._build", "livery.extensions.docs._site"),
         ),
     )
     problems = extension_imports_in_the_base(modules)

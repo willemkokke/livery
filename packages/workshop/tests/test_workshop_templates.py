@@ -79,7 +79,9 @@ def test_a_members_seeds_are_never_judged(tmp_path: Path) -> None:
     apply_project(root)
     package = root / "packages" / "thing"
     package.mkdir(parents=True)
-    (package / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
+    (package / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-thing"\n'
+    )
     (package / "pyproject.toml").write_text('[project]\nname = "livery-thing"\n')
     from livery.workshop._shipped_files import deliver, shipped_drift
 
@@ -579,7 +581,9 @@ def test_a_native_package_s_part_lands_where_every_workspace_ignores_it(
     workspace = tmp_path / "native"
     member = workspace / "packages" / "lib"
     member.mkdir(parents=True)
-    (member / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-lib"\n')
+    (member / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-lib"\n'
+    )
     for listed in ("[]", '["coverage"]'):
         (workspace / "workshop.toml").write_text(
             f"[workspace]\nextensions = {listed}\n"
@@ -904,10 +908,10 @@ def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
     package = tmp_path / "packages" / "thing"
     package.mkdir(parents=True)
     assert _release_baseline(package) == ""
-    (package / "workshop.toml").write_text('kind = "python"\nname = "thing"\n')
+    (package / "workshop.toml").write_text('extensions = ["python"]\nname = "thing"\n')
     assert _release_baseline(package) == ""
     (package / "workshop.toml").write_text(
-        'kind = "python"\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
+        'extensions = ["python"]\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
     )
     assert _release_baseline(package) == "0.6.1"
 
@@ -1077,7 +1081,7 @@ def test_removing_a_member_needs_only_sync(tmp_path: Path) -> None:
         member = root / "packages" / name
         member.mkdir(parents=True)
         (member / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{name}"\n'
+            f'extensions = ["python"]\nname = "livery-{name}"\n'
         )
         (member / "pyproject.toml").write_text(f'[project]\nname = "livery-{name}"\n')
     compose_into(root)

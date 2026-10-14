@@ -409,8 +409,7 @@ def answered_at(
     extension's listing contributes to it. Decided from the
     declarations and the contracts' lists alone, asking nothing; empty
     when no place answers now. [livery.workshop._queries.answers][]
-    asks the places it names, and a package's lifecycle decides through
-    it whether its extensions answer a query or its kind does.
+    asks the places it names.
     """
     held: list[tuple[tuple[str, ...], Reference | DeclaredValue]] = []
     if query in declared.queries:

@@ -53,7 +53,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
         (member / "src" / "acme" / name).mkdir(parents=True)
         (member / "src" / "acme" / name / "__init__.py").write_text("")
         (member / "workshop.toml").write_text(
-            f'kind = "python"\nname = "acme-{name}"\n'
+            f'extensions = ["python"]\nname = "acme-{name}"\n'
         )
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         if pages:
@@ -190,7 +190,7 @@ def test_a_member_in_a_group_directory_mounts_and_stays_mounted(tmp_path: Path) 
         member = root / "packages" / "extensions" / name
         (member / "src" / "acme" / "extensions" / name).mkdir(parents=True)
         (member / "workshop.toml").write_text(
-            f'kind = "python"\nname = "acme-extensions-{name}"\n'
+            f'extensions = ["python"]\nname = "acme-extensions-{name}"\n'
         )
         (member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-extensions-{name}"\n'
@@ -448,7 +448,9 @@ def test_a_second_generator_s_tables_reach_the_config(
 def test_a_package_no_generator_documents_has_no_api_entry(tmp_path: Path) -> None:
     root = _workspace(tmp_path, docs_table='extensions = ["docs", "mkdocstrings"]\n')
     bare = root / "packages" / "bare"
-    (bare / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-bare"\n')
+    (bare / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-bare"\n'
+    )
     (bare / "pyproject.toml").unlink()
     (bare / "docs").mkdir()
     (bare / "docs" / "index.md").write_text("# bare\n")
@@ -923,7 +925,9 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
 
 def _declare_generators(root: Path, package: str, table: str) -> None:
     contract = root / "packages" / package / "workshop.toml"
-    contract.write_text(f'kind = "python"\nname = "acme-{package}"\n\n[docs]\n{table}')
+    contract.write_text(
+        f'extensions = ["python"]\nname = "acme-{package}"\n\n[docs]\n{table}'
+    )
 
 
 def _package(root: Path, name: str):
@@ -1187,7 +1191,8 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
     assets.mkdir(parents=True)
     (assets / "site.css").write_text("/* mine */\n")
     (root / "packages" / "core" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-core"\n[docs]\nextra-css = ["extra.css"]\n'
+        'extensions = ["python"]\nname = "acme-core"\n'
+        '[docs]\nextra-css = ["extra.css"]\n'
     )
     config = tomllib.loads(zensical_config(root))
     # A package's declared sheet comes before the workspace's own.
@@ -2365,7 +2370,9 @@ def test_the_tree_places_packages_and_orders_them_by_their_dependencies(
     # A package with no import path sits at its folder under packages/.
     group = root / "packages" / "native" / "engine"
     group.mkdir(parents=True)
-    (group / "workshop.toml").write_text('kind = "python"\nname = "acme-engine"\n')
+    (group / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-engine"\n'
+    )
     (group / "pyproject.toml").write_text('[project]\nname = "acme-engine"\n')
     # bare depends on core, so core comes first though bare sorts first.
     contract = root / "packages" / "bare" / "workshop.toml"

@@ -94,6 +94,7 @@ def _member(root: Path, name: str) -> Package:
         name=f"acme-{name}",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 

@@ -64,15 +64,13 @@ def _extension(tmp_path: Path, name: str, **files: str) -> Path:
     return content
 
 
-def _member(root: Path, name: str, kind: str, *extensions: str) -> None:
+def _member(root: Path, name: str, *extensions: str) -> None:
     member = root / "packages" / name
     member.mkdir(parents=True)
     listed = ", ".join(f'"{extension}"' for extension in extensions)
     held = f"extensions = [{listed}]\n" if extensions else ""
-    (member / "workshop.toml").write_text(
-        f'kind = "{kind}"\nname = "acme-{name}"\n{held}'
-    )
-    if kind != "cpp-conan":
+    (member / "workshop.toml").write_text(f'name = "acme-{name}"\n{held}')
+    if "cmake" not in extensions:
         (member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-{name}"\nversion = "0.1.0"\n'
         )
@@ -357,7 +355,7 @@ def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_rea
     assert "acme-native" not in agent and "format" not in agent
     assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
     assert "the members hold the package-level extensions none." in agent
-    _member(root, "cpp", "cpp-conan")
+    _member(root, "cpp", "cmake", "conan")
     agent = render_gate(root, AGENT)
     assert "- lint.acme-native: judges cpp packages" in agent
     assert (
@@ -418,14 +416,14 @@ def test_the_compositions_and_tools_fragments_render_what_is_present(
 ) -> None:
     root = _workspace(tmp_path)
     assert render_compositions(root, AGENT) == ""
-    # A package holding no package-level extension, here one of a kind
-    # nothing registered, is listed under none.
-    _member(root, "odd", "rust")
+    # A package holding no package-level extension, one that lists none,
+    # is listed under none.
+    _member(root, "odd")
     assert "- none (packages/odd): holds none; gate phases none\n" in (
         render_compositions(root, AGENT)
     )
-    _member(root, "cpp", "cpp-conan")
-    _member(root, "nb", "python", "nanobind")
+    _member(root, "cpp", "cmake", "conan")
+    _member(root, "nb", "nanobind")
     agent = render_compositions(root, AGENT)
     assert (
         "- cmake+conan (packages/cpp): holds cmake, cpp, conan;"

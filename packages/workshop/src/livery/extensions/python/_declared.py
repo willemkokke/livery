@@ -130,18 +130,16 @@ def problems(context: RuleContext) -> list[str]:
     """Each import no declaration accounts for, in package and source order.
 
     A package that holds the python extension is judged, each of its
-    sources under ``src`` that the run reaches; a package whose kind is
-    not registered is left out, since ``layering.graph`` names it.
+    sources under ``src`` that the run reaches.
     """
     from livery.workshop import _lifecycle
-    from livery.workshop._kinds import extension_set, kind_names
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import neighbours
 
     around = neighbours(context.packages)
-    known = kind_names()
     found: list[str] = []
     for package in context.packages_in_scope():
-        if package.kind not in known or "python" not in extension_set(package):
+        if "python" not in extension_set(package):
             continue
         declared = manifest(package)
         shipped = f"{package.path}/src/"

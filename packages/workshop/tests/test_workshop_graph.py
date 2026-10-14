@@ -32,7 +32,7 @@ def _packages(root: Path) -> None:
         directory = root / "packages" / name
         directory.mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'kind = "python"\nname = "livery-{name}"\n{extra}'
+            f'extensions = ["python"]\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{name}"\ndependencies = []\n'
@@ -212,7 +212,14 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
     from livery.workshop._categories import category_of
     from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
 
-    package = Package(Path("packages/x"), "packages/x", "livery-x", "python", ())
+    package = Package(
+        Path("packages/x"),
+        "packages/x",
+        "livery-x",
+        "python",
+        (),
+        extensions=("python",),
+    )
 
     def category(path: str) -> str:
         return category_of(package, path).name

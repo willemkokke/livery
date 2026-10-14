@@ -80,8 +80,8 @@ def declared_place(package: Package) -> tuple[str, ...] | None:
 def imported_place(package: Package) -> tuple[str, ...] | None:
     """The shallowest import path *package*'s code is referenced by, split at its dots.
 
-    Read from its module roots, which the package's extensions answer,
-    or its kind while it lists none. The path with the fewest parts
+    Read from its module roots, which the package's extensions answer.
+    The path with the fewest parts
     wins; of two with as many, the one answered first. None for a
     package no import path reaches.
     """

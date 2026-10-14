@@ -67,6 +67,7 @@ def _member(root: Path, name: str, *, off_at: str = "") -> Package:
         kind="python",
         depends=(),
         step_options=((off_at, turned_off),) if off_at else (),
+        extensions=("python",),
     )
 
 
@@ -242,7 +243,9 @@ def test_the_file_names_the_root_tests_only_while_they_exist_and_skips_natives(
     (tested / "tests").mkdir()
     native = tested / "packages" / "native"
     native.mkdir(parents=True)
-    (native / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-native"\n')
+    (native / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
+    )
     deliver(tested)
     written = _settings((tested / "pyrightconfig.json").read_text())
     assert written["include"] == ["packages", "tests", "tasks.py"]

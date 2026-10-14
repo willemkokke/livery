@@ -57,6 +57,7 @@ def _member(root: Path, name: str) -> Package:
         name=f"acme-{name}",
         kind="python",
         depends=(),
+        extensions=("python",),
     )
 
 
@@ -226,7 +227,7 @@ def test_the_file_names_a_member_s_directory_only_while_it_holds_python(
         (directory / "src" / "acme" / name).mkdir(parents=True)
         (directory / "tests").mkdir()
         (directory / "workshop.toml").write_text(
-            f'kind = "python"\nname = "acme-{name}"\n'
+            f'extensions = ["python"]\nname = "acme-{name}"\n'
         )
         (directory / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         (directory / "src" / "acme" / name / (source or "extension.toml")).write_text(
