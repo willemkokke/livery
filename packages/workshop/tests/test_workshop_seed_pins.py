@@ -389,7 +389,11 @@ ROOT_IGNORES = (
 def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._packages import workspace_suite
+    from livery.workshop._packages import (
+        RUNTIME_LANGUAGE,
+        holds_runtime_language,
+        workspace_suite,
+    )
     from livery.workshop._phases import PhaseContext
     from livery.workshop._steps import (
         PATHS,
@@ -409,6 +413,10 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     _mounted(root)
     unit = workspace_suite(root)
     assert unit is not None
+    # The runtime's language is python, and the root's own tests hold it
+    # while the library does not.
+    assert RUNTIME_LANGUAGE == "python"
+    assert [p.path for p in (lib, unit) if holds_runtime_language(p)] == ["tests"]
     # The test phase runs the root's suite beside the library's.
     assert [package.path for package in tested((lib, unit))] == [
         "packages/lib",
@@ -419,7 +427,7 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     read = {
         name: scoped_paths(ctx, name)
         for name, record in steps_by_name().items()
-        if record.narrowing == PATHS and "python" in record.extensions
+        if record.narrowing == PATHS and RUNTIME_LANGUAGE in record.extensions
     }
     assert read == ROOT_TESTS_READ
     assert (

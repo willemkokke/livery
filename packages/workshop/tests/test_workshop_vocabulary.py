@@ -9,7 +9,8 @@ scans the base's sources for each, and every extension's
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
-interpreter, the venv), each with its reason; those stay. ``ALLOWANCE``
+interpreter, the venv, the runtime's language and the project file of
+a member holding it), each with its reason; those stay. ``ALLOWANCE``
 holds what the base still knows of a kind today, one count per module
 and word. A count may only fall: a finding above it refuses, and a
 module that now finds fewer refuses until its count is lowered here,
@@ -33,6 +34,14 @@ BACKEND_IMPORT = "import a backend"
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
+    ("_packages", "python"): (
+        1,
+        "the runtime's language, the extension the root's own files hold",
+    ),
+    ("_packages", "pyproject.toml"): (
+        1,
+        "the project file a member holding the runtime's language carries",
+    ),
     ("_points", "python"): (1, "a runner's interpreter version"),
     ("_pythons", "pyproject.toml"): (1, "the root's requires-python"),
     ("_shipped_files", "pyproject.toml"): (
@@ -60,9 +69,8 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_kinds", BACKEND_IMPORT): 1,
     ("_kinds", "conan"): 3,
     ("_kinds", "cpp-conan"): 1,
-    ("_kinds", "python"): 5,
+    ("_kinds", "python"): 4,
     ("_kinds", "python-nanobind"): 1,
-    ("_packages", "pyproject.toml"): 1,
     ("_publish", "conan"): 3,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
@@ -76,7 +84,6 @@ ALLOWANCE: dict[tuple[str, str], int] = {
     ("_release_driver", "python"): 2,
     ("_steps", BACKEND_IMPORT): 1,
     ("_templates", "python"): 4,
-    ("_tools", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 

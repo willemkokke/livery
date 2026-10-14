@@ -1404,6 +1404,12 @@ parts, each mergeable alone:
   a sibling; a sibling no writer takes refuses.
 - P1d (#1621): cpp answers a `host-tools` query naming the C
   compilers, until phase 14's toolchains.
+- P1e (#1620): each extension writes its own manifest's requirement on
+  a sibling; a sibling no writer takes refuses.
+- P1f (built, #1622): one base constant names the runtime's language,
+  `python`; a member holding it carries a `pyproject.toml` and joins
+  the uv workspace, and the workspace's own tests are judged as python.
+  `is_python_kind` and `requires_pyproject` go.
 - P1e (built, #1620): each extension writes its own manifest's
   requirement on a sibling, through the package query
   `requirement-writers`; a sibling no writer takes refuses, naming its
