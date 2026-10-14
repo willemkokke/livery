@@ -279,13 +279,13 @@ per package, and each extension of the package's set may add steps to
 it, as many as it needs:
 
 ```toml
-[phases.build.configure]
-main = "acme.native._build:configure"
+[phases.build.bindings]
+main = "acme.native._build:bindings"
 reads = ["abi"]
 
-[phases.build.compile]
-main = "acme.native._build:compile"
-after = ["build.configure"]
+[phases.build.wheel]
+main = "acme.native._build:wheel"
+after = ["build.bindings"]
 provides = { wheel = "path" }
 ```
 
@@ -355,7 +355,12 @@ runs it on the side the engine gives. `isolated` on a step of a phase
 without the key refuses. `fm check` runs the tree side, so a step
 serving the isolated side alone is none of the gate's steps: the
 release train runs it, once per resolution `[release] prove` lists
-([Releases](releases.md)).
+([Releases](releases.md)). A step of the build phase, which runs once
+per package and which `fm check` runs, joins the gate's steps when it
+serves the tree side: cmake's `build.configure` and `build.compile`
+build each package that holds cmake before its `test.ctest` runs. The
+builds of python, conan and nanobind serve the isolated side alone:
+each builds what a release publishes, which the gate does not build.
 
 The release train stamps, builds, tests and publishes a package, and
 `fm release.verify` verifies a released version, through these phases:
@@ -663,7 +668,8 @@ own verbs that take them; `fm check` refuses them the same way. A
 step that wraps no tool, such as `fm drift.check`, refuses them too.
 A step says it takes them with `{arguments}` in its template, or by
 naming `tools` when it runs code, and its code reads them from the
-context's `arguments`.
+context's `arguments`: cmake's `build.configure` names cmake, so
+`fm build.configure -- -DACME_FAST=ON` hands cmake its flag.
 
 A step's `options` are what a package may set in its own contract,
 each with a type and a default; every step carries `enabled`, and
@@ -693,8 +699,9 @@ far: a per-package configuration file has one owner among the steps
 whose fragments name an extension; a path's
 category is the most specific rule's, the nearer table winning a tie
 between tables and two rules of one table never tying; every step a
-step runs `after` is registered, and following them never leads back
-to it; an extension's `extension.toml` holds only declared keys, each of
+step runs `after` is registered or declared by an installed extension,
+and following them never leads back to it; an extension's
+`extension.toml` holds only declared keys, each of
 its type, and every reference in it names a function its module
 defines; importing a module a reference names registers nothing, which
 the kit proves by importing each in a process of its own; every task a

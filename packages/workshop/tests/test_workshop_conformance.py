@@ -20,6 +20,7 @@ from livery.workshop._steps import (
     StepRecord,
     register_step,
     step_for,
+    steps_by_name,
 )
 from livery.workshop.testing import CLAUSES, Subject, builtin_subject, judge
 
@@ -133,6 +134,16 @@ def test_a_probe_of_the_empty_set_is_named_none(
 def test_a_step_after_nothing_or_after_itself_breaks_the_step_order(
     acme: None,
 ) -> None:
+    # The fallback first: a step after one an installed extension declares
+    # and the workspace did not mount, cmake's configure, breaks nothing.
+    register_step(
+        StepRecord(
+            "tidy", "lint", _idle, after=("build.configure",), extension=EXTENSION
+        )
+    )
+    assert "build.configure" not in steps_by_name()
+    tidy = Subject(EXTENSION, steps=(step_for("lint.tidy"),))
+    assert _names(tidy, "step-order") == []
     register_step(
         StepRecord("late", "lint", _idle, after=("lint.gone",), extension=EXTENSION)
     )
@@ -146,7 +157,8 @@ def test_a_step_after_nothing_or_after_itself_breaks_the_step_order(
     found = _names(Subject(EXTENSION, steps=steps), "step-order")
     assert found == [
         "step-order: step lint.late: runs after lint.gone, which no registered"
-        " step answers to; the gate stops there",
+        " step answers to and no installed extension declares; the gate stops"
+        " there",
         "step-order: step lint.a: runs after itself through lint.b, lint.a;"
         " the gate would wait on it for ever",
         "step-order: step lint.b: runs after itself through lint.a, lint.b;"
@@ -711,9 +723,12 @@ def test_the_builtin_steps_pass_every_clause() -> None:
         ("nanobind",),
         ("python",),
     }
-    assert {record.name for record in subject.steps} >= {
-        "build.compile",
-        "test.ctest",
+    assert {record.name for record in subject.steps} == {
+        "drift.check",
+        "provenance.check",
+        "layering.graph",
+        "layering.base-imports-no-extension",
+        "layering.sibling-references",
     }
     assert judge(subject) == []
 

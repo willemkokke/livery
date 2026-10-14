@@ -20,6 +20,7 @@ from livery.workshop._steps import (
     register_step,
     step_for,
 )
+from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -82,7 +83,7 @@ def test_a_file_the_repository_ignores_is_beyond_every_claim(
 
 
 def test_a_step_judges_the_files_its_claims_reach_and_no_other(
-    tmp_path: Path, restored_steps, python_steps: object
+    tmp_path: Path, restored_steps, python_steps: object, cmake_steps: object
 ) -> None:
     native = _native(tmp_path)
     python = Package(

@@ -9,6 +9,18 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.2.0] - 2026-10-14
+
+### Added
+
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- The coverage record stores parts in the line format with each file's fixed facts once, the union merges them without coverage.py's commands, and llvm-cov's counted ranges reach the pages by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+
+### Fixed
+
+- Credentials in command lines reach a profile trace as ***, and a test's mounts and environment writes are undone before the next test by @willemkokke
+
 ## [0.1.0] - 2026-10-12
 
 ### Added

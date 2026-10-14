@@ -13,7 +13,6 @@ from livery import git
 from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.workshop import _publish
-from livery.workshop._backends import _cpp_conan
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_release
 from livery.workshop._registries import RegistryTarget
@@ -42,13 +41,13 @@ def test_the_conan_stamp_writes_and_refuses(tmp_path: Path) -> None:
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     conanfile = package.directory / "conanfile.py"
     conanfile.write_text('class L:\n    name = "acme-lib"\n    version = "0.1.0"\n')
-    assert _cpp_conan.current_version(package) == "0.1.0"
-    assert _cpp_conan.stamp_version(package).stamp("0.2.0") == ["conanfile.py"]
-    assert _cpp_conan.current_version(package) == "0.2.0"
-    assert _cpp_conan.stamp_version(package).stamp("0.2.0") == []  # idempotent
+    assert _conan.current_version(package) == "0.1.0"
+    assert _conan.stamp_version(package).stamp("0.2.0") == ["conanfile.py"]
+    assert _conan.current_version(package) == "0.2.0"
+    assert _conan.stamp_version(package).stamp("0.2.0") == []  # idempotent
     conanfile.write_text("class L:\n    pass\n")
     with pytest.raises(_FAILURES, match="no version line"):
-        _cpp_conan.stamp_version(package).stamp("0.3.0")
+        _conan.stamp_version(package).stamp("0.3.0")
 
 
 def test_the_folder_registry_answers_from_saved_archives(tmp_path: Path) -> None:
@@ -57,7 +56,7 @@ def test_the_folder_registry_answers_from_saved_archives(tmp_path: Path) -> None
     (target / "acme-lib-0.1.0.tgz").touch()
     (target / "acme-lib-0.2.0.tgz").touch()
     (target / "acme-other-9.9.9.tgz").touch()
-    registry = _cpp_conan.ConanRegistry(
+    registry = _conan.ConanRegistry(
         RegistryTarget(kind="conan", url=str(target), local=True), root=tmp_path
     )
     assert registry.versions("acme-lib") == ("0.1.0", "0.2.0")
@@ -72,9 +71,7 @@ def test_conan_publish_refuses_without_conan(
     monkeypatch.setenv("PATH", str(empty))
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     with pytest.raises(_FAILURES, match="conan is not on"):
-        _cpp_conan.publish(
-            package, str(tmp_path / "share"), version="0.1.0", local=True
-        )
+        _conan.publish(package, str(tmp_path / "share"), version="0.1.0", local=True)
 
 
 _REMOTE = "https://forge.example/api/packages/acme/conan"
@@ -125,9 +122,7 @@ def test_conans_own_login_wins_over_the_registry_token(
     calls = _recorded_conan(monkeypatch)
     monkeypatch.setenv(own, "chosen")
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    assert _cpp_conan.publish(
-        package, _REMOTE, version="0.1.0", local=False, token="lane"
-    )
+    assert _conan.publish(package, _REMOTE, version="0.1.0", local=False, token="lane")
     assert _upload_logins(calls) == [{}]
 
 
@@ -136,7 +131,7 @@ def test_an_upload_without_a_token_adds_no_login(
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    assert _cpp_conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert _conan.publish(package, _REMOTE, version="0.1.0", local=False)
     assert _upload_logins(calls) == [{}]
 
 
@@ -145,9 +140,7 @@ def test_the_registry_token_logs_in_to_the_workshop_remote_alone(
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    assert _cpp_conan.publish(
-        package, _REMOTE, version="0.1.0", local=False, token="lane"
-    )
+    assert _conan.publish(package, _REMOTE, version="0.1.0", local=False, token="lane")
     assert _upload_logins(calls) == [
         {"CONAN_LOGIN_USERNAME_WORKSHOP": "workshop", "CONAN_PASSWORD_WORKSHOP": "lane"}
     ]
@@ -169,9 +162,7 @@ def test_the_publish_seam_hands_the_targets_token_to_the_upload(
     monkeypatch.setattr(_conan, "publish", _publish)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
-    assert _cpp_conan.publish_artifact(
-        package, tmp_path, version="0.1.0", target=target
-    )
+    assert _conan.publish_artifact(package, tmp_path, version="0.1.0", target=target)
     assert seen == ["lane"]
 
 
@@ -443,7 +434,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         if "nanobind" in package.extensions:
             (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
         else:
-            (dist / _cpp_conan.cache_name(package.name, "0.3.0")).write_bytes(b"cache")
+            (dist / _conan.cache_name(package.name, "0.3.0")).write_bytes(b"cache")
         return dist
 
     def _fake_wheels(package: Package, **kwargs: object) -> bool:
@@ -455,7 +446,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
-    conan_registry = _cpp_conan.ConanRegistry(target, root=root)
+    conan_registry = _conan.ConanRegistry(target, root=root)
 
     def registry_for(package: Package):
         return conan_registry if "conan" in package.extensions else registry
@@ -498,7 +489,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
         "packages/ext/v0.3.0",
     ]
     attached = [asset.name for asset in repository.release.assets(tag)]
-    assert attached == [_cpp_conan.cache_name("acme-geometry", "0.3.0")]
+    assert attached == [_conan.cache_name("acme-geometry", "0.3.0")]
 
 
 def _serving_wave(
@@ -582,7 +573,7 @@ def test_prebuilt_publishes_what_the_run_collected_without_building(
     order: list[str] = []
     registry_for = _serving_wave(monkeypatch, order)
     for member, collected in (
-        ("geometry", _cpp_conan.cache_name("acme-geometry", "0.3.0", "linux-x64")),
+        ("geometry", _conan.cache_name("acme-geometry", "0.3.0", "linux-x64")),
         ("ext", "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl"),
     ):
         dist = root / "packages" / member / "dist"
@@ -718,9 +709,8 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
         },
     )
     package = _package(destination, "acme-geometry", "cmake", "conan")
-    from livery.workshop._backends import _cpp_conan as cpp
 
-    cpp.build(package, tmp_path)
+    _conan.build(package, tmp_path)
     return package
 
 
@@ -730,8 +720,8 @@ def test_the_folder_target_round_trips(
 ) -> None:
     package = _render_library(tmp_path, monkeypatch)
     share = tmp_path / "share"
-    assert _cpp_conan.publish(package, str(share), version="0.0.0", local=True)
-    registry = _cpp_conan.ConanRegistry(
+    assert _conan.publish(package, str(share), version="0.0.0", local=True)
+    registry = _conan.ConanRegistry(
         RegistryTarget(kind="conan", url=str(share), local=True), root=tmp_path
     )
     assert registry.versions("acme-geometry") == ("0.0.0",)
@@ -774,22 +764,22 @@ def test_the_rig_conan_registry_round_trips(
     monkeypatch.setenv("CONAN_LOGIN_USERNAME", "livery-admin")
     monkeypatch.setenv("CONAN_PASSWORD", token)
     login = subprocess.run(
-        ["conan", "remote", "add", _cpp_conan.CONAN_REMOTE, remote, "--force"],
+        ["conan", "remote", "add", _conan.CONAN_REMOTE, remote, "--force"],
         capture_output=True,
         text=True,
     )
     assert login.returncode == 0, login.stderr
     auth = subprocess.run(
-        ["conan", "remote", "login", _cpp_conan.CONAN_REMOTE, "livery-admin"],
+        ["conan", "remote", "login", _conan.CONAN_REMOTE, "livery-admin"],
         capture_output=True,
         text=True,
     )
     assert auth.returncode == 0, auth.stderr
-    assert _cpp_conan.publish(package, remote, version="0.0.0", local=False) in (
+    assert _conan.publish(package, remote, version="0.0.0", local=False) in (
         True,
         False,  # a re-run walks past the earlier upload
     )
-    registry = _cpp_conan.ConanRegistry(
+    registry = _conan.ConanRegistry(
         RegistryTarget(kind="conan", url=remote), root=tmp_path
     )
     assert "0.0.0" in registry.versions("acme-geometry")
@@ -797,11 +787,11 @@ def test_the_rig_conan_registry_round_trips(
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
     subprocess.run(["conan", "profile", "detect", "--exist-ok"], capture_output=True)
     subprocess.run(
-        ["conan", "remote", "add", _cpp_conan.CONAN_REMOTE, remote, "--force"],
+        ["conan", "remote", "add", _conan.CONAN_REMOTE, remote, "--force"],
         capture_output=True,
     )
     subprocess.run(
-        ["conan", "remote", "login", _cpp_conan.CONAN_REMOTE, "livery-admin"],
+        ["conan", "remote", "login", _conan.CONAN_REMOTE, "livery-admin"],
         capture_output=True,
         text=True,
     )
@@ -811,7 +801,7 @@ def test_the_rig_conan_registry_round_trips(
             "install",
             "--requires=acme-geometry/0.0.0",
             "-r",
-            _cpp_conan.CONAN_REMOTE,
+            _conan.CONAN_REMOTE,
             "--build=missing",
         ],
         cwd=tmp_path,

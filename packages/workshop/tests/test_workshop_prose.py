@@ -29,6 +29,7 @@ from livery.workshop._prose import (
     unregister_section,
 )
 from livery.workshop._steps import StepRecord, register_step
+from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
@@ -412,7 +413,7 @@ def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(
 
 
 def test_the_compositions_and_tools_fragments_render_what_is_present(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cmake_steps: object
 ) -> None:
     root = _workspace(tmp_path)
     assert render_compositions(root, AGENT) == ""

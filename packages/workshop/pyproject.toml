@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-workshop"
-version = "0.9.0"
+version = "0.10.0"
 description = "The livery ecosystem's devkit: the task surface, extensions, templates, and content."
 readme = "README.md"
 license = "MIT"
@@ -31,7 +31,7 @@ dependencies = [
     # act's lowest-direct leg installs the floor and proves it.
     "livery-toolroom>=0.11.0",
     # Every git call the workshop makes goes through livery.git.
-    "livery-git>=0.1.0",
+    "livery-git>=0.2.0",
     # The tool records, the catalogue and the lock: what `fm tools.*`
     # resolves against.
     "livery-toolroom-store>=0.4.0",
@@ -135,10 +135,9 @@ Repository = "https://github.com/willemkokke/livery"
 [tool.uv.build-backend]
 # The wheel ships the base, livery.workshop, whose entry module is its
 # __init__.py, and extensions with no public names under the PEP 420
-# namespace livery. Nothing imports an extension but the workshop: its
-# mount, and the package kinds' registrations, which take the
-# extensions' code as their backends until the package kinds go. The
-# flag lets uv ship a root with no __init__.py.
+# namespace livery. Nothing imports an extension but the workshop's
+# mount and an extension that requires it. The flag lets uv ship a root
+# with no __init__.py.
 module-name = [
     "livery.workshop",
     "livery.extensions.cmake",

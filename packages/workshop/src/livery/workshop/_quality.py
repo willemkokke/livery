@@ -524,22 +524,6 @@ def run_steps(
     walk(context, only=only, inputs=VERB_INPUTS)
 
 
-def run_on_packages(
-    names: tuple[str, ...],
-    packages: tuple[Package, ...],
-    *,
-    inputs: Mapping[str, Mapping[str, object]] = GATE_INPUTS,
-) -> None:
-    """Run the steps *names* over *packages* whole; nothing recorded as proved.
-
-    Each package step judges the packages it applies to, files and
-    claims notwithstanding: the development build ``fm run`` starts
-    with ([livery.workshop._run.develop][]), which gives the phases its
-    own *inputs*.
-    """
-    walk(_context(subset=packages), only=frozenset(names), inputs=inputs)
-
-
 def run_phase_over(phase: str, packages: tuple[Package, ...]) -> None:
     """Run the steps of *phase* over *packages* whole; nothing recorded as proved.
 
@@ -557,7 +541,7 @@ def run_phase_over(phase: str, packages: tuple[Package, ...]) -> None:
     )
     if not names:
         return
-    run_on_packages(names, packages)
+    walk(_context(subset=packages), only=frozenset(names))
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:

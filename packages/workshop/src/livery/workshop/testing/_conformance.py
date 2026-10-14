@@ -31,6 +31,7 @@ from livery.workshop._steps import (
     WORKSPACE,
     StepRecord,
     answering,
+    installed_step,
     steps_by_name,
 )
 
@@ -303,13 +304,16 @@ def _step_order(subject: Subject) -> list[Violation]:
     for record in subject.steps:
         where = f"step {record.name}"
         for earlier in record.after:
-            if answering(earlier) is None:
+            # A step an installed extension declares orders nothing
+            # while the workspace does not mount it, and the gate goes on.
+            if answering(earlier) is None and not installed_step(earlier):
                 violations.append(
                     Violation(
                         STEP_ORDER,
                         where,
                         f"runs after {earlier}, which no registered step"
-                        " answers to; the gate stops there",
+                        " answers to and no installed extension declares;"
+                        " the gate stops there",
                     )
                 )
         loop = _loop(record.name)
@@ -1056,8 +1060,9 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         STEP_ORDER,
-        "Every step a step runs after is registered, and following the"
-        " steps it runs after never leads back to it.",
+        "Every step a step runs after is registered or declared by an"
+        " installed extension, and following the steps it runs after never"
+        " leads back to it.",
         _step_order,
     ),
     Clause(

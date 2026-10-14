@@ -41,8 +41,12 @@ main = "livery.extensions.conan._steps:stamp"
 reads = ["version"]
 provides = { changed = "strs" }
 
+# The release's conan package, created in the conan cache on the build
+# phase's isolated side; the gate builds on the tree side, where it
+# creates none.
 [phases.build.conan]
 main = "livery.extensions.conan._steps:build"
+isolated = true
 provides = { dist = "path" }
 
 [phases.publish.conan]

@@ -16,7 +16,6 @@ from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.forge import RegistryKind, Repository, Unsupported
 from livery.forge.testing import FakeForge
-from livery.workshop._backends import _cpp_conan
 from livery.workshop._packages import Package
 from livery.workshop._registries import RegistryTarget, resolve_registry
 
@@ -90,16 +89,16 @@ def _saved(root: Path, version: str, host: str = "") -> Path:
     """One leg's saved cache in the member's dist/; the file."""
     dist = root / "packages" / "geometry" / "dist"
     dist.mkdir(parents=True, exist_ok=True)
-    archive = dist / _cpp_conan.cache_name("acme-geometry", version, host)
+    archive = dist / _conan.cache_name("acme-geometry", version, host)
     archive.write_bytes(f"cache of {version} for {host or 'this host'}".encode())
     return archive
 
 
 def _another_host() -> str:
     """A host key that is not this machine's."""
-    mine = _cpp_conan.cache_name("acme-geometry", "0.0.0")
+    mine = _conan.cache_name("acme-geometry", "0.0.0")
     for host in ("linux-arm", "windows-x64", "macos-x64"):
-        if _cpp_conan.cache_name("acme-geometry", "0.0.0", host) != mine:
+        if _conan.cache_name("acme-geometry", "0.0.0", host) != mine:
             return host
     raise AssertionError("every host key matched this machine's")
 
@@ -113,7 +112,7 @@ def test_the_publish_refuses_when_no_leg_saved_a_cache(
     root = _workspace(tmp_path)
     _forge(monkeypatch)
     with pytest.raises(_FAILURES, match="no saved conan cache"):
-        _cpp_conan.publish_to_releases(_member(root), root, version="0.3.0")
+        _conan.publish_to_releases(_member(root), root, version="0.3.0")
 
 
 def test_the_restore_refuses_a_name_no_member_carries(
@@ -122,7 +121,7 @@ def test_the_restore_refuses_a_name_no_member_carries(
     root = _workspace(tmp_path)
     _forge(monkeypatch)
     with pytest.raises(_FAILURES, match="not a member of this workspace"):
-        _cpp_conan.restore_from_releases(root, "acme-ghost", "0.3.0", cwd=root)
+        _conan.restore_from_releases(root, "acme-ghost", "0.3.0", cwd=root)
 
 
 def test_the_restore_refuses_when_the_release_carries_no_cache_for_this_host(
@@ -131,33 +130,31 @@ def test_the_restore_refuses_when_the_release_carries_no_cache_for_this_host(
     root = _workspace(tmp_path)
     fake, repository = _forge(monkeypatch)
     tag = _released(fake, repository, "0.3.0")
-    other = _cpp_conan.cache_name("acme-geometry", "0.3.0", _another_host())
+    other = _conan.cache_name("acme-geometry", "0.3.0", _another_host())
     repository.release.upload_asset(tag, other, b"another host's cache")
     with pytest.raises(_FAILURES, match="carries no conan cache for this host") as bad:
-        _cpp_conan.restore_from_releases(root, "acme-geometry", "0.3.0", cwd=root)
+        _conan.restore_from_releases(root, "acme-geometry", "0.3.0", cwd=root)
     assert other in str(bad.value)
 
 
 def test_a_digest_that_does_not_match_the_bytes_refuses() -> None:
     with pytest.raises(_FAILURES, match="does not match the release's digest"):
-        _cpp_conan.verify_digest("c.tgz", b"bytes", "sha256:" + "0" * 64)
+        _conan.verify_digest("c.tgz", b"bytes", "sha256:" + "0" * 64)
 
 
 def test_a_digest_algorithm_the_restore_cannot_check_refuses() -> None:
     with pytest.raises(_FAILURES, match="verifies sha256"):
-        _cpp_conan.verify_digest("c.tgz", b"bytes", "md5:abc")
+        _conan.verify_digest("c.tgz", b"bytes", "md5:abc")
 
 
 def test_no_digest_is_used_and_said(capsys: pytest.CaptureFixture[str]) -> None:
-    _cpp_conan.verify_digest("c.tgz", b"bytes", "")
+    _conan.verify_digest("c.tgz", b"bytes", "")
     assert "not verified" in capsys.readouterr().out
 
 
 def test_a_matching_digest_passes() -> None:
     data = b"the cache"
-    _cpp_conan.verify_digest(
-        "c.tgz", data, f"sha256:{hashlib.sha256(data).hexdigest()}"
-    )
+    _conan.verify_digest("c.tgz", data, f"sha256:{hashlib.sha256(data).hexdigest()}")
 
 
 def test_a_cache_whose_bytes_changed_under_the_tag_refuses(
@@ -166,7 +163,7 @@ def test_a_cache_whose_bytes_changed_under_the_tag_refuses(
     root = _workspace(tmp_path)
     fake, repository = _forge(monkeypatch)
     tag = _released(fake, repository, "0.2.0")
-    name = _cpp_conan.cache_name("acme-geometry", "0.2.0")
+    name = _conan.cache_name("acme-geometry", "0.2.0")
     repository.release.upload_asset(tag, name, b"the saved cache")
     monkeypatch.setattr(
         type(repository.release),
@@ -174,7 +171,7 @@ def test_a_cache_whose_bytes_changed_under_the_tag_refuses(
         lambda _self, _tag, _name: b"something else",
     )
     with pytest.raises(_FAILURES, match="does not match the release's digest"):
-        _cpp_conan.restore_from_releases(root, "acme-geometry", "0.2.0", cwd=root)
+        _conan.restore_from_releases(root, "acme-geometry", "0.2.0", cwd=root)
 
 
 # The round trip.
@@ -190,21 +187,21 @@ def test_the_publish_creates_the_release_and_attaches_every_host_once(
     _saved(root, "0.3.0")
     _saved(root, "0.3.0", _another_host())
     _saved(root, "0.2.0")  # another version's cache stays where it is
-    assert _cpp_conan.publish_to_releases(_member(root), root, version="0.3.0")
+    assert _conan.publish_to_releases(_member(root), root, version="0.3.0")
     release = repository.release.get(tag)
     assert release is not None
     assert release.body == "- the area function"
     assets = repository.release.assets(tag)
     assert sorted(asset.name for asset in assets) == sorted(
         [
-            _cpp_conan.cache_name("acme-geometry", "0.3.0"),
-            _cpp_conan.cache_name("acme-geometry", "0.3.0", _another_host()),
+            _conan.cache_name("acme-geometry", "0.3.0"),
+            _conan.cache_name("acme-geometry", "0.3.0", _another_host()),
         ]
     )
     assert all(asset.digest.startswith("sha256:") for asset in assets)
     # Idempotent: a re-run attaches nothing and says so.
     capsys.readouterr()
-    assert not _cpp_conan.publish_to_releases(_member(root), root, version="0.3.0")
+    assert not _conan.publish_to_releases(_member(root), root, version="0.3.0")
     assert "already attached" in capsys.readouterr().out
 
 
@@ -220,10 +217,10 @@ def test_the_probe_answers_only_versions_whose_release_carries_a_cache(
     # A release with this host's cache on it.
     tag = _released(fake, repository, "0.3.0")
     repository.release.upload_asset(
-        tag, _cpp_conan.cache_name("acme-geometry", "0.3.0"), b"cache"
+        tag, _conan.cache_name("acme-geometry", "0.3.0"), b"cache"
     )
     target = RegistryTarget(kind="conan", url="fake://acme", releases=True)
-    registry = _cpp_conan.ConanRegistry(target, root=root)
+    registry = _conan.ConanRegistry(target, root=root)
     assert registry.versions("acme-geometry") == ("0.3.0",)
     assert registry.versions("acme-ghost") == ()
 
@@ -234,7 +231,7 @@ def test_the_restore_verifies_the_digest_and_hands_the_file_to_conan(
     root = _workspace(tmp_path)
     fake, repository = _forge(monkeypatch)
     tag = _released(fake, repository, "0.2.0")
-    name = _cpp_conan.cache_name("acme-geometry", "0.2.0")
+    name = _conan.cache_name("acme-geometry", "0.2.0")
     repository.release.upload_asset(tag, name, b"the saved cache")
     seen: list[tuple[str, bytes]] = []
 
@@ -250,7 +247,7 @@ def test_the_restore_verifies_the_digest_and_hands_the_file_to_conan(
         return _Done()
 
     monkeypatch.setattr(_conan, "_conan", _fake_conan)
-    _cpp_conan.restore_from_releases(root, "acme-geometry", "0.2.0", cwd=root)
+    _conan.restore_from_releases(root, "acme-geometry", "0.2.0", cwd=root)
     assert [payload for _path, payload in seen] == [b"the saved cache"]
     assert Path(seen[0][0]).name == name
     assert "restored from packages/geometry/v0.2.0" in capsys.readouterr().out
@@ -270,9 +267,9 @@ def test_the_ladder_answers_the_forge_releases_when_it_hosts_no_conan_registry(
 def test_the_changelog_entry_is_the_release_body(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     package = _member(root)
-    assert _cpp_conan.changelog_entry(package, "0.3.0") == "- the area function"
-    assert _cpp_conan.changelog_entry(package, "0.2.0") == "- older"
-    assert _cpp_conan.changelog_entry(package, "9.9.9") == ""
+    assert _conan.changelog_entry(package, "0.3.0") == "- the area function"
+    assert _conan.changelog_entry(package, "0.2.0") == "- older"
+    assert _conan.changelog_entry(package, "9.9.9") == ""
 
 
 def test_the_waves_floor_check_reads_the_attached_caches(
@@ -295,13 +292,13 @@ def test_the_waves_floor_check_reads_the_attached_caches(
     target = RegistryTarget(kind="conan", url="fake://acme", releases=True)
     by_path = {library.path: library}
 
-    def registry_for(_package: Package) -> _cpp_conan.ConanRegistry:
-        return _cpp_conan.ConanRegistry(target, root=root)
+    def registry_for(_package: Package) -> _conan.ConanRegistry:
+        return _conan.ConanRegistry(target, root=root)
 
     with pytest.raises(_FAILURES, match=r"floors acme-geometry at 0\.1\.0"):
         floor_probe(extension, by_path, registry_for)
     tag = _released(fake, repository, "0.1.0")
     repository.release.upload_asset(
-        tag, _cpp_conan.cache_name("acme-geometry", "0.1.0"), b"cache"
+        tag, _conan.cache_name("acme-geometry", "0.1.0"), b"cache"
     )
     floor_probe(extension, by_path, registry_for)

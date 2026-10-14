@@ -200,6 +200,22 @@ def test_a_record_names_its_phase_and_step() -> None:
     ) == ((), (), None, True, (), ())
 
 
+def test_an_after_naming_a_step_the_workspace_did_not_mount_orders_nothing(
+    restored_registries,
+) -> None:
+    from livery.workshop._steps import installed_step, steps_by_name, with_earlier
+
+    # clang-tidy's lint runs after cmake's configure, which registers only
+    # while a package's set holds cmake: in a workspace whose sets hold
+    # none, the lint walks alone.
+    register_step(StepRecord("tidy", "lint", _noop, after=("build.configure",)))
+    assert "build.configure" not in steps_by_name()
+    assert installed_step("build.configure")
+    assert [record.name for record in with_earlier(("lint.tidy",))] == ["lint.tidy"]
+    # A name no installed extension declares is no step at all.
+    assert not installed_step("build.ghost")
+
+
 def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
     restored_registries, tmp_path: Path
 ) -> None:

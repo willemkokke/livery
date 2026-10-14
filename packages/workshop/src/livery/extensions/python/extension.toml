@@ -53,8 +53,12 @@ main = "livery.extensions.python._steps:stamp"
 reads = ["version"]
 provides = { changed = "strs" }
 
+# The release's wheel and sdist, built on the build phase's isolated
+# side; the gate builds on the tree side, where the suites run from the
+# sources and no distribution is built.
 [phases.build.python]
 main = "livery.extensions.python._steps:build"
+isolated = true
 reads = ["epoch"]
 provides = { dist = "path" }
 

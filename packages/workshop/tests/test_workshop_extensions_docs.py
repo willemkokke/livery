@@ -43,18 +43,30 @@ def test_a_base_module_importing_a_extension_refuses_naming_both() -> None:
     assert "livery.extensions.docs._site" in problems[0]
 
 
-def test_an_allowed_base_module_importing_another_extension_refuses() -> None:
-    # The allowance names the extensions a module may import: _cpp_conan
-    # may import cmake, conan and cpp, and nothing else under the namespace.
+def test_a_base_module_importing_an_extension_refuses_naming_it() -> None:
+    # No base module is excepted: one that runs a package step's code
+    # by importing the extension refuses as any other does, for each
+    # extension it imports.
     modules = (
         _module(
-            "livery.workshop._backends._cpp_conan",
-            ("livery.extensions.cmake._build", "livery.extensions.docs._site"),
+            "livery.workshop._steps",
+            (
+                "livery.extensions.cmake._build",
+                "livery.extensions.conan._package",
+                "livery.extensions.cpp",
+            ),
         ),
     )
-    problems = extension_imports_in_the_base(modules)
-    assert len(problems) == 1
-    assert "livery.extensions.docs._site" in problems[0]
+    assert extension_imports_in_the_base(modules) == [
+        f"livery/workshop/_steps.py: the base imports the extension {name}; the"
+        " base reaches an extension through a registry it fills at mount, never"
+        " by import"
+        for name in (
+            "livery.extensions.cmake._build",
+            "livery.extensions.conan._package",
+            "livery.extensions.cpp",
+        )
+    ]
 
 
 def test_a_base_module_s_optional_import_is_left_alone_and_any_other_refuses() -> None:
@@ -77,35 +89,6 @@ def test_a_base_module_s_optional_import_is_left_alone_and_any_other_refuses() -
         "livery/workshop/_quality.py: the base imports the extension"
         " livery.extensions.docs._llms",
     ]
-
-
-def test_the_base_extension_import_allowance_is_exact() -> None:
-    """Each allowed module still imports its extension; a stale entry refuses.
-
-    The list says what is left of the exception, so an entry whose import
-    went comes out of it.
-    """
-    from livery.workshop._packages import BASE_EXTENSION_IMPORTS
-
-    src = ROOT / "packages" / "workshop" / "src"
-    stale: list[str] = []
-    for dotted, extension in BASE_EXTENSION_IMPORTS:
-        tree = ast.parse((src / f"{dotted.replace('.', '/')}.py").read_text("utf-8"))
-        imported = {
-            node.module or ""
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-        } | {
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        }
-        if not any(
-            name == extension or name.startswith(extension + ".") for name in imported
-        ):
-            stale.append(dotted)
-    assert stale == []
 
 
 # Then the shape: a second tree's extension joins the namespace, and the

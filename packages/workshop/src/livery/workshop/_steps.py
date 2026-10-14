@@ -1020,19 +1020,41 @@ def with_earlier(names: tuple[str, ...]) -> tuple[StepRecord, ...]:
     """The records of *names*, and of every step one of them runs after.
 
     Followed through ``after`` transitively, in registration order,
-    so a build's configure joins the walk that judges the build.
+    so a build's configure joins the walk that judges the build. An
+    ``after`` naming a step an installed extension declares and the
+    mount did not register orders nothing: clang-tidy's lint runs after
+    cmake's configure in a workspace whose packages hold cmake, and
+    alone in one whose packages do not.
 
     Raises:
-        Failed: when an ``after`` names no registered step.
+        Failed: when an ``after`` names a step that neither the base nor
+            an installed extension declares, naming the registry.
     """
     wanted = set(names)
     queue = list(names)
     while queue:
         for earlier in step_for(queue.pop()).after:
-            if earlier not in wanted:
-                wanted.add(earlier)
-                queue.append(earlier)
+            if earlier in wanted:
+                continue
+            if earlier not in _STEPS and installed_step(earlier):
+                continue
+            # A name nothing declares joins the queue, and its lookup
+            # refuses naming the registry.
+            wanted.add(earlier)
+            queue.append(earlier)
     return tuple(record for record in _STEPS.values() if record.name in wanted)
+
+
+def installed_step(name: str) -> bool:
+    """Whether an installed extension or the base declares the step *name*.
+
+    *name* is ``<phase>.<step>``. Read from the declarations, so a step
+    the mount did not register, one of an extension the workspace does
+    not mount, is declared all the same.
+    """
+    from livery.workshop._declaration import installed_steps
+
+    return any(address.partition(":")[2] == name for address in installed_steps())
 
 
 def _applies_now(record: StepRecord, ctx: PhaseContext) -> bool:
@@ -1535,14 +1557,11 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
 def _register_builtin() -> None:
     """Register the workshop's own steps, in the order the rewriters run.
 
-    The workspace steps judge the whole tree; the cmake build and test
-    steps judge one package at a time, each package holding the cmake
-    extension. The base registers those three, which call cmake's code
-    through the module that gathers it. A body resolves its function on
-    the module when it runs, never at registration, so a test that
-    patches ``_cpp_conan.test`` sees its fake run.
+    Each judges the whole tree: the render's drift, the provenance of
+    the shipped content, the graph and the base's rules over the
+    sources. A step that judges one package at a time is an
+    extension's, and registers at mount.
     """
-    from livery.workshop._backends import _cpp_conan
     from livery.workshop._influence import Inputs
     from livery.workshop._packages import RULES
 
@@ -1627,17 +1646,6 @@ def _register_builtin() -> None:
         # what it leaves.
         rule_run("sibling-references")(ctx)
 
-    def configure_run(ctx: PhaseContext) -> None:
-        _cpp_conan.configure(ctx.member, ctx.arguments)
-
-    def build_run(ctx: PhaseContext) -> None:
-        _cpp_conan.compile(ctx.member, ctx.arguments)
-
-    def ctest_run(ctx: PhaseContext) -> None:
-        _cpp_conan.test(
-            ctx.member, ctx.root, selection=ctx.selection, arguments=ctx.arguments
-        )
-
     for record in (
         StepRecord(
             "check",
@@ -1675,38 +1683,6 @@ def _register_builtin() -> None:
                 ),
             )
             for step in RULES
-        ),
-        StepRecord(
-            "configure",
-            "build",
-            configure_run,
-            scope=PACKAGE,
-            extensions=("cmake",),
-            tests_only=True,
-            arguments=True,
-        ),
-        StepRecord(
-            "compile",
-            "build",
-            build_run,
-            scope=PACKAGE,
-            extensions=("cmake",),
-            tests_only=True,
-            after=("build.configure",),
-            arguments=True,
-        ),
-        # A change to any test or source file reaches ctest, whatever the
-        # language the project builds.
-        StepRecord(
-            "ctest",
-            "test",
-            ctest_run,
-            scope=PACKAGE,
-            extensions=("cmake",),
-            tests_only=True,
-            after=("build.compile",),
-            claims=(Claim("test"), Claim("source")),
-            arguments=True,
         ),
     ):
         register_step(record)
