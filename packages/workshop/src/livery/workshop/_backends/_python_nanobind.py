@@ -56,14 +56,15 @@ STANDS_FOR = ("cpp", "conan", "nanobind")
 
 
 def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
-    """Write the requirement where the dependency's kind lives.
+    """Write the requirement where the dependency lives.
 
-    The pyproject for a python sibling, the recipe for a conan one.
+    The pyproject for a sibling holding the runtime's language, the
+    recipe for any other.
     """
     from livery.workshop._backends import _cpp_conan
-    from livery.workshop._kinds import is_python_kind
+    from livery.workshop._packages import holds_runtime_language
 
-    if is_python_kind(dependency.kind):
+    if holds_runtime_language(dependency):
         return _python.declare_requirement(package, dependency, floor)
     return _cpp_conan.declare_requirement(package, dependency, floor)
 

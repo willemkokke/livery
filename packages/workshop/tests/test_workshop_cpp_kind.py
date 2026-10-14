@@ -18,13 +18,12 @@ from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     KindRecord,
-    is_python_kind,
     kind_for,
     record_for_template,
     register_kind,
     template_chain,
 )
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._registries import RegistryTarget
 from livery.workshop._steps import (
@@ -460,23 +459,6 @@ def test_the_cpp_template_seeds_no_floor_and_the_default_judges_it(
     )
 
 
-def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> None:
-    packages_dir = tmp_path / "packages"
-    (packages_dir / "native").mkdir(parents=True)
-    (packages_dir / "native" / "workshop.toml").write_text(
-        'kind = "cpp-conan"\nname = "acme-native"\n'
-    )
-    found = discover_packages(tmp_path)
-    assert [package.name for package in found] == ["acme-native"]
-    # A python member without its pyproject still refuses.
-    (packages_dir / "member").mkdir(parents=True)
-    (packages_dir / "member" / "workshop.toml").write_text(
-        'kind = "python"\nname = "acme-member"\n'
-    )
-    with pytest.raises(ValueError, match=r"member: no pyproject\.toml"):
-        discover_packages(tmp_path)
-
-
 def test_python_steps_skip_a_native_member_by_name(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], python_steps: object
 ) -> None:
@@ -747,8 +729,6 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    assert not is_python_kind("cpp-conan")
-    assert is_python_kind("python")
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-extension") is None

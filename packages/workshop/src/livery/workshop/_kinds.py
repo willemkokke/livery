@@ -493,29 +493,6 @@ def kind_host_allowed(present_types: set[str]) -> tuple[str, ...]:
     return tuple(sorted(tools))
 
 
-def is_python_kind(kind_name: str) -> bool:
-    """Whether the kind is a Python distribution, by its chain.
-
-    True when ``python`` sits anywhere in the chain: a child kind (a
-    binary extension) is still a wheel with a ``pyproject.toml``,
-    while a kind outside the chain (``cpp-conan``) is not and never
-    joins the uv workspace.
-    """
-    return any(record.name == "python" for record in kind_chain(kind_name))
-
-
-def requires_pyproject(kind_name: str) -> bool:
-    """Whether a package of this declared kind must carry a pyproject.
-
-    An unregistered kind answers False so discovery can finish and
-    the backend refusal can name the vocabulary; a missing file
-    would otherwise mask the real problem, the typo.
-    """
-    if kind_name not in _KINDS:
-        return False
-    return is_python_kind(kind_name)
-
-
 def record_for_template(template_kind: str) -> KindRecord | None:
     """The record whose template is *template_kind*; None when unmapped.
 

@@ -1411,21 +1411,20 @@ def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
 
     The files the run names, when it names any. Otherwise the whole
     tree, ``.``, when the run reaches every member the step judges;
-    else the reached python members' ``src`` and ``tests``
-    directories, the workspace's own tests when the run judges them,
-    and the files the step's claims give it in the reached native
-    members.
+    else the ``src`` and ``tests`` directories of the reached members
+    holding the runtime's language, the workspace's own tests when the
+    run judges them, and the files the step's claims give it in the
+    other reached members.
     """
-    from livery.workshop._kinds import is_python_kind
-    from livery.workshop._packages import package_paths
+    from livery.workshop._packages import holds_runtime_language, package_paths
 
     record = step_for(name)
     if ctx.files:
         return claimed_files(record, ctx)
     gated_members = judged_by(record, members(ctx))
     chosen_members = enabled(name, gated_members)
-    pythons = tuple(p for p in chosen_members if is_python_kind(p.kind))
-    natives = tuple(p for p in chosen_members if not is_python_kind(p.kind))
+    pythons = tuple(p for p in chosen_members if holds_runtime_language(p))
+    natives = tuple(p for p in chosen_members if not holds_runtime_language(p))
     unit = _workspace_unit(ctx)
 
     def holding(packages: tuple[Package, ...]) -> tuple[str, ...]:
@@ -1514,16 +1513,13 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered step of the test phase runs.
 
     A package by the extensions it holds. The workspace's own tests
-    are the root's suite, run when a test step names an extension the
-    root's kind stands for ([livery.workshop._tools.ROOT_KIND][]).
+    are the root's suite, run when a test step names the runtime's
+    language, which the root's own files hold whatever the members are.
     """
-    from livery.workshop._kinds import kind_stands_for
-    from livery.workshop._packages import WORKSPACE_TESTS
-    from livery.workshop._tools import ROOT_KIND
+    from livery.workshop._packages import RUNTIME_LANGUAGE, WORKSPACE_TESTS
 
     tests = [record for record in _STEPS.values() if record.phase == "test"]
-    root = set(kind_stands_for(ROOT_KIND))
-    workspace = any(root & set(record.extensions) for record in tests)
+    workspace = any(RUNTIME_LANGUAGE in record.extensions for record in tests)
 
     def runs(unit: Package) -> bool:
         if unit.path == WORKSPACE_TESTS:
