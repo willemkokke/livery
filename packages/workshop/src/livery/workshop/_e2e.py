@@ -584,6 +584,7 @@ def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str
 #: general form, and this name serves the Gitea-only callers.
 ALIAS_URL = "http://gitea:3000"
 
+
 @dataclass(frozen=True)
 class LoopMember:
     """One member of the loop: its directory and the seed tree it is born from.
