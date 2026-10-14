@@ -847,6 +847,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "requirements",
         "requirement-writers",
         "distributions",
+        "registry",
         "executables",
         "host-tools",
         "editor-extensions",
@@ -870,6 +871,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["job-built-members"].combine) == "livery.workshop._queries:merged"
     assert str(found["executables"].combine) == "livery.workshop._queries:owned"
+    assert found["registry"].combine == "agreed"
     # The base's are among every declared query, as the base declares them.
     declared = _queries.declared_queries()
     assert all(declared[name] == spec for name, spec in found.items())

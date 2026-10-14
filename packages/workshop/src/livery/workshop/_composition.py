@@ -150,6 +150,20 @@ def order(
     return tuple(done)
 
 
+def order_or_sorted(names: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
+    """*names* in composition order, alphabetical when the order has no start.
+
+    For a reader that answers while a cycle in the declared order
+    stands: the sync that lets a person remove the cycle still runs, and
+    ``layering.graph`` names it.
+    """
+    members = tuple(dict.fromkeys(names))
+    try:
+        return order(members, lookup)
+    except OrderCycle:
+        return tuple(sorted(members))
+
+
 def cycle_of(waiting: dict[str, set[str]]) -> tuple[str, ...]:
     """One cycle among *waiting*, each member before the next, the first alphabetical.
 

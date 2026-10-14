@@ -135,20 +135,53 @@ def test_a_missing_compiler_is_named_for_a_package_holding_cpp(
     assert "  c++: MISSING (a host compiler; " in capsys.readouterr().out
 
 
-def test_a_recipe_releases_a_conan_package_only_when_it_names_a_reference(
-    tmp_path: Path,
+def test_a_consumer_recipe_answers_no_distribution_and_no_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._queries import DISTRIBUTIONS, answer
+    from livery.footman import Failed
+    from livery.workshop import _registries
+    from livery.workshop._queries import DISTRIBUTIONS, REGISTRY, answer
+    from livery.workshop._registries import RegistryTarget
 
-    # A consumer's recipe, requirements alone, releases nothing.
-    consumer = _member(tmp_path / "consumer", ("cmake", "conan"))
+    def _no_target(root: Path, kind: str) -> RegistryTarget:
+        raise AssertionError(f"a {kind} target was resolved under {root}")
+
+    monkeypatch.setattr(_registries, "resolve_registry", _no_target)
+    # A consumer's recipe, requirements alone, releases nothing: conan
+    # answers neither question, and resolves no target for it.
+    consumer = _member(tmp_path / "packages" / "consumer", ("cmake", "conan"))
     (consumer.directory / "conanfile.py").write_text(
         'class C:\n    requires = ("acme-lib/[>=1.0.0]",)\n'
     )
     assert answer(consumer, DISTRIBUTIONS) == ()
-    # A recipe that declares its name and version releases the package.
-    listing = _member(tmp_path / "listing", ("cmake", "conan"))
+    assert not answer(consumer, REGISTRY)
+    # So the release train has nowhere to publish it, and says so.
+    with pytest.raises(Failed) as refused:
+        _lifecycle.registry(consumer)
+    assert str(refused.value) == (
+        "packages/consumer: its extensions (cmake, conan, cpp) answer no registry:"
+        " none of them releases a distribution of it, so the release train has"
+        " nowhere to publish it. List the extension that releases it, or set"
+        " [release] publish = false to version and tag it without an upload"
+    )
+
+
+def test_a_recipe_naming_a_reference_releases_its_package_to_the_conan_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._queries import DISTRIBUTIONS, answer
+
+    # The target the ladder resolves for conan, a folder here, which
+    # holds a saved cache of the package.
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    share = tmp_path / "share"
+    share.mkdir()
+    (share / "acme-lib-1.0.0.tgz").touch()
+    monkeypatch.setenv("CONAN_REMOTE_URL", str(share))
+    listing = _member(tmp_path / "packages" / "listing", ("cmake", "conan"))
     assert answer(listing, DISTRIBUTIONS) == (("conan", "acme-lib"),)
+    assert _lifecycle.ecosystem(listing) == "conan"
+    assert _lifecycle.registry(listing).versions("acme-lib") == ("1.0.0",)
 
 
 def test_a_consumer_recipe_answers_no_version_and_no_version_file(

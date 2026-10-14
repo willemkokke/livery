@@ -27,7 +27,7 @@ and releases it.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -53,9 +53,6 @@ from livery.workshop._categories import (
 from livery.workshop._categories import (
     WORKSPACE as WORKSPACE,
 )
-from livery.workshop._categories import (
-    register_categories,
-)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,22 +70,6 @@ class Stamper(Protocol):
 
     def homes(self) -> list[Path]:
         """Every file `stamp` may write, so a caller can snapshot and restore them."""
-        ...
-
-
-class SuiteRunner(Protocol):
-    """How a kind runs the test suites of several packages in one call."""
-
-    def __call__(
-        self,
-        *arguments: str,
-        packages: tuple[Package, ...],
-        root: Path,
-        selection: Mapping[str, tuple[str, ...]] | None = None,
-        point: str = "",
-        measured: bool = False,
-    ) -> None:
-        """Run *packages*' suites, metered when *measured*; a refusal is the verdict."""
         ...
 
 
@@ -197,17 +178,6 @@ class KindRecord:
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
-        examples: How the kind runs a package's documentation
-            examples, the files under ``docs/examples/``, given the
-            package, the workspace root, the named example files (empty
-            for all of them) and the arguments for its tool; None for a
-            kind that runs
-            none, which the examples step says by name. A child kind
-            takes the nearest ancestor's.
-        suites: How the kind runs the test suites of several packages
-            in one call ([livery.workshop.run_suites][]); None for
-            a kind that runs none that way. A child kind takes the
-            nearest ancestor's.
         abstract: Whether the record exists for the seed chain alone:
             a birth writes its seed tree over its parent's, it builds
             nothing, and a package's ``kind`` never names it. A
@@ -224,10 +194,6 @@ class KindRecord:
     parent: str = ""
     host_tools: tuple[str, ...] = ()
     artifact: str = "python"
-    examples: (
-        Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None
-    ) = None
-    suites: SuiteRunner | None = None
     abstract: bool = False
     stands_for: tuple[str, ...] = ()
 
@@ -351,59 +317,6 @@ def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     return tuple(sorted(tools))
 
 
-def kind_examples(
-    kind_name: str,
-) -> Callable[[Package, Path, tuple[str, ...], tuple[str, ...]], None] | None:
-    """The examples runner *kind_name* uses: its own, else its nearest ancestor's.
-
-    The runner takes the package, the workspace root, the example
-    files a run names (empty for all of them) and the arguments for its
-    tool. None for a kind that runs no examples.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.examples is not None:
-            return record.examples
-    return None
-
-
-def run_suites(
-    kind_name: str,
-    *arguments: str,
-    packages: tuple[Package, ...],
-    root: Path,
-    selection: Mapping[str, tuple[str, ...]] | None = None,
-    point: str = "",
-    measured: bool = False,
-) -> None:
-    """Run the test suites of *packages* in one call of *kind_name*'s runner.
-
-    The kind's own runner, else its nearest ancestor's. *arguments* go
-    to the runner unchanged. The call collects each package's own
-    tests and nothing else, the workspace's own among them when
-    [livery.workshop.workspace_suite][] is in *packages*.
-    *selection* names, per package path, the test files that stand for
-    the package's suite, and *point* selects that CI point's tests.
-    *measured* runs the suites metered, which the test extension asks
-    for while a listed extension judges what it measures; unmeasured,
-    the suites run with no meter.
-
-    Raises:
-        Failed: when the kind runs no suites, or when a suite fails.
-    """
-    for record in reversed(kind_chain(kind_name)):
-        if record.suites is not None:
-            record.suites(
-                *arguments,
-                packages=packages,
-                root=root,
-                selection=selection,
-                point=point,
-                measured=measured,
-            )
-            return
-    fail(f"kind {kind_name!r} runs no test suites")
-
-
 def kind_stands_for(kind_name: str) -> tuple[str, ...]:
     """The extensions *kind_name*'s packages are taken to hold while they list none.
 
@@ -439,18 +352,6 @@ def held_extensions(kind_name: str, listed: tuple[str, ...]) -> tuple[str, ...]:
     return package_set(listed, installed_declaration)
 
 
-def record_for_template(template_kind: str) -> KindRecord | None:
-    """The record whose template is *template_kind*; None when unmapped.
-
-    A template variant (``package-extension``) maps to no record
-    and the caller falls back to the python wiring.
-    """
-    for record in _KINDS.values():
-        if record.template == template_kind:
-            return record
-    return None
-
-
 def _register_builtin() -> None:
     from livery.extensions.python import _backend as _python
     from livery.workshop._backends import _cpp_conan
@@ -474,8 +375,6 @@ def _register_builtin() -> None:
             backend=_python,
             template="package-python",
             parent="base",
-            examples=_python.run_examples,
-            suites=_python.run_test,
             # A package that lists no extension is taken to hold the
             # python extension: its categories and steps are the same.
             stands_for=("python",),
@@ -515,36 +414,4 @@ def _register_builtin() -> None:
     )
 
 
-def _register_categories() -> None:
-    """The builtin category tables, one per kind that ships, and the root's."""
-    register_categories(
-        "base",
-        [
-            ("docs/**/*.md", "prose"),
-            ("docs/nav.toml", "nav"),
-            ("docs/assets/**", "asset"),
-            ("docs/examples/**/*.py", EXAMPLE),
-            ("docs/_generated/**", "generated"),
-            ("**", CONFIGURATION),
-        ],
-    )
-    # The workspace's own unit: its tests as the python kind reads
-    # them, and the files beside them that only the site or nobody
-    # reads.
-    register_categories(
-        WORKSPACE,
-        [
-            ("tests/**/test_*.py", TEST),
-            ("tests/**/*_test.py", TEST),
-            ("tests/**", TEST_SUPPORT),
-            ("notes/**", "notes"),
-            ("docs/**", "site"),
-            ("zensical.toml", "site"),
-            ("README.md", "readme"),
-            ("**", CONFIGURATION),
-        ],
-    )
-
-
 _register_builtin()
-_register_categories()

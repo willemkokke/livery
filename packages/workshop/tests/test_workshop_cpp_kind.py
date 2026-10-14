@@ -18,7 +18,6 @@ from livery.extensions.conan import _package as _conan
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     KindRecord,
-    record_for_template,
     register_kind,
     template_chain,
 )
@@ -726,9 +725,6 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    record = record_for_template("package-cpp-conan")
-    assert record is not None and record.name == "cpp-conan"
-    assert record_for_template("package-extension") is None
     # The build tools come from the [toolroom] tables of the extensions
     # the kind stands for, cmake's and conan's, and the measurer of a
     # build made with MSVC from cmake's [for.coverage] table; the steps

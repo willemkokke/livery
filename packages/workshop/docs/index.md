@@ -350,7 +350,11 @@ The release train stamps, builds, tests and publishes a package, and
 `fm release.verify` verifies a released version, through these phases
 when its extensions add steps to them, and through the package's kind
 otherwise. A phase whose steps provide nothing under the key the train
-reads back refuses, naming the phase and the key.
+reads back refuses, naming the phase and the key. The registry it
+publishes a package to is its extensions' answer: the one ecosystem
+their `distributions` answer names, and the probe of that registry
+their `registry` answer gives, which the train polls until an upload is
+served.
 
 An extension also answers queries, questions the base or another
 extension declares:
@@ -386,6 +390,7 @@ or the rule's answer over nothing. The base declares:
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
 | `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
+| `registry` | package | the registry the package releases to, as a probe of the versions it serves | one value every answer that is not empty agrees on |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
 | `executables` | package | the executables `fm run` starts | the union; a name two extensions answer refuses |
 | `host-tools` | package | what the host must provide and no store installs, such as a C compiler; `fm doctor` and `fm env.check` name each one that does not resolve | the union |
@@ -447,12 +452,17 @@ The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its
 **category** says what the file is to its package, `source`, `test`,
 `test-support`, `configuration`, and what an extension adds (`prose`,
-`example`, `asset`, `nav`); a kind or an extension registers a pattern
-table for a kind, `register_categories("python", [("src/**",
-"source"), ...])` in `livery.workshop._categories`, a derived kind
-inherits its parents' tables, the most specific pattern wins, and two
-patterns of one specificity claiming one path refuse naming both. A
-package reassigns its own paths in its contract, on this axis alone:
+`example`, `asset`, `nav`). A package-level extension declares a
+pattern table under `[categories]` in its `extension.toml`, and a
+package takes the tables of the extensions it holds over the base's
+own table, which names the documentation's paths and calls the rest
+configuration. The most specific pattern wins. Between patterns of
+one specificity in two tables, the extension later in composition
+order wins: an extension wins over the extensions it requires, and of
+two that do not require one another the later in alphabetical order
+wins. The base's table comes last. Two patterns of one table at one
+specificity that claim one path refuse naming both. A package
+reassigns its own paths in its contract, on this axis alone:
 
 ```toml
 [categories]
@@ -633,8 +643,8 @@ each naming its clause, and an extension's own suite runs every clause on
 its subject. The clauses so far: a concrete kind's backend takes every
 call of the backend protocol; a per-package configuration file has one
 owner among the steps whose fragments name an extension; a path's
-category is the most specific rule's, the nearer kind winning a tie
-between kinds and two rules of one kind never tying; every step a
+category is the most specific rule's, the nearer table winning a tie
+between tables and two rules of one table never tying; every step a
 step runs `after` is registered, and following them never leads back
 to it; an extension's `extension.toml` holds only declared keys, each of
 its type, and every reference in it names a function its module
@@ -747,8 +757,9 @@ followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
 pytest extension's `examples.pytest` step runs each file as one test
-through the kind's runner, pytest for python, from the workspace root;
-a failure reports the example's own file and line. An example is
+through the function the python extension answers
+`python.examples.runner` with, which starts pytest from the workspace
+root; a failure reports the example's own file and line. An example is
 never a test module: pytest's own collector leaves it alone, named or
 not, so a `test_*` function in it is code a reader sees and never a
 test the workspace runs. A run over named files runs the named
@@ -788,23 +799,25 @@ file is for, not its language, so ruff claims a native package's
 configuration and reaches its `conanfile.py` alone, which a scoped
 gate hands it by name. `fm explain` prints the steps whose claims
 reach a file, and the per-file ignores in `ruff.toml` render from the
-claims over the present kinds' tables, so the docstring rules stop at
-the tests of every kind without a table typed by hand.
+claims over the tables of the extensions the packages hold, so the
+docstring rules stop at the tests of every package without a table
+typed by hand.
 
 An extension's prose, its voice, its standards, its rules, is a set of
 fragments in sections the base orders: identity, voice, standards,
-rules, workflow, gate, verbs, kinds, tools. A fragment is a file in the
-extension's `content/fragments/` named
-`<section>.[<kind>.]<topic>[.<audience>].md`, or a registration with a
-render that answers each audience from the registries; a kind in the
-name delivers it only while a package of that kind, or one deriving
-from it, is present, and two fragments of one name refuse at sync
-naming both files. `fm sync` delivers the agent's set flat under
-`.workshop/fragments/`, a shipped file byte for byte and an edited copy
-kept and named, and writes the entry file from it in section order,
-the repository's own `fragments/` last. The gate, verbs, kinds and
-tools sections render from the registries, so no fragment names a
-checker by hand.
+rules, workflow, gate, verbs, compositions, tools. A fragment is a
+file in the extension's `content/fragments/` named
+`<section>.<topic>[.<audience>].md`, or a registration with a render
+that answers each audience from the registries, and two fragments of
+one name refuse at sync naming both files. `fm sync` delivers the
+agent's set flat under `.workshop/fragments/`, a shipped file byte for
+byte and an edited copy kept and named, and writes the entry file from
+it in section order, the repository's own `fragments/` last. The gate,
+verbs, compositions and tools sections render from the registries, so
+no fragment names a checker by hand. The compositions section names
+each set of package-level extensions the packages hold, by the
+shortest list that composes it, with its packages and the gate phases
+that judge them.
 
 Each rule over the sources is a step of the layering phase: the
 base's two (the base importing no extension, and the sibling

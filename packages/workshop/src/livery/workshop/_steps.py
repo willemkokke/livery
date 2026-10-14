@@ -11,11 +11,12 @@ rewriters; a listed extension's records register at mount, after
 them and in list order, and re-registering a name replaces the
 record.
 
-A step names the kinds it judges, and a package of another kind
-skips it by name: a C++ member is formatted over its recipe by a
-python formatter and over its sources by clang-format because both
-steps name its kind. The phases the registry knows are the ones its
-steps name, so they are what the listed extensions register.
+A step names the package-level extensions it judges, and a package
+holding none of them skips it by name: a C++ member is formatted over
+its recipe by a python formatter and over its sources by clang-format
+because each step names an extension it holds. The phases the
+registry knows are the ones its steps name, so they are what the
+listed extensions register.
 
 A step is named by its phase and its name in the phase,
 ``test.pytest``. The phase is a declared one
@@ -52,6 +53,7 @@ from livery.workshop import _fragments
 from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
+    from livery.workshop._categories import CategoryRule
     from livery.workshop._influence import Inputs, Selection
     from livery.workshop._packages import Package
     from livery.workshop._phases import PhaseContext
@@ -174,9 +176,9 @@ class StepRecord:
         extension: The extension that registered the step, named when a
             narrowing is printed.
         tools: The tools the step runs, as the tool profile names
-            them, ``("clang_format",)``; each reaches the profile for every kind
-            the step judges, naming ``step <name>`` as its site, and
-            leaves it when the step is unregistered.
+            them, ``("clang_format",)``; each reaches the profile while a
+            package the step judges exists, naming ``step <name>`` as its
+            site, and leaves it when the step is unregistered.
         options: The options a package may set under
             ``[phases.<phase>.<step>]``; ``enabled`` is every step's.
         fragments: The configuration the render manages for the
@@ -549,10 +551,10 @@ def _reaches(claim: Claim, relative: str) -> bool:
 def _admits(claim: Claim, pattern: str) -> bool:
     """Whether a category pattern can name a file the claim reads.
 
-    A pattern ending in a literal suffix outside the claim's, a
-    native kind's ``tests/**/*.cpp`` against a python claim, renders
-    no ignore; a directory pattern renders as it is, since the tool
-    reads only its own files under it.
+    A pattern ending in a literal suffix outside the claim's, cpp's
+    ``tests/**/*.cpp`` against a python claim, renders no ignore; a
+    directory pattern renders as it is, since the tool reads only its
+    own files under it.
     """
     return not PurePosixPath(pattern).suffix or _reaches(claim, pattern)
 
@@ -604,35 +606,36 @@ def claimants(package: Package, path: str) -> tuple[str, ...]:
     return tuple(sorted(names))
 
 
-def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]]:
+def per_file_ignores(
+    held: Iterable[Iterable[str]],
+) -> list[tuple[str, tuple[str, ...]]]:
     """The per-file ignores the claims render, pattern to rule codes, sorted.
 
-    For each present kind and the workspace's own unit, every claim
-    that withholds rules on a category maps to that category's
-    patterns in the kind's table, a package's under ``packages/**/``,
-    which reaches a member in a group directory too, and the root's as
-    they are; two steps claiming one category under different rules
-    land in one entry with both sets.
+    *held* is each set of package-level extensions a present package
+    holds. For each set, every claim of a step that judges a package
+    holding it and withholds rules on a category maps to that
+    category's patterns in the tables that answer for such a package,
+    each under ``packages/**/``, which reaches a member in a group
+    directory too. For the workspace's own unit, every step's claims map
+    to its table's patterns as they are. Two steps claiming one category
+    under different rules land in one entry with both sets.
     """
-    from livery.workshop._categories import WORKSPACE, category_rules
-    from livery.workshop._kinds import kind_names, kind_stands_for
+    from livery.workshop._categories import category_rules, workspace_rules
 
     table: dict[str, set[str]] = {}
-    units = [(kind, "packages/**/") for kind in kinds if kind in kind_names()]
-    units.append((WORKSPACE, ""))
-    for kind, prefix in units:
-        held = set(kind_stands_for(kind))
+    units: list[tuple[frozenset[str] | None, tuple[CategoryRule, ...], str]] = []
+    for listed in held:
+        names = tuple(listed)
+        units.append((frozenset(names), category_rules(names), "packages/**/"))
+    units.append((None, workspace_rules(), ""))
+    for holding, rules, prefix in units:
         for record in _STEPS.values():
-            if (
-                kind != WORKSPACE
-                and record.extensions
-                and not held & set(record.extensions)
-            ):
+            if holding is not None and not judges_extensions(record, holding):
                 continue
             for claim in record.claims:
                 if not claim.ignore:
                     continue
-                for rule in category_rules(kind):
+                for rule in rules:
                     if rule.category != claim.category or rule.pattern == "**":
                         continue
                     if not _admits(claim, rule.pattern):
@@ -1198,11 +1201,11 @@ def catalogue(ctx: PhaseContext) -> dict[str, tuple[tuple[str, str], ...]] | Non
 
     Listed once per walk: tracked files and untracked ones git does not
     ignore, as the tools see them, or the run's named files alone. A
-    package's files are relative to it
-    and categorised by its kind's table; a file under no package
-    belongs to [livery.workshop._steps.ROOT_UNIT], relative to the
-    root and categorised by the workspace's table. None when the root
-    is not a git checkout, and then every step that applies runs.
+    package's files are relative to it and categorised by the tables of
+    the extensions it holds; a file under no package belongs to
+    [livery.workshop._steps.ROOT_UNIT], relative to the root and
+    categorised by the workspace's table. None when the root is not a
+    git checkout, and then every step that applies runs.
     """
     from livery.workshop._categories import category_of
     from livery.workshop._packages import WORKSPACE_TESTS
@@ -1486,11 +1489,11 @@ def scoped_files(
 def scoped_packages(ctx: PhaseContext, name: str) -> tuple[Package, ...]:
     """The members the package-narrowing step *name* judges in this run.
 
-    The members of its kinds, in a scoped run those of the subset,
-    less each one that turned the step off in its contract. Each
-    skip is printed, so a narrowed gate names what it left out. A run
-    over named files keeps the members holding a named file the
-    step claims. The workspace's own tests are not a member.
+    The members holding an extension it names, in a scoped run those
+    of the subset, less each one that turned the step off in its
+    contract. Each skip is printed, so a narrowed gate names what it
+    left out. A run over named files keeps the members holding a named
+    file the step claims. The workspace's own tests are not a member.
     """
     record = step_for(name)
     chosen = enabled(name, judged_by(record, members(ctx)))

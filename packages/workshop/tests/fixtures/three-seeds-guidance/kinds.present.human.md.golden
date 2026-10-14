@@ -1,6 +1,0 @@
-# The kinds present
-
-| kind | derives from | packages | gate phases |
-| --- | --- | --- | --- |
-| cpp-conan | nothing | packages/lib | build, format, lint, test |
-| python | nothing | packages/echo, packages/native | examples, format, lint, test, typecheck |

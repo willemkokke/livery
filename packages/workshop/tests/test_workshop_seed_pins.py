@@ -393,6 +393,7 @@ ROOT_IGNORES = (
 def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     tmp_path: Path,
 ) -> None:
+    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import (
         RUNTIME_LANGUAGE,
         holds_runtime_language,
@@ -446,7 +447,7 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     )
     root_ignores = tuple(
         (pattern, codes)
-        for pattern, codes in per_file_ignores(("cpp-conan",))
+        for pattern, codes in per_file_ignores([extension_set(lib)])
         if not pattern.startswith("packages/")
     )
     assert root_ignores == ROOT_IGNORES
@@ -873,17 +874,21 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
 # The guidance and the categories.
 
 
-def test_the_kinds_present_guidance_for_the_three_seeds(tmp_path: Path) -> None:
+def test_the_compositions_present_guidance_for_the_three_seeds(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._prose import AGENT, HUMAN, guidance
 
     root = _workspace(tmp_path / "acme", STACK)
     _born(root, *THREE)
     _mounted(root)
     (fragment,) = [
-        prose for prose in guidance(root, AGENT) if prose.name == "kinds.present.md"
+        prose
+        for prose in guidance(root, AGENT)
+        if prose.name == "compositions.present.md"
     ]
     rendered = {
-        f"kinds.present.{audience}.md": fragment.text(root, audience)
+        f"compositions.present.{audience}.md": fragment.text(root, audience)
         for audience in (AGENT, HUMAN)
     }
     match(
@@ -892,7 +897,7 @@ def test_the_kinds_present_guidance_for_the_three_seeds(tmp_path: Path) -> None:
 
 
 #: What each file a nanobind member is born with is to it, and the
-#: extension or kind whose rule says so.
+#: extension whose rule says so.
 NANOBIND_CATEGORIES = {
     ".gitignore": ("configuration", "livery.workshop"),
     "CMakeLists.txt": ("configuration", "livery.workshop"),
@@ -903,11 +908,12 @@ NANOBIND_CATEGORIES = {
     "docs/index.md": ("prose", "livery.workshop"),
     "docs/nav.toml": ("nav", "livery.workshop"),
     "pyproject.toml": ("configuration", "livery.workshop"),
-    # cpp's table is nearer than python's, and both claim src/**.
-    "src/acme/native/__init__.py": ("source", "cpp"),
-    "src/acme/native/_native.cpp": ("source", "cpp"),
-    "src/acme/native/_native.pyi": ("source", "cpp"),
-    "src/acme/native/py.typed": ("source", "cpp"),
+    # Both python and cpp claim src/**, and python is later than cpp in
+    # the set's composition order, so its rule answers for every file there.
+    "src/acme/native/__init__.py": ("source", "python"),
+    "src/acme/native/_native.cpp": ("source", "python"),
+    "src/acme/native/_native.pyi": ("source", "python"),
+    "src/acme/native/py.typed": ("source", "python"),
     # python's test pattern is more specific than cpp's tests/**.
     "tests/test_native_package.py": ("test", "python"),
     "workshop.toml": ("configuration", "livery.workshop"),

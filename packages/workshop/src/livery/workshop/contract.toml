@@ -297,7 +297,7 @@ doc = "the dotted Python namespace the members import under, which starts each n
 
 [contract.package.categories]
 types = ["table"]
-doc = "categories the package gives its own paths, which win over its kind's rules"
+doc = "categories the package gives its own paths, which win over its extensions' rules"
 
 [contract.package.categories."*"]
 types = ["strs"]
@@ -1055,8 +1055,18 @@ combine = "livery.workshop._queries:merged"
 combine = "union"
 
 # The distributions a package releases, each as its ecosystem and name.
+# The release train publishes a package to the registry of the one
+# ecosystem its distributions name.
 [queries.distributions]
 combine = "union"
+
+# The registry a package releases to, as a probe of the versions it
+# serves: an object whose versions(name) answers them, which the release
+# train polls until an upload is served. The extension that releases the
+# package's distribution answers; an empty answer is left out, and two
+# answers that differ refuse.
+[queries.registry]
+combine = "agreed"
 
 # The executables fm run may start, by name; a name two extensions
 # answer refuses.

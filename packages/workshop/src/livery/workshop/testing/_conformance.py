@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from livery.workshop import _steps
 from livery.workshop._categories import (
+    BASE_TABLE,
     CategoryError,
     CategoryRule,
     category_of,
@@ -23,7 +24,7 @@ from livery.workshop._categories import (
     matches,
 )
 from livery.workshop._fragments import Fragment, package_fragment
-from livery.workshop._kinds import Backend, KindRecord, all_kinds, kind_chain
+from livery.workshop._kinds import Backend, KindRecord, all_kinds, extension_set
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -50,8 +51,8 @@ class Subject:
         extension: The extension's package, ``acme.extension``: where its
             ``extension.toml`` sits, which the kit reads as the mount
             does.
-        kinds: The kinds the extension registers, and the kinds whose
-            category tables it extends.
+        kinds: The kinds the extension registers; the kit judges a
+            probe package of each, which holds what the kind stands for.
         steps: The steps the extension registers.
     """
 
@@ -277,21 +278,29 @@ def _representative(pattern: str) -> str:
     return "/".join(parts)
 
 
-def _documented_answer(kind: str, path: str) -> list[CategoryRule]:
+def _documented_answer(held: tuple[str, ...], path: str) -> list[CategoryRule]:
     """The rule the documented order picks for *path*, or the rules that tie.
 
-    The most specific pattern wins; between kinds of equal specificity
-    the nearer kind wins; two rules of one kind and one specificity
-    claiming *path* for different categories or extensions tie.
+    *held* is the package's set of extensions. The most specific pattern
+    wins; between tables of equal specificity the nearer table wins, the
+    extension later in composition order first and the base's table
+    last; two rules of one table and one specificity claiming *path* for
+    different categories or extensions tie.
     """
-    nearest_first = [record.name for record in reversed(kind_chain(kind))]
-    matching = [rule for rule in category_rules(kind) if matches(rule.pattern, path)]
+    from livery.workshop._composition import order_or_sorted
+    from livery.workshop._extensions import installed_declaration
+
+    nearest_first = [
+        *reversed(order_or_sorted(held, installed_declaration)),
+        BASE_TABLE,
+    ]
+    matching = [rule for rule in category_rules(held) if matches(rule.pattern, path)]
     if not matching:
         return []
     top = max(rule.specificity for rule in matching)
     best = [rule for rule in matching if rule.specificity == top]
-    depth = min(nearest_first.index(rule.kind) for rule in best)
-    at_nearest = [rule for rule in best if nearest_first.index(rule.kind) == depth]
+    depth = min(nearest_first.index(rule.table) for rule in best)
+    at_nearest = [rule for rule in best if nearest_first.index(rule.table) == depth]
     first = at_nearest[0]
     if any(
         rule.category != first.category or rule.extension != first.extension
@@ -305,12 +314,13 @@ def _category_table(subject: Subject) -> list[Violation]:
     violations: list[Violation] = []
     for kind in subject.kinds:
         probe = Package(Path("."), "packages/probe", "probe", kind.name, ())
-        for rule in category_rules(kind.name):
+        held = extension_set(probe)
+        for rule in category_rules(held):
             path = _representative(rule.pattern)
             if not matches(rule.pattern, path):
                 continue
             where = f"kind {kind.name} {path}"
-            wanted = _documented_answer(kind.name, path)
+            wanted = _documented_answer(held, path)
             if len(wanted) > 1:
                 first, second = wanted[0], wanted[1]
                 violations.append(
@@ -319,7 +329,7 @@ def _category_table(subject: Subject) -> list[Violation]:
                         where,
                         f"{first.pattern!r} ({first.category}, {first.extension}) and"
                         f" {second.pattern!r} ({second.category}, {second.extension})"
-                        " claim it at one specificity for one kind; one of them"
+                        " claim it at one specificity in one table; one of them"
                         " names the file more closely",
                     )
                 )
@@ -331,22 +341,25 @@ def _category_table(subject: Subject) -> list[Violation]:
                     Violation(
                         CATEGORY_TABLE,
                         where,
-                        f"refuses ({error}) where the nearer kind's rule decides",
+                        f"refuses ({error}) where the nearer table's rule decides",
                     )
                 )
                 continue
             rule_wanted = wanted[0]
-            if (found.name, found.pattern) != (
+            if (found.name, found.pattern, found.supplier) != (
                 rule_wanted.category,
                 rule_wanted.pattern,
+                rule_wanted.extension,
             ):
                 violations.append(
                     Violation(
                         CATEGORY_TABLE,
                         where,
-                        f"answers {found.name} from {found.pattern!r}; the most"
-                        f" specific rule of the nearest kind, {rule_wanted.kind},"
-                        f" says {rule_wanted.category} from {rule_wanted.pattern!r}",
+                        f"answers {found.name} from {found.pattern!r}"
+                        f" ({found.supplier}); the most specific rule of the"
+                        f" nearest table, {rule_wanted.table}, says"
+                        f" {rule_wanted.category} from {rule_wanted.pattern!r}"
+                        f" ({rule_wanted.extension})",
                     )
                 )
     return list(dict.fromkeys(violations))
@@ -779,27 +792,21 @@ def _contract_keys_documented(subject: Subject) -> list[Violation]:
 # An extension's configuration files, through the workshop's own render.
 
 
-def _probe_answers(kind: str = "") -> dict[str, Any]:
+def _probe_answers() -> dict[str, Any]:
     """The answers the kit renders an extension's fragments with.
 
     A workspace of one python member and one native member, so a
-    fragment's loops over either run, rendering *kind*'s package files.
+    fragment's loops over either run.
     """
     return {
         "packages": [
-            {
-                "dir": "probe",
-                "name": "acme-probe",
-                "dev": "acme-probe",
-                "kind": "package-python",
-            },
-            {"dir": "native", "name": "acme-native", "kind": "package-cpp-conan"},
+            {"dir": "probe", "name": "acme-probe", "dev": "acme-probe"},
+            {"dir": "native", "name": "acme-native"},
         ],
         "python_floor": "3.11",
         "namespace_package": "acme",
         "runner_prog": "fm",
         "project_name": "acme",
-        "kind": kind,
     }
 
 
@@ -1138,8 +1145,10 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         CATEGORY_TABLE,
-        "A path's category is the most specific rule's, the nearer kind"
-        " winning a tie between kinds, and two rules of one kind never tie.",
+        "A path's category is the most specific rule's, the nearer table"
+        " winning a tie between tables, the extension later in composition"
+        " order first and the base's table last, and two rules of one table"
+        " never tie.",
         _category_table,
     ),
     Clause(

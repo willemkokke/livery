@@ -1,0 +1,7 @@
+# The compositions present
+
+| composition | extensions | packages | gate phases |
+| --- | --- | --- | --- |
+| cmake+conan | cmake, cpp, conan | packages/lib | build, format, lint, test |
+| nanobind | cpp, conan, python, nanobind | packages/native | examples, format, lint, test, typecheck |
+| python | python | packages/echo | examples, format, lint, test, typecheck |

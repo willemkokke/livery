@@ -8,6 +8,7 @@ import pytest
 
 from livery import git
 from livery.workshop._categories import (
+    BASE_TABLE,
     WORKSPACE,
     CategoryError,
     ChannelRule,
@@ -45,12 +46,16 @@ def _member(root: Path, contract: str) -> Path:
     return member
 
 
+#: A package-level extension's declaration, its categories to follow.
+PACKAGE_LEVEL = '[extension]\nlevels = ["package"]\n'
+
+
 @pytest.fixture
 def brand_extension():
     yield
-    for kind in ("python", "base"):
-        unregister_categories(kind, extension="acme.brand")
-        unregister_categories(kind, extension="acme.other")
+    for table in (BASE_TABLE, WORKSPACE):
+        unregister_categories(table, extension="acme.brand")
+        unregister_categories(table, extension="acme.other")
     unregister_channels(extension="acme.brand")
 
 
@@ -61,14 +66,23 @@ def test_two_rules_of_one_specificity_claiming_one_path_refuse_naming_both(
     brand_extension,
 ) -> None:
     register_categories(
-        "python", [("src/**/*_vendor.py", "vendored")], extension="acme.brand"
+        BASE_TABLE, [("src/**/*_vendor.py", "vendored")], extension="acme.brand"
     )
     register_categories(
-        "python", [("src/**/*_vendor.py", "generated")], extension="acme.other"
+        BASE_TABLE, [("src/**/*_vendor.py", "generated")], extension="acme.other"
     )
     with pytest.raises(CategoryError, match="two rules of one specificity") as caught:
         category_of(_package(), "src/livery/x/lib_vendor.py")
     assert "acme.brand" in str(caught.value) and "acme.other" in str(caught.value)
+
+
+def test_a_rule_for_a_table_no_package_reads_refuses_naming_the_tables() -> None:
+    with pytest.raises(
+        CategoryError,
+        match=r"acme\.brand registers category rules into 'python', which no"
+        r" package reads: the tables are base, workspace",
+    ):
+        register_categories("python", [("src/**", "vendored")], extension="acme.brand")
 
 
 def test_a_categories_value_off_the_shape_refuses_naming_it(tmp_path: Path) -> None:
@@ -122,6 +136,53 @@ def test_two_channel_rules_of_one_rank_refuse_naming_both(
         channel_of(tmp_path, Path("anything.txt"), emitted=frozenset())
 
 
+# The fallbacks.
+
+
+def test_a_package_whose_extensions_declare_no_categories_takes_the_base_s_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(tmp_path, monkeypatch, lua=PACKAGE_LEVEL)
+    # The package's kind stands for python, and it lists an extension
+    # that declares no categories: python's table no longer answers.
+    package = replace(_package(), extensions=("acme.lua",))
+
+    def found(package: Package, path: str) -> tuple[str, str]:
+        category = category_of(package, path)
+        return category.name, category.supplier
+
+    assert found(package, "src/acme/x.py") == ("configuration", "livery.workshop")
+    assert found(package, "tests/test_x.py") == ("configuration", "livery.workshop")
+    assert found(package, "docs/index.md") == ("prose", "livery.workshop")
+    # Listing nothing, it holds what its kind stands for.
+    assert found(_package(), "src/acme/x.py") == ("source", "python")
+
+
+def test_a_set_whose_declared_order_has_no_start_reads_its_tables_alphabetically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_package_extensions
+
+    # Each requires the other, which layering.graph names; the categories
+    # still answer, so the sync that lets a person remove the cycle runs.
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        a=PACKAGE_LEVEL
+        + 'requires = ["acme.b"]\n\n[categories]\ngenerated = ["gen/**"]\n',
+        b=PACKAGE_LEVEL
+        + 'requires = ["acme.a"]\n\n[categories]\nsource = ["gen/**"]\n',
+    )
+    found = category_of(replace(_package(), extensions=("acme.a",)), "gen/a")
+    assert (found.name, found.supplier) == ("source", "acme.b")
+
+
 # Then what the registries answer, and who supplied it.
 
 
@@ -129,14 +190,14 @@ def test_a_extensions_rule_answers_with_its_name_and_the_more_specific_wins(
     brand_extension,
 ) -> None:
     register_categories(
-        "python", [("src/livery/x/_vendor/**", "vendored")], extension="acme.brand"
+        BASE_TABLE, [("src/livery/x/_vendor/**", "vendored")], extension="acme.brand"
     )
     found = category_of(_package(), "src/livery/x/_vendor/lib.py")
     assert (found.name, found.supplier) == ("vendored", "acme.brand")
     assert category_of(_package(), "src/livery/x/mod.py").name == "source"
 
 
-def test_the_package_exception_wins_over_the_kinds_rule() -> None:
+def test_the_package_exception_wins_over_its_extensions_rules() -> None:
     package = _package(categories=(("vendored", ("docs/assets/vendor/**",)),))
     found = category_of(package, "docs/assets/vendor/codemirror.js")
     assert (found.name, found.supplier) == ("vendored", "the package")
@@ -162,7 +223,8 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
     found = category_of(package, "lua/init.lua")
     assert (found.name, found.supplier) == ("source", "acme.lua")
     assert category_of(package, "spec/init_spec.lua").name == "test"
-    # The base kind's rules still answer; the python kind's no longer do.
+    # The base's table still answers; python's, which the package does
+    # not hold, does not.
     assert category_of(package, "docs/index.md").name == "prose"
     assert category_of(package, "src/acme/x.py").name == "configuration"
     # A package's own table wins over its extensions'.
@@ -170,17 +232,57 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
     assert category_of(own, "lua/vendor/json.lua").name == "vendored"
 
 
-def test_a_package_listing_nanobind_takes_the_tables_of_its_set() -> None:
+def test_a_package_takes_the_table_of_each_extension_it_holds() -> None:
     from dataclasses import replace
 
-    # nanobind requires python and cpp, whose tables answer with the base's.
+    # A nanobind package lists nanobind, which requires python, cpp and
+    # conan.
     package = replace(_package(), extensions=("nanobind",))
     assert category_of(package, "src/acme/ext.cpp").name == "source"
+    assert category_of(package, "include/acme/ext.hpp").supplier == "cpp"
+    assert category_of(package, "tests/test_ext.cpp").supplier == "cpp"
     assert category_of(package, "tests/test_ext.py").name == "test"
     assert category_of(package, "docs/examples/first.py").name == "example"
     assert category_of(package, "docs/index.md").name == "prose"
     assert category_of(package, "docs/nav.toml").name == "nav"
     assert category_of(package, "docs/_generated/api.md").name == "generated"
+
+
+def test_between_two_tables_the_extension_later_in_composition_order_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, brand_extension
+) -> None:
+    from dataclasses import replace
+
+    from workshop_extension_fakes import fake_package_extensions
+
+    def declares(category: str, requires: str = "") -> str:
+        return (
+            PACKAGE_LEVEL
+            + (f'requires = ["{requires}"]\n' if requires else "")
+            + f'\n[categories]\n{category} = ["gen/**"]\n'
+        )
+
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        early=declares("generated"),
+        late=declares("source"),
+        app=declares("source", requires="acme.lib"),
+        lib=declares("generated"),
+    )
+    # The base's table comes last, whatever it claims at one specificity.
+    register_categories(BASE_TABLE, [("gen/**", "asset")], extension="acme.brand")
+
+    def found(*extensions: str) -> tuple[str, str]:
+        category = category_of(replace(_package(), extensions=extensions), "gen/a")
+        return category.name, category.supplier
+
+    # Of two that do not require one another, the later alphabetically wins.
+    assert found("acme.early", "acme.late") == ("source", "acme.late")
+    assert found("acme.late", "acme.early") == ("source", "acme.late")
+    # An extension comes after the one it requires, so app wins over lib.
+    assert found("acme.app") == ("source", "acme.app")
+    assert found("acme.lib") == ("generated", "acme.lib")
 
 
 def test_the_workspace_unit_answers_for_the_roots_own_files(tmp_path: Path) -> None:

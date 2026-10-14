@@ -63,3 +63,20 @@ def distributions(package: Package) -> tuple[tuple[str, str], ...]:
     if not _package.names_a_reference(package):
         return ()
     return ((ECOSYSTEM, package.name),)
+
+
+def registry(package: Package) -> _package.ConanRegistry | None:
+    """The conan target the recipe's package goes to, as a probe of its versions.
+
+    The target is the one the registry ladder resolves for conan in the
+    package's workspace ([livery.workshop.registry][]): a conan remote,
+    a folder, or the forge's releases. A consumer's recipe releases
+    nothing, so it answers None.
+    """
+    if not _package.names_a_reference(package):
+        return None
+    from livery.workshop import registry as resolved
+    from livery.workshop._packages import root_of
+
+    root = root_of(package)
+    return _package.ConanRegistry(resolved(root, ECOSYSTEM), root=root)

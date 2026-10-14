@@ -251,6 +251,100 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return root
 
 
+def _lists(root: Path, member: str, extensions: str) -> None:
+    """Make ``packages/<member>``'s contract list *extensions*, a TOML list."""
+    contract = root / "packages" / member / "workshop.toml"
+    contract.write_text(f"{contract.read_text()}extensions = {extensions}\n")
+
+
+def _handed(
+    monkeypatch: pytest.MonkeyPatch, ledger: _Ledger
+) -> list[tuple[str, str, str]]:
+    """Stand in for each member's build and upload; each upload's member and target.
+
+    Each upload is served by *ledger* at once.
+    """
+    from livery.workshop import _lifecycle
+
+    handed: list[tuple[str, str, str]] = []
+
+    def _build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
+        return package.directory / "dist"
+
+    def _upload(
+        package: Package, _root: Path, *, version: str, target: RegistryTarget
+    ) -> bool:
+        handed.append((package.name, target.kind, target.url))
+        ledger.serve(package.name, version)
+        return True
+
+    monkeypatch.setattr(_lifecycle, "build", _build)
+    monkeypatch.setattr(_lifecycle, "publish", _upload)
+    return handed
+
+
+def test_a_member_whose_extensions_answer_no_registry_refuses_the_wave_naming_it(
+    cross_train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A library listing cmake alone releases nothing, so it has no registry.
+
+    The wave refuses before anything uploads or any tag is cut, and the
+    extension released beside it stays unpublished too.
+    """
+    root = cross_train
+    _lists(root, "geometry", '["cmake"]')
+    ledger = _Ledger()
+    handed = _handed(monkeypatch, ledger)
+    with pytest.raises(Failed) as refused:
+        publish_release(
+            root,
+            lambda _package: ledger,
+            ref=git.head_sha(root),
+            probe_timeout=5,
+            probe_poll=0.01,
+        )
+    assert str(refused.value) == (
+        "packages/geometry: its extensions (cmake) answer no registry: none of"
+        " them releases a distribution of it, so the release train has nowhere"
+        " to publish it. List the extension that releases it, or set [release]"
+        " publish = false to version and tag it without an upload"
+    )
+    assert handed == []
+    assert not [tag for tag in git.tags(root) if tag.startswith("packages/")]
+
+
+def test_the_wave_resolves_each_member_s_target_from_its_distributions(
+    cross_train, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Conan's target for the library that lists conan, python's for the extension.
+
+    The extension lists nothing, so it is asked as its kind stands for:
+    python releases its wheel, and its consumer's recipe releases
+    nothing.
+    """
+    root = cross_train
+    _lists(root, "geometry", '["cmake", "conan"]')
+    ledger = _Ledger()
+    handed = _handed(monkeypatch, ledger)
+    receipts = publish_release(
+        root,
+        lambda _package: ledger,
+        ref=git.head_sha(root),
+        index_url="https://idx.example/",
+        token="t",
+        probe_timeout=5,
+        probe_poll=0.01,
+    )
+    assert handed == [
+        ("acme-geometry", "conan", str(tmp_path / "share")),
+        ("acme-ext", "python", "https://idx.example/"),
+    ]
+    assert [receipt.tag for receipt in receipts] == [
+        "packages/geometry/v0.3.0",
+        "packages/ext/v0.3.0",
+    ]
+
+
 def test_the_cross_kind_wave_orders_and_dispatches(
     cross_train, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

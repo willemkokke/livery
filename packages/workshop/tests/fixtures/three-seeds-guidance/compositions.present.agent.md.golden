@@ -1,0 +1,7 @@
+# The compositions present
+
+The sets of package-level extensions the packages hold, each named by the shortest list that composes it, with its packages and the gate phases that judge them:
+
+- cmake+conan (packages/lib): holds cmake, cpp, conan; gate phases build, format, lint, test
+- nanobind (packages/native): holds cpp, conan, python, nanobind; gate phases examples, format, lint, test, typecheck
+- python (packages/echo): holds python; gate phases examples, format, lint, test, typecheck

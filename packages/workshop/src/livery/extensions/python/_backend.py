@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import livery.footman as footman
@@ -604,13 +604,12 @@ def _extra_siblings(package: Package) -> tuple[Neighbours, frozenset[str]]:
     longest member prefix it matches is one of their roots. Empty for a
     package that declares no extra, which then reads no other member.
     """
-    from livery.workshop._packages import discover_packages, neighbours
+    from livery.workshop._packages import discover_packages, neighbours, root_of
 
     extras = _extra_distributions(package)
     if not extras:
         return Neighbours(owners={}, by_path={}), frozenset()
-    root = package.directory.parents[len(PurePosixPath(package.path).parts) - 1]
-    around = neighbours(discover_packages(root))
+    around = neighbours(discover_packages(root_of(package)))
     named = frozenset(
         path
         for path, member in around.by_path.items()

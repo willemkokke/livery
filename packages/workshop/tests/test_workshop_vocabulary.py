@@ -63,26 +63,21 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
 ALLOWANCE: dict[tuple[str, str], int] = {
     ("_ci_generate", "conanfile.py"): 1,
     ("_devenv", "conan"): 1,
-    ("_e2e", BACKEND_IMPORT): 1,
-    ("_e2e", "conan"): 4,
     ("_e2e", "pyproject.toml"): 1,
     ("_kinds", BACKEND_IMPORT): 1,
     ("_kinds", "conan"): 1,
     ("_kinds", "cpp-conan"): 1,
     ("_kinds", "python"): 4,
-    ("_publish", "conan"): 3,
     ("_publish", "python"): 1,
     ("_registries", "conan"): 3,
     ("_registries", "container"): 1,
     ("_registries", "python"): 4,
     ("_release", "python"): 1,
-    ("_release_driver", BACKEND_IMPORT): 1,
-    ("_release_driver", "conan"): 2,
     ("_release_driver", "conanfile.py"): 2,
     ("_release_driver", "pyproject.toml"): 2,
-    ("_release_driver", "python"): 2,
+    ("_release_driver", "python"): 1,
     ("_steps", BACKEND_IMPORT): 1,
-    ("_templates", "python"): 4,
+    ("_templates", "python"): 1,
     ("_update", "pyproject.toml"): 1,
 }
 
@@ -238,10 +233,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
     ),
-    ("_e2e", "conan"): (
-        5,
-        "the loop's registry probe, #1624 (P1a), and its conan home, phase 15",
-    ),
+    ("_e2e", "conan"): (1, "the loop's conan home; phase 15"),
     ("_e2e", "ninja"): (
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
@@ -264,15 +256,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         2,
         "BASE_EXTENSION_IMPORTS' conan row; #1614's P5 deletes it",
     ),
-    ("_publish", "conan"): (
-        3,
-        "the wave's conan target; #1624 (P1a), then the registries, phase 13",
-    ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
-    ("_release_driver", "conan"): (
-        2,
-        "the wave's conan registry probe; #1624 (P1a)",
-    ),
     ("_steps", "cmake"): (
         3,
         "the base's cmake build and test steps; #1614's P5 moves them",

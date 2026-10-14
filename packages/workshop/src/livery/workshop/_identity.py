@@ -2,12 +2,12 @@
 
 The root `workshop.toml`'s `[workspace]` table names the project, its
 description, its namespace, its authors and its copyright year; each
-package's `workshop.toml` names the package, its kind, its description,
-the extras its dev-group entry installs, and the template it renders
-from when that differs from its kind's own. The renders read these
-facts under the names the templates spell (`project_name`,
-`package_name`, the `packages` roster), so a template reads the same
-data whatever stores it.
+package's `workshop.toml` names the package, its kind, its description
+and the extras its dev-group entry installs, and discovery gives the
+package-level extensions it holds. The renders read these facts under
+the names the templates spell (`project_name`, `package_name`, the
+`packages` roster), so a template reads the same data whatever stores
+it.
 
 Reach for [livery.workshop._identity.project_facts][] for the project's
 render data and [livery.workshop._identity.package_facts][] for one
@@ -55,7 +55,6 @@ def identity(root: Path) -> dict[str, Any]:
     authors = cast("list[dict[str, str]]", workspace.get("authors") or [])
     first = authors[0] if authors else {}
     return {
-        "kind": "project",
         "project_name": name,
         "project_description": str(
             workspace.get("description") or f"The {name} monorepo (virtual root)."
@@ -70,23 +69,30 @@ def identity(root: Path) -> dict[str, Any]:
     }
 
 
-def roster(root: Path) -> list[dict[str, str]]:
+def roster(root: Path) -> list[dict[str, Any]]:
     """Each member as the project file lists it, in path order.
 
-    A member holding the runtime's language carries `dev`, the
-    dev-group entry with its `dev-extras`; any other carries none and
-    stays out of the uv workspace.
+    Each carries `extensions`, the package-level extensions it holds in
+    composition order. A member holding the runtime's language carries
+    `dev`, the dev-group entry with its `dev-extras`; any other carries
+    none and stays out of the uv workspace.
     """
+    from livery.workshop._composition import order_or_sorted
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._kinds import extension_set
     from livery.workshop._packages import discover_packages, holds_runtime_language
 
     if not (root / "packages").is_dir():
         return []
-    entries: list[dict[str, str]] = []
+    entries: list[dict[str, Any]] = []
     for package in discover_packages(root):
-        entry = {
+        entry: dict[str, Any] = {
             "dir": package.member,
             "name": package.name,
             "kind": package.kind,
+            "extensions": list(
+                order_or_sorted(extension_set(package), installed_declaration)
+            ),
         }
         if holds_runtime_language(package):
             contract = load_contract(package.directory / "workshop.toml")
@@ -123,24 +129,12 @@ def python_dirs(root: Path) -> list[str]:
     return found
 
 
-def template_of(directory: Path) -> str:
-    """The template a package renders from: its `template`, or its kind's own."""
-    from livery.workshop._kinds import kind_for
-
-    contract = load_contract(directory / "workshop.toml")
-    declared = contract.get("template")
-    if declared:
-        return str(declared)
-    return kind_for(str(contract["kind"])).template
-
-
 def package_facts(root: Path, directory: Path) -> dict[str, Any]:
     """One member's identity, under the names the package templates spell."""
     project = identity(root)
     contract = load_contract(directory / "workshop.toml")
     name = str(contract.get("name") or directory.name)
     return {
-        "kind": template_of(directory),
         "package_name": name,
         "package_description": str(
             contract.get("description")
