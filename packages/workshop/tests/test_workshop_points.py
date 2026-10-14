@@ -519,6 +519,9 @@ def test_a_red_judge_stops_the_gate_job_before_the_stamp(tmp_path: Path) -> None
 def test_a_workspace_without_coverage_runs_no_coverage_leg(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The ruff extension is a distribution of its own: a run of this
+    # wheel alone has none, and the test skips.
+    pytest.importorskip("livery.extensions.ruff")
     from livery import git
     from livery.workshop._ci_context import LEG_VARIABLE, state_store
     from livery.workshop._ci_tasks import leg_flow
