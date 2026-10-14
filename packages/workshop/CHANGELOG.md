@@ -1,5 +1,65 @@
 # Changelog
 
+## [0.10.0] - 2026-10-14
+
+### Added
+
+- Fm doctor reports a uv cache over its limit and prunes it under --fix; the limit is [workspace] uv-cache-limit, 10G by default, and the fix names raising it by @willemkokke
+- A dispatched nightly runs only the scheduled tasks --only names, so a rehearsal runs the loop alone, and the tool refresh observes nothing off the default branch by @willemkokke
+- Nanobind declares the release's wheels job with its runner labels at [nanobind] wheel-platforms, and the mount takes what a package holds through its kind by @willemkokke
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- The coverage extension draws every language's pages from parts in the line format with a renderer of its own, and pytest reduces coverage.py's arcs to those parts by @willemkokke
+- The coverage machinery leaves the base for the coverage extension, so a workspace that does not list coverage runs no coverage leg by @willemkokke
+- Pytest and cmake measure for coverage through their [for.coverage] tables, so a workspace without coverage runs its tests unmetered, and coverage with nothing that measures is dormant and named by @willemkokke
+- The coverage record stores parts in the line format with each file's fixed facts once, the union merges them without coverage.py's commands, and llvm-cov's counted ranges reach the pages by @willemkokke
+- Every coverage row names the tests that reached each line, numbered once so a test keeps its index across runs and legs by @willemkokke
+- The docs extension declares a docs phase and a deploy phase, and the task reference, the package generators and coverage's pages become their steps by @willemkokke
+- The python extension judges each source's imports against its package's declared dependencies, and holds the terminal rule by @willemkokke
+- An mkdocstrings extension draws the python API reference and writes its handler's tables through docs.config, the docstring checks move to it, and the kind's extractor goes by @willemkokke
+- The run row's reader reads coverage from sections alone by @willemkokke
+- A package's [docs] table is the docs extension's, every docs build removes what earlier builds generated, and the base's docs contract goes by @willemkokke
+- The docs dependency group follows the listed extensions, and griffelib moves from the workshop wheel's runtime to its test extra by @willemkokke
+- Nanobind answers which members its wheels job builds, and the wheel identity check moves into the build steps by @willemkokke
+- Each extension writes its own manifest's requirement on a sibling, conan opens a recipe's requires tuple, and a sibling no writer takes refuses naming its set by @willemkokke
+- The cpp extension names the C compilers a package needs, answering a host-tools query that fm doctor and fm env.check union by @willemkokke
+- One base constant names the runtime's language, and what a member holds decides whether it carries a pyproject.toml and joins the uv workspace by @willemkokke
+- The release train asks a member's extensions for its registry by @willemkokke
+- A package holds nanobind by listing it, nanobind's build step and its deletions replace the kind's backend, and the python-nanobind kind refuses naming the list to write by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+- Package.kind goes, public_modules and compile_commands leave the workshop's public names, and a step's kinds refuses naming extensions by @willemkokke
+
+### Fixed
+
+- The sync's deliver step survives an install that moved a member's metadata by @willemkokke
+- The hook enters the receipts its sync wrote into the task's own environment, so a fresh checkout's first command runs by @willemkokke
+- A command the hook's sync re-runs starts without the sync marker, so its own hook syncs by @willemkokke
+- The hook's sync runs on the root it found and fails no command, and new.package wires its member in a fresh runner whose mount holds it by @willemkokke
+- Credentials in command lines reach a profile trace as ***, and a test's mounts and environment writes are undone before the next test by @willemkokke
+- A loop pass and each runner's jobs run conan with a home inside the environment, so a pass after another never builds against the earlier forge's remote by @willemkokke
+- The MSVC measurer rides cmake's [for.coverage] table, so a workspace without coverage locks and installs no dotnet_coverage on Windows by @willemkokke
+- Lint.docrefs judges the references in each docstring the site renders against the anchors the site renders, so one the strict build cannot resolve fails the gate by @willemkokke
+- A pull request found by a branch's head commit is the branch's own only when it proposed that branch, never a stacked branch's parent's by @willemkokke
+
+### Changed
+
+- Root files are fragments and the layering rules are steps: a package-level extension writes [fragments."<path>"] while a package holds it, each layering rule is a step over the one parse, python's private-reaches is [phases.layering.private-reaches], and [root-files] and [rules] refuse naming the new spelling by @willemkokke
+- The train takes isolated and configuration: a step serves the side of its phase it declares, the test phase's isolated side runs once per resolution [release] prove lists, replay is verify, and a bare fm build and fm run build debug while the gate instruments by @willemkokke
+- The names: StepRecord, _steps.py, register_step and the public step_option say step and phase, PhaseContext.step names the running step, and role is gone by @willemkokke
+- Pins for nanobind's wheels job in today's spelling, the loop's release act requires the publish job's prebuilt line, and the nanobind extension ships declaring nothing by @willemkokke
+- A CI job's runner labels come from a function and its driver pin is derived, so the base's wheels job is a generic job by @willemkokke
+- Pins for what coverage's move out of the base must keep, and 12e restated with the extension owning the pages before 11c by @willemkokke
+- Raise the workshop's coverage floor to 90, just under the 90.1% the CI union measures, so a drop below 89.5% fails the gate by @willemkokke
+- The coverage extension starts in the workshop wheel and draws the coverage pages as its answer to the docs extension's query, and a [for] table's queries are asked while its target is listed by @willemkokke
+- Pins for the docs phase's parts, a control pair of site builds, and 11c restated as the ruled parts by @willemkokke
+- The references query, which the python extension answers from its own parse, replaces the base's python parse in the layering rules by @willemkokke
+- Pins for what each package seed births, composes and runs, in today's spelling by @willemkokke
+- Each tool is required by the extension that runs it, and uv by the base by @willemkokke
+- Pytest runs the suites and examples through runners the python extension answers, and run_suites and kind_examples leave the public names by @willemkokke
+- A package's categories, the per-file ignores and the guidance read the extensions packages hold, the kinds guidance becomes compositions.present.md, and the dead kind render facts go by @willemkokke
+- The kind registry goes: the seed chain and the base's category tables are data, and the conformance kit probes sets of extensions by @willemkokke
+- The tests that mount the ruff or pytest extension skip in a run of the workshop's wheel alone by @willemkokke
+- The seed pins skip while an extension their workspace lists is not installed by @willemkokke
+
 ## [0.9.0] - 2026-10-12
 
 ### Added

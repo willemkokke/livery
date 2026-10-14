@@ -142,7 +142,7 @@ if TYPE_CHECKING:
     from livery.workshop._steps import step_option as step_option
     from livery.workshop._tokens import forge_token as forge_token
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 __all__ = [
     "AGENT",
