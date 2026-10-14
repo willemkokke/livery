@@ -1279,12 +1279,14 @@ class _Reader:
     ) -> Reference | DeclaredValue:
         """The answer to the query *name*: a function, resolved, or a literal.
 
-        The name is a declared query, and the extension's levels hold
-        the query's: a package-level query is answered by an extension
-        a package may list, a workspace-level one by an extension the
-        workspace may list. A literal answer is one of the query's
-        values when it declares them. *prefix* is the ``[for.<target>]``
-        table the answer is under, empty for the top level.
+        The name is a declared query. A package-level query is answered
+        by the package's set alone, so an extension answers one only
+        when a package may list it. A workspace-level query is asked of
+        every extension the workspace mounts, a package-level one while
+        a package holds it, so an extension of either level answers one.
+        A literal answer is one of the query's values when it declares
+        them. *prefix* is the ``[for.<target>]`` table the answer is
+        under, empty for the top level.
         """
         from livery.workshop._queries import PACKAGE_LEVEL
 
@@ -1298,13 +1300,12 @@ class _Reader:
                 f"names no query; the queries are {', '.join(self.query_specs)}{hint}",
             )
         levels = tuple(str(level) for level in identity.get("levels", ("workspace",)))
-        if spec.level not in levels:
-            about = "a package" if spec.level == PACKAGE_LEVEL else "the workspace"
+        if spec.level == PACKAGE_LEVEL and PACKAGE_LEVEL not in levels:
             raise self.refuse(
                 where,
-                f"answers a question about {about}, and this extension's levels are"
-                f" {', '.join(levels)}; add {spec.level!r} to levels, or drop the"
-                " answer",
+                "answers a question about a package, and this extension's levels"
+                f" are {', '.join(levels)}; add {PACKAGE_LEVEL!r} to levels, or drop"
+                " the answer",
             )
         if isinstance(value, dict):
             table = cast("dict[str, Any]", value)

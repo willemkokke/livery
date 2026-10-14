@@ -26,3 +26,20 @@ def version_files(package: Package) -> tuple[Path, ...]:
 def requirements(package: Package) -> Mapping[str, str]:
     """The conan references the recipe requires, each name to its version range."""
     return _package.declared_requirements(package)
+
+
+#: The ecosystem a conan package is released to, as the ``distributions``
+#: query names it.
+ECOSYSTEM = "conan"
+
+
+def distributions(package: Package) -> tuple[tuple[str, str], ...]:
+    """The conan package the recipe releases, as its ecosystem and its name.
+
+    A recipe that declares both ``name`` and ``version`` names a
+    reference and releases the package; a consumer's recipe,
+    requirements alone, releases nothing, so it answers empty.
+    """
+    if not _package.names_a_reference(package):
+        return ()
+    return ((ECOSYSTEM, package.name),)
