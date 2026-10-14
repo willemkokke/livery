@@ -848,6 +848,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "requirement-writers",
         "distributions",
         "executables",
+        "host-tools",
         "editor-extensions",
         "python.dev-group",
         "python.docs-group",
