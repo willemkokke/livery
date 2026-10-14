@@ -81,9 +81,11 @@ def test_a_workspace_without_cpp_names_no_compiler(
             "lib": 'name = "acme-lib"\nkind = "cpp-conan"\nextensions = ["python"]\n',
         },
     )
-    (root / "packages" / "plain" / "pyproject.toml").write_text(
-        '[project]\nname = "acme-plain"\n'
-    )
+    # Each member holds python, so each carries a pyproject.toml.
+    for member in ("echo", "plain", "lib"):
+        (root / "packages" / member / "pyproject.toml").write_text(
+            f'[project]\nname = "acme-{member}"\n'
+        )
     assert missing_host_tools(root) == ()
     assert _compiler_findings(root, monkeypatch) == [
         ("host: every compiler the workspace's packages need is present", "", "")
