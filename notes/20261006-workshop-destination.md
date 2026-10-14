@@ -334,7 +334,7 @@ every kind the check judges"). What changes:
 | the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
-| the python kinds and backends | `_kinds._register_builtin`, `_backends/` | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
+| the python kinds and backends | `_backends/` (the kind registry went in step 7's P6) | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
 | the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the python extension's runner-terminal and declared-imports steps read that parse | the `references` query: a language extension answers what a source references; rules register against it |
 | the registry kinds and their defaults | `_registries._ECOSYSTEM` | ecosystems as registrations (phase 13) |
 
@@ -1470,7 +1470,13 @@ parts, each mergeable alone:
   `compile_commands` leave the public names.
 - P5: cmake's build and test steps are cmake's; `_backends` goes, and
   the base imports no extension.
-- P6: the registry goes, and the category tables become data.
+- P6 (built, #1651): the registry goes: `_kinds` is deleted, the seed
+  trees' chain is data beside the seeds (`_seeds.PARENTS`) until P7's
+  templates, the base's and the workspace's category tables are data,
+  the conformance kit probes sets of extensions (`Subject.sets`), and
+  the vocabulary test's words are the installed package-level
+  extensions and the registry kinds, each allowance row naming the
+  change that removes it.
 - P7: templates. An extension declares `[templates.<name>]`: the
   extension list a package born from it writes, the template it
   extends, and its seed files, which carry the native settings
@@ -1624,7 +1630,7 @@ neither needs nor rules out).
 
 | Temporary | Replaced by |
 | --- | --- |
-| `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, `register_categories`, `register_kind`, and the `[checks.<tool>.<role>]`, `[options]`, `[for]`, `tools` attributes | `extension.toml`, read at mount (phase 10, 11) |
+| `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, and the `[checks.<tool>.<role>]`, `[options]`, `[for]`, `tools` attributes | `extension.toml`, read at mount (phase 10, 11) |
 | `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
 | the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
 | the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
