@@ -99,7 +99,7 @@ def _render_cpp(tmp_path: Path) -> Package:
 
     seed_into(
         destination,
-        "package-cpp-conan",
+        "cpp-library",
         {
             "package_name": "acme-native",
             "package_description": "acme-native: a native library.",
@@ -626,15 +626,14 @@ def test_the_conan_workspace_steps_aside_for_a_block_and_comes_back_after_a_fail
 # The seed chain and the tools.
 
 
-def test_the_cpp_seed_tree_is_written_over_the_base_alone() -> None:
-    # No python tree comes between them; the shared base tree still
-    # comes first, carrying the docs seeds.
-    from livery.workshop._seeds import chain
+def test_the_cpp_template_extends_no_other() -> None:
+    # No python template comes before it; the package-base seeds still
+    # come first, carrying the docs seeds.
+    from livery.workshop._seeds import template_chain
 
-    assert chain("package-cpp-conan") == (
-        "package-base",
-        "package-cpp-conan",
-    )
+    assert [template.name for template in template_chain("cpp-library")] == [
+        "cpp-library"
+    ]
     # The build tools come from the [toolroom] tables of the extensions
     # a package born from the seeds holds, cmake's and conan's, and the
     # measurer of a build made with MSVC from cmake's [for.coverage]

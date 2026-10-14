@@ -1,0 +1,19 @@
+# Seeded from the cpp-library template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project(lib CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(lib src/lib.cpp)
+target_include_directories(lib PUBLIC src)
+
+install(TARGETS lib)
+install(FILES src/lib.hpp DESTINATION include)
+
+enable_testing()
+add_executable(test_lib tests/test_lib.cpp)
+target_link_libraries(test_lib PRIVATE lib)
+add_test(NAME test_lib COMMAND test_lib)

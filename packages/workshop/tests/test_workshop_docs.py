@@ -1090,12 +1090,12 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
 
 
 def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
-    # Every package's seed chain starts at package-base, the one home
-    # of the docs seeds; a copy in another package tree would shadow
-    # the base's and rot separately.
-    from livery.workshop._seeds import chain
+    # Every package's birth writes package-base first, the one home of
+    # the docs seeds; a copy in a template would shadow the base's and
+    # rot separately.
+    from livery.workshop._seeds import installed_templates, template_files
 
-    templates = (
+    seeds = (
         Path(__file__).resolve().parents[1]
         / "src"
         / "livery"
@@ -1103,14 +1103,12 @@ def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
         / "content"
         / "seeds"
     )
-    base = templates / "package-base" / "docs"
+    base = seeds / "package-base" / "docs"
     assert (base / "nav.toml").is_file()
     assert (base / "index.md.jinja").is_file()
-    for template in sorted(templates.glob("package-*")):
-        if template.name == "package-base":
-            continue
-        assert not (template / "docs").exists(), template
-        assert chain(template.name)[0] == "package-base"
+    assert sorted(tree.name for tree in seeds.iterdir()) == ["package-base", "project"]
+    for template in installed_templates().values():
+        assert not (template_files(template) / "docs").exists(), template.name
 
 
 # The config surface and the theme. Refusals first.

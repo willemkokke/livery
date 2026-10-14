@@ -14,9 +14,9 @@
 # under for.*, so they are written once, below.
 #
 # The base's phases are declared at the end, under [phases.<phase>], its
-# queries under [queries.<name>] and the tools it runs under [toolroom],
-# each in the grammar an extension declares one in under the same table
-# of its extension.toml.
+# queries under [queries.<name>], the tools it runs under [toolroom] and
+# its templates under [templates.<name>], each in the grammar an
+# extension declares one in under the same table of its extension.toml.
 
 # workshop.toml at a workspace's root.
 
@@ -429,10 +429,6 @@ doc = "the resolutions a release tests the package at, each at most once: floor,
 [contract.package.release.publish]
 types = ["bool"]
 doc = "whether the release uploads the package to its registry; true when absent, and a package that does not is still versioned, built and tagged"
-
-[contract.package.template]
-types = ["str"]
-doc = "the seed the package was born from"
 
 # extension.toml beside an extension's package.
 
@@ -864,6 +860,29 @@ doc = "the shipped files of earlier extensions that this one's own files replace
 types = ["str"]
 doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one's file of that name replaces it"
 
+[contract.extension.templates]
+types = ["table"]
+doc = "the templates the extension declares, each one fm new.package <name> <template> creates a package from, read whether a workspace lists the extension or not"
+
+# A template, by the name fm new.package takes: lower-case letters,
+# digits and hyphens. Its files live under content/templates/<name>/
+# beside the file declaring it. Its doc key is declared below, so the
+# table carries none of its own.
+[contract.extension.templates."*"]
+types = ["table"]
+
+[contract.extension.templates."*".doc]
+types = ["str"]
+doc = "one line saying what a package born from the template is, which fm new.package names; required"
+
+[contract.extension.templates."*".extends]
+types = ["str"]
+doc = "the template whose files the birth writes first, this one's file winning for a path both hold; none when absent"
+
+[contract.extension.templates."*".extensions]
+types = ["strs"]
+doc = "the package-level extensions a package born from the template lists, written into its contract in their canonical form; required, [] for none"
+
 
 # The base's phases, in the grammar of [contract.extension.phases."*"]:
 # the keys the engine running the phase gives its steps, each to its
@@ -1130,3 +1149,12 @@ requires = ["uv"]
 [queries.job-built-members]
 level = "workspace"
 combine = "livery.workshop._queries:merged"
+
+# The base's templates, in the grammar an extension declares one in
+# under the same table of its extension.toml; their files live under
+# content/templates/<name>/ beside this file. The extension format is
+# the base's, and so is the template of a package that is an extension.
+[templates.workshop-extension]
+doc = "a workshop extension: a python package with its extension.toml, its content, its verbs and a branded App"
+extensions = ["python"]
+extends = "python-library"

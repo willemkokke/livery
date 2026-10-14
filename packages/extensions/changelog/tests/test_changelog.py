@@ -340,11 +340,11 @@ def test_a_member_born_while_it_is_listed_starts_its_history(tmp_path: Path) -> 
 
     # Unlisted, a birth writes no history: the first record creates it.
     bare = _workspace(tmp_path / "bare", "[]")
-    render_member(bare, "thing")
+    render_member(bare, "thing", "python-library")
     assert not (bare / "packages" / "thing" / "CHANGELOG.md").exists()
     assert not (bare / "packages" / "thing" / "cliff.toml").exists()
     root = _workspace(tmp_path / "ws", '["changelog"]')
-    render_member(root, "thing")
+    render_member(root, "thing", "python-library")
     text = (root / "packages" / "thing" / "CHANGELOG.md").read_text()
     assert "All notable changes to acme-thing are documented here." in text
     assert (root / "packages" / "thing" / "cliff.toml").is_file()

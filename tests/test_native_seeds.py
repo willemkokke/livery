@@ -49,17 +49,17 @@ def _supplied() -> bool:
 
 
 @pytest.mark.parametrize(
-    ("tree", "listed", "name"),
+    ("template", "listed", "name"),
     [
-        ("package-cpp-conan", ("cmake", "conan"), "acme-native"),
-        ("package-python-nanobind", ("nanobind",), "ci-e2e-loop-loop-native"),
-        ("package-python-nanobind", ("nanobind",), "x-y"),
+        ("cpp-library", ("cmake", "conan"), "acme-native"),
+        ("nanobind-module", ("nanobind",), "ci-e2e-loop-loop-native"),
+        ("nanobind-module", ("nanobind",), "x-y"),
     ],
 )
 def test_a_member_born_from_the_native_seeds_is_in_style(
     tmp_path: Path,
     registered: None,
-    tree: str,
+    template: str,
     listed: tuple[str, ...],
     name: str,
 ) -> None:
@@ -71,7 +71,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     destination = tmp_path / "packages" / "native"
     seed_into(
         destination,
-        tree,
+        template,
         {
             "package_name": name,
             "package_description": "A native member.",
@@ -130,7 +130,7 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
     destination = tmp_path / "packages" / "native"
     seed_into(
         destination,
-        "package-cpp-conan",
+        "cpp-library",
         {
             "package_name": "acme-native",
             "package_description": "A native member.",

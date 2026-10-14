@@ -147,7 +147,14 @@ spelling. Every key is optional:
   refuses, naming both;
 - `[replaces]` and `[deletes]`, an earlier extension's shipped file,
   `"<owner>:<name>"`, that its own file of that name replaces or that it
-  deletes, to the reason.
+  deletes, to the reason;
+- `[templates.<name>]`, a template `fm new.package` creates a package
+  from: `doc`, one line saying what a package born from it is;
+  `extensions`, the package-level extensions such a package lists; and
+  `extends`, another template whose files the birth writes first. Its
+  files live under `content/templates/<name>/` beside the
+  `extension.toml`. A template is read while it is installed, listed or
+  not, and at a birth alone.
 
 A step whose verdict is its tool's exit code is the tool's words, and
 needs no code:
@@ -440,7 +447,40 @@ answering `executables` only the owner's steps run: the step that
 starts the executable reads the phase's `executable` key and the
 context's `arguments`, and records the exit code with `exit`, which
 the verb exits with. An extension that answers `executables` adds a step to
-the `run` phase, or its declaration refuses.
+the `run` phase, or its declaration refuses. The python extension
+answers with the scripts a package's `pyproject.toml` names under
+`[project.scripts]`, and its step starts the one the workspace's
+environment holds, which `fm sync` installs.
+
+`fm new.package <name> <template>` creates a package under
+`packages/<name>` from a template an installed extension declares, and
+wires it into the workspace. Completion offers the installed templates,
+and the verb without one refuses, naming each with its `doc`. The birth
+writes the `package-base` seeds every package starts from, the base's
+docs page and what the listed extensions add to it, then the files of
+each template the born one extends, the template extended first and the
+born one last; for a path two of them write, the later one wins. The
+package's contract lists the born template's `extensions` in their
+canonical form. Every written file is the workspace's own from then on,
+and nothing records the template: an extension that needs to know what
+a package is reads it from the package's own manifests, as python reads
+its scripts. The installed templates:
+
+| Template | Declared by | Lists | Extends |
+|---|---|---|---|
+| `python-library` | python | `["python"]` | |
+| `python-cli` | python | `["python"]` | `python-library` |
+| `workshop-extension` | the base | `["python"]` | `python-library` |
+| `nanobind-module` | nanobind | `["nanobind"]` | `python-library` |
+| `cpp-library` | conan | `["cmake", "conan"]` | |
+| `cpp-executable` | conan | `["cmake", "conan"]` | `cpp-library` |
+
+A template that lists an extension no installed distribution declares
+refuses the birth, naming it, and so does an `extends` that leads back
+to the template, or one that names a template nobody declares. Two
+extensions declaring one template refuse every birth, naming both. A
+package's contract that writes `template` refuses: the template is
+read at the birth alone.
 
 From any directory inside a workspace, a verb resolves the workspace
 at the directory that holds the root's `workshop.toml`: a package's own
@@ -1247,7 +1287,8 @@ absence.
 - `fm drift` keeps the composed and generated files byte-identical
   to what the listed extensions and the contract write, and names
   `fm sync` as the remedy;
-  `fm new.package` renders a member and wires it in.
+  `fm new.package <name> <template>` creates a member from an
+  installed template and wires it in.
 - `fm release.prepare` and `fm release.check-tag` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.

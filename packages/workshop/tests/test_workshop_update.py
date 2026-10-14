@@ -600,10 +600,10 @@ def test_new_package_renders_and_wires(
     )
     wired_here(monkeypatch, root)
     with pytest.raises(_FAILURES):
-        new_package("Bad Name")
-    new_package("scratch")
+        new_package("Bad Name", "python-library")
+    new_package("scratch", "python-library")
     assert (root / "packages" / "scratch" / "workshop.toml").is_file()
     assert "livery-scratch" in (root / "pyproject.toml").read_text()
     assert '"packages/scratch"' in (root / "pyproject.toml").read_text()
     with pytest.raises(_FAILURES):
-        new_package("scratch")  # already exists
+        new_package("scratch", "python-library")  # already exists

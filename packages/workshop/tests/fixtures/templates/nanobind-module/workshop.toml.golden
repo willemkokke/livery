@@ -1,0 +1,17 @@
+# Seeded from the nanobind-module template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+# The package-level extensions this package is composed of; nanobind
+# requires python, cpp and conan, so the set is the four.
+extensions = ...
+name = "acme-native"
+description = "acme-native: a package of the acme workspace."
+
+[nanobind]
+# The runner labels that build this package's platform wheels, one leg
+# of the release's wheels job each; the publish job collects and ships
+# the set.
+wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]

@@ -15,7 +15,6 @@ from livery.extensions.nanobind import _build, _ci, _container
 from livery.extensions.python import _backend as _python
 from livery.workshop._identity import project_facts
 from livery.workshop._packages import Package
-from livery.workshop._seeds import chain
 from workshop_composed import seed_into
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
@@ -75,7 +74,7 @@ def _render_named(tmp_path: Path, package_name: str) -> Path:
     destination = tmp_path / "packages" / "native"
     seed_into(
         destination,
-        "package-python-nanobind",
+        "nanobind-module",
         {
             "package_name": package_name,
             "package_description": "A native extension.",
@@ -118,7 +117,7 @@ def _render_chain(tmp_path: Path) -> Package:
     answers = project_facts(ROOT)
     seed_into(
         destination,
-        "package-python-nanobind",
+        "nanobind-module",
         {
             "package_name": "acme-ext",
             "package_description": "acme-ext: a compiled extension.",
@@ -149,12 +148,14 @@ def test_a_pure_wheel_from_a_nanobind_build_refuses(tmp_path: Path) -> None:
     _build.assert_platform_tagged(package, dist)
 
 
-def test_the_seed_chain_runs_from_python_s() -> None:
-    assert chain("package-python-nanobind") == (
-        "package-base",
-        "package-python",
-        "package-python-nanobind",
-    )
+def test_the_template_chain_runs_from_python_s() -> None:
+    from livery.workshop._seeds import template_chain
+
+    chain = template_chain("nanobind-module")
+    assert [template.name for template in chain] == [
+        "python-library",
+        "nanobind-module",
+    ]
 
 
 def test_a_package_listing_nanobind_holds_python_cpp_and_conan(
@@ -237,7 +238,7 @@ def _render_library(tmp_path: Path) -> Package:
     answers = project_facts(ROOT)
     seed_into(
         destination,
-        "package-cpp-conan",
+        "cpp-library",
         {
             "package_name": "acme-geometry",
             "package_description": "acme-geometry: a native library.",

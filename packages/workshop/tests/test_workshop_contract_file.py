@@ -111,14 +111,15 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
 def test_for_a_target_takes_every_table_again() -> None:
     keys = {item.path: item for item in extension_keys()}
     # Every table of the top level, the tool store's [toolroom] among
-    # them, but the identity, the targets and the contract keys.
+    # them, but the identity, the targets, the contract keys and the
+    # templates, which a birth reads whatever the workspace lists.
     tables = {path.split(".")[0] for path in keys if not path.startswith("for.")}
     assert {"phases", "ci", "queries", "fragments", "toolroom"} <= tables
     mirrored = [
         path
         for path in keys
         if not path.startswith("for.")
-        and path.split(".")[0] in tables - {"extension", "for", "contract"}
+        and path.split(".")[0] in tables - {"extension", "for", "contract", "templates"}
     ]
     assert mirrored
     for path in mirrored:
@@ -128,17 +129,19 @@ def test_for_a_target_takes_every_table_again() -> None:
             keys[path].values,
             keys[path].doc,
         ), path
-    for table in ("extension", "contract"):
+    for table in ("extension", "contract", "templates"):
         assert f"for.*.{table}" not in keys, table
     assert not any(path.startswith("for.*.for") for path in keys)
 
 
 def test_every_base_key_carries_a_doc() -> None:
-    # A key whose table declares a child named doc, an option's own,
-    # holds no string doc of its own: TOML has one value per name.
+    # A key whose table declares a child named doc, an option's own or
+    # a template's, holds no string doc of its own: TOML has one value
+    # per name.
     allowed = {
         ("extension", "phases.*.*.options.*"),
         ("extension", "for.*.phases.*.*.options.*"),
+        ("extension", "templates.*"),
     }
     missing = [
         (item.contract, item.path)

@@ -106,7 +106,9 @@ def test_a_members_facts_come_from_its_contract_and_the_projects(
     plain = _member(tmp_path, "plain", 'extensions = ["python"]\nname = "acme-plain"\n')
     facts = package_facts(tmp_path, plain)
     assert facts["package_name"] == "acme-plain"
-    assert facts["package_description"] == "acme-plain: a acme workspace package."
+    assert (
+        facts["package_description"] == "acme-plain: a package of the acme workspace."
+    )
     assert facts["package_dir"] == "plain"
     assert (facts["author_name"], facts["copyright_year"]) == ("A", "2026")
     # No package template reads the package's kind or its seed, so the
@@ -115,7 +117,6 @@ def test_a_members_facts_come_from_its_contract_and_the_projects(
     variant = _member(
         tmp_path,
         "brand",
-        'extensions = ["python"]\nname = "acme-brand"\ndescription = "The brand."\n'
-        'template = "package-extension"\n',
+        'extensions = ["python"]\nname = "acme-brand"\ndescription = "The brand."\n',
     )
     assert package_facts(tmp_path, variant)["package_description"] == "The brand."

@@ -54,3 +54,16 @@ provides = { published = "bool" }
 # conan: each member resolves its siblings from their sources through it.
 [fragments."conanws.yml"]
 render = "livery.extensions.conan._package:workspace_file"
+
+# The templates fm new.package creates a C++ package from, built with
+# CMake and packaged by conan: a library, and an executable whose
+# recipe says application. Their files live under
+# content/templates/<name>/ beside this file.
+[templates.cpp-library]
+doc = "a C++ library built with CMake and packaged by conan"
+extensions = ["cmake", "conan"]
+
+[templates.cpp-executable]
+doc = "a C++ executable built with CMake and packaged by conan as an application"
+extensions = ["cmake", "conan"]
+extends = "cpp-library"

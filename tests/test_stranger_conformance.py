@@ -100,7 +100,7 @@ def _stranger(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "workshop.toml").write_text(_CONTRACT)
     data = {**project_facts(destination), **package_injections(destination)}
-    create(destination, destination, (PROJECT,), data)
+    create(destination, destination, PROJECT, data)
     apply_generated(destination)
     from livery.workshop._shipped_files import deliver
 
@@ -289,12 +289,12 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
     # git-cliff attempt the author lookup instead of its offline arm.
     for variable in ("FORGE_TOKEN", "GITEA_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"):
         env.pop(variable, None)
-    for name, kind in (
-        ("geometry", "package-cpp-conan"),
-        ("ext", "package-python-nanobind"),
+    for name, template in (
+        ("geometry", "cpp-library"),
+        ("ext", "nanobind-module"),
     ):
         made = subprocess.run(
-            ["uv", "run", "fm", "new.package", name, f"--kind={kind}"],
+            ["uv", "run", "fm", "new.package", name, template],
             cwd=root,
             env=env,
             capture_output=True,

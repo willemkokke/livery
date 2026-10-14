@@ -663,10 +663,16 @@ def _declared(
 def _fake_declarations(
     monkeypatch: pytest.MonkeyPatch, declared: dict[str, Declaration]
 ) -> None:
-    """Install *declared* beside the real extensions, which the members' sets read."""
-    from livery.workshop import _extensions
+    """Install *declared* beside the real extensions, which the members' sets read.
+
+    The members' lists come from the real templates, read before the
+    fakes take the installed extensions' place.
+    """
+    from livery.workshop import _extensions, _seeds
 
     real = _extensions.declaration
+    templates = _seeds.installed_templates()
+    monkeypatch.setattr(_seeds, "installed_templates", lambda: templates)
 
     def found(name: str) -> Declaration | None:
         return declared[name] if name in declared else real(name)
@@ -814,7 +820,7 @@ def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) 
         '\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     for member in _e2e.LOOP_MEMBERS:
-        render_member(tmp_path, member.name, kind=member.seed)
+        render_member(tmp_path, member.name, member.template)
         contract = tmp_path / "packages" / member.name / "workshop.toml"
         born = tomllib.loads(contract.read_text("utf-8"))["extensions"]
         assert member.listed() == tuple(born)
@@ -2094,8 +2100,8 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert calls == [
         ("align",),
         ("branch", "feat/members"),
-        ("fm", "new.package", "loop-native", "--kind=package-python-nanobind"),
-        ("fm", "new.package", "loop-cpp", "--kind=package-cpp-conan"),
+        ("fm", "new.package", "loop-native", "nanobind-module"),
+        ("fm", "new.package", "loop-cpp", "cpp-library"),
         ("fm", "drift.check", "--fix"),
         ("commit", "feat: the loop's members"),
         ("fm", "submit", "--force", "--armed"),

@@ -108,11 +108,11 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     _run(["uv", "sync"], project, env)
     scripts = "Scripts" if sys.platform == "win32" else "bin"
     fm = str(project / ".venv" / scripts / "fm")
-    _run([fm, "new.package", "thing"], project, env)
-    _run([fm, "new.package", "geometry", "--kind=package-cpp-conan"], project, env)
+    _run([fm, "new.package", "thing", "python-library"], project, env)
+    _run([fm, "new.package", "geometry", "cpp-library"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.
-    _run([fm, "new.package", "extensions/demo"], project, env)
+    _run([fm, "new.package", "extensions/demo", "python-library"], project, env)
     grouped = project / "packages" / "extensions" / "demo"
     assert 'name = "acme-extensions-demo"' in (grouped / "workshop.toml").read_text()
     assert (grouped / "src" / "acme" / "extensions" / "demo").is_dir()

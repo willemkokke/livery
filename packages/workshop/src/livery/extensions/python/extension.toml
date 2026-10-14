@@ -9,7 +9,8 @@ levels = ["package"]
 # The questions about a package this extension answers. Its requirement
 # writer writes into the pyproject for a sibling that holds python; the
 # package releases its python distribution, and the release train probes
-# the python index the registry ladder resolves for it.
+# the python index the registry ladder resolves for it. Each script the
+# pyproject names under [project.scripts] is an executable fm run starts.
 [queries]
 current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
@@ -20,6 +21,7 @@ public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"
 distributions = "livery.extensions.python._answers:distributions"
 registry = "livery.extensions.python._answers:registry"
+executables = "livery.extensions.python._answers:executables"
 
 # Who prints a machine's coverage preview after its suites ran, a query
 # a listed extension answers with the function that prints it, given
@@ -76,6 +78,12 @@ provides = { resolved = "table" }
 main = "livery.extensions.python._steps:verify"
 reads = ["version", "tree", "interpreter", "index", "extras"]
 provides = { exit-code = "int" }
+
+# fm run starts the script the engine names from the workspace's
+# environment, with the words after the dashes, and exits with its code.
+[phases.run.python]
+main = "livery.extensions.python._steps:run"
+reads = ["executable"]
 
 # What a python package's paths are to it: a change to a test runs that
 # test alone, and a change to anything else its suite and its
@@ -135,3 +143,14 @@ reason = { types = ["str"], doc = "why the reach stays, and the public seam that
 [for.pytest.queries]
 "python.test.runner" = "livery.extensions.python._answers:suite_runner"
 "python.examples.runner" = "livery.extensions.python._answers:examples_runner"
+
+# The templates fm new.package creates a python package from; their
+# files live under content/templates/<name>/ beside this file.
+[templates.python-library]
+doc = "a python library: a typed module, its tests, and a pyproject.toml uv builds"
+extensions = ["python"]
+
+[templates.python-cli]
+doc = "a python command line: a python library whose script on PATH runs its main()"
+extensions = ["python"]
+extends = "python-library"

@@ -127,6 +127,11 @@ def python_dirs(root: Path) -> list[str]:
     return found
 
 
+def default_description(name: str, project: str) -> str:
+    """The one-line description of the package *name* whose contract names none."""
+    return f"{name}: a package of the {project} workspace."
+
+
 def package_facts(root: Path, directory: Path) -> dict[str, Any]:
     """One member's identity, under the names the package templates spell."""
     project = identity(root)
@@ -136,7 +141,7 @@ def package_facts(root: Path, directory: Path) -> dict[str, Any]:
         "package_name": name,
         "package_description": str(
             contract.get("description")
-            or f"{name}: a {project['project_name']} workspace package."
+            or default_description(name, str(project["project_name"]))
         ),
         "package_dir": directory.relative_to(root / "packages").as_posix(),
         "namespace_package": project["namespace_package"],

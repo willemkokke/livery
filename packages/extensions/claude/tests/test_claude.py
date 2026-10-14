@@ -60,7 +60,7 @@ def test_a_project_without_claude_writes_no_agent_file(tmp_path: Path) -> None:
     assert not (bare / ".claude").exists()
     assert not (bare / "CLAUDE.md").exists()
     assert not (bare / ".workshop" / "fragments").exists()
-    assert "CLAUDE.project.md" not in plan(bare, ("project",), {})
+    assert "CLAUDE.project.md" not in plan(bare, "project", {})
     # Listed, the sync writes the entry file, the guidance and .claude/,
     # and a birth seeds the repository's own facts.
     root = _workspace(tmp_path / "ws")
@@ -68,7 +68,7 @@ def test_a_project_without_claude_writes_no_agent_file(tmp_path: Path) -> None:
     assert (root / "CLAUDE.md").is_file()
     assert (root / ".workshop" / "fragments" / "voice.interaction.md").is_file()
     assert (root / ".claude" / "settings.json").is_file()
-    assert "CLAUDE.project.md" in plan(root, ("project",), {})
+    assert "CLAUDE.project.md" in plan(root, "project", {})
 
 
 def test_two_extensions_shipping_settings_refuse_naming_both(

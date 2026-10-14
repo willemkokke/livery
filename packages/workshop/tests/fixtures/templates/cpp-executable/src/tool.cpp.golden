@@ -1,0 +1,10 @@
+// Seeded from the cpp-library template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+#include "tool.hpp"
+
+namespace tool {
+
+const char* version() { return "0.0.0"; }
+
+} // namespace tool

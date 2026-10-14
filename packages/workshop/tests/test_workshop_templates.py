@@ -191,7 +191,7 @@ def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     answers = project_facts(ROOT)
     seed_into(
         destination,
-        "package-python",
+        "python-library",
         {
             "package_name": "livery-scratch",
             "package_description": "livery-scratch: a livery workspace package.",
@@ -811,7 +811,7 @@ def test_a_seeded_package_without_a_runner_to_wire_it_names_the_resume(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
     with pytest.raises(BaseException) as caught:
-        new_package("thing")
+        new_package("thing", "python-library")
     assert "environment has no fm to wire packages/thing" in str(caught.value)
     assert "`fm new.package thing --resume`" in str(caught.value)
     assert (root / "packages" / "thing" / "workshop.toml").is_file()
@@ -837,7 +837,7 @@ def test_new_package_writes_the_installed_seeds(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
     handed = wired_here(monkeypatch, root)
-    new_package("thing")
+    new_package("thing", "python-library")
     assert [argv[1:] for argv in handed] == [["new.package", "thing", "--resume"]]
     assert (root / "packages" / "thing" / "README.md").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
@@ -875,7 +875,7 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
         with jobs_restored():
             assert "nanobind" not in mounted_now(root)
             handed = wired_here(monkeypatch, root, starting=lambda: mounted_now(root))
-            new_package("ext", kind="package-python-nanobind")
+            new_package("ext", "nanobind-module")
             # The next command mounts nanobind too, and nothing drifts.
             assert "nanobind" in mounted_now(root)
             assert shipped_drift(root) + project_drift(root) == []
@@ -883,60 +883,6 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
             assert len(handed) == 1
     finally:
         _steps.restore(state)
-
-
-def test_a_tree_no_listed_extension_seeds_refuses_naming_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.workshop._templates import new_package
-
-    root = _wheel_instance(tmp_path)
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    with pytest.raises(BaseException, match="no listed extension seeds package-x"):
-        new_package("thing", kind="package-x")
-    assert not (root / "packages" / "thing").exists()
-
-
-# The seed chain a member's birth writes, the fallbacks first.
-
-
-def test_a_tree_that_is_no_package_s_is_written_alone() -> None:
-    from livery.workshop._seeds import chain
-
-    # A workspace's tree, and the base tree every package starts from.
-    assert chain("project") == ("project",)
-    assert chain("package-base") == ("package-base",)
-
-
-def test_a_package_tree_no_parent_names_is_written_over_the_base_alone() -> None:
-    from livery.workshop._seeds import chain
-
-    # The extension package's tree, and one an extension of its own ships.
-    assert chain("package-extension") == ("package-base", "package-extension")
-    assert chain("package-lua") == ("package-base", "package-lua")
-
-
-def test_a_package_tree_is_written_over_its_parent_s_chain() -> None:
-    from livery.workshop._seeds import chain
-
-    assert chain("package-python") == ("package-base", "package-python")
-    assert chain("package-python-nanobind") == (
-        "package-base",
-        "package-python",
-        "package-python-nanobind",
-    )
-
-
-def test_every_tree_the_chain_names_is_one_the_base_ships() -> None:
-    from livery.workshop._extensions import SELF, extension_content
-    from livery.workshop._seeds import PACKAGE_BASE, PARENTS, SEEDS
-
-    content = extension_content(SELF)
-    assert content is not None
-    named = {PACKAGE_BASE, *PARENTS, *PARENTS.values()}
-    assert {tree for tree in named if not (content / SEEDS / tree).is_dir()} == set()
 
 
 def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
