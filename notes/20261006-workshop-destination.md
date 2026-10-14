@@ -753,7 +753,7 @@ arrives when an extension that requires docs needs it; none has yet:
 | Name | Goes to | Who breaks | Phase |
 | --- | --- | --- | --- |
 | `rewrite_nav_block` | nothing: a generator writes `nav.<name>.toml` as data | any third-party generator | 10 |
-| `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` | basedpyright, clang-tidy (ours) | 11 |
+| `public_modules`, `compile_commands` | `answer(package, PUBLIC_MODULES)`, `answer(package, COMPILE_COMMANDS)` (step 7's P4) | basedpyright, clang-tidy (ours) | 11 |
 | `run_suites`, `kind_examples` | python's answers to `python.test.runner` and `python.examples.runner`, which pytest asks (step 7's P1g); `workspace_suite` stays the base's | pytest (ours) | 11 |
 | `CheckRecord.kinds` | `CheckRecord.extensions` | the eight (ours) | 11 |
 | `mount_extensions` | private; the mount is the plugin's | this repository's tests | 10 |
@@ -1466,8 +1466,10 @@ parts, each mergeable alone:
   the phase. `Backend`, `backend_for`, `stands_for`, `artifact` and
   `host_tools` leave the kind records, which keep the seed trees and
   their chain until P6 and P7.
-- P4: `Package.kind` goes, and `public_modules` and
-  `compile_commands` leave the public names.
+- P4 (built, #1649): `Package.kind` goes, and `public_modules` and
+  `compile_commands` leave the public names; a step that still writes
+  `kinds` refuses, naming `extensions`. The workspace's own units are
+  told apart by their path, outside `packages/`.
 - P5: cmake's build and test steps are cmake's; `_backends` goes, and
   the base imports no extension.
 - P6: the registry goes, and the category tables become data.
