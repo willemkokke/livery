@@ -1294,7 +1294,7 @@ slices, each mergeable alone:
    12e moved the coverage pages to the coverage extension): the
    generators become steps of the docs phase the docs extension
    declares.
-7. **The kinds go**: the registry, `KindRecord`, `Backend`, the
+7. **The kinds go** (complete 2026-10-14): the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
    the python extension; `fm new.package` takes a template an
    extension declares (ruled 2026-10-14, step 7's P7). With it and phase 13, the
@@ -1380,7 +1380,8 @@ Acceptance, refusals first:
   list in `_new_project` and the refusal of `[docs] python-paths` in
   `_contract`.
 
-**Step 7, the kinds go** (issue #1614). Ruled 2026-10-14, on the plan:
+**Step 7, the kinds go** (issue #1614), complete on 2026-10-14 with
+every part below built. Ruled 2026-10-14, on the plan:
 every package lists its extensions, and a contract that writes `kind`
 refuses, naming the list to write, with no rewrite by `--fix`. The
 parts, each mergeable alone:
