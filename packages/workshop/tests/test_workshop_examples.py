@@ -1,4 +1,4 @@
-"""Documentation examples as files: the collector and the python kind's runner."""
+"""Documentation examples as files: the collector and the python extension's runner."""
 
 from __future__ import annotations
 
@@ -160,12 +160,3 @@ def test_the_runner_says_so_without_examples_and_names_a_red_exit(
     # The words after -- on the step's own verb follow the targets.
     _python.run_examples(package, tmp_path, (ok,), ("-x",))
     assert fake.calls[-1] == ((ok, "-x"), {})
-
-
-def test_the_kind_names_its_runner_and_a_child_inherits_it() -> None:
-    from livery.extensions.python import _backend as _python
-    from livery.workshop._kinds import kind_examples
-
-    assert kind_examples("python") is _python.run_examples
-    assert kind_examples("python-nanobind") is _python.run_examples
-    assert kind_examples("cpp-conan") is None

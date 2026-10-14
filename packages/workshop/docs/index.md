@@ -718,8 +718,9 @@ followed by the quoted repository-relative path of the file, with
 `:part-1` after the path for one part, and `# --8<-- [start:part-1]`
 and `# --8<-- [end:part-1]` lines around that part in the file. The
 pytest extension's `examples.pytest` step runs each file as one test
-through the kind's runner, pytest for python, from the workspace root;
-a failure reports the example's own file and line. An example is
+through the function the python extension answers
+`python.examples.runner` with, which starts pytest from the workspace
+root; a failure reports the example's own file and line. An example is
 never a test module: pytest's own collector leaves it alone, named or
 not, so a `test_*` function in it is code a reader sees and never a
 test the workspace runs. A run over named files runs the named
