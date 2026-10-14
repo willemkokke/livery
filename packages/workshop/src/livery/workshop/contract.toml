@@ -613,7 +613,7 @@ doc = "the phases the extension declares and the steps it adds, by phase: the ba
 
 [contract.extension.phases."*"]
 types = ["table"]
-doc = "one phase: its declaration when the extension declares it, and the steps the extension adds to it; a package-level phase takes the extension's one step, a workspace-level one its step tables"
+doc = "one phase: its declaration when the extension declares it, and the steps the extension adds to it, each a table of its own"
 
 [contract.extension.phases."*".after]
 types = ["strs"]
@@ -647,7 +647,7 @@ doc = "a step of the phase, by the one-word name its verb gives it; it answers t
 
 [contract.extension.phases."*"."*".after]
 types = ["strs"]
-doc = "the steps this one runs after in a gate, by name; none when absent"
+doc = "the steps this one runs after in a gate, by name; an installed extension's step the workspace does not mount orders nothing; none when absent"
 
 [contract.extension.phases."*"."*".claims]
 types = ["list"]

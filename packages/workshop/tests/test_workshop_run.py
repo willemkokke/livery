@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from livery.footman import Failed
-from livery.workshop import _extensions, _run, _steps
+from livery.workshop import _extensions, _run
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package, discover_packages
-from livery.workshop._phases import PhaseContext
 from livery.workshop._run import RECORD, start
-from livery.workshop._steps import StepRecord, register_step
 from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: The fixture's package-level extension: two executables, and a run main
@@ -42,9 +39,27 @@ def main(ctx):
 """
 
 
-#: What the build steps here judge: the library lists python, and the
-#: app lists the fixture extension.
-BOTH = ("python", "acme.native")
+#: The fixture's build extension: one step, which serves the build phase's
+#: tree side as it names no side. Both members list it.
+BUILDER = """\
+[extension]
+levels = ["package"]
+
+[phases.build.builder]
+main = "{package}._steps:build"
+"""
+
+#: The build step's body: it says which member it built, and adds the
+#: member's path to a record beside the workspace, which `Built` reads.
+BUILDER_STEPS = """\
+from pathlib import Path
+
+
+def build(ctx):
+    print("built", ctx.member.path)
+    with (Path(ctx.root).parent / "built.txt").open("a") as record:
+        record.write(ctx.member.path + "\\n")
+"""
 
 
 def _member(root: Path, name: str, extensions: str, depends: str = "") -> Path:
@@ -70,33 +85,36 @@ def _workspace(
     if git:
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
-    _member(root, "lib", '["python"]')
-    _member(root, "app", '["acme.native"]', depends="lib")
-    fake_extensions(tmp_path, monkeypatch, native=NATIVE)
+    _member(root, "lib", '["acme.builder"]')
+    _member(root, "app", '["acme.builder", "acme.native"]', depends="lib")
+    fake_extensions(tmp_path, monkeypatch, builder=BUILDER, native=NATIVE)
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
     fake_steps(tmp_path, "native", STEPS)
     monkeypatch.chdir(root)
     return root
 
 
+class Built:
+    """The members the fixture's build step built, in order, from its record."""
+
+    def __init__(self, record: Path) -> None:
+        self.record = record
+
+    def __call__(self) -> list[str]:
+        """Each member's path, once per build, since the record was cleared."""
+        if not self.record.is_file():
+            return []
+        return self.record.read_text().splitlines()
+
+    def clear(self) -> None:
+        """Forget the builds so far."""
+        self.record.unlink(missing_ok=True)
+
+
 @pytest.fixture
-def built() -> Iterator[list[str]]:
-    """A counting build step over the fixture's packages: the paths it built.
-
-    The library lists python, and the app lists the fixture extension
-    alone.
-    """
-    state = _steps.snapshot()
-    calls: list[str] = []
-
-    def count(ctx: PhaseContext) -> None:
-        assert ctx.package is not None
-        calls.append(ctx.package.path)
-
-    register_step(
-        StepRecord("acme", "build", count, scope=_steps.PACKAGE, extensions=BOTH)
-    )
-    yield calls
-    _steps.restore(state)
+def built(tmp_path: Path) -> Built:
+    """What the fixture's build step builds, read from the record it keeps."""
+    return Built(tmp_path / "built.txt")
 
 
 # The refusals first.
@@ -147,7 +165,7 @@ def built() -> Iterator[list[str]]:
 def test_a_target_naming_nothing_that_runs_refuses_naming_what_exists(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     target: str,
     where: str,
     refusal: str,
@@ -156,7 +174,7 @@ def test_a_target_naming_nothing_that_runs_refuses_naming_what_exists(
     with pytest.raises(Failed) as raised:
         start(root, target, (), root / where)
     assert str(raised.value) == refusal
-    assert built == []
+    assert built() == []
 
 
 def test_executables_with_no_run_step_to_start_them_refuse(
@@ -182,40 +200,36 @@ def test_executables_with_no_run_step_to_start_them_refuse(
 
 
 def test_a_failed_build_records_nothing_and_the_next_run_builds_again(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: Built
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    real = _steps.steps_by_name()["build.acme"].run
-
-    def refuse(ctx: PhaseContext) -> None:
-        real(ctx)
-        raise Failed("the library does not compile")
-
-    register_step(
-        StepRecord("acme", "build", refuse, scope=_steps.PACKAGE, extensions=BOTH)
+    fake_steps(
+        tmp_path,
+        "builder",
+        BUILDER_STEPS + "\n\n_real = build\n\n\ndef build(ctx):\n    _real(ctx)\n"
+        "    from livery.footman import Failed\n\n"
+        "    raise Failed('the library does not compile')\n",
     )
     with pytest.raises(Failed):
         start(root, "app:serve", (), root)
-    assert built == ["packages/lib"]
+    assert built() == ["packages/lib"]
     assert not (root / RECORD).exists()
-    register_step(
-        StepRecord("acme", "build", real, scope=_steps.PACKAGE, extensions=BOTH)
-    )
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
     assert start(root, "app:serve", (), root) == 3
-    assert built == ["packages/lib", "packages/lib", "packages/app"]
+    assert built() == ["packages/lib", "packages/lib", "packages/app"]
 
 
 def test_a_checkout_git_cannot_read_builds_every_member_each_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, git=False)
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     assert start(root, "app:serve", (), root) == 3
     assert start(root, "app:serve", (), root) == 3
-    assert built == ["packages/lib", "packages/app"] * 2
+    assert built() == ["packages/lib", "packages/app"] * 2
     assert "run: git cannot read this checkout, so every member builds:" in (
         capsys.readouterr().err
     )
@@ -248,26 +262,26 @@ def test_inside_a_package_the_workspace_is_the_root_that_holds_it(
 def test_fm_run_builds_the_closure_dependencies_first_then_starts_the_executable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
     assert start(root, "app:serve", ("--port", "8"), root) == 3
-    assert built == ["packages/lib", "packages/app"]
+    assert built() == ["packages/lib", "packages/app"]
     assert "started serve ['--port', '8']\n" in capsys.readouterr().out
     # Nothing changed: it starts at once and no build step runs.
     built.clear()
     assert start(root, "app:serve", (), root) == 3
-    assert built == []
+    assert built() == []
     # The library changed: it builds first, then the app that needs it.
     (root / "packages" / "lib" / "source.txt").write_text("two\n")
     assert start(root, "app:serve", (), root) == 3
-    assert built == ["packages/lib", "packages/app"]
+    assert built() == ["packages/lib", "packages/app"]
     # The app alone changed: the library stays as it was built.
     built.clear()
     (root / "packages" / "app" / "source.txt").write_text("two\n")
     assert start(root, "app:tool", (), root) == 3
-    assert built == ["packages/app"]
+    assert built() == ["packages/app"]
     # Inside the app's directory the package may be left out.
     assert start(root, "tool", (), root / "packages" / "app") == 3
     assert "started tool []\n" in capsys.readouterr().out
@@ -279,19 +293,7 @@ def test_the_build_runs_before_the_owners_run_step_which_the_verb_exits_with(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    state = _steps.snapshot()
-
-    def say(ctx: PhaseContext) -> None:
-        assert ctx.package is not None
-        print(f"built {ctx.package.path}")
-
-    try:
-        register_step(
-            StepRecord("acme", "build", say, scope=_steps.PACKAGE, extensions=BOTH)
-        )
-        assert start(root, "app:serve", (), root) == 3
-    finally:
-        _steps.restore(state)
+    assert start(root, "app:serve", (), root) == 3
     out = capsys.readouterr().out
     assert (
         out.index("built packages/lib\n")
@@ -301,20 +303,42 @@ def test_the_build_runs_before_the_owners_run_step_which_the_verb_exits_with(
 
 
 def test_a_member_no_build_step_judges_is_never_built(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: Built
 ) -> None:
+    # The set's build step serves the isolated side alone, the release's,
+    # as python's does: the development build runs none of it.
     root = _workspace(tmp_path, monkeypatch)
-    register_step(
-        StepRecord(
-            "acme",
-            "build",
-            lambda ctx: None,
-            scope=_steps.PACKAGE,
-            extensions=("cmake",),
-        )
+    isolated = BUILDER.replace(
+        'main = "{package}._steps:build"\n',
+        'main = "{package}._steps:build"\nisolated = true\n',
     )
+    fake_extensions(tmp_path, monkeypatch, builder=isolated, native=NATIVE)
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
+    fake_steps(tmp_path, "native", STEPS)
     app, packages = _app_and_packages(root)
     assert _run.develop(root, app, packages) == []
+    assert built() == []
+    assert not (root / RECORD).exists()
+
+
+def test_a_build_whose_steps_cannot_run_refuses_with_the_walk_s_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: Built
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    reads = BUILDER.replace(
+        'main = "{package}._steps:build"\n',
+        'main = "{package}._steps:build"\nreads = ["wheel"]\n',
+    )
+    fake_extensions(tmp_path, monkeypatch, builder=reads, native=NATIVE)
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
+    fake_steps(tmp_path, "native", STEPS)
+    with pytest.raises(Failed) as raised:
+        start(root, "app:serve", (), root)
+    assert str(raised.value) == (
+        "packages/lib: the build phase: build.builder reads wheel, which no step"
+        " of the package provides"
+    )
+    assert built() == []
     assert not (root / RECORD).exists()
 
 
@@ -327,7 +351,7 @@ def _app_and_packages(root: Path) -> tuple[Package, tuple[Package, ...]]:
 def test_the_verb_hands_the_words_after_the_dashes_and_exits_with_the_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _workspace(tmp_path, monkeypatch)
@@ -387,12 +411,13 @@ def _with_extra(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: str, steps: str
 ) -> Path:
     root = _workspace(tmp_path, monkeypatch)
-    fake_extensions(tmp_path, monkeypatch, native=NATIVE, extra=extra)
+    fake_extensions(tmp_path, monkeypatch, builder=BUILDER, native=NATIVE, extra=extra)
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
     fake_steps(tmp_path, "native", STEPS)
     fake_steps(tmp_path, "extra", steps)
     app = root / "packages" / "app" / "workshop.toml"
     app.write_text(
-        app.read_text().replace('["acme.native"]', '["acme.extra", "acme.native"]')
+        app.read_text().replace('"acme.native"]', '"acme.extra", "acme.native"]')
     )
     return root
 
@@ -409,7 +434,7 @@ def _started(out: str) -> list[str]:
 def test_every_run_step_of_the_set_runs_and_after_orders_them(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _with_extra(tmp_path, monkeypatch, EXTRA, EXTRA_STEPS)
@@ -428,7 +453,7 @@ def test_every_run_step_of_the_set_runs_and_after_orders_them(
 def test_the_owners_run_step_alone_runs_among_the_extensions_answering(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    built: list[str],
+    built: Built,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _with_extra(tmp_path, monkeypatch, EXTRA, EXTRA_STEPS)
@@ -436,7 +461,15 @@ def test_the_owners_run_step_alone_runs_among_the_extensions_answering(
     # starts that one: `fm run app:serve` leaves it out, and runs the
     # steps of an extension answering none.
     other = NATIVE.replace("[phases.run.native]", "[phases.run.other]")
-    fake_extensions(tmp_path, monkeypatch, native=NATIVE, extra=EXTRA, other=other)
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        builder=BUILDER,
+        native=NATIVE,
+        extra=EXTRA,
+        other=other,
+    )
+    fake_steps(tmp_path, "builder", BUILDER_STEPS)
     fake_steps(tmp_path, "native", STEPS)
     fake_steps(tmp_path, "extra", EXTRA_STEPS)
     fake_steps(
@@ -456,7 +489,7 @@ def test_the_owners_run_step_alone_runs_among_the_extensions_answering(
 
 
 def test_answers_or_a_run_phase_that_cannot_run_refuse_through_fm_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: Built
 ) -> None:
     # Two extensions of the app's set answer one executable.
     twice = EXTRA.replace(

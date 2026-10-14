@@ -122,8 +122,8 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
 def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
     tmp_path: Path, registered: None
 ) -> None:
+    from livery.extensions.cmake import _build as cmake_build
     from livery.workshop import COMPILE_COMMANDS, answer
-    from livery.workshop._backends import _cpp_conan
     from livery.workshop._extensions import composed_set
     from livery.workshop._shipped_files import settle_package
 
@@ -161,7 +161,7 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
             "} // namespace native",
         )
     )
-    _cpp_conan.gate_build(package, tmp_path)
+    cmake_build.gate_build(package, tmp_path)
     database = answer(package, COMPILE_COMMANDS)
     assert database is not None and database.is_file()
     with pytest.raises(BaseException, match="clang-tidy found something") as caught:

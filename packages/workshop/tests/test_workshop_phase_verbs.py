@@ -404,20 +404,21 @@ def test_a_second_generation_follows_the_registry(
 
 
 def test_the_builtin_steps_generate_the_phase_verbs(python_steps: object) -> None:
-    # The base's own: an extension mounted earlier in this process (the
-    # docs extension's lint steps) and the fakes add theirs beside them.
+    # The base's own, each over the workspace: an extension mounted
+    # earlier in this process (the docs extension's lint steps) and the
+    # fakes add theirs beside them, and a package's build and test steps
+    # are its extensions', cmake's among them.
     tree = {
         phase: {step for step, record in steps.items() if record.extension == SELF}
         for phase, steps in verb_tree().items()
     }
     assert tree == {
-        "build": {"compile", "configure"},
         "format": set(),
         "layering": {"graph", "base-imports-no-extension", "sibling-references"},
         "lint": set(),
         "provenance": {"check"},
         "drift": {"check"},
-        "test": {"ctest"},
+        "test": set(),
         "typecheck": set(),
     }
     root = Group("root")
@@ -426,7 +427,6 @@ def test_the_builtin_steps_generate_the_phase_verbs(python_steps: object) -> Non
     # --point where a step reads it, and nowhere else.
     assert _flags(test, "default") == {"point"}
     assert _flags(test, "fake") == {"point"}
-    assert _flags(test, "ctest") == set()
     assert _flags(root.groups["layering"], "sibling-references") == {
         "fix",
         "safe_fix",

@@ -1,6 +1,6 @@
 """The vocabulary test: the base names no package extension, tool or coverage verb.
 
-The workshop's base (``livery.workshop`` outside ``_backends``) names
+The workshop's base (``livery.workshop``) names
 no package-level extension and no registry kind, the words this test
 looks for, and imports no backend: it asks the extensions a package
 holds instead. It names no tool a listed extension's steps bring, and
@@ -30,7 +30,6 @@ import pytest
 SRC = Path(__file__).resolve().parents[1] / "src"
 ROOT = Path(__file__).resolve().parents[3]
 MANIFESTS = ("pyproject.toml", "conanfile.py")
-BACKEND_IMPORT = "import a backend"
 
 #: The base's own python runtime: (module, word) to (count, reason).
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
@@ -119,14 +118,6 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "the python registry the wave resolves; phase 13",
     ),
-    ("_steps", "cmake"): (
-        3,
-        "the base's cmake build and test steps; #1614's P5 moves them",
-    ),
-    ("_steps", BACKEND_IMPORT): (
-        1,
-        "the base's cmake steps import the backend; #1614's P5 deletes it",
-    ),
     ("_templates", "python"): (
         1,
         "the python registry the root project file renders; phase 13",
@@ -181,15 +172,6 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return found
 
 
-def _imports_a_backend(node: ast.AST) -> bool:
-    names: list[str] = []
-    if isinstance(node, ast.ImportFrom) and node.module:
-        names = [node.module, *(f"{node.module}.{a.name}" for a in node.names)]
-    elif isinstance(node, ast.Import):
-        names = [alias.name for alias in node.names]
-    return any(name.startswith("livery.workshop._backends._") for name in names)
-
-
 def _word_of(value: str, words: set[str]) -> str:
     if value in words:
         return value
@@ -199,42 +181,28 @@ def _word_of(value: str, words: set[str]) -> str:
     return ""
 
 
-def scan(src: Path, words: set[str]) -> tuple[Counter[tuple[str, str]], list[str]]:
-    """The base's findings by (module, word), and every extension's backend import."""
+def scan(src: Path, words: set[str]) -> Counter[tuple[str, str]]:
+    """The base's findings by (module, word)."""
     base: Counter[tuple[str, str]] = Counter()
-    extensions: list[str] = []
     for path in sorted(src.rglob("*.py")):
         relative = path.relative_to(src)
         if "templates" in relative.parts:
             continue
         dotted = ".".join(relative.with_suffix("").parts).removesuffix(".__init__")
-        if dotted.startswith("livery.extensions."):
-            tree = ast.parse(path.read_text("utf-8"))
-            extensions += [
-                f"{dotted}:{node.lineno}"
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.Import, ast.ImportFrom))
-                and _imports_a_backend(node)
-            ]
-            continue
         if not dotted.startswith("livery.workshop."):
             continue
         module = dotted.removeprefix("livery.workshop.")
-        if module.startswith("_backends"):
-            continue
         tree = ast.parse(path.read_text("utf-8"))
         skip = _docstrings(tree)
         for node in ast.walk(tree):
-            if _imports_a_backend(node):
-                base[(module, BACKEND_IMPORT)] += 1
-            elif (
+            if (
                 isinstance(node, ast.Constant)
                 and isinstance(node.value, str)
                 and id(node) not in skip
                 and (word := _word_of(node.value, words))
             ):
                 base[(module, word)] += 1
-    return base, extensions
+    return base
 
 
 def judge(
@@ -276,7 +244,7 @@ def test_the_words_are_the_package_level_extensions_and_the_registry_kinds() -> 
 
 
 def test_the_base_names_no_word_beyond_its_allowance() -> None:
-    found, _ = scan(SRC, _words())
+    found = scan(SRC, _words())
     assert judge(found, RUNTIME, _counts(ALLOWANCE)) == []
 
 
@@ -285,16 +253,6 @@ def test_every_allowance_entry_states_its_reason(key: tuple[str, str]) -> None:
     count, reason = ALLOWANCE[key]
     assert count > 0
     assert reason
-
-
-def test_no_extension_imports_a_backend() -> None:
-    # Every member's sources: the extensions that ship in the base's
-    # wheel and the ones in their own.
-    found: list[str] = []
-    for src in sorted(ROOT.glob("packages/**/src")):
-        if (src / "livery" / "extensions").is_dir():
-            found += scan(src, _words())[1]
-    assert found == []
 
 
 #: The tools an extension's steps and tables bring that the base still
@@ -335,19 +293,7 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "a GitHub job's conan home; the CI placement review, #1534",
     ),
-    ("_packages", "cmake"): (
-        2,
-        "BASE_EXTENSION_IMPORTS' cmake row; #1614's P5 deletes it",
-    ),
-    ("_packages", "conan"): (
-        2,
-        "BASE_EXTENSION_IMPORTS' conan row; #1614's P5 deletes it",
-    ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
-    ("_steps", "cmake"): (
-        3,
-        "the base's cmake build and test steps; #1614's P5 moves them",
-    ),
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
     ("_new_project", "basedpyright"): (
         1,
@@ -368,8 +314,11 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 def _extension_tools() -> set[str]:
     """The tools the installed extensions' steps name and their tables require.
 
-    The tables are the top level's ``[toolroom]`` and each ``[for.<target>]``
-    table's.
+    A step names the tools it runs, and a step named for its extension
+    is named for its tool, as ``format.ruff`` and ``docs.mkdocstrings``
+    are; another step's name, cmake's ``build.configure``, names no
+    tool. The tables are the top level's ``[toolroom]`` and each
+    ``[for.<target>]`` table's.
     """
     from importlib.metadata import entry_points
 
@@ -382,7 +331,9 @@ def _extension_tools() -> set[str]:
         if found is None:
             continue
         for record in found.additions.steps:
-            tools.update((record.step, *record.tools))
+            tools.update(record.tools)
+            if record.step == entry.name:
+                tools.add(record.step)
         declared = [*found.tools]
         for required in found.target_tools.values():
             declared += required
@@ -521,15 +472,6 @@ def _base_module(tmp_path: Path, name: str, text: str) -> Path:
     return tmp_path
 
 
-def test_a_base_module_importing_a_backend_refuses(tmp_path: Path) -> None:
-    src = _base_module(
-        tmp_path, "_fresh.py", "from livery.workshop._backends import _python\n"
-    )
-    found, _ = scan(src, {"python"})
-    (problem,) = judge(found, {}, {})
-    assert problem.startswith("_fresh: 'import a backend' 1 time(s), 0 allowed")
-
-
 def test_a_new_word_literal_in_the_base_refuses_naming_the_module(
     tmp_path: Path,
 ) -> None:
@@ -539,7 +481,7 @@ def test_a_new_word_literal_in_the_base_refuses_naming_the_module(
         '"""A docstring naming conan is prose."""\nNAME = "conan"\n'
         'HOME = "packages/x/pyproject.toml"\n',
     )
-    found, _ = scan(src, {"conan"})
+    found = scan(src, {"conan"})
     assert judge(found, {}, {}) == [
         "_fresh: 'conan' 1 time(s), 0 allowed; the base names no package-level"
         " extension and no registry kind, so ask the extensions a package holds",
@@ -551,7 +493,7 @@ def test_a_new_word_literal_in_the_base_refuses_naming_the_module(
 
 def test_the_allowance_only_falls(tmp_path: Path) -> None:
     src = _base_module(tmp_path, "_fresh.py", 'A = "conan"\nB = "conan"\n')
-    found, _ = scan(src, {"conan"})
+    found = scan(src, {"conan"})
     assert judge(found, {}, {("_fresh", "conan"): 2}) == []
     assert judge(found, {}, {("_fresh", "conan"): 1}) == [
         "_fresh: 'conan' 2 time(s), 1 allowed; the base names no package-level"
@@ -568,7 +510,7 @@ def test_the_runtime_list_exempts_only_its_count(tmp_path: Path) -> None:
         "_fresh.py",
         'ROOT = "pyproject.toml"\nMEMBER = "packages/x/pyproject.toml"\n',
     )
-    found, _ = scan(src, set())
+    found = scan(src, set())
     runtime = {("_fresh", "pyproject.toml"): (1, "the root")}
     (problem,) = judge(found, runtime, {})
     assert problem.startswith("_fresh: 'pyproject.toml' 1 time(s), 0 allowed")
@@ -584,14 +526,6 @@ def test_every_runtime_entry_states_its_reason(key: tuple[str, str]) -> None:
     count, reason = RUNTIME[key]
     assert count > 0
     assert reason
-
-
-def test_a_extension_importing_a_backend_is_named(tmp_path: Path) -> None:
-    module = tmp_path / "livery" / "extensions" / "site" / "_pages.py"
-    module.parent.mkdir(parents=True)
-    module.write_text("def f():\n    from livery.workshop._backends._python import x\n")
-    _, extensions = scan(tmp_path, set())
-    assert extensions == ["livery.extensions.site._pages:2"]
 
 
 def _loaded_by(statement: str, prefixes: tuple[str, ...]) -> list[str]:

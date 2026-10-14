@@ -19,6 +19,43 @@ requires = ["cmake", "ninja"]
 [queries]
 compile-commands = "livery.extensions.cmake._build:compile_commands"
 
+# The gate build, in two steps on the build phase's tree side: the
+# configure into build/gate with the Ninja generator and a compilation
+# database, then the compile. Both run when a package's change is its
+# tests alone, since its tests run on the build. The release builds on
+# the isolated side, where neither runs. Each names cmake, the tool it
+# runs, so its own verb hands cmake the words after --:
+# `fm build.configure -- -DACME_FAST=ON`.
+[phases.build.configure]
+main = "livery.extensions.cmake._steps:configure"
+isolated = false
+tests-only = true
+tools = ["cmake"]
+
+[phases.build.compile]
+main = "livery.extensions.cmake._steps:compile"
+isolated = false
+tests-only = true
+after = ["build.configure"]
+tools = ["cmake"]
+
+# ctest over the gate build of each package whose set holds cmake: every
+# test, or the ones a change to its test files selects. A change to any
+# test or source file reaches it, whatever the language the project
+# builds. It serves the tree side alone, so a release has no isolated
+# test of a cmake package to run. It names no tool: a tool a test step
+# names is a verdict tool, which no workspace may take from the host,
+# and a workspace may serve cmake from the host. So its verb takes no
+# words after --.
+[phases.test.ctest]
+main = "livery.extensions.cmake._steps:ctest"
+isolated = false
+scope = "package"
+extensions = ["cmake"]
+tests-only = true
+after = ["build.compile"]
+claims = [{ category = "test" }, { category = "source" }]
+
 # While coverage is listed, this extension measures every native suite
 # for it: the gate build includes coverage.cmake, each ctest run is read
 # by the compiler family's own measurer, and what it read, lines,

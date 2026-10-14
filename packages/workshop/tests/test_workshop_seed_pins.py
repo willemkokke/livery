@@ -316,8 +316,9 @@ def test_a_workspace_of_the_three_seeds_composes_these_files(tmp_path: Path) -> 
 #: What a workspace listing nothing requires as each seed's member joins
 #: it: each requirement's name and site, each pair once, in the order
 #: first required. The base requires uv; each native tool is required by
-#: the extension in the member's set that runs it, in the mount's order.
-#: The nanobind member is of the python kind and lists nanobind.
+#: the extension in the member's set that runs it, in the mount's order,
+#: and cmake by the two build steps that run it as well. The nanobind
+#: member is of the python kind and lists nanobind.
 REQUIRED = {
     "no member": (("uv", "the base"),),
     "package-python": (("uv", "the base"),),
@@ -331,6 +332,8 @@ REQUIRED = {
     ),
     "package-cpp-conan": (
         ("uv", "the base"),
+        ("cmake", "step build.configure"),
+        ("cmake", "step build.compile"),
         ("cmake", "extension cmake"),
         ("ninja", "extension cmake"),
         ("conan", "extension conan"),
@@ -383,8 +386,11 @@ ROOT_TESTS_READ = {
     "typecheck.mypy": (".",),
 }
 
-#: The tools the steps require in that workspace, each with its site.
+#: The tools the steps require in that workspace, each with its site:
+#: the library's build steps, cmake's, first, since cmake mounts first.
 ROOT_TESTS_TOOLS = (
+    ("cmake", "step build.configure"),
+    ("cmake", "step build.compile"),
     ("ruff", "step format.ruff"),
     ("ruff", "step lint.ruff"),
     ("basedpyright", "step typecheck.basedpyright"),
@@ -468,16 +474,17 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
 
 #: Each step a process registers in the three seeds' workspace, in
 #: registration order, with the extension that registered it and the
-#: members it judges.
+#: members it judges. The build and test steps of the C++ library are
+#: cmake's, which mounts first since the library's set holds it.
 JUDGED = (
     "drift.check (livery.workshop): echo, native, lib",
     "provenance.check (livery.workshop): echo, native, lib",
     "layering.graph (livery.workshop): echo, native, lib",
     "layering.base-imports-no-extension (livery.workshop): echo, native, lib",
     "layering.sibling-references (livery.workshop): echo, native, lib",
-    "build.configure (livery.workshop): lib",
-    "build.compile (livery.workshop): lib",
-    "test.ctest (livery.workshop): lib",
+    "build.configure (cmake): lib",
+    "build.compile (cmake): lib",
+    "test.ctest (cmake): lib",
     "layering.private-reaches (python): echo, native, lib",
     "layering.runner-terminal (python): echo, native, lib",
     "layering.declared-imports (python): echo, native, lib",

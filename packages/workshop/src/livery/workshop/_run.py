@@ -2,13 +2,14 @@
 
 ``fm run <package>[:<executable>] -- <arguments>`` names a package and
 one of the executables its extensions answer under ``executables``
-([livery.workshop.EXECUTABLES][]). It first runs the gate's ``build``
-phase over the package's dependency closure, dependencies first, on the
-build phase's tree side in the ``debug`` configuration, and skips each
-package whose files and dependencies are unchanged since its last good
-build in this checkout; the record of those builds lives under
-``.workshop/.cache/run/``. Then it runs the ``run`` phase through the
-one walk ([livery.workshop._phases.run_phase][]): every step the
+([livery.workshop.EXECUTABLES][]). It first builds the package's
+dependency closure, dependencies first, each member through the steps
+its set adds to the ``build`` phase's tree side, in the ``debug``
+configuration, and skips each member whose files and dependencies are
+unchanged since its last good build in this checkout; the record of
+those builds lives under ``.workshop/.cache/run/``. Then it runs the
+``run`` phase through the one walk
+([livery.workshop._phases.run_phase][]): every step the
 package's set adds to it, except that of the extensions answering
 ``executables`` only the owner's steps run. The engine gives the phase
 the executable under ``executable``, which a step reads as it reads
@@ -30,6 +31,7 @@ from livery.footman import Arg, cwd, doc, fail, passthrough, prog, suggest, task
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
+    from livery.workshop._steps import StepRecord
 
 #: The record of the development builds, under the workspace root.
 RECORD = Path(".workshop") / ".cache" / "run" / "built.json"
@@ -80,9 +82,10 @@ def run(
 ) -> int:
     """Build what a package's executable needs, start it, and exit with its code.
 
-    The gate's build phase runs over the package's dependency closure
-    first, skipping what is unchanged since its last good build; then
-    the run phase starts the executable with the words after ``--``.
+    The build phase's tree side runs over the package's dependency
+    closure first, skipping what is unchanged since its last good
+    build; then the run phase starts the executable with the words
+    after ``--``.
     """
     from livery.workshop._extensions import workspace_root
 
@@ -203,24 +206,21 @@ def _known(packages: tuple[Package, ...]) -> str:
 
 
 def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list[str]:
-    """Build *package*'s dependency closure in the gate's build phase; the paths built.
+    """Build *package*'s dependency closure in the build phase; the paths built.
 
-    Dependencies come first, each on the build phase's tree side in the
-    ``debug`` configuration ([livery.workshop._run.DEVELOP_INPUTS][]).
+    Dependencies come first, each through the steps its set adds to the
+    build phase that serve the tree side, in the ``debug``
+    configuration ([livery.workshop._run.DEVELOP_INPUTS][]), run
+    through the one walk as the release train runs a package's phase.
     A member is built when its files, or the fingerprint of a
     dependency, differ from its last good build in this checkout, so a
-    dependency that changed rebuilds what depends on it; a member no
-    build step judges is never built. With nothing changed, no build
-    step runs. A checkout git cannot read is built whole, and says so.
+    dependency that changed rebuilds what depends on it; a member whose
+    set adds no such step is never built. With nothing changed, no
+    build step runs. A checkout git cannot read is built whole, and
+    says so.
     """
-    from livery.workshop._composition import extension_set
     from livery.workshop._graph import dependencies_closure, order_topologically
-    from livery.workshop._quality import run_on_packages
-    from livery.workshop._steps import judges_extensions, steps_by_name
 
-    builders = [
-        record for record in steps_by_name().values() if record.phase == "build"
-    ]
     closure = order_topologically(dependencies_closure(packages, {package.path}))
     try:
         tree = git.working_tree_id(root)
@@ -241,16 +241,45 @@ def develop(root: Path, package: Package, packages: tuple[Package, ...]) -> list
         )
         fingerprint = hashlib.sha256("\n".join((own, *needs)).encode()).hexdigest()
         prints[member.path] = fingerprint
-        held = extension_set(member)
-        names = tuple(r.name for r in builders if judges_extensions(r, held))
-        if not names or (own and record.get(member.path) == fingerprint):
+        steps = _build_steps(member)
+        if not steps or (own and record.get(member.path) == fingerprint):
             continue
-        run_on_packages(names, (member,), inputs=DEVELOP_INPUTS)
+        _build(root, member, steps)
         built.append(member.path)
         if own:
             record[member.path] = fingerprint
             _write(root, record)
     return built
+
+
+def _build_steps(member: Package) -> tuple[StepRecord, ...]:
+    """The steps *member*'s set adds to the build phase that serve the tree side."""
+    from livery.workshop._composition import extension_set
+    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._phases import phase_steps, serves
+
+    side = DEVELOP_INPUTS["build"]
+    return tuple(
+        record
+        for record in phase_steps("build", extension_set(member), installed_declaration)
+        if serves(record, side)
+    )
+
+
+def _build(root: Path, member: Package, steps: tuple[StepRecord, ...]) -> None:
+    """Run *steps* over *member*, the development build's inputs given the phase.
+
+    Raises:
+        Failed: when the steps cannot run as declared, with the walk's
+            reason.
+    """
+    from livery.workshop._phases import PhaseContext, PhaseError, run_phase
+
+    ctx = PhaseContext(root=root, packages=(member,), package=member, phase="build")
+    try:
+        run_phase(ctx, steps, inputs=DEVELOP_INPUTS)
+    except PhaseError as error:
+        fail(str(error))
 
 
 def _subtrees(root: Path, tree: str, members: tuple[Package, ...]) -> dict[str, str]:

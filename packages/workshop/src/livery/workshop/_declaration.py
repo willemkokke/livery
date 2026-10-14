@@ -48,7 +48,10 @@ A step is declared at ``[phases.<phase>.<step>]`` and reads into one
 record whatever its phase's level
 ([livery.workshop._steps.StepRecord][]): a workspace-level phase's
 steps register at mount, and a package-level phase's run over each
-package whose set holds the extension. A step whose verdict is its
+package whose set holds the extension. ``fm check`` runs the tree
+side, so of a gated package-level phase, the build, a step serving
+the tree side registers at mount as well, and one serving the
+isolated side alone registers nothing. A step whose verdict is its
 tool's exit code is its tool's words (``main`` as a template, with
 ``fix``, ``safe-fix``, ``env`` and ``matrix``), which the engine runs
 ([livery.workshop._words.Command][]). Other behaviour is a reference,
@@ -155,9 +158,11 @@ class Additions:
     """What a declaration adds while it is mounted.
 
     Attributes:
-        steps: The steps of the ``[phases.<phase>.<step>]`` tables of
-            the workspace-level phases, as records under the
-            extension's name, which the mount registers.
+        steps: The steps of the ``[phases.<phase>.<step>]`` tables the
+            mount registers, as records under the extension's name:
+            those of the workspace-level phases and those of the gated
+            package-level phases, less each that serves the isolated
+            side alone.
         jobs: The CI jobs it adds to the builtin points, with their entries.
     """
 
@@ -235,10 +240,10 @@ class Declaration:
         phase_specs: The phases it declares, by name.
         phases: The steps its top-level ``[phases.<phase>.<step>]``
             tables add, by phase, each the one step record whatever
-            the phase's level: a workspace-level phase's are among
-            ``additions`` too, which the mount registers; a
-            package-level phase's run through the walk of a package's
-            phase ([livery.workshop._phases.run_phase][]).
+            the phase's level: a package-level phase's run through the
+            walk of a package's phase
+            ([livery.workshop._phases.run_phase][]), and those the
+            mount registers are among ``additions`` too.
         query_specs: The queries it declares, by name.
         queries: The queries it answers, each query's name to the
             function that answers it or to its literal answer.
@@ -583,12 +588,15 @@ class _Reader:
         """What *data* adds: the gate phases' steps and jobs.
 
         The steps are those of the workspace-level phases among
-        *steps*, read from *data* when none are given; a package-level
-        phase's steps run through the walk of a package's phase and
-        register nothing. A step serving a phase's isolated side alone
-        registers nothing either: the gate runs the tree side, and the
-        release train runs that step through the walk of the package's
-        phase.
+        *steps*, read from *data* when none are given, and those of the
+        gated package-level phases: the gate builds each package on the
+        build phase's tree side, so a build step serving that side
+        registers. A package-level phase the gate does not run, the
+        release's stamp or publish, runs its steps through the walk of
+        a package's phase and registers none. A step serving a phase's
+        isolated side alone registers nothing either: the gate runs the
+        tree side, and the release train runs that step through the
+        walk of the package's phase.
         """
         from livery.workshop._phases import WORKSPACE_LEVEL
 
@@ -596,7 +604,7 @@ class _Reader:
         registered = [
             record
             for phase, records in found.items()
-            if self.specs[phase].level == WORKSPACE_LEVEL
+            if self.specs[phase].level == WORKSPACE_LEVEL or self.specs[phase].gated
             for record in records
             if record.isolated is not True
         ]

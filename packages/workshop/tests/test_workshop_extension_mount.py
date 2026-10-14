@@ -173,16 +173,16 @@ def test_the_gate_names_what_a_extension_registered_and_withdrew(
         return set(_steps.narrowings()) - before
 
     register_step(StepRecord("brand", "lint", _noop, extension="acme.brand"))
-    unregister_step("test.ctest", by="acme.brand")
+    unregister_step("drift.check", by="acme.brand")
     assert added() == {
         "  lint.brand: registered by acme.brand",
-        "  test.ctest: withdrawn by acme.brand",
+        "  drift.check: withdrawn by acme.brand",
     }
     # An extension withdrawing its own step narrows nothing the base owned.
     unregister_step("lint.brand", by="acme.brand")
-    assert added() == {"  test.ctest: withdrawn by acme.brand"}
+    assert added() == {"  drift.check: withdrawn by acme.brand"}
     # Registering the name again clears the withdrawal.
-    register_step(StepRecord("ctest", "test", _noop))
+    register_step(StepRecord("check", "drift", _noop))
     assert added() == set()
 
 

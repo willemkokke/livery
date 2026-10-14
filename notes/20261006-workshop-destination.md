@@ -334,7 +334,7 @@ every kind the check judges"). What changes:
 | the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
-| the python kinds and backends | `_backends/` (the kind registry went in step 7's P6) | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
+| the python kinds and backends | nothing: the kind registry went in step 7's P6, the backends in P5 | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
 | the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the python extension's runner-terminal and declared-imports steps read that parse | the `references` query: a language extension answers what a source references; rules register against it |
 | the registry kinds and their defaults | `_registries._ECOSYSTEM` | ecosystems as registrations (phase 13) |
 
@@ -1470,8 +1470,11 @@ parts, each mergeable alone:
   `compile_commands` leave the public names; a step that still writes
   `kinds` refuses, naming `extensions`. The workspace's own units are
   told apart by their path, outside `packages/`.
-- P5: cmake's build and test steps are cmake's; `_backends` goes, and
-  the base imports no extension.
+- P5 (built, #1650): cmake declares `build.configure`, `build.compile`
+  and `test.ctest`; a gated package-level phase's tree-side step
+  registers in the gate, and python's and conan's builds are isolated.
+  `_backends` goes, and with it `BASE_EXTENSION_IMPORTS`: the base
+  imports no extension, without exception.
 - P6 (built, #1651): the registry goes: `_kinds` is deleted, the seed
   trees' chain is data beside the seeds (`_seeds.PARENTS`) until P7's
   templates, the base's and the workspace's category tables are data,
@@ -1640,13 +1643,10 @@ neither needs nor rules out).
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
-| `BASE_EXTENSION_IMPORTS`, the `_backends._cpp_conan` module importing `cmake`, `cpp` and `conan` for the base's cmake steps and the loop | nothing: the package kinds go, and `base-imports-no-extension` holds without exception (phase 11b, slice 6) |
-| `livery.workshop._backends._cpp_conan`, gathering the cmake, cpp and conan extensions' code for the base's cmake steps and the loop | cmake's own steps (step 7's P5) |
 | the host build of nanobind's wheels in the extension's code, run by nanobind's hidden `nanobind.wheels` task | conan's per-host artifact (phase 13) |
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
-| the base registering `build.configure`, `build.compile` and `test.ctest`, which name `cmake` | the cmake extension's build and test steps, once a package holds cmake only by listing it (phase 11b, slice 6) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
