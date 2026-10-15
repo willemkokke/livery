@@ -1,0 +1,23 @@
+# The lfs extension: Git LFS for the workspace. Read at every mount; the
+# sync step's code is imported when it runs. An extension that ships an
+# LFS attribute line ships it under content/for/lfs/ with a [for.lfs]
+# table, so the line applies while this extension is listed.
+
+[extension]
+description = "Git LFS for the workspace: the lock pins git-lfs, every fm sync installs LFS's hooks and filter in the checkout, and the rendered CI checkout fetches the LFS objects."
+api-version = 1
+
+# git-lfs runs the hooks and the filter the sync step installs, so the
+# lock pins it while the workspace lists this extension.
+[toolroom]
+requires = ["git_lfs"]
+
+# Once over the workspace on every fm sync, after the tools are
+# installed: LFS's hooks and the checkout's filter configuration.
+[phases.sync.lfs]
+main = "livery.extensions.lfs._hooks:install"
+
+# The rendered CI checkout fetches the LFS objects, or the gate reads
+# the pointer files where the files should be.
+[queries.checkout-inputs]
+value = { lfs = "true" }

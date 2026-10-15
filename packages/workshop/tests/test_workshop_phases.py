@@ -760,6 +760,9 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
         True,
     )
     assert found["format"] == PhaseSpec("format", {}, WORKSPACE_LEVEL, True, (), True)
+    # fm sync runs the sync phase once over the workspace, so an
+    # extension the root lists adds to it as one a package lists does.
+    assert found["sync"] == PhaseSpec("sync", {}, WORKSPACE_LEVEL, False, (), False)
     assert found["stamp"] == PhaseSpec(
         "stamp", {"version": "str"}, PACKAGE_LEVEL, False, (), False
     )
@@ -780,7 +783,6 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
     }
     assert {name for name, spec in found.items() if spec.verb} == gated
     assert lifecycle_phases() == (
-        "sync",
         "clean",
         "build",
         "stamp",

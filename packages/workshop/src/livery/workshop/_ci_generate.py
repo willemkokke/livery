@@ -21,9 +21,9 @@ member, so a tag is a receipt, never a trigger.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import livery.footman as footman
 from livery.workshop._contract import load_contract
@@ -39,6 +39,9 @@ from livery.workshop._points import (
     pull_request_runners,
 )
 from livery.workshop._pythons import gate_pythons, python_matrix
+
+if TYPE_CHECKING:
+    from livery.workshop._composition import Lookup
 
 #: Pinned action shas, one place; version comments ride each use.
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
@@ -68,21 +71,21 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
     minor; the uv pin from the lock; what a job installs, where it
     deploys and the runners it fans out to from the functions the job
     names, over *everything*, the points the files render, *root*'s
-    when absent. Nothing here is an answer: the answers hold identity
-    alone.
+    when absent; what the listed extensions add to the checkout step
+    from their answers to the ``checkout-inputs`` query. None of it is
+    the project's identity, which the project's answers hold alone.
     """
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
+    from livery.workshop._queries import CHECKOUT_INPUTS, answer
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
-    from livery.workshop._lfs import lfs_enabled
-
     return {
         "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
-        # With Git LFS on, a checkout fetches the LFS objects, or the
-        # gate reads pointer files where the binaries should be.
-        "lfs": lfs_enabled(root),
+        # What the listed extensions add to the checkout step, such as
+        # fetching the objects a git filter keeps outside the repository.
+        "checkout_inputs": dict(answer(root, CHECKOUT_INPUTS)),
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
         "pull_request_runners": pull_request_runners(ci),
         "required_context": str(ci.get("required-context", "gate")),
@@ -446,12 +449,53 @@ def _call_env(job: Job, *, forge: str) -> str:
     return "        env:\n" + "".join(f"          {line}\n" for line in lines)
 
 
-def _checkout_step(point: Point, job: Job, *, forge: str, lfs: bool = False) -> str:
-    """The checkout: as deep as the verbs need, at the dispatched ref, able to push."""
+#: The inputs the checkout step sets from the job's own declaration,
+#: which no answer to the ``checkout-inputs`` query may name.
+CHECKOUT_OWN = ("ref", "fetch-depth", "fetch-tags", "token")
+
+
+def checkout_inputs(answers: Mapping[str, Any], lookup: Lookup) -> dict[str, str]:
+    """Every input the answers add to the checkout step, each name to its value.
+
+    The rule of the ``checkout-inputs`` query, which the base's
+    contract file names. Each answer maps an input of the checkout
+    action to its value, written into the workflow as it stands.
+
+    Raises:
+        QueryError: when an answer names an input the step sets from the
+            job's declaration (``CHECKOUT_OWN``) or gives a value that is
+            not a string, naming the extension, or when two answers give
+            one input different values, naming both.
+    """
+    from livery.workshop._queries import QueryError, merged
+
+    for name, value in answers.items():
+        for key, held in cast("Mapping[str, object]", value).items():
+            if key in CHECKOUT_OWN:
+                raise QueryError(
+                    f"{name} answers {key}, which the checkout step sets from"
+                    " the job's declaration; answer another input"
+                )
+            if not isinstance(held, str):
+                raise QueryError(
+                    f"{name} answers {key} with {held!r}, and an input's value"
+                    " is a string, as the workflow writes it; quote it"
+                )
+    return dict(merged(answers, lookup))
+
+
+def _checkout_step(
+    point: Point, job: Job, *, forge: str, inputs: Mapping[str, str] | None = None
+) -> str:
+    """The checkout: as deep as the verbs need, at the dispatched ref, able to push.
+
+    *inputs* are what the listed extensions add to it, each written
+    before the inputs the job's declaration sets.
+    """
     action = CHECKOUT if forge == "github" else "actions/checkout@v4"
-    with_lines: list[str] = []
-    if lfs:
-        with_lines.append("          lfs: true")
+    with_lines = [
+        f"          {name}: {value}" for name, value in (inputs or {}).items()
+    ]
     if point.ref_input:
         with_lines.append(f"          ref: ${{{{ inputs.{point.ref_input} }}}}")
     if job.fetch == "full":
@@ -683,7 +727,9 @@ def _actions_job(
     else:
         lines.append(f"    runs-on: {first}\n")
     lines.append("    steps:\n")
-    lines.append(_checkout_step(point, job, forge=forge, lfs=bool(answers.get("lfs"))))
+    lines.append(
+        _checkout_step(point, job, forge=forge, inputs=answers.get("checkout_inputs"))
+    )
     if forge == "github":
         lines.append(_setup_uv_step(answers))
     lines.append(_collect_step(job, forge=forge, everything=everything))

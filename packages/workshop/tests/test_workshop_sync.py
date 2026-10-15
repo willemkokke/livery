@@ -310,19 +310,25 @@ def test_the_sync_phase_runs_after_the_tools_and_before_uv(
     assert "the default profile was detected again" in capsys.readouterr().out
 
 
-def test_the_sync_phase_runs_the_listed_extensions_alone(
+def test_the_sync_phase_runs_a_step_once_or_for_each_package_holding_its_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A listed extension's sync step runs; a package listing none runs nothing."""
+    """A workspace step runs once; a package step per package holding its extension."""
     from livery.workshop import _lifecycle
+    from livery.workshop import _steps as registry
+    from livery.workshop._extensions import declaration, register_declared
     from livery.workshop._packages import Package
     from workshop_extension_fakes import fake_extensions, fake_steps
 
     fake_extensions(
         tmp_path,
         monkeypatch,
-        prof='[extension]\n\n[phases.sync.prof]\nmain = "{package}._steps:main"\n',
+        prof=(
+            '[extension]\n\n[phases.sync.prof]\nmain = "{package}._steps:main"\n'
+            'scope = "package"\nextensions = ["acme.prof"]\n'
+        ),
         over='[extension]\nrequires = ["acme.prof"]\n',
+        hooks='[extension]\n\n[phases.sync.hooks]\nmain = "{package}._steps:main"\n',
     )
     fake_steps(
         tmp_path,
@@ -330,6 +336,14 @@ def test_the_sync_phase_runs_the_listed_extensions_alone(
         """
         def main(ctx):
             print(f"prof.main for {ctx.package.path}")
+        """,
+    )
+    fake_steps(
+        tmp_path,
+        "hooks",
+        """
+        def main(ctx):
+            print(f"hooks.main over the workspace: {ctx.package is None}")
         """,
     )
 
@@ -342,22 +356,36 @@ def test_the_sync_phase_runs_the_listed_extensions_alone(
             extensions=extensions,
         )
 
-    # Nothing first: a package listing nothing, and one listing an
-    # extension that adds no sync step, run no step.
-    _lifecycle.sync((member("plain"), member("other", "python")), tmp_path)
-    assert capsys.readouterr().out == ""
-    # The step runs for a package listing its extension, and for one
-    # listing an extension that requires it.
-    _lifecycle.sync(
-        (member("listed", "acme.prof"), member("over", "acme.over")), tmp_path
+    everyone = (
+        member("plain"),
+        member("other", "python"),
+        member("listed", "acme.prof"),
+        member("over", "acme.over"),
     )
-    # The step's own lines; the walk's and footman's receipts are its.
-    said = [
+    # Nothing first: with no step registered, the phase runs nothing.
+    _lifecycle.sync(everyone, tmp_path)
+    assert capsys.readouterr().out == ""
+    # Registered as the mount registers a listed extension's steps: the
+    # workspace step runs once, and the package step for the package
+    # listing its extension and for the one listing an extension that
+    # requires it.
+    state = registry.snapshot()
+    try:
+        for name in ("acme.prof", "acme.hooks"):
+            found = declaration(name)
+            assert found is not None
+            register_declared(name, found.additions)
+        _lifecycle.sync(everyone, tmp_path)
+    finally:
+        registry.restore(state)
+    # The steps' own lines, in any order: independent steps run at once.
+    said = sorted(
         line
         for line in capsys.readouterr().out.splitlines()
-        if line.startswith("prof.main")
-    ]
+        if line.startswith(("prof.main", "hooks.main"))
+    )
     assert said == [
+        "hooks.main over the workspace: True",
         "prof.main for packages/listed",
         "prof.main for packages/over",
     ]

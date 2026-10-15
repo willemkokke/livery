@@ -355,6 +355,74 @@ def test_a_member_two_answers_give_different_jobs_refuses_naming_both(
     assert answer(tmp_path, JOB_BUILT_MEMBERS) == {"packages/core": "wheels"}
 
 
+def test_a_checkout_input_the_job_sets_or_one_not_a_string_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._queries import CHECKOUT_INPUTS
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        deep=WORKSPACE + _literal("checkout-inputs", '{ fetch-depth = "0" }'),
+        flag=WORKSPACE + _literal("checkout-inputs", "{ lfs = true }"),
+    )
+    root_contract(tmp_path, '["acme.deep"]')
+    with pytest.raises(QueryError) as raised:
+        answer(tmp_path, CHECKOUT_INPUTS)
+    assert str(raised.value) == (
+        "checkout-inputs: acme.deep answers fetch-depth, which the checkout step"
+        " sets from the job's declaration; answer another input"
+    )
+    root_contract(tmp_path, '["acme.flag"]')
+    with pytest.raises(QueryError) as refused:
+        answer(tmp_path, CHECKOUT_INPUTS)
+    assert str(refused.value) == (
+        "checkout-inputs: acme.flag answers lfs with True, and an input's value is"
+        " a string, as the workflow writes it; quote it"
+    )
+
+
+def test_the_checkout_inputs_the_listed_extensions_answer_reach_the_checkout_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._ci_generate import generate
+    from livery.workshop._queries import CHECKOUT_INPUTS
+
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: tmp_path
+    )
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        a=WORKSPACE + _literal("checkout-inputs", '{ lfs = "true" }'),
+        b=WORKSPACE + _literal("checkout-inputs", '{ lfs = "false" }'),
+        c=WORKSPACE + _literal("checkout-inputs", '{ lfs = "true", submodules = "x" }'),
+    )
+    # None listed: the checkout takes the job's own inputs alone.
+    root_contract(tmp_path, "[]")
+    assert answer(tmp_path, CHECKOUT_INPUTS) == {}
+    plain = generate(tmp_path)[".github/workflows/ci.yml"]
+    assert "lfs: true" not in plain
+    # Two answers giving one input different values refuse, naming both.
+    root_contract(tmp_path, '["acme.a", "acme.b"]')
+    with pytest.raises(QueryError) as raised:
+        answer(tmp_path, CHECKOUT_INPUTS)
+    assert str(raised.value) == (
+        "checkout-inputs: acme.a answers lfs 'true' and acme.b answers 'false';"
+        " the answers name each entry once, or alike"
+    )
+    # Alike answers name the input once, written before the job's own,
+    # on GitHub and on Gitea.
+    root_contract(tmp_path, '["acme.a", "acme.c"]')
+    assert answer(tmp_path, CHECKOUT_INPUTS) == {"lfs": "true", "submodules": "x"}
+    added = "        with:\n          lfs: true\n          submodules: x\n"
+    assert added in generate(tmp_path)[".github/workflows/ci.yml"]
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.a", "acme.c"]\n\n[forge]\nkind = "gitea"\n'
+    )
+    assert added in generate(tmp_path)[".gitea/workflows/ci.yml"]
+
+
 def test_a_question_asked_at_the_other_level_refuses(tmp_path: Path) -> None:
     root_contract(tmp_path, "[]")
     with pytest.raises(QueryError) as raised:
@@ -859,6 +927,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "store.series",
         "release-notes",
         "job-built-members",
+        "checkout-inputs",
     ]
     assert all(spec.extension == "livery.workshop" for spec in found.values())
     assert [name for name, spec in found.items() if spec.level == "workspace"] == [
@@ -869,11 +938,16 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "store.series",
         "release-notes",
         "job-built-members",
+        "checkout-inputs",
     ]
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["test-requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["job-built-members"].combine) == "livery.workshop._queries:merged"
     assert str(found["executables"].combine) == "livery.workshop._queries:owned"
+    assert (
+        str(found["checkout-inputs"].combine)
+        == "livery.workshop._ci_generate:checkout_inputs"
+    )
     assert found["registry"].combine == "agreed"
     # The base's are among every declared query, as the base declares them.
     declared = _queries.declared_queries()

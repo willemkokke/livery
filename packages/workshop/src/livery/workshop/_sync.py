@@ -37,13 +37,9 @@ def sync_workspace(root: Path, *, local_only: bool = False) -> list[str]:
     temporary trees. *local_only* writes no file a commit holds: the
     local outputs alone.
     """
-    from livery.workshop._lfs import install_hooks, lfs_enabled
     from livery.workshop._shipped_files import deliver
 
-    lines: list[str] = deliver(root, local_only=local_only)
-    if lfs_enabled(root):
-        lines += install_hooks(root)
-    return lines
+    return deliver(root, local_only=local_only)
 
 
 def _foreign_authors(root: Path, since: str) -> set[str]:

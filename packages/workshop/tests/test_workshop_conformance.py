@@ -855,6 +855,22 @@ def test_a_walk_that_judges_before_it_fixes_breaks_the_walk_order(
     ]
 
 
+def test_a_step_of_a_phase_the_gate_never_runs_is_judged_by_no_walk_clause(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _quality
+
+    # The gate walks nothing: the lint step breaks both clauses, and the
+    # sync step, of a phase fm check never runs, breaks neither.
+    monkeypatch.setattr(_quality, "walk", _walked_nothing)
+    subject = _walkers()
+    register_step(StepRecord("acme-hooks", "sync", _idle, extension=EXTENSION))
+    hooked = replace(subject, steps=(*subject.steps, step_for("sync.acme-hooks")))
+    assert [line for line in _names(hooked, "walk-order") if "sync." in line] == []
+    assert [line for line in _names(hooked, "gate-lines") if "sync." in line] == []
+    assert _names(hooked, "walk-order") == _names(subject, "walk-order") != []
+
+
 # A package fragment goes by extension; the later composed extension wins a
 # category tie.
 

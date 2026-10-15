@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from operator import itemgetter
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, cast
 
 import livery.footman as footman
@@ -322,18 +322,6 @@ def _packaged(
 
 def outputs(root: Path) -> tuple[Output, ...]:
     """The shipped files as the listed extensions render them for *root*."""
-    return _composed(root)[0]
-
-
-def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
-    """The shipped files for *root*, and a line naming the LFS rules left out.
-
-    While the workspace has Git LFS off, an `.gitattributes` keeps no
-    LFS line; the line says which patterns were left out and the
-    setting that composes them.
-    """
-    from livery.workshop._lfs import KEY, lfs_enabled, without_lfs
-
     fragments, order = shipped(root)
     per_package, packages, package_data = _packaged(root, order)
     planned = plan(
@@ -344,25 +332,11 @@ def _composed(root: Path) -> tuple[tuple[Output, ...], list[str]]:
         packages=packages,
         package_data=package_data,
     )
-    kept: list[Output] = []
-    notes: list[str] = []
-    lfs = lfs_enabled(root)
-    for output in planned:
-        if not lfs and PurePosixPath(output.path).name == ".gitattributes":
-            text, left = without_lfs(output.body.decode())
-            if left:
-                notes.append(
-                    f"  {output.path}: Git LFS is off, so the LFS rules for"
-                    f" {', '.join(left)} are left out; `[workspace] {KEY} = true`"
-                    " in workshop.toml composes them"
-                )
-                output = Output(output.path, text.encode(), output.owners)
-        kept.append(output)
-    # Every output beside the composed ones, whatever the LFS setting:
-    # an output the list leaves out is one the delivery withdraws.
+    # Every output beside the composed ones: an output the list leaves
+    # out is one the delivery withdraws.
     rest = _schema_outputs(root)
-    taken = {output.path: output.owners[0] for output in (*kept, *rest)}
-    return (*kept, *computed_outputs(root, order, taken), *rest), notes
+    taken = {output.path: output.owners[0] for output in (*planned, *rest)}
+    return (*planned, *computed_outputs(root, order, taken), *rest)
 
 
 def _schema_outputs(root: Path) -> list[Output]:
@@ -396,24 +370,20 @@ def deliver(root: Path, *, local_only: bool = False) -> list[str]:
     if local_only:
         from livery.workshop._fragment_engine import apply_untracked
 
-        planned, notes = _composed(root)
-        lines = apply_untracked(root, planned)
+        lines = apply_untracked(root, outputs(root))
         if lines:
-            planned, _notes = _composed(root)
-            lines += apply_untracked(root, planned)
-        return notes + lines
+            lines += apply_untracked(root, outputs(root))
+        return lines
 
     homes = (
         [package.path for package in discover_packages(root)]
         if (root / "packages").is_dir()
         else []
     )
-    planned, notes = _composed(root)
-    lines = apply(root, planned, packages=homes)
+    lines = apply(root, outputs(root), packages=homes)
     if lines:
-        planned, _notes = _composed(root)
-        lines += apply(root, planned, packages=homes)
-    return notes + lines
+        lines += apply(root, outputs(root), packages=homes)
+    return lines
 
 
 def shipped_drift(root: Path) -> list[str]:
