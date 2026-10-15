@@ -3472,6 +3472,26 @@ neither needs nor rules out).
   extension with `uv pip install`, which ignores the workspace's
   `[tool.uv.sources]`, so a path- or git-sourced extension resolves
   from the index instead (#1695).
+- 2026-10-15, Willem (#1686): Git LFS is an extension, not a switch of
+  the base. Built: `livery-extensions-lfs` (`packages/extensions/lfs`)
+  declares `[toolroom] requires = ["git_lfs"]`, a sync step that runs
+  `git lfs install --local` at the root, and `lfs: true` on the
+  rendered checkout through a new workspace query of the base,
+  `checkout-inputs` (each answer maps a checkout input to its value;
+  an input the step sets itself, a non-string value or two different
+  values for one input refuse). Other extensions' `.gitattributes`
+  lines that need LFS live under `[for.lfs]`. `_lfs.py`, the
+  `[workspace] lfs` key and the base's `filter=lfs` stripping went;
+  this supersedes the 2026-10-03 ruling that LFS is a workspace
+  setting. Decided while building it, recorded for Willem: the base's
+  `sync` phase is workspace-level, as the gate's phases are, so a
+  sync step runs once over the workspace and one declaring
+  `scope = "package"` runs per package whose set holds what it names;
+  conan's sync step declares that scope. A package-level `sync` ran a
+  step only for packages listing its extension, so a root-listed
+  extension's sync step never ran. The conformance kit's `walk-order`
+  and `gate-lines` clauses judge only gated phases' steps, and take a
+  step's extension by the name the workspace lists.
 
 ## Open
 
