@@ -274,9 +274,7 @@ def test_a_declaration_without_an_api_version_is_taken_at_the_current_version() 
     _extensions.check_api_version("acme.quiet", quiet)
 
 
-def test_the_gate_names_what_a_extension_registered_and_withdrew(
-    restored_steps,
-) -> None:
+def test_the_gate_names_each_step_an_extension_registered(restored_steps) -> None:
     # An extension mounted earlier in this process (the docs extension's
     # steps) is already named; the lines below are this test's own.
     before = set(_steps.narrowings())
@@ -285,16 +283,11 @@ def test_the_gate_names_what_a_extension_registered_and_withdrew(
         return set(_steps.narrowings()) - before
 
     register_step(StepRecord("brand", "lint", _noop, extension="acme.brand"))
-    unregister_step("drift.check", by="acme.brand")
-    assert added() == {
-        "  lint.brand: registered by acme.brand",
-        "  drift.check: withdrawn by acme.brand",
-    }
-    # An extension withdrawing its own step narrows nothing the base owned.
-    unregister_step("lint.brand", by="acme.brand")
-    assert added() == {"  drift.check: withdrawn by acme.brand"}
-    # Registering the name again clears the withdrawal.
-    register_step(StepRecord("check", "drift", _noop))
+    assert added() == {"  lint.brand: registered by acme.brand"}
+    # A step the base registers is never named.
+    register_step(StepRecord("plain", "lint", _noop))
+    assert added() == {"  lint.brand: registered by acme.brand"}
+    unregister_step("lint.brand")
     assert added() == set()
 
 
@@ -571,17 +564,14 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     # runs: the mount leaves the plugin alone, and registers what the
     # declaration adds as it does for any other extension.
     from livery.footman import _paths
-    from livery.workshop._points import verdict_needs, withdraw_job
+    from livery.workshop._points import verdict_needs
 
     fake_extensions(tmp_path, monkeypatch, brand=_BRANDED)
     root_contract(tmp_path, '["acme.brand"]')
     monkeypatch.setattr(_paths, "_builtin", ("acme.brand",))
-    try:
-        _mount(tmp_path)
-        assert _steps.steps_by_name()["lint.brand"].extension == "acme.brand"
-        assert "brand" in verdict_needs("gate")
-    finally:
-        withdraw_job("gate", "brand")
+    _mount(tmp_path)
+    assert _steps.steps_by_name()["lint.brand"].extension == "acme.brand"
+    assert "brand" in verdict_needs("gate")
     assert "did not mount its plugin" not in capsys.readouterr().err
 
 

@@ -170,19 +170,6 @@ def _docker_overlay() -> Path:
     return Path(str(resources.files(__name__))) / "compose.docker.yaml"
 
 
-def _workspace_root() -> Path:
-    """The nearest ancestor carrying a ``workshop.toml``, or fail.
-
-    The dev credentials are workspace state, not package state, so
-    they live beside the workspace contract.
-    """
-    origin = Path.cwd().resolve()
-    for candidate in (origin, *origin.parents):
-        if (candidate / "workshop.toml").is_file():
-            return candidate
-    fail("no workspace: no workshop.toml above the working directory")
-
-
 def _dev_env_path() -> Path:
     """The shared env file the cascade reads: the runner's config dir."""
     return footman.config_dir() / ".repo.shared.env"

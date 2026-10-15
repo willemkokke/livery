@@ -24,8 +24,3 @@ def register_site_file(path: str, render: Render, *, extension: str) -> None:
 def site_files() -> dict[str, Render]:
     """Every registered path with its renderer, in registration order."""
     return {path: render for path, (render, _extension) in _FILES.items()}
-
-
-def unregister_site_file(path: str) -> None:
-    """Withdraw *path*; nothing when it was never registered."""
-    _FILES.pop(path, None)

@@ -1,7 +1,7 @@
 # The package contract. Discovery is by this file: a directory under
 # packages/ is a package exactly when it carries one.
 
-# The package-level extensions this package is composed of.
+# The extensions this package is composed of.
 extensions = ["python"]
 name = "livery-forge"
 description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."

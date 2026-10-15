@@ -198,15 +198,6 @@ def _lf(data: bytes) -> bytes:
     return data.replace(b"\r\n", b"\n")
 
 
-def _member_directories(root: Path) -> list[Path]:
-    """Each member package's directory, in path order: those with a contract."""
-    from livery.workshop._packages import discover_packages
-
-    if not (root / "packages").is_dir():
-        return []
-    return [package.directory for package in discover_packages(root)]
-
-
 def project_drift(root: Path) -> list[str]:
     """The drift report: generated files (CI, codeowners) that disagree with *root*.
 

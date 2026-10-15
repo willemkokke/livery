@@ -1,8 +1,7 @@
 """What the C and C++ languages tell the workshop about a package's files.
 
-The suffixes of a C or C++ source, a header and a test source, and the
-answers a C or C++ package gives where a python package names modules:
-none, since other packages reach its code through headers and
+The answers a C or C++ package gives where a python package names
+modules: none, since other packages reach its code through headers and
 libraries, never an import path.
 
 Nothing here answers the ``references`` query, so the layering phase
@@ -32,12 +31,3 @@ def public_modules(package: Package) -> tuple[str, ...]:
     """Nothing: a C or C++ package has no importable API to verify."""
     del package
     return ()
-
-
-#: The extensions of a C or C++ test source under ``tests/``.
-TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
-
-
-#: The extensions of a C or C++ source or header: what clang-format
-#: walks, and what a native step's claims admit.
-SOURCE_SUFFIXES = (*TEST_SOURCES, ".hpp", ".h", ".hxx")

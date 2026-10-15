@@ -1,10 +1,10 @@
-# Seeded from the package-python seeds at
+# Seeded from the python-library template at
 # birth; this file is the workspace's own. Edit it directly:
 # nothing rewrites it.
 # The package contract: everything the workshop knows about this
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
-# The package-level extensions this package is composed of.
+# The extensions this package is composed of.
 extensions = ["python"]
 name = "livery-git"
 dev-extras = ["test"]

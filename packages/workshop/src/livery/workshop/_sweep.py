@@ -30,8 +30,6 @@ The rules, each saying what went or why it stayed:
   belongs to the worktree rule, and the branch the checkout stands on
   is named for ``fm sync`` to step off. On demand only, like the rule
   above.
-- A file or folder no code writes any more (`LEFTOVERS`) goes when
-  met.
 - Every declared series of the state store is bounded, windows,
   ages, and orphans, as [livery.git.sweep][] says.
 - The config directory is reported, never touched: anything beside the
@@ -42,7 +40,6 @@ The rules, each saying what went or why it stayed:
 from __future__ import annotations
 
 import shutil
-from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,9 +50,6 @@ from livery import git
 #: The workshop's homes under the data directory.
 WORKTREES = "worktrees"
 LOOP = "workshop-e2e"
-
-#: Files and folders no code writes any more; they go when met.
-LEFTOVERS = ("checkouts.txt", "diagnostics", "livery-workshop")
 
 #: What the config directory is for; anything else is reported.
 CONFIG_OWN = ("config.toml", ".repo.shared.env", "__pycache__")
@@ -75,7 +69,6 @@ def sweep(
     root = facts["root"] if "root" in facts else workspace_root()
     lines = sweep_worktrees(data_dir / WORKTREES, dry_run=dry_run)
     lines += sweep_branches(root, dry_run=dry_run)
-    lines += sweep_leftovers(data_dir, dry_run=dry_run)
     lines += sweep_store(root, dry_run=dry_run, now=now)
     lines += report_config(config_dir)
     lines += report_loop(data_dir / LOOP)
@@ -298,21 +291,6 @@ def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]
     return [f"state store: {line.strip()}" for line in lines]
 
 
-def sweep_leftovers(data_dir: Path, *, dry_run: bool) -> list[str]:
-    """Remove files and folders no code writes any more; the lines."""
-    lines: list[str] = []
-    for name in LEFTOVERS:
-        path = data_dir / name
-        if path.exists():
-            if not dry_run and path.is_dir():
-                shutil.rmtree(path, ignore_errors=True)
-            elif not dry_run:
-                path.unlink()
-            verb = "would remove" if dry_run else "removed"
-            lines.append(f"{name}: no code writes it any more; {verb}")
-    return lines
-
-
 def report_config(config_dir: Path) -> list[str]:
     """Name what sits in the config directory beside the user's own files."""
     from livery.footman import tasks_file_name
@@ -341,8 +319,3 @@ def report_loop(home: Path) -> list[str]:
         f"loop workspace: {total / 1e6:.0f} MB at {home};"
         f" kept for `{footman.prog()} ci.e2e`"
     ]
-
-
-def lines_of(items: Iterable[str]) -> list[str]:
-    """A list from any iterable of lines, for callers that print."""
-    return list(items)

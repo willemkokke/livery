@@ -709,8 +709,6 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     job, at its top level or in its ``[for.<target>]`` tables, and its
     plugin mounts all the same, so its verbs stay.
     """
-    # footman does not expose the brand's builtin set publicly; this
-    # private read is one of the reaches issue #1204 closes with a seam.
     from livery.footman import builtins, plugin
 
     global MOUNTED, UNDECLARED, STALE

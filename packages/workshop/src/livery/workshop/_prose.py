@@ -4,9 +4,9 @@ An extension's prose, its voice, its standards, its rules, is a set of
 fragments, and one set writes the agent's entry file and the site's
 development pages. A fragment is a markdown file in the extension's
 ``content/fragments/`` named ``<section>.<topic>[.<audience>].md``, or
-a registration with `register_fragment` and a render that takes the
-audience. The base defines the sections and their order;
-`register_section` adds one at a declared position. The audience is
+one the base renders from its registries, a render that takes the
+audience. The base defines the sections and their order, and an
+extension adds fragments to them, never a section. The audience is
 ``agent`` or ``human``, and a name without one serves both; a render
 answers each audience itself, and an empty answer leaves the fragment
 out for that reader. A topic is never named ``agent`` or ``human``: the
@@ -65,7 +65,7 @@ Render = Callable[[Path, "str | None"], str]
 
 
 class ProseError(ValueError):
-    """A fragment or a section the registry refuses; the message names the files."""
+    """A fragment name the guidance refuses; the message names the files."""
 
 
 @dataclass(frozen=True)
@@ -73,12 +73,12 @@ class Prose:
     """One prose fragment: a file an extension ships, or a render from the registries.
 
     Attributes:
-        section: The section it belongs to, one the registry knows.
+        section: The section it belongs to, one of the base's.
         topic: What it is about; with the section, its name.
         audience: ``agent`` or ``human`` for a file that serves one
             reader, empty for both; a rendered fragment is empty here
             and answers per audience.
-        extension: The extension that ships or registers it; empty for the
+        extension: The extension that ships or renders it; empty for the
             repository's own.
         source: The shipped file, or None for a rendered fragment.
         render: The render, or None for a shipped fragment.
@@ -101,7 +101,7 @@ class Prose:
         """Where it comes from, for a refusal: the posix file, or the extension."""
         if self.source is not None:
             return f"{self.source.as_posix()} ({self.extension or 'this repository'})"
-        return f"the render {self.extension} registered"
+        return f"the render of {self.extension}"
 
     def text(self, root: Path, audience: str | None) -> str:
         """The markdown for *audience*: the shipped text, or the render's answer."""
@@ -112,126 +112,12 @@ class Prose:
         return ""
 
 
-_SECTIONS: list[str] = list(BASE_SECTIONS)
-_SECTION_EXTENSIONS: dict[str, str] = dict.fromkeys(BASE_SECTIONS, BASE_EXTENSION)
-#: The rendered fragments by delivered name.
-_RENDERED: dict[str, Prose] = {}
-
-
-def sections() -> tuple[str, ...]:
-    """The sections in the order the entry file and the site read them."""
-    return tuple(_SECTIONS)
-
-
-def register_section(name: str, *, after: str, extension: str) -> None:
-    """Add the section *name* right after *after*.
-
-    Refuses a name an extension already registered, naming that extension, and
-    an anchor no extension registered, naming the sections.
-    """
-    if name in _SECTION_EXTENSIONS:
-        raise ProseError(
-            f"{extension} registers section {name!r}, which"
-            f" {_SECTION_EXTENSIONS[name]} already registered"
-        )
-    if after not in _SECTION_EXTENSIONS:
-        raise ProseError(
-            f"{extension} registers section {name!r} after {after!r}, which no"
-            f" extension registered; the sections are {', '.join(_SECTIONS)}"
-        )
-    _SECTIONS.insert(_SECTIONS.index(after) + 1, name)
-    _SECTION_EXTENSIONS[name] = extension
-
-
-def unregister_section(name: str, *, by: str) -> None:
-    """Drop the section *name*.
-
-    Refuses the base's own, an unknown one, another extension's, and one a
-    rendered fragment still belongs to.
-    """
-    owner = _SECTION_EXTENSIONS.get(name)
-    if owner is None:
-        raise ProseError(
-            f"{by} withdraws section {name!r}, which no extension registered"
-        )
-    if name in BASE_SECTIONS:
-        raise ProseError(f"{by} withdraws section {name!r}, which is the base's")
-    if owner != by:
-        raise ProseError(f"{by} withdraws section {name!r}, which {owner} registered")
-    inside = [p.name for p in _RENDERED.values() if p.section == name]
-    if inside:
-        raise ProseError(
-            f"{by} withdraws section {name!r} while {', '.join(inside)} still"
-            " belongs to it"
-        )
-    _SECTIONS.remove(name)
-    del _SECTION_EXTENSIONS[name]
-
-
 def _check_section(where: str, section: str) -> None:
-    if section not in _SECTION_EXTENSIONS:
+    if section not in BASE_SECTIONS:
         raise ProseError(
-            f"{where}: section {section!r} is not one the registry knows; the"
-            f" sections are {', '.join(_SECTIONS)}"
+            f"{where}: section {section!r} is not one of the sections; the"
+            f" sections are {', '.join(BASE_SECTIONS)}"
         )
-
-
-def register_fragment(
-    section: str,
-    topic: str,
-    render: Render,
-    *,
-    extension: str = BASE_EXTENSION,
-) -> None:
-    """Register a rendered fragment.
-
-    The render takes the workspace root and the audience, ``agent``,
-    ``human`` or None for no particular reader, and returns the
-    markdown; an empty answer leaves the fragment out for that reader.
-    Refuses an unknown section, a topic spelling an audience, and a name
-    an extension already registered, naming that extension.
-    """
-    prose = Prose(section, topic, "", extension, render=render)
-    where = f"{extension} registers fragment {prose.name}"
-    _check_section(where, section)
-    if topic in AUDIENCES:
-        raise ProseError(f"{where}: a topic is never named {topic!r}, an audience is")
-    existing = _RENDERED.get(prose.name)
-    if existing is not None:
-        raise ProseError(f"{where}, which {existing.extension} already registered")
-    _RENDERED[prose.name] = prose
-
-
-def unregister_fragment(name: str, *, by: str) -> None:
-    """Drop the rendered fragment delivered as *name*.
-
-    Refuses an unknown one, and one another extension registered.
-    """
-    prose = _RENDERED.get(name)
-    if prose is None:
-        raise ProseError(
-            f"{by} withdraws fragment {name}, which no extension registered"
-        )
-    if prose.extension != by:
-        raise ProseError(
-            f"{by} withdraws fragment {name}, which {prose.extension} registered"
-        )
-    del _RENDERED[name]
-
-
-def snapshot() -> tuple[list[str], dict[str, str], dict[str, Prose]]:
-    """The registry's state, for [livery.workshop._prose.restore][] to put back."""
-    return list(_SECTIONS), dict(_SECTION_EXTENSIONS), dict(_RENDERED)
-
-
-def restore(state: tuple[list[str], dict[str, str], dict[str, Prose]]) -> None:
-    """Put the registry back to *state*."""
-    ordered, extensions, rendered = state
-    _SECTIONS[:] = ordered
-    _SECTION_EXTENSIONS.clear()
-    _SECTION_EXTENSIONS.update(extensions)
-    _RENDERED.clear()
-    _RENDERED.update(rendered)
 
 
 def parse_name(filename: str, *, where: str = "") -> tuple[str, str, str]:
@@ -302,7 +188,7 @@ def guidance(root: Path, audience: str) -> list[Prose]:
 
     *audience* is [livery.workshop.AGENT][] or [livery.workshop.HUMAN][].
     The set is every fragment the mounted extensions ship, every
-    fragment an extension renders, and the repository's own under
+    fragment the base renders, and the repository's own under
     ``fragments/``: by section, then by extension in mount order, the
     repository's own last, then by name. A fragment written for the
     other reader is left out.
@@ -351,7 +237,7 @@ def fragments(
             tier, index, name = 0, mounted.index(prose.extension), ""
         else:
             tier, index, name = 1, 0, prose.extension
-        return (_SECTIONS.index(prose.section), tier, index, name, prose.name)
+        return (BASE_SECTIONS.index(prose.section), tier, index, name, prose.name)
 
     chosen.sort(key=rank)
     seen: dict[str, Prose] = {}
@@ -650,12 +536,14 @@ def render_tools(root: Path, audience: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _register_builtin() -> None:
-    """The base's rendered fragments: what the registries say, never written by hand."""
-    register_fragment("gate", "checks", render_gate)
-    register_fragment("verbs", "extensions", render_verbs)
-    register_fragment("compositions", "present", render_compositions)
-    register_fragment("tools", "locked", render_tools)
-
-
-_register_builtin()
+#: The base's rendered fragments by delivered name: what the registries
+#: say, never written by hand.
+_RENDERED: dict[str, Prose] = {
+    prose.name: prose
+    for prose in (
+        Prose("gate", "checks", render=render_gate),
+        Prose("verbs", "extensions", render=render_verbs),
+        Prose("compositions", "present", render=render_compositions),
+        Prose("tools", "locked", render=render_tools),
+    )
+}

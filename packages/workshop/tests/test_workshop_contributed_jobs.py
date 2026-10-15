@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,8 +18,9 @@ from livery.workshop._points import (
     job_installs,
     job_seams,
     point_by_name,
+    restore,
+    snapshot,
     verdict_needs,
-    withdraw_job,
 )
 
 # The site's jobs are the docs extension's, added as the mount adds them.
@@ -29,40 +29,26 @@ from workshop_docs_declared import docs_jobs  # noqa: F401
 _FAILURES = (SystemExit, Failed)
 
 
-@pytest.fixture
-def acme_jobs() -> Iterator[None]:
-    yield
-    for point in ("gate", "merge", "nightly"):
-        for name in ("lint-prose", "publish-book"):
-            withdraw_job(point, name)
-
-
-def test_a_test_leaves_the_jobs_contributed_before_it_in_place(
-    acme_jobs: None,
-) -> None:
-    # A mount earlier in the session contributed lint-prose; a test
-    # withdraws it and adds publish-book. Afterwards the jobs are the
-    # mount's again.
+def test_a_test_leaves_the_jobs_contributed_before_it_in_place() -> None:
+    # A mount earlier in the session contributed lint-prose; a test adds
+    # publish-book. Afterwards the jobs are the mount's again.
     from workshop_docs_declared import jobs_restored
 
     contribute_job("gate", Job("lint-prose"), extension="acme.prose")
     with jobs_restored():
-        withdraw_job("gate", "lint-prose")
         contribute_job("nightly", Job("publish-book"), extension="acme.prose")
     assert [item.job.name for item in contributed_jobs("gate")].count("lint-prose") == 1
     assert "publish-book" not in [item.job.name for item in contributed_jobs("nightly")]
 
 
-def test_a_contribution_to_an_unknown_point_names_the_points(acme_jobs: None) -> None:
+def test_a_contribution_to_an_unknown_point_names_the_points() -> None:
     with pytest.raises(
         _FAILURES, match=r"'weekly', which is not a builtin point; the points are gate"
     ):
         contribute_job("weekly", Job("lint-prose"), extension="acme.prose")
 
 
-def test_a_job_the_point_declares_or_another_extension_contributed_refuses(
-    acme_jobs: None,
-) -> None:
+def test_a_job_the_point_declares_or_another_extension_contributed_refuses() -> None:
     with pytest.raises(_FAILURES, match=r"the gate point, which declares it already"):
         contribute_job("gate", Job("check"), extension="acme.prose")
     contribute_job("gate", Job("lint-prose"), extension="acme.prose")
@@ -73,7 +59,7 @@ def test_a_job_the_point_declares_or_another_extension_contributed_refuses(
     assert contributed_jobs("gate")[-1].job.fetch == "2"
 
 
-def test_an_entry_naming_another_job_refuses(acme_jobs: None) -> None:
+def test_an_entry_naming_another_job_refuses() -> None:
     with pytest.raises(_FAILURES, match=r"an entry for merge/deploy; an entry names"):
         contribute_job(
             "gate",
@@ -87,9 +73,8 @@ def test_an_entry_naming_another_job_refuses(acme_jobs: None) -> None:
 # says so, and its entries ride the schedule.
 
 
-def test_a_gating_job_sits_before_the_verdict_and_joins_its_needs(
-    acme_jobs: None,
-) -> None:
+def test_a_gating_job_sits_before_the_verdict_and_joins_its_needs() -> None:
+    state = snapshot()
     before = [job.name for job in point_by_name(None)["gate"].jobs]
     contribute_job(
         "gate",
@@ -110,13 +95,11 @@ def test_a_gating_job_sits_before_the_verdict_and_joins_its_needs(
     assert "lint-prose" in verdict.args[0]
     # Declared points are untouched; the composition is read each time.
     assert "lint-prose" not in [job.name for job in DECLARED[0].jobs]
-    withdraw_job("gate", "lint-prose")
+    restore(state)
     assert [job.name for job in point_by_name(None)["gate"].jobs] == before
 
 
-def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
-    acme_jobs: None,
-) -> None:
+def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries() -> None:
     contribute_job(
         "nightly",
         Job("publish-book", needs=("nightly",)),
@@ -129,9 +112,7 @@ def test_a_job_on_a_point_without_a_verdict_lands_last_with_its_entries(
     assert nightly.name == composed_points()[2].name
 
 
-def test_a_job_another_job_of_its_point_waits_for_sits_before_it(
-    acme_jobs: None,
-) -> None:
+def test_a_job_another_job_of_its_point_waits_for_sits_before_it() -> None:
     from workshop_docs_declared import jobs_restored
 
     with jobs_restored():
@@ -163,9 +144,7 @@ def test_a_job_another_job_of_its_point_waits_for_sits_before_it(
     assert "book" not in [job.name for job in point_by_name(None)["release"].jobs]
 
 
-def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses(
-    acme_jobs: None,
-) -> None:
+def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses() -> None:
     with pytest.raises(_FAILURES, match=r"joins the job 'book' of the merge point"):
         contribute_job("merge", Job("book", joins=True), extension="acme.prose")
     with pytest.raises(_FAILURES, match=r"joins the job 'gate' of the merge point and"):
@@ -174,9 +153,7 @@ def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses(
         )
 
 
-def test_a_join_rides_the_point_and_its_entries_run_before_the_jobs_last(
-    acme_jobs: None,
-) -> None:
+def test_a_join_rides_the_point_and_its_entries_run_before_the_jobs_last() -> None:
     from workshop_docs_declared import jobs_restored
 
     with jobs_restored():

@@ -25,7 +25,7 @@ claims = [
 [phases.lint.clang-tidy.fragments.".clang-tidy"]
 extensions = ["cpp"]
 text = '''
-# Rendered by the template channel for each C or C++ package; the gate
+# Rendered by the fragment engine for each C or C++ package; the gate
 # keeps it matching its render. A `.clang-tidy` deeper in the tree with
 # `InheritParentConfig: true` carries this package's own lines.
 #

@@ -589,16 +589,6 @@ class RuleContext:
     packages: tuple[Package, ...]
     files: frozenset[str] | None = None
 
-    def in_scope(self, path: Path) -> bool:
-        """Whether *path*, absolute, is a source this run judges."""
-        if self.files is None:
-            return True
-        try:
-            relative = path.relative_to(self.root).as_posix()
-        except ValueError:
-            return False
-        return relative in self.files
-
     def packages_in_scope(self) -> tuple[Package, ...]:
         """The packages holding a source this run judges, every one without a scope."""
         if self.files is None:

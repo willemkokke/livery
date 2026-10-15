@@ -1,6 +1,6 @@
-<!-- Seeded from the template channel (package-base kind) at
+<!-- Seeded from the package-base seeds at
      birth; this file is the workspace's own. Edit it directly:
-     the template never rewrites it.
+     nothing rewrites it.
 -->
 # livery-strongroom
 

@@ -12,8 +12,9 @@ copyright-year = "2026"
 # The extensions, each by the name its distribution declares in the
 # workshop.extensions entry point group, written as the canonical list:
 # no extension another listed one requires, each after the ones it
-# requires, ties alphabetical, which `fm check --fix` writes. Discovery
-# is the lists and nothing else: an extension no list holds is not
+# requires, ties alphabetical, which `fm check --fix` writes. The mount
+# takes the extensions this list and the packages' lists name, and every
+# extension those require; an extension outside that set is not
 # mounted, however it got installed. The base is never listed, and a
 # plugin (forge's dev verbs, the bench's tools verbs) mounts because
 # this project depends on it directly.

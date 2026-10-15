@@ -2,11 +2,8 @@
 
 The python extension's answers and steps call the functions here, so a
 package whose set holds python builds, stamps, publishes and runs its
-tests through them. One invocation covers every python
-package at once: the checkers read their scopes from the workspace's
-own configuration, so the whole repository is checked as CI checks it,
-and a tracked file outside any package still cannot pass the gate and
-fail the build.
+tests through them. The suites of every package a run judges run in
+one pytest call.
 """
 
 from __future__ import annotations
@@ -32,10 +29,6 @@ from livery.workshop._packages import Neighbours, SourceReferences
 
 if TYPE_CHECKING:
     from livery.workshop import RegistryTarget
-
-#: The python suffixes a python step's claims admit; a foreign file
-#: an explicit path names passes through untouched.
-PY_SUFFIXES = (".py", ".pyi")
 
 #: The name a package lists this extension by.
 EXTENSION = "python"

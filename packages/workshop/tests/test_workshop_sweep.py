@@ -198,18 +198,12 @@ def test_the_store_is_swept_in_the_checkouts_local_scope(
 
 def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -> None:
     data = tmp_path / "data"
-    # The homes of rows the workshop no longer keeps on the machine.
-    (data / "diagnostics").mkdir(parents=True)
-    (data / "diagnostics" / "20260901T000000Z-x.json").write_text("{}")
-    (data / "livery-workshop").mkdir()
-    (data / "livery-workshop" / "gate-record.json").write_text("[]")
-    (data / "checkouts.txt").write_text("/gone/path\n")
     config = tmp_path / "config"
     config.mkdir()
     (config / "config.toml").write_text("")
     (config / "birth-e2e").mkdir()
     loop = data / "workshop-e2e"
-    loop.mkdir()
+    loop.mkdir(parents=True)
     (loop / "big.bin").write_bytes(b"x" * 2_000_000)
     facts: dict[str, Any] = {
         "data_dir": data,
@@ -221,14 +215,8 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
     # A dry run first: it says, and changes nothing.
     said = _sweep.sweep(dry_run=True, **facts)
     assert "state store: no checkout here; nothing swept" in said
-    for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
-        assert f"{name}: no code writes it any more; would remove" in said
-        assert (data / name).exists()
-    # Then for real: gone, the config directory reported only, the loop kept.
+    # Then for real: the config directory reported only, the loop kept.
     done = _sweep.sweep(dry_run=False, **facts)
-    for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
-        assert f"{name}: no code writes it any more; removed" in done
-        assert not (data / name).exists()
     assert (
         "config: birth-e2e is not the config, the tasks file, or the shared env;"
         " yours to remove" in done
@@ -238,9 +226,8 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
         line.startswith("loop workspace: 2 MB") and "kept" in line for line in done
     )
     assert loop.is_dir()
-    # A second sweep finds nothing left to remove, and still reports.
+    # A second sweep still reports.
     again = _sweep.sweep(dry_run=False, **facts)
-    assert not any("no code writes it any more" in line for line in again)
     assert any(line.startswith("config: birth-e2e") for line in again)
     assert any(line.startswith("loop workspace:") for line in again)
 

@@ -260,10 +260,6 @@ class StepRecord:
 
 _STEPS: dict[str, StepRecord] = {}
 
-#: Builtin steps an extension withdrew, name to the extension that did: the
-#: gate names them, so a lighter gate is a legible decision.
-_WITHDRAWN: dict[str, str] = {}
-
 
 #: The command-line flags a step may read, beyond the fix modes.
 FLAGS = ("point",)
@@ -347,7 +343,6 @@ def register_step(record: StepRecord) -> None:
                 f" table knows; the categories are {', '.join(sorted(known))}"
             )
     _STEPS[record.name] = record
-    _WITHDRAWN.pop(record.name, None)
 
 
 def _typed(option: Option, value: object) -> bool:
@@ -488,34 +483,24 @@ def tools_for(extensions: Iterable[str]) -> tuple[tuple[str, str], ...]:
     return tuple(found)
 
 
-def unregister_step(name: str, *, by: str = "") -> None:
-    """Drop the step *name*; unknown names refuse naming the registry.
-
-    *by* names the extension withdrawing a step it did not register, so
-    the gate can print who narrowed it.
-    """
+def unregister_step(name: str) -> None:
+    """Drop the step *name*; unknown names refuse naming the registry."""
     if name not in _STEPS:
         fail(f"{name!r} is not a registered step; steps: {', '.join(_STEPS)}")
-    record = _STEPS.pop(name)
-    if by and record.extension != by:
-        _WITHDRAWN[name] = by
+    del _STEPS[name]
 
 
 def narrowings() -> tuple[str, ...]:
-    """The gate's lines naming what an extension added, replaced or withdrew.
+    """The gate's lines naming each step an extension registered.
 
-    A step the base did not register names its extension; a builtin an
-    extension withdrew names the extension too. Empty for the base alone.
+    A step the base did not register names its extension. Empty for the
+    base alone.
     """
-    lines = [
+    return tuple(
         f"  {record.name}: registered by {record.extension}"
         for record in _STEPS.values()
         if record.extension != BASE_EXTENSION
-    ]
-    lines += [
-        f"  {name}: withdrawn by {extension}" for name, extension in _WITHDRAWN.items()
-    ]
-    return tuple(lines)
+    )
 
 
 def step_names() -> tuple[str, ...]:
@@ -523,25 +508,19 @@ def step_names() -> tuple[str, ...]:
     return tuple(_STEPS)
 
 
-def snapshot(*, initial: bool = False) -> tuple[dict[str, StepRecord], dict[str, str]]:
+def snapshot(*, initial: bool = False) -> dict[str, StepRecord]:
     """The registry's state, for [livery.workshop._steps.restore][] to put back.
 
     With *initial*, the state importing this module leaves instead: the
     builtin steps alone, as a process starts with them.
     """
-    if initial:
-        records, withdrawn = _BUILTIN_STATE
-        return dict(records), dict(withdrawn)
-    return dict(_STEPS), dict(_WITHDRAWN)
+    return dict(_BUILTIN_STATE if initial else _STEPS)
 
 
-def restore(state: tuple[dict[str, StepRecord], dict[str, str]]) -> None:
+def restore(state: dict[str, StepRecord]) -> None:
     """Put the registry back to *state*."""
-    records, withdrawn = state
     _STEPS.clear()
-    _STEPS.update(records)
-    _WITHDRAWN.clear()
-    _WITHDRAWN.update(withdrawn)
+    _STEPS.update(state)
 
 
 def _reaches(claim: Claim, relative: str) -> bool:
@@ -731,13 +710,6 @@ def judges_package(record: StepRecord, ctx: PhaseContext, package: Package) -> b
         and _applies(record, package)
         and (record.tests_only or not tests_only)
     )
-
-
-def _package_records(ctx: PhaseContext, package: Package) -> list[StepRecord]:
-    """The registered package steps that judge *package* in this run, in order."""
-    return [
-        record for record in _STEPS.values() if judges_package(record, ctx, package)
-    ]
 
 
 def members(ctx: PhaseContext) -> tuple[Package, ...]:

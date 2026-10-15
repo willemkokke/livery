@@ -22,8 +22,9 @@ note.
   `livery/__init__.py`.
 - The local forge containers: `fm forge.dev.up` (Gitea and GitLab,
   seeded; `--with-docker` mounts the host's docker socket into the
-  runners, which the CI loop needs), shipped by livery-forge and mounted through the extensions
-  list in `workshop.toml`; their credentials are written to their own
+  runners, which the CI loop needs), shipped by livery-forge, whose
+  verbs mount because this project depends on livery-forge directly;
+  their credentials are written to their own
   record, `.forge-dev.env`, and to `.repo.shared.env`, both in the
   runner's config directory. The env cascade reads the shared file
   everywhere, and a local loop environment rewrites its Gitea keys;

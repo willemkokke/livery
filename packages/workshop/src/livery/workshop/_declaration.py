@@ -1843,7 +1843,7 @@ def installed_steps() -> dict[str, str]:
     from livery.workshop._phases import PACKAGE_LEVEL, declared_phases
     from livery.workshop._steps import PACKAGE, WORKSPACE, snapshot
 
-    builtin, _withdrawn = snapshot(initial=True)
+    builtin = snapshot(initial=True)
     found = {
         f"{record.extension}:{record.name}": record.scope for record in builtin.values()
     }
