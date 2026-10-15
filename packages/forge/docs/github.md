@@ -59,8 +59,11 @@ answers for the running install.
   and `runs` with a workflow reads that workflow's own listing. Each
   answer is matched again client-side. A run's `ref` is its
   `head_branch`.
-- `dispatch` answers 204 with no body, so it returns None and the
-  caller finds the run in `runs` by its event, `ref` and `head_sha`.
+- `dispatch` sends `return_run_details: true` in the body, and GitHub
+  answers 200 naming the run in `workflow_run_id`, which comes back. A
+  server without the run's details answers 204 with no body: None
+  comes back, and the caller finds the run in `runs` by its event,
+  `ref` and `head_sha`.
 - `mergeable` is computed asynchronously after a pull request opens;
   merging inside that window is refused and callers retry.
 - Branch protection is one whole-rule PUT: the pieces the caller did

@@ -244,9 +244,9 @@ class FakeForge:
             for. Defaults to every known capability; pass a subset to
             model a forge that declines some by name.
         dispatch_names_run: Whether livery.forge.Checks.dispatch
-            returns the id of the run it started, as GitLab's answer
-            names its pipeline. False answers None, as GitHub and
-            Gitea do.
+            returns the id of the run it started, as every backend's
+            answer names it. False answers None, as a GitHub or Gitea
+            server without the run's details does.
     """
 
     def __init__(
@@ -256,7 +256,7 @@ class FakeForge:
         version: str = "1.0.0",
         capabilities: tuple[Capability, ...] = _ALL_CAPABILITIES,
         token: str = "",
-        dispatch_names_run: bool = False,
+        dispatch_names_run: bool = True,
     ) -> None:
         """Build an empty forge for *user* with *capabilities*."""
         self.faults: Faults = Faults()

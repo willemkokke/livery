@@ -614,6 +614,9 @@ def test_ci_dispatch_never_follows_a_newer_run_of_another_ref(
     from livery.workshop._ci_tasks import dispatch_flow, point_runs
 
     fake, _root = rig
+    # The forge's answer names no run, as a GitHub or Gitea server
+    # without the run's details answers: the listing decides.
+    fake.dispatch_names_run = False
     repo = _repo(fake)
     main = fake.push(OWNER, NAME, "main")
     fake.push(OWNER, NAME, "feat/other")
@@ -646,10 +649,12 @@ def test_ci_dispatch_refuses_two_runs_of_its_ref_naming_both(
     from livery.workshop._ci_tasks import dispatch_flow, point_runs
 
     fake, _root = rig
+    fake.dispatch_names_run = False
     repo = _repo(fake)
     main = fake.push(OWNER, NAME, "main")
-    # Another dispatch on main at the same commit: the listing cannot
-    # tell the two apart, so the dispatch refuses and names both.
+    # Another dispatch on main at the same commit, and an answer that
+    # names no run: the listing cannot tell the two apart, so the
+    # dispatch refuses and names both.
     _concurrent(monkeypatch, repo, then=("main",))
     with pytest.raises(_FAILURES) as caught:
         dispatch_flow(repo, point="nightly", ref="main", head=main, follow=False)
@@ -669,6 +674,7 @@ def test_ci_dispatch_leaves_a_run_of_its_ref_at_another_commit(
     from livery.workshop._ci_tasks import dispatch_flow, point_runs
 
     fake, _root = rig
+    fake.dispatch_names_run = False
     repo: Repository = _repo(fake)
     main = fake.push(OWNER, NAME, "main")
     original = repo.checks.dispatch
@@ -693,8 +699,10 @@ def test_ci_dispatch_leaves_a_run_of_its_ref_at_another_commit(
     assert f"nightly: run {own.id} " in out
 
 
-@pytest.mark.parametrize("names_run", [False, True], ids=["github-and-gitea", "gitlab"])
-def test_ci_dispatch_follows_its_own_run_on_each_forge_kind(
+@pytest.mark.parametrize(
+    "names_run", [False, True], ids=["answer-names-no-run", "answer-names-the-run"]
+)
+def test_ci_dispatch_follows_its_own_run_to_its_verdict(
     rig: tuple[FakeForge, Path],
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -703,8 +711,9 @@ def test_ci_dispatch_follows_its_own_run_on_each_forge_kind(
     from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
 
     fake, _root = rig
-    # GitHub and Gitea answer a dispatch with no run; GitLab's answer
-    # names the pipeline it created.
+    # Every backend's answer names the run it started; a GitHub or
+    # Gitea server without the run's details answers with no run, and
+    # the listing finds it.
     fake.dispatch_names_run = names_run
     repo = _repo(fake)
     main = fake.push(OWNER, NAME, "main")

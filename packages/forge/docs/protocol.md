@@ -129,7 +129,7 @@ the waiting caller.
 | `job_log(job)` | the raw log; quoted verbatim in triage, never boolean-ised |
 | `rerun(run, *, failed_only=True)` | failed jobs by default; refuses a live run |
 | `cancel_run(run, *, force=False)` | required everywhere; refuses a terminal run; `force` is capability-gated |
-| `dispatch(workflow, *, ref, inputs)` | trigger a workflow; returns the run's id when the forge's answer names it (GitLab), and None otherwise (GitHub, Gitea), where the caller finds the run in `runs` by its event, `ref` and `head_sha` |
+| `dispatch(workflow, *, ref, inputs)` | trigger a workflow; returns the run's id, which every backend's answer names, and None from a server whose answer names no run, where the caller finds the run in `runs` by its event, `ref` and `head_sha` |
 
 ### `release`: releases by tag
 

@@ -313,12 +313,13 @@ class Checks(Protocol):
         Returns:
             The id of the run the dispatch started, as
             [livery.forge.Checks.runs][] lists it, when the forge's answer
-            names it: GitLab answers with the pipeline it created.
-            None when the answer names no run, as GitHub's and
-            Gitea's do: the caller finds the run in the listing by
-            its event, its ref and its head commit, and two runs
-            dispatched together on one ref and commit cannot be told
-            apart there.
+            names it: GitLab answers with the pipeline it created,
+            GitHub and Gitea with the run's details. None when the
+            answer names no run, as a GitHub or Gitea server without
+            the run's details answers: the caller finds the run in the
+            listing by its event, its ref and its head commit, and two
+            runs dispatched together on one ref and commit cannot be
+            told apart there.
         """
         ...
 
