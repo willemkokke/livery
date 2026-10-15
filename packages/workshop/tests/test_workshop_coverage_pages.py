@@ -181,14 +181,14 @@ def test_a_part_of_another_format_version_is_named_and_skipped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    earlier = {**fmt.encode(Part(".", COVERAGE_PY, {})), "format": 1}
+    earlier = {**fmt.encode(Part(".", COVERAGE_PY, {})), "format": 2}
     _meter(
         root, left=[earlier, fmt.encode(Part(".", COVERAGE_PY, {MODULE: _entry(root)}))]
     )
     assert _render_pages(root) == ["core"]
     assert (
-        "  coverage: the arcs measurer's data on this machine: a part of format 1;"
-        " this workshop reads format 2; the pages draw without it\n"
+        "  coverage: the arcs measurer's data on this machine: a part of format 2;"
+        " this workshop reads format 3; the pages draw without it\n"
     ) in capsys.readouterr().out
     index = read_page(root / "packages/core/htmlcov/index.html")
     assert [row["File"] for row in index.rows] == [MODULE, "Total"]

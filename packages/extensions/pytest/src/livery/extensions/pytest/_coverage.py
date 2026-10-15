@@ -8,7 +8,7 @@ check leg's metered run left into one part per suite the leg ran, each
 suite's arcs within its closure as its own tests and the code outside
 every test reached them; and on a machine, the data its last run left
 into one part of the whole run. A part is in the line format, version
-2: per file, coverage.py's own analysis of it under the workspace's
+3: per file, coverage.py's own analysis of it under the workspace's
 ``.coveragerc``. It holds the statements and the ones that ran, the
 excluded lines, the statements written over several lines, each
 branch of a line with more than one exit with the sentence that says
@@ -29,7 +29,6 @@ reduction, naming the file.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import platform
 import re
@@ -48,7 +47,7 @@ if TYPE_CHECKING:
 MEASURER = "arcs"
 
 #: The line format version the parts are written in.
-FORMAT = 2
+FORMAT = 3
 
 #: The data a run leaves at the workspace root, and the configuration
 #: coverage.py reads there. A metered leg leaves one data file per
@@ -503,19 +502,20 @@ def _reached(
 
 
 def _packed(indexes: Iterable[int]) -> str:
-    """A set of indexes sorted, delta-coded as unsigned LEB128, base64-encoded."""
-    packed = bytearray()
+    """A set of indexes as the line format writes it: ``0,0,297`` for 0, 1 and 299.
+
+    It sorts the indexes and writes the first, then for each next one
+    how many indexes it skips past the one before, each number in
+    decimal, comma-separated: digits and commas alone, never a letter,
+    so no set's text matches the shape of an access token a forge's
+    push protection refuses. The empty set is the empty string.
+    """
     previous = -1
+    gaps: list[str] = []
     for value in sorted(indexes):
-        delta = value - previous - 1
-        while True:
-            low = delta & 0x7F
-            delta >>= 7
-            packed.append(low | (0x80 if delta else 0))
-            if not delta:
-                break
+        gaps.append(str(value - previous - 1))
         previous = value
-    return base64.b64encode(bytes(packed)).decode("ascii")
+    return ",".join(gaps)
 
 
 def _digest(content: bytes) -> str:

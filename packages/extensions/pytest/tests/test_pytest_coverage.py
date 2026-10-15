@@ -312,11 +312,15 @@ def test_a_crlf_source_and_a_backslashed_name_reduce_as_their_lf_and_slashed_for
     assert reduced["\n"]["files"][module]["digest"] == _coverage._digest(lf_text)
 
 
-def test_a_context_set_packs_sorted_deltas_and_a_wide_gap_takes_two_bytes() -> None:
-    from livery.extensions.coverage._format import parse_ranges, unpack_set
+def test_a_context_set_is_its_sorted_gaps_in_digits_and_commas() -> None:
+    from livery.extensions.coverage._format import pack_set, parse_ranges, unpack_set
 
-    assert _coverage._packed({0, 1, 300}) == "AACqAg=="
-    assert unpack_set(_coverage._packed({0, 1, 300})) == {0, 1, 300}
+    assert _coverage._packed({0, 1, 300}) == "0,0,298"
+    assert _coverage._packed(set()) == ""
+    # The reduction spells every set as the coverage extension does.
+    for held in (set(), {0}, {5, 6, 900}, {0, 127, 128, 20000}, {10**12}):
+        assert _coverage._packed(held) == pack_set(held)
+        assert unpack_set(_coverage._packed(held)) == held
     assert _coverage._ranges([5, 1, 2, 3, 9, 10]) == "1-3,5,9-10"
     assert parse_ranges(_coverage._ranges([5, 1, 2, 3, 9, 10])) == {1, 2, 3, 5, 9, 10}
 

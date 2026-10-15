@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 PARTS = ".workshop/coverage/parts"
 
 #: The line format's version the parts are written in.
-FORMAT = 2
+FORMAT = 3
 
 #: The tag of a branch an exception takes.
 THROW = "throw"

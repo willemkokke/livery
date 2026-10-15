@@ -87,13 +87,13 @@ def test_a_part_that_is_not_one_refuses_naming_it(
     with pytest.raises(_FAILURES, match=r"packages-n\.json: the part does not parse"):
         coverage_floors.measured_coverage(tmp_path, (package,))
     # A part of another format version is named and left out of a figure.
-    bad.write_text('{"format": 1}')
-    with pytest.raises(fmt.OtherVersion, match="a part of format 1"):
+    bad.write_text('{"format": 2}')
+    with pytest.raises(fmt.OtherVersion, match="a part of format 2"):
         read_part(bad, tmp_path)
     assert coverage_floors.measured_coverage(tmp_path, (package,)) == {}
     assert (
         "  coverage: .workshop/coverage/parts/gcov/packages-n.json: a part of"
-        " format 1; this workshop reads format 2; the figure reads without it"
+        " format 2; this workshop reads format 3; the figure reads without it"
     ) in capsys.readouterr().out
     bad.unlink()
     assert part_files(tmp_path) == []
@@ -544,7 +544,7 @@ def test_the_figure_counts_source_lines_alone_and_the_union_adds_counts(
 
 def test_the_unit_row_carries_its_parts_and_one_of_another_format_is_a_miss() -> None:
     reading = {
-        "format": 2,
+        "format": 3,
         "unit": "packages/n",
         "measurer": {"name": "gcov", "counts": "counts", "branches": "none"},
         "files": {"packages/n/src/x.cpp": {"digest": "", "statements": "1-2"}},
@@ -554,10 +554,10 @@ def test_the_unit_row_carries_its_parts_and_one_of_another_format_is_a_miss() ->
     assert fields["parts"] == [reading]
     assert coverage_record._parse_unit(fields) == (unit, "")
     assert unit.files == ("packages/n/src/x.cpp",)
-    earlier = {**fields, "parts": [{**reading, "format": 1}]}
+    earlier = {**fields, "parts": [{**reading, "format": 2}]}
     assert coverage_record._parse_unit(earlier) == (
         None,
-        "holds a part of format 1, and this workshop reads format 2",
+        "holds a part of format 2, and this workshop reads format 3",
     )
     assert coverage_record._parse_unit({**fields, "parts": "no"})[0] is None
     assert coverage_record._parse_unit({**fields, "parts": ["no"]})[0] is None
