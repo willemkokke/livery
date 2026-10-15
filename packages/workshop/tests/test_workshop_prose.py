@@ -547,6 +547,93 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
     assert "Its root entry leaves out acme.site with `without`.\n" in human
 
 
+def test_a_step_another_extension_replaces_is_listed_under_the_replacer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        owner="""
+        [extension]
+        description = "Acme's first lint."
+
+        [phases.lint.acme]
+        main = "{package}._steps:noop"
+        """,
+        taker="""
+        [extension]
+        description = "Acme's faster lint."
+        requires = ["acme.owner"]
+
+        [phases.lint.acme]
+        main = "{package}._steps:noop"
+
+        [phases.lint.acme.replaces]
+        "acme.owner:lint.acme" = "it reads faster"
+        """,
+    )
+    # The owner comes first in composition order, since the taker
+    # requires it; the step's verb still goes to the taker.
+    root = _verbs_workspace(tmp_path / "ws", monkeypatch, '"acme.taker"')
+    tree = {
+        "groups": {
+            "lint": {
+                "mounted_from": "livery.workshop",
+                "tasks": {"acme": {"help": "Run the lint.acme step alone."}},
+            },
+        },
+    }
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: tree)
+    agent = render_verbs(root, AGENT)
+    assert agent.endswith(
+        "## acme.owner\n\n"
+        "Acme's first lint.\n\n"
+        "## acme.taker\n\n"
+        "Acme's faster lint.\n\n"
+        "- `fm lint.acme`: Run the lint.acme step alone.\n"
+    )
+    assert "- livery.workshop" not in agent
+
+
+def test_a_pipe_in_a_doc_is_escaped_in_the_site_s_table_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import re
+
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        piped="""
+        [extension]
+        description = "Acme's modes."
+
+        [contract.package.acme.mode]
+        types = ["str"]
+        doc = "how acme reads: fast | full"
+        """,
+    )
+    root = _verbs_workspace(tmp_path / "ws", monkeypatch, '"acme.piped"')
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: None)
+    human = render_verbs(root, HUMAN)
+    row = "| `[acme] mode` | package contract key | how acme reads: fast \\| full |"
+    assert f"{row}\n" in human
+    # Split on the pipes no backslash escapes, the row keeps the header's
+    # three columns.
+    header = "| item | kind | what it does |"
+    assert header in human
+    cells = [re.split(r"(?<!\\)\|", line)[1:-1] for line in (header, row)]
+    assert [len(found) for found in cells] == [3, 3]
+    # The agent's list is no table, so its line keeps the pipe as written.
+    assert (
+        "- `[acme] mode` in a package contract: how acme reads: fast | full\n"
+        in render_verbs(root, AGENT)
+    )
+
+
 def test_this_repository_s_block_for_one_extension_matches_its_golden(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
