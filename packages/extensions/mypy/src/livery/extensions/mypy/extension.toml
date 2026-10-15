@@ -6,6 +6,7 @@
 # reads the files mypy.ini names.
 
 [extension]
+description = "The type checker mypy, run once for each of linux, darwin and win32, over the python files the root mypy.ini names."
 api-version = 1
 
 [phases.typecheck.mypy]

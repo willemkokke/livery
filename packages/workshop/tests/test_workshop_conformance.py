@@ -174,8 +174,8 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     monkeypatch.syspath_prepend(str(tmp_path))
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:\n"
-        "  [extension] has no key 'level': it takes api-version, dormant-until,"
-        " plugin, requires; the mount refuses the extension"
+        "  [extension] has no key 'level': it takes api-version, description,"
+        " dormant-until, plugin, requires; the mount refuses the extension"
     ]
     declaration.write_text(
         '[phases.lint.acme]\nmain = "acme_kit_extension._steps:judge"\n'
@@ -381,24 +381,83 @@ def test_a_plugin_no_distribution_declares_breaks_the_clause(
     assert _names(Subject("acme_kit_plugin"), clause) == []
 
 
-def test_a_contract_key_without_a_doc_breaks_the_clause(
+def test_an_item_without_its_doc_line_breaks_the_clause_naming_each(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = tmp_path / "acme_kit_keys"
+    package = tmp_path / "acme_kit_docs"
     package.mkdir()
-    declaration = package / "extension.toml"
-    declaration.write_text('[contract.package.acme.depth]\ntypes = ["str"]\n')
-    monkeypatch.syspath_prepend(str(tmp_path))
-    clause = "contract-keys-documented"
-    assert _names(Subject("acme_kit_keys"), clause) == [
-        "contract-keys-documented: extension acme_kit_keys: declares the package"
-        " contract key acme.depth with no doc; the editor shows a key by its doc,"
-        " and so will the reference pages"
-    ]
-    declaration.write_text(
-        '[contract.package.acme.depth]\ntypes = ["str"]\ndoc = "how deep acme reads"\n'
+    (package / "_steps.py").write_text("def judged(ctx):\n    del ctx\n")
+    (package / "_verbs.py").write_text(
+        "from livery.footman import group\n\n"
+        'acme = group("acme")\n\n\n'
+        '@acme.task(name="build")\n'
+        "def acme_build() -> None: ...\n\n\n"
+        '@acme.task(name="serve")\n'
+        "def acme_serve() -> None:\n"
+        '    """Serve the acme site."""\n'
     )
-    assert _names(Subject("acme_kit_keys"), clause) == []
+    declaration = package / "extension.toml"
+    declaration.write_text(
+        '[extension]\nplugin = "acme_kit_docs"\n\n'
+        '[contract.package.acme.depth]\ntypes = ["str"]\n\n'
+        "[templates.acme-app]\nextensions = []\n\n"
+        '[phases.lint.acme]\nmain = "acme_kit_docs._steps:judged"\n\n'
+        '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n\n'
+        '[for.docs.phases.lint.acme-pages]\nmain = "acme_kit_docs._steps:judged"\n\n'
+        '[for.docs.phases.lint.acme-pages.options.depth]\ntype = "int"\n'
+        "default = 1\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    clause = "declaration-documented"
+    # Each item without its doc line is named, the template's among them
+    # though the mount refuses that declaration for it already.
+    assert _names(Subject("acme_kit_docs"), clause) == [
+        "declaration-documented: extension acme_kit_docs: declares no [extension]"
+        " description; the agent's guidance and the site say what the extension"
+        " does from it",
+        "declaration-documented: extension acme_kit_docs: defines the verb"
+        " acme.build with no docstring; its help, the agent's guidance and the"
+        " site show the verb by the docstring's first line",
+        "declaration-documented: extension acme_kit_docs: declares the package"
+        " contract key acme.depth with no doc; the editor, the agent's guidance"
+        " and the site show a key by its doc",
+        "declaration-documented: extension acme_kit_docs: declares the template"
+        " acme-app with no doc; fm new.package, the agent's guidance and the site"
+        " show a template by its doc",
+        "declaration-documented: extension acme_kit_docs: declares the option"
+        " strict of [phases.lint.acme] with no doc; the agent's guidance and the"
+        " site show an option by its doc",
+        "declaration-documented: extension acme_kit_docs: declares the option"
+        " depth of [for.docs.phases.lint.acme-pages] with no doc; the agent's"
+        " guidance and the site show an option by its doc",
+    ]
+    # A blank doc line is no doc line.
+    declaration.write_text('[extension]\ndescription = "  "\n')
+    assert _names(Subject("acme_kit_docs"), clause) == [
+        "declaration-documented: extension acme_kit_docs: declares no [extension]"
+        " description; the agent's guidance and the site say what the extension"
+        " does from it",
+    ]
+    # Without a plugin the tasks beside the file are no verbs of it.
+    declaration.write_text('[extension]\ndescription = "Acme\'s checks."\n')
+    assert _names(Subject("acme_kit_docs"), clause) == []
+    (package / "_verbs.py").write_text(
+        "from livery.footman import group\n\n"
+        'acme = group("acme")\n\n\n'
+        '@acme.task(name="build")\n'
+        "def acme_build() -> None:\n"
+        '    """Build the acme site."""\n'
+    )
+    declaration.write_text(
+        '[extension]\ndescription = "Acme\'s checks."\nplugin = "acme_kit_docs"\n\n'
+        '[contract.package.acme.depth]\ntypes = ["str"]\ndoc = "how deep acme'
+        ' reads"\n\n'
+        '[templates.acme-app]\ndoc = "an acme app"\nextensions = []\n\n'
+        '[phases.lint.acme]\nmain = "acme_kit_docs._steps:judged"\n\n'
+        '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n'
+        'doc = "judge every rule"\n'
+    )
+    assert _names(Subject("acme_kit_docs"), clause) == []
 
 
 def test_a_template_the_kit_cannot_judge_breaks_the_clause_saying_why(
@@ -514,7 +573,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         "words-are-answerable",
         "plugin-is-an-entry-point",
         "requirements-in-metadata",
-        "contract-keys-documented",
+        "declaration-documented",
     }
     found = [
         str(violation)
@@ -871,7 +930,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "words-are-answerable",
         "plugin-is-an-entry-point",
         "requirements-in-metadata",
-        "contract-keys-documented",
+        "declaration-documented",
         "template-composes",
         "fragment-drift",
         "withdrawn-file",

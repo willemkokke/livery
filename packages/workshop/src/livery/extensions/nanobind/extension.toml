@@ -11,6 +11,7 @@
 # job builds.
 
 [extension]
+description = "A python package whose extension module is C++, bound through nanobind: its platform wheels and sdist built for a release, on the runners the package names in [nanobind] wheel-platforms."
 api-version = 1
 # The footman plugin that carries the verb the wheels job runs.
 plugin = "livery.extensions.nanobind"

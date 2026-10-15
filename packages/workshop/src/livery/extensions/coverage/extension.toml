@@ -6,6 +6,7 @@
 # query's answer is imported when it is asked.
 
 [extension]
+description = "Each package's coverage floor, judged on the union of what every CI leg measured, the record that carries it across runs, and the site's coverage pages. It stays dormant until a listed extension measures for it."
 api-version = 1
 # The footman plugin that carries the leg's entry, the union and the
 # two verbs a person runs.

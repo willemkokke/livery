@@ -3,6 +3,7 @@
 # mount; the step's code is imported when the step runs.
 
 [extension]
+description = "The C and C++ linter clang-tidy, judging each C or C++ package against the checks in its .clang-tidy and the compilation database its build writes."
 api-version = 1
 
 # The C and C++ packages, each linted against the compilation database

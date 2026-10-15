@@ -3,6 +3,7 @@
 # Read at every mount; its verbs arrive through its plugin.
 
 [extension]
+description = "The documentation site: its verbs build, serve and publish it from the workspace's docs/ and each package's docs/, and a lint step judges the links in the authored pages."
 api-version = 1
 # The footman plugin that carries the site's verbs.
 plugin = "livery.extensions.docs"

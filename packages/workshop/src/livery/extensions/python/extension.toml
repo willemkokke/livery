@@ -2,6 +2,7 @@
 # distribution, for each package whose set holds it.
 
 [extension]
+description = "Python distributions: each package's version stamped, its wheel and sdist built, published and verified, its suite run against the installed wheel, and the layering rules over the python sources. Its run phase starts the scripts a pyproject.toml names."
 api-version = 1
 
 # The questions about a package this extension answers. Its requirement

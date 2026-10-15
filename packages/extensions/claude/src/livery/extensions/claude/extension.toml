@@ -4,6 +4,7 @@
 # its plugin carries the hook verbs .claude/settings.json wires in.
 
 [extension]
+description = "What Claude Code reads in a workspace: CLAUDE.md, the guidance under .workshop/fragments/, and the skills, hooks and settings under .claude/, with the hook verbs those settings run."
 api-version = 1
 # The footman plugin that carries the `fm hooks.*` verbs.
 plugin = "livery.extensions.claude"

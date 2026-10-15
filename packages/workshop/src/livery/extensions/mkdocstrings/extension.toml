@@ -5,6 +5,7 @@
 # its answer are imported when they run.
 
 [extension]
+description = "The python API reference on the docs site, a page per module, and the lint steps that judge the docstrings it publishes and the cross-references in them."
 api-version = 1
 # Its pages and its tables are the docs extension's site's.
 requires = ["docs"]

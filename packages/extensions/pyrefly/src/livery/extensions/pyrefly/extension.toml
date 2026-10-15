@@ -3,6 +3,7 @@
 # reaches: a run costs seconds, and the file pins every platform at once.
 
 [extension]
+description = "The type checker pyrefly, over every platform at once, on the python files the root pyrefly.toml includes."
 api-version = 1
 
 [phases.typecheck.pyrefly]

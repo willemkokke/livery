@@ -11,7 +11,7 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from livery.workshop import _steps
 from livery.workshop._categories import (
@@ -114,7 +114,7 @@ CLAIMS_NAME_CATEGORIES = "claims-name-categories"
 WORDS_ARE_ANSWERABLE = "words-are-answerable"
 PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
 REQUIREMENTS_IN_METADATA = "requirements-in-metadata"
-CONTRACT_KEYS_DOCUMENTED = "contract-keys-documented"
+DECLARATION_DOCUMENTED = "declaration-documented"
 TEMPLATE_COMPOSES = "template-composes"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
@@ -679,29 +679,95 @@ def _requirements_in_metadata(subject: Subject) -> list[Violation]:
     return violations
 
 
-def _contract_keys_documented(subject: Subject) -> list[Violation]:
+def _declaration_documented(subject: Subject) -> list[Violation]:
+    """Each item the subject's declaration names without its doc line, one each.
+
+    Read from the file as it is written, so a doc missing beside another
+    refusal is named too; a file that does not parse names nothing here,
+    since ``declaration-validates`` names it. The verbs are the tasks
+    the sources beside the file define, read when ``[extension]`` names
+    a plugin.
+    """
+    from livery.workshop._contract_keys import shown
     from livery.workshop._declaration import (
         DeclarationError,
+        _step_tables,  # pyright: ignore[reportPrivateUsage]
         contract_keys,
         declaration_file,
+        task_docs,
     )
 
-    if declaration_file(subject.extension) is None:
+    path = declaration_file(subject.extension)
+    if path is None:
         return []
+    try:
+        data = tomllib.loads(path.read_text("utf-8"))
+    except tomllib.TOMLDecodeError:
+        return []
+    where = f"extension {subject.extension}"
+    reasons: list[str] = []
+    identity = _table(data.get("extension"))
+    if not _documented(identity.get("description")):
+        reasons.append(
+            "declares no [extension] description; the agent's guidance and the"
+            " site say what the extension does from it"
+        )
+    if identity.get("plugin"):
+        reasons += [
+            f"defines the verb {task} with no docstring; its help, the agent's"
+            " guidance and the site show the verb by the docstring's first line"
+            for task, doc in sorted(task_docs(path.parent).items())
+            if not doc
+        ]
     try:
         keys = contract_keys(subject.extension)
     except DeclarationError:
-        return []  # declaration-validates names the file
-    return [
-        Violation(
-            CONTRACT_KEYS_DOCUMENTED,
-            f"extension {subject.extension}",
-            f"declares the {item.contract} contract key {item.path} with no doc;"
-            " the editor shows a key by its doc, and so will the reference pages",
-        )
+        keys = ()
+    reasons += [
+        f"declares the {item.contract} contract key {item.path} with no doc; the"
+        " editor, the agent's guidance and the site show a key by its doc"
         for item in keys
         if not item.doc
     ]
+    reasons += [
+        f"declares the template {name} with no doc; fm new.package, the agent's"
+        " guidance and the site show a template by its doc"
+        for name, table in _table(data.get("templates")).items()
+        if not _documented(_table(table).get("doc"))
+    ]
+    for prefix, held in _step_holders(data):
+        for phase, table in _table(held.get("phases")).items():
+            for step, body in _step_tables(_table(table)).items():
+                reasons += [
+                    f"declares the option {option} of"
+                    f" [{shown((*prefix, 'phases', phase, step))}] with no doc;"
+                    " the agent's guidance and the site show an option by its doc"
+                    for option, spec in _table(body.get("options")).items()
+                    if not _documented(_table(spec).get("doc"))
+                ]
+    return [Violation(DECLARATION_DOCUMENTED, where, reason) for reason in reasons]
+
+
+def _table(value: object) -> dict[str, Any]:
+    """*value* when it is a table, else an empty one."""
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
+
+
+def _documented(doc: object) -> bool:
+    """Whether *doc* is a doc line: text with something in it."""
+    return isinstance(doc, str) and bool(doc.strip())
+
+
+def _step_holders(
+    data: dict[str, Any],
+) -> list[tuple[tuple[str, ...], dict[str, Any]]]:
+    """The file's top level, then each ``[for.<target>]`` table, with its keys."""
+    found: list[tuple[tuple[str, ...], dict[str, Any]]] = [((), data)]
+    found += [
+        (("for", target), _table(table))
+        for target, table in _table(data.get("for")).items()
+    ]
+    return found
 
 
 # The templates an extension declares.
@@ -1214,9 +1280,11 @@ CLAUSES: tuple[Clause, ...] = (
         _requirements_in_metadata,
     ),
     Clause(
-        CONTRACT_KEYS_DOCUMENTED,
-        "Every contract key an extension declares carries a doc.",
-        _contract_keys_documented,
+        DECLARATION_DOCUMENTED,
+        "An extension's extension.toml carries an [extension] description, and"
+        " every verb its plugin defines, every contract key, template and step"
+        " option it declares carries its doc line.",
+        _declaration_documented,
     ),
     Clause(
         TEMPLATE_COMPOSES,

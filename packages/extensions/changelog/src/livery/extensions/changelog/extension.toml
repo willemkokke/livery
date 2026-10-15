@@ -5,6 +5,7 @@
 # is this extension's per-package content.
 
 [extension]
+description = "Each package's CHANGELOG.md: at each release, git-cliff writes the entry from the commits since the package's last release tag, as the package's cliff.toml says."
 api-version = 1
 
 # The release notes' writer, which the release train asks for each

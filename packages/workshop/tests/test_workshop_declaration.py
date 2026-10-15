@@ -71,8 +71,8 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
     refused = _refusal(package, '[extension]\nlevels = ["workspace"]\n')
     assert refused == (
         f"{package / 'extension.toml'}:\n"
-        "  [extension] has no key 'levels': it takes api-version, dormant-until,"
-        " plugin, requires"
+        "  [extension] has no key 'levels': it takes api-version, description,"
+        " dormant-until, plugin, requires"
     )
     refused = _refusal(package, STEP + "claim = []\n")
     assert "[phases.lint.acme] has no key 'claim'" in refused
@@ -1014,7 +1014,7 @@ def test_declared_jobs_join_their_points_under_the_listed_name(package: Path) ->
 def test_the_tasks_an_extension_defines_are_read_from_its_sources(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._declaration import defined_tasks
+    from livery.workshop._declaration import defined_tasks, task_docs
 
     package = tmp_path / "acme_tasks"
     package.mkdir()
@@ -1027,7 +1027,8 @@ def test_the_tasks_an_extension_defines_are_read_from_its_sources(
         "@acme.task\n"
         "def publish_site_() -> None: ...\n\n\n"
         "@deep.task\n"
-        "def dig() -> None: ...\n\n\n"
+        "def dig() -> None:\n"
+        '    """Dig one level deeper.\n\n    The rest is the long help.\n    """\n\n\n'
         "def helper() -> None: ...\n"
     )
     (package / "_more.py").write_text(
@@ -1046,6 +1047,13 @@ def test_the_tasks_an_extension_defines_are_read_from_its_sources(
         "acme.serve",
     }
     assert defined_tasks(tmp_path / "acme_tasks" / "_none_here") == frozenset()
+    # A task's doc line is its docstring's first line, empty without one.
+    assert task_docs(package) == {
+        "acme.build": "",
+        "acme.publish-site": "",
+        "acme.deep.dig": "Dig one level deeper.",
+        "acme.serve": "",
+    }
 
 
 # A file the extension's code writes: the refusals first.
