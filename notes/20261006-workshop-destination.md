@@ -3398,6 +3398,14 @@ neither needs nor rules out).
   listing the extension and those needs. This also supersedes the step
   8 entry above that had `fm new.package --extension` list, sync and
   render.
+- 2026-10-15, N4's loop (#1681): the plain pass's root now lists cmake,
+  so the `host-allowed` entry the loop's wiring adds after the birth
+  moves the cmake and ninja entries of `toolroom.lock`, and CI's
+  `sync --locked` refused the birth's lock. The wiring now runs the
+  loop's `fm toolroom.lock` after its contract edits and before its
+  push, which skips `fm submit`'s lock check. The fault was the loop's:
+  a root listing cmake and nanobind before any member of their kind is
+  green, which the armed stranger rehearsal now gates.
 
 ## Open
 

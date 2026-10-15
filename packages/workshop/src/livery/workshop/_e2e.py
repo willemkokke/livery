@@ -1365,10 +1365,12 @@ def _eat_dev_wheels(
     the templates and the emitter under test. Measured necessity: a
     released workshop predating the emitted verbs fails the docs job
     with "no task named", and a render before the re-lock ships the
-    previous pass's workflows. *enabled* names the steps the contract
-    turns on, each at its own address, the steps the extension under
-    test declares off. Idempotent: an already-wired workspace pushes
-    nothing.
+    previous pass's workflows. The loop's fm then writes the tool lock
+    against the contract the wiring edited, since CI's setup refuses a
+    lock the contract has moved past. *enabled* names the steps the
+    contract turns on, each at its own address, the steps the extension
+    under test declares off. Idempotent: an already-wired workspace
+    pushes nothing.
     """
     from livery.workshop._new_project import _SETUP_BRANCH
 
@@ -1515,6 +1517,12 @@ def _eat_dev_wheels(
     # unchanged pyproject makes that a no-op.
     _lock_pins(root, pins)
     _loop_fm(root, "drift.check", "--fix")
+    # The tool lock follows the contract as the wiring left it: an
+    # allowance above joins its tool's entry, so a lock the birth wrote
+    # before it moves, and CI's setup (`sync --locked`) refuses a lock
+    # that would move. The push below skips the lock check `fm submit`
+    # makes, so the wiring writes the lock itself.
+    _loop_fm(root, "toolroom.lock")
     _lock_pins(root, pins)
     # Cleanliness is the truth, not this run's edits: a resumed
     # half-wired workspace still commits and pushes here.

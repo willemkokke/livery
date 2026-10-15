@@ -2113,6 +2113,109 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert "members loop-native, loop-cpp: landed through the loop's own gate" in out
 
 
+def _wiring_rig(
+    monkeypatch: pytest.MonkeyPatch, root: Path, *, refuse_the_lock: bool = False
+) -> list[tuple[str, ...]]:
+    """The calls `_eat_dev_wheels` makes at *root*, its forge and loop faked.
+
+    The birth's contract is written first: a root that lists cmake, a
+    ``[toolroom]`` table without the allowance, and the ``[ci]`` table
+    a birth seeds. The loop's own fm records each call, and its
+    ``toolroom.lock`` call records whether the contract it locks against
+    holds the allowance. *refuse_the_lock* makes that call refuse, as
+    the loop's fm does when its lock cannot be written.
+    """
+    from types import SimpleNamespace
+
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        'name = "ci-e2e-loop"\n'
+        'extensions = ["cmake"]\n'
+        "\n[toolroom]\n"
+        'index = "https://tools.invalid/"\n'
+        "\n[ci]\n"
+        'runners = ["ubuntu-latest"]\n',
+        "utf-8",
+    )
+    calls: list[tuple[str, ...]] = []
+    lane = SimpleNamespace(
+        url_var="LOOP_TEST_FORGE_URL",
+        alias="http://forge.invalid:3000",
+        index=lambda: "http://forge.invalid:3000/api/packages/livery/pypi/simple",
+        publish=lambda: "http://forge.invalid:3000/api/packages/livery/pypi",
+    )
+    monkeypatch.setattr(_e2e, "_lane", lambda kind: lane)
+    monkeypatch.setattr(
+        _e2e, "_fresh_branch", lambda root, name: calls.append(("branch", name))
+    )
+    monkeypatch.setattr(
+        _e2e, "_render_with_the_pass", lambda root: calls.append(("render",))
+    )
+    monkeypatch.setattr(_e2e, "_lock_pins", lambda root, pins: calls.append(("uv",)))
+    monkeypatch.setattr(_e2e, "_listed_extensions", lambda root: frozenset({"cmake"}))
+
+    def loop_fm(root: Path, *args: str, **kw: object) -> int:
+        calls.append(("fm", *args))
+        if args == ("toolroom.lock",):
+            contract = (root / "workshop.toml").read_text("utf-8")
+            allowed = 'host-allowed = ["cmake", "ninja"]' in contract
+            calls.append(("allowance in the contract", str(allowed)))
+            if refuse_the_lock:
+                raise Failed("the loop's `fm toolroom.lock` exited 1")
+        return 0
+
+    monkeypatch.setattr(_e2e, "_loop_fm", loop_fm)
+    monkeypatch.setattr(git, "is_clean", lambda root: False)
+    monkeypatch.setattr(
+        git, "commit_all", lambda root, message: calls.append(("commit",))
+    )
+    monkeypatch.setattr(git, "remote_head", lambda root, branch: "")
+    monkeypatch.setattr(
+        git, "push_force", lambda root, branch: calls.append(("push", branch))
+    )
+    monkeypatch.setattr(git, "head_sha", lambda root: "5730fa48b2")
+    return calls
+
+
+def test_a_tool_lock_the_loop_s_fm_cannot_write_stops_the_wiring_before_its_push(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _wiring_rig(monkeypatch, tmp_path, refuse_the_lock=True)
+    with pytest.raises(Failed, match=r"`fm toolroom.lock` exited 1"):
+        _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert ("commit",) not in calls
+    assert not [call for call in calls if call[0] == "push"]
+
+
+def test_the_wiring_writes_the_tool_lock_after_its_allowance_and_before_its_push(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CI's setup refuses a tool lock the contract has moved past.
+
+    The birth writes the lock before the wiring adds the allowance for
+    cmake and ninja, and the allowance joins each allowed tool's entry,
+    so a root whose set requires cmake has a lock that moves. The
+    wiring pushes without `fm submit`'s lock check, so it writes the
+    lock itself, against the contract it edited.
+    """
+    from livery.workshop._new_project import _SETUP_BRANCH
+
+    calls = _wiring_rig(monkeypatch, tmp_path)
+    head = _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert head == "5730fa48b2"
+    assert calls == [
+        ("branch", _SETUP_BRANCH),
+        ("render",),
+        ("uv",),
+        ("fm", "drift.check", "--fix"),
+        ("fm", "toolroom.lock"),
+        ("allowance in the contract", "True"),
+        ("uv",),
+        ("commit",),
+        ("push", _SETUP_BRANCH),
+    ]
+
+
 def test_the_plain_pass_lists_the_stock_but_the_site_and_what_members_need() -> None:
     """The site is the docs extension and every stock entry that requires it.
 

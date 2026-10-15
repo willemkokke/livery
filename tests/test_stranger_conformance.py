@@ -302,6 +302,23 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
         ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
     )
     assert synced.returncode == 0, f"{synced.stdout}\n{synced.stderr}"
+    # Listed before any member of their kind exists, as a person lists
+    # them before the first C++ package: CI's setup takes the locks the
+    # sync wrote (`sync --locked`), and the gate, the rendered workflows
+    # among what it judges, is green with nothing for cmake to build.
+    for command in (
+        ["uv", "run", "fm", "sync", "--locked"],
+        ["uv", "run", "fm", "check"],
+    ):
+        done = subprocess.run(
+            command, cwd=root, env=env, capture_output=True, text=True
+        )
+        assert done.returncode == 0, (
+            f"{' '.join(command)} exited {done.returncode}:"
+            f"\n{done.stdout}\n{done.stderr}"
+        )
+    assert (root / "conanws.yml").is_file()
+    assert not (root / "packages").exists()
     for name, template in (
         ("geometry", "cpp-library"),
         ("ext", "nanobind-module"),
