@@ -3407,6 +3407,21 @@ neither needs nor rules out).
   a root listing cmake and nanobind before any member of their kind is
   green, which the armed stranger rehearsal now gates.
 
+- 2026-10-15, Willem, on `[for]` (#1687): cooperation stays greedy, so
+  a listed extension contributes to every installed target it has a
+  `[for.<target>]` table for, a target listed later or a table a later
+  release adds included; this reverses the 2026-09-29 rule that the fix
+  writes an entry's targets once and `for` is the truth. The
+  cooperations are made visible where people look: `fm extensions`
+  prints each extension's `for:` and `without:` lines, and the agent's
+  capability block (#1685) lists them. An opt-out names what is off: a
+  root entry's `without = [<target>, ...]` replaces `for`, which goes
+  with no refusal of its own; an empty `without` is written as the
+  plain name, an implied entry carrying one is kept, and a `without`
+  naming a target the extension has no table for, or one not
+  installed, is named. This supersedes the F8 wording of the one-kind
+  entry above, which spoke of `for`. Built in #1687.
+
 ## Open
 
 Each with its options, what each option does not cover, and a

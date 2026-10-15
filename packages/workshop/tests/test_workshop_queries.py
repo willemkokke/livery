@@ -530,11 +530,13 @@ def test_a_for_table_s_answer_is_never_asked_while_its_target_is_unlisted(
         ),
     )
     asked = tmp_path / "asked"
-    # The target unlisted, then listed with the owner's `for` list leaving
-    # it out: the owner's listing contributes nothing, and nothing asks.
+    # The target unlisted, then listed with the owner's entry leaving it
+    # out: the owner's listing contributes nothing, and nothing asks.
     root_contract(tmp_path, '["acme.a"]')
     assert answer(tmp_path, STYLE) == ()
-    root_contract(tmp_path, '["acme.site", { name = "acme.a", for = [] }]')
+    root_contract(
+        tmp_path, '["acme.site", { name = "acme.a", without = ["acme.site"] }]'
+    )
     assert answer(tmp_path, STYLE) == ()
     assert not asked.exists()
     # Listed, and the owner's listing contributes to it: asked.

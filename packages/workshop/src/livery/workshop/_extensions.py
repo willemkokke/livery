@@ -269,7 +269,7 @@ def _spelling(entry: Any) -> str:
 def workspace_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     """Each entry of ``[workspace] extensions`` as ``(name, distribution)``, in order.
 
-    An entry is a name, or a table ``{ name = "...", for = [...] }``.
+    An entry is a name, or a table ``{ name = "...", without = [...] }``.
     Empty outside a workspace and when the contract has no list: the
     mount refuses that, and a reader has nothing to read.
     """
@@ -563,22 +563,26 @@ def shipped_content(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
     return tuple(found)
 
 
-def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
-    """Each root entry's ``for`` list; None for an entry without one.
+def left_out(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each root entry's ``without``: the targets its extension contributes nothing to.
 
-    A table entry may carry ``for = [...]``, the targets the extension
-    contributes to. Without one it contributes to every target of the
-    installed set it declares a table for, the default; a ``for`` that
-    leaves a target out is the workspace's opt-out from that target's
-    opinions. A ``for`` naming exactly the default says nothing more
-    than the name alone, and the fix of ``layering.graph`` writes the
-    name alone in its place.
+    Cooperation is greedy: an extension contributes to every target of
+    the installed set it declares a ``[for.<target>]`` table for, a
+    target listed later included. A table entry's ``without = [...]``
+    is the workspace's opt-out, naming the targets that get nothing
+    from it. An entry with no ``without`` leaves out nothing, and the
+    fix of ``layering.graph`` writes a table entry that leaves out
+    nothing as the name alone.
     """
-    found: dict[str, tuple[str, ...] | None] = {}
+    found: dict[str, tuple[str, ...]] = {}
     for entry in _listed(start):
         name = listing(_spelling(entry)).name
-        targets = entry.get("for") if isinstance(entry, dict) else None
-        found[name] = None if targets is None else tuple(str(t) for t in targets)
+        written = entry.get("without") if isinstance(entry, dict) else None
+        found[name] = (
+            tuple(str(target) for target in cast("list[object]", written))
+            if isinstance(written, list)
+            else ()
+        )
     return found
 
 
@@ -983,9 +987,8 @@ def _graft_contributions(
     """Register every ``[for.<target>]`` table whose owner and target are both present.
 
     Called after each extension mounts, so a contribution lands whichever
-    of the two mounts later. A ``for`` entry naming a target the owner
-    declares nothing for registers nothing: ``layering.graph`` names
-    that entry, and it can only run inside a mount that went on. A step
+    of the two mounts later. *active* holds each owner's targets, so a
+    target its root entry's ``without`` names registers nothing. A step
     in the table declared off registers under the steps the root
     contract turns on, *enabled*, as one at the file's top level does.
     An owner among *asleep*, the dormant extensions, registers none of
@@ -1149,21 +1152,22 @@ def declared_targets(start: Path | None = None) -> dict[str, dict[str, Additions
 def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each extension of the installed set to its active targets, in composition order.
 
-    The root entry's ``for`` list when it has one, which is how a
-    workspace opts out of a target; otherwise every target of the
-    installed set the extension declares a ``[for.<target>]`` table for,
-    the default.
+    Every target of the installed set the extension declares a
+    ``[for.<target>]`` table for, except those its root entry's
+    ``without`` names: cooperation is greedy, and an opt-out names what
+    is off (``left_out``).
     """
     names = extension_names(start)
     declared = declared_targets(start)
-    written = extension_targets(start)
-    found: dict[str, tuple[str, ...]] = {}
-    for owner in names:
-        targets = written.get(owner)
-        if targets is None:
-            targets = tuple(name for name in names if name in declared.get(owner, {}))
-        found[owner] = targets
-    return found
+    off = left_out(start)
+    return {
+        owner: tuple(
+            name
+            for name in names
+            if name in declared.get(owner, {}) and name not in off.get(owner, ())
+        )
+        for owner in names
+    }
 
 
 def contributions_for(
@@ -1173,14 +1177,14 @@ def contributions_for(
 
     The extensions come in composition order. An extension contributes
     its ``[for.<target>]`` table while *target* is listed and the
-    extension's listing contributes to it (its ``for`` list, or every
-    listed target it declares a table for when it has none), the rule
-    the mount grafts by; an extension that requires *target*
-    contributes its top-level tables. The
-    tables come as the declaration file holds them, and an extension
-    that declares nothing for *target* is left out, as is every
-    extension when *target* is not listed. *start* is a directory in
-    the workspace, the working directory when absent.
+    extension's listing contributes to it (every listed target it
+    declares a table for, except those its root entry's ``without``
+    names), the rule the mount grafts by; an extension that requires
+    *target* contributes its top-level tables. The tables come as the
+    declaration file holds them, and an extension that declares nothing
+    for *target* is left out, as is every extension when *target* is
+    not listed. *start* is a directory in the workspace, the working
+    directory when absent.
     """
     names = extension_names(start)
     if target not in names:
@@ -1202,8 +1206,7 @@ def contributing(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each listed extension to the listed targets its ``[for]`` tables apply to now.
 
     A target is listed, the owner declares a ``[for.<target>]`` table for
-    it, and the owner's listing contributes to it: its ``for`` list, or
-    every listed target it declares a table for when it has none. An
+    it, and the owner's root entry does not name it in ``without``. An
     extension that contributes to nothing is left out. The rule the
     mount grafts by, which [livery.workshop.contributions_for][], the
     delivery of a table's files and dormancy read through.
@@ -1298,13 +1301,15 @@ def describe_extensions(start: Path | None = None) -> list[str]:
 
     The base, then each extension of the installed set in mount order;
     under each, who requires it, the packages whose sets hold it, its
-    tools, its targets, whether it is dormant and what would wake it,
-    and the steps it declares off, each with whether it is on.
+    tools, the targets it contributes to, the targets its root entry
+    leaves out, whether it is dormant and what would wake it, and the
+    steps it declares off, each with whether it is on.
     """
     names = extension_names(start)
     who = requirers(start)
     tools = extension_tools(start)
     targets = resolved_targets(start)
+    off = left_out(start)
     enabled = enabled_steps(start)
     holders = _holders(start)
     asleep = dormancy(start)
@@ -1319,6 +1324,8 @@ def describe_extensions(start: Path | None = None) -> list[str]:
             lines.append(f"    tools: {', '.join(tools[name])}")
         if targets.get(name):
             lines.append(f"    for: {', '.join(targets[name])}")
+        if off.get(name):
+            lines.append(f"    without: {', '.join(off[name])}")
         if name in asleep:
             lines.append(f"    dormant: {asleep[name]}")
         for step in _declared_off(name):
@@ -1387,35 +1394,36 @@ def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
 def closure_problems(start: Path | None = None) -> list[str]:
     """Why the contracts' lists are not valid compositions in their canonical form.
 
-    Empty when every target a root entry's ``for`` names is in the
-    installed set and declared a contribution for; when every listed
-    extension is installed and every entry is a name alone
-    ([livery.workshop._extensions.entry_problems][]); when every step
-    the root contract turns on is one a listed extension declares off
-    ([livery.workshop._extensions.enabled_problems][]); when the root's
-    list is its canonical one (``root_list_problems``); and when every
-    package's list is a valid composition in its canonical form
-    ([livery.workshop._extensions.composition_problems][]). The gate's
-    ``--fix`` writes each list in its canonical form
-    (``write_extensions``).
+    Empty when every target a root entry's ``without`` names is in the
+    installed set and its extension declares a contribution for it;
+    when every listed extension is installed and every entry is a name
+    alone (``entry_problems``); when every step the root contract turns
+    on is one a listed extension declares off (``enabled_problems``);
+    when the root's list is its canonical one (``root_list_problems``);
+    and when every package's list is a valid composition in its
+    canonical form (``composition_problems``). The gate's ``--fix``
+    writes each list in its canonical form (``write_extensions``).
     """
     root = workspace_root(start)
     installed = set(installed_set(start))
     problems: list[str] = []
     declared = declared_targets(start)
-    for owner, targets in extension_targets(start).items():
-        for target in targets or ():
-            if target not in installed:
+    for owner, targets in left_out(start).items():
+        if installed_declaration(owner) is None:
+            # entry_problems names an extension nothing installed declares.
+            continue
+        for target in targets:
+            if target not in declared.get(owner, {}):
                 problems.append(
                     f"[workspace] extensions: the entry for {owner} names {target}"
-                    " in `for`, and does not list it; list it, or remove it"
-                    " from `for`"
+                    f" in `without`, and {owner} declares no contribution for it;"
+                    " remove it from `without`"
                 )
-            elif target not in declared.get(owner, {}):
+            elif target not in installed:
                 problems.append(
                     f"[workspace] extensions: the entry for {owner} names {target}"
-                    f" in `for`, and {owner} declares no contribution for it;"
-                    " remove it from `for`"
+                    " in `without`, and the installed set does not hold it; list"
+                    " it, or remove it from `without`"
                 )
     if root is not None:
         if why := missing_list(root):
@@ -1429,7 +1437,7 @@ def closure_problems(start: Path | None = None) -> list[str]:
 
 
 #: An entry of the root's list as the contract holds it: a name, or a
-#: table of the name and the targets it contributes to.
+#: table of the name and the targets it leaves out.
 Entry = str | dict[str, Any]
 
 
@@ -1453,14 +1461,13 @@ def _root_list(root: Path) -> _RootList | str | None:
     """The root's list and its canonical form; a cycle's refusal; None when not judged.
 
     Judged once every entry is the name of an installed extension, or a
-    table of that name and ``for``: the other problems name any other
-    entry first. The canonical list holds each extension of the root's
-    set once, in composition order. It leaves out an entry
+    table of that name and ``without``: the other problems name any
+    other entry first. The canonical list holds each extension of the
+    root's set once, in composition order. It leaves out an entry
     another listed extension requires, unless the entry carries a
-    ``for``: an implied extension's opt-out has no other place to be
-    written. A ``for`` naming exactly its default targets, every target
-    of the installed set the extension declares a table for, is written
-    as the name alone.
+    ``without``: an implied extension's opt-out has no other place to
+    be written. A table entry whose ``without`` is empty or absent is
+    written as the name alone.
     """
     from livery.workshop._composition import implied, order
 
@@ -1479,14 +1486,9 @@ def _root_list(root: Path) -> _RootList | str | None:
     except OrderCycle as error:
         return f"[workspace] extensions: {error}"
     required = implied(members, installed_declaration)
-    installed = installed_set(root)
-    declared = declared_targets(root)
 
     def canonical(name: str, entry: Entry) -> Entry:
-        if isinstance(entry, str) or "for" not in entry:
-            return name
-        default = {other for other in installed if other in declared.get(name, {})}
-        return name if set(entry["for"]) == default else entry
+        return entry if isinstance(entry, dict) and entry.get("without") else name
 
     chosen: dict[str, tuple[int, Entry]] = {}
     for index, (name, entry) in enumerate(zip(names, written, strict=True)):
@@ -1513,13 +1515,13 @@ def _root_list(root: Path) -> _RootList | str | None:
         why = f"; {', '.join(gone)} {verb} required by another listed extension"
     elif len(plain) == 1:
         why = (
-            f"; the entry for {plain[0]} names its default targets, which the"
-            " name alone says"
+            f"; the entry for {plain[0]} leaves out no target, which the name"
+            " alone says"
         )
     elif plain:
         why = (
-            f"; the entries for {' and '.join(plain)} name their default"
-            " targets, which a name alone says"
+            f"; the entries for {' and '.join(plain)} leave out no target,"
+            " which a name alone says"
         )
     elif len(chosen) != len(names):
         why = "; it lists an extension twice"
@@ -1532,14 +1534,14 @@ def _root_list(root: Path) -> _RootList | str | None:
 
 
 def _judged_table(entry: dict[str, Any]) -> bool:
-    """Whether the root's table entry *entry* is a name and a ``for`` of names.
+    """Whether the root's table entry *entry* is a name and a ``without`` of names.
 
     Any other table is the contract judge's to name, and the list is
     judged canonical once it is gone.
     """
-    targets = entry.get("for", [])
+    targets = entry.get("without", [])
     return (
-        set(entry) <= {"name", "for"}
+        set(entry) <= {"name", "without"}
         and isinstance(targets, list)
         and all(isinstance(target, str) for target in cast("list[object]", targets))
     )
@@ -1553,9 +1555,9 @@ def _spelled_entries(entries: Iterable[Entry]) -> str:
             spelled.append(f'"{entry}"')
             continue
         parts = [f'name = "{_spelling(entry)}"']
-        if "for" in entry:
-            targets = ", ".join(f'"{target}"' for target in entry["for"])
-            parts.append(f"for = [{targets}]")
+        if "without" in entry:
+            targets = ", ".join(f'"{target}"' for target in entry["without"])
+            parts.append(f"without = [{targets}]")
         spelled.append("{ " + ", ".join(parts) + " }")
     return "[" + ", ".join(spelled) + "]"
 
@@ -1563,15 +1565,15 @@ def _spelled_entries(entries: Iterable[Entry]) -> str:
 def root_list_problems(root: Path) -> list[str]:
     """Why ``[workspace] extensions`` is not its canonical list; empty when it is.
 
-    The canonical list holds each extension once, in composition order,
-    without an entry another listed extension requires unless the entry
-    carries a ``for``, and with a ``for`` naming exactly its default
-    targets written as the name alone. No other order means anything,
-    so the list is written in this one, which the gate's ``--fix``
-    writes. A list whose set's declared order has no start names the
-    cycle. An entry that is not an installed extension's name is named
-    by ``entry_problems`` and ``listing_problems``, and the list is
-    judged once they pass.
+    The canonical list holds each extension once, in composition order.
+    It leaves out an entry another listed extension requires unless the
+    entry carries a ``without``, and writes a table entry whose
+    ``without`` is empty or absent as the name alone. No other order
+    means anything, so the list is written in this one, which the
+    gate's ``--fix`` writes. A list whose set's declared order has no
+    start names the cycle. An entry that is not an installed
+    extension's name is named by ``entry_problems`` and
+    ``listing_problems``, and the list is judged once they pass.
     """
     found = _root_list(root)
     if found is None:
@@ -1888,7 +1890,8 @@ class _Entry:
     """One entry of an ``extensions`` array as written, with its comments.
 
     Attributes:
-        text: The entry itself, ``"ruff"`` or ``{ name = "pytest", for = [] }``.
+        text: The entry itself, ``"ruff"`` or
+            ``{ name = "pytest", without = ["coverage"] }``.
         above: The whole lines between the entry before it and this one,
             its comment lines and blank lines, as written.
         after: The comment after the entry on its own line; empty without one.

@@ -190,7 +190,7 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
         "[workspace]\n"
         "extensions = [\n"
         '  "livery.forge",\n'
-        '  { name = "docs", for = [] },\n'
+        '  { name = "docs", without = [] },\n'
         "]\n"
     )
     # The distribution is the one whose entry point declares the name,

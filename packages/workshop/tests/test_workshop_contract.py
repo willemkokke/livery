@@ -42,6 +42,19 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
     )
 
 
+def test_a_root_entry_takes_its_name_and_without_alone(tmp_path: Path) -> None:
+    # Any other key of a table entry is unknown, and the refusal names
+    # the two the entry takes.
+    path = _workspace(tmp_path, "")
+    path.write_text('[workspace]\nextensions = [{ name = "docs", for = [] }]\n')
+    message = _refusal(lambda: _contract.load_contract(path))
+    assert "has no key 'for': it takes name, without" in message
+    path.write_text('[workspace]\nextensions = [{ name = "docs", without = [] }]\n')
+    assert _contract.load_contract(path)["workspace"]["extensions"] == [
+        {"name": "docs", "without": []}
+    ]
+
+
 def test_the_old_tools_table_refuses_naming_toolroom(tmp_path: Path) -> None:
     # The table is toolroom's and carries its name; no reader takes
     # [tools], and the refusal's nearest match names the table to use.

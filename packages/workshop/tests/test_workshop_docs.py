@@ -1552,12 +1552,13 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     )
     report = root / "packages" / "core" / "htmlcov"
     page = root / "packages" / "core" / "docs" / "_generated" / "coverage.md"
-    # Docs alone, and docs beside an awake coverage whose `for` list
-    # leaves docs out, so its [for.docs] table adds no step: nothing in
-    # the docs phase draws, and the declared report states the absence.
+    # Docs alone, and docs beside an awake coverage whose entry leaves
+    # docs out with `without`, so its [for.docs] table adds no step:
+    # nothing in the docs phase draws, and the declared report states the
+    # absence.
     for listed in (
         '["docs"]',
-        '["docs", "acme.meter", { name = "coverage", for = [] }]',
+        '["docs", "acme.meter", { name = "coverage", without = ["docs"] }]',
     ):
         (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
         _mount(root)

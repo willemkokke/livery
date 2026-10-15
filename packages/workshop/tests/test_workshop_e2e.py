@@ -860,7 +860,7 @@ def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
 def test_a_contract_s_root_set_is_read_by_name(tmp_path: Path) -> None:
     assert _e2e._listed_extensions(tmp_path) == frozenset()  # pyright: ignore[reportPrivateUsage]
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [{ name = "acme.house", for = [] },'
+        '[workspace]\nextensions = [{ name = "acme.house", without = ["docs"] },'
         ' "basedpyright", "mkdocstrings"]\n'
     )
     # The set, so the docs extension mkdocstrings requires counts though
