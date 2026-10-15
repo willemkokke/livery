@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -15,11 +14,7 @@ import livery.workshop
 from livery.extensions.claude import _tasks
 from livery.extensions.claude._tasks import HookEvent, ToolInput, post_edit, stop
 from livery.footman import Failed
-from livery.workshop._prose import (
-    register_fragment,
-    repository_fragments,
-    unregister_fragment,
-)
+from livery.workshop._prose import repository_fragments
 from livery.workshop._sync import sync_workspace
 
 _FAILURES = (SystemExit, Failed)
@@ -35,18 +30,6 @@ def _workspace(tmp_path: Path, extensions: str = '["claude"]') -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "workshop.toml").write_text(f"[workspace]\nextensions = {extensions}\n")
     return tmp_path
-
-
-@pytest.fixture
-def restored() -> Iterator[None]:
-    """The prose and step registries, put back after the test."""
-    from livery.workshop import _prose, _steps
-
-    prose = _prose.snapshot()
-    steps = _steps.snapshot()
-    yield
-    _prose.restore(prose)
-    _steps.restore(steps)
 
 
 # The refusals first: unlisted, the extension writes nothing.
@@ -544,39 +527,36 @@ def test_a_shipped_fragment_lands_byte_for_byte_and_an_edit_is_kept_and_named(
 
 
 def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
-    tmp_path: Path, restored
+    tmp_path: Path,
 ) -> None:
-    root = _workspace(tmp_path)
-    register_fragment(
-        "rules",
-        "acme",
-        lambda root, audience: f"# Acme\n\nfor {audience}\n",
-        extension="acme.brand",
-    )
-    register_fragment(
-        "rules", "quiet", lambda root, audience: "", extension="acme.brand"
-    )
-    sync_workspace(root)
-    delivered = root / ".workshop" / "fragments" / "rules.acme.md"
-    text = delivered.read_text()
-    assert text.startswith(
-        "<!-- Rendered by `fm sync` from the registries acme.brand fills;"
-    )
-    assert text.endswith("# Acme\n\nfor agent\n")
-    # An empty render is left out, not delivered empty.
-    assert not (root / ".workshop" / "fragments" / "rules.quiet.md").exists()
-    assert sync_workspace(root) == []
-    unregister_fragment("rules.acme.md", by="acme.brand")
-    unregister_fragment("rules.quiet.md", by="acme.brand")
-    lines = sync_workspace(root)
-    assert (
-        "  removed .workshop/fragments/rules.acme.md: no listed extension ships it"
-        in lines
-    )
-    assert not delivered.exists()
+    import shutil
+
     from livery.workshop._fragment_engine import local_receipts
 
-    assert ".workshop/fragments/rules.acme.md" not in local_receipts(root)
+    # The base renders the compositions fragment while a package is
+    # present, and renders nothing for it without one.
+    root = _workspace(tmp_path)
+    member = root / "packages" / "acme"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text('extensions = []\nname = "acme"\n')
+    sync_workspace(root)
+    delivered = root / ".workshop" / "fragments" / "compositions.present.md"
+    text = delivered.read_text()
+    assert text.startswith(
+        "<!-- Rendered by `fm sync` from the registries livery.workshop fills;"
+    )
+    assert "- none (packages/acme): holds none; gate phases none\n" in text
+    # An empty render is left out, not delivered empty: no lock, no tools.
+    assert not (root / ".workshop" / "fragments" / "tools.locked.md").exists()
+    assert sync_workspace(root) == []
+    shutil.rmtree(member)
+    lines = sync_workspace(root)
+    assert (
+        "  removed .workshop/fragments/compositions.present.md: no listed"
+        " extension ships it" in lines
+    )
+    assert not delivered.exists()
+    assert ".workshop/fragments/compositions.present.md" not in local_receipts(root)
 
 
 def test_a_newly_listed_extension_s_block_arrives_at_the_next_sync(
@@ -600,15 +580,12 @@ def test_a_newly_listed_extension_s_block_arrives_at_the_next_sync(
 
 
 def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
-    tmp_path: Path, restored
+    tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path)
     own = root / "fragments"
     own.mkdir()
     (own / "identity.acme.md").write_text("# Acme\n")
-    register_fragment(
-        "workflow", "acme", lambda root, audience: "# W\n", extension="acme.brand"
-    )
     sync_workspace(root)
     imports = [
         line
@@ -619,7 +596,6 @@ def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
         "@.workshop/fragments/voice.interaction.md",
         "@.workshop/fragments/standards.documentation.md",
         "@.workshop/fragments/rules.workshop.md",
-        "@.workshop/fragments/workflow.acme.md",
         "@.workshop/fragments/gate.checks.md",
         "@.workshop/fragments/verbs.extensions.md",
         "@fragments/identity.acme.md",

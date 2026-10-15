@@ -352,11 +352,6 @@ def register_channels(rules: Iterable[ChannelRule]) -> None:
         _CHANNELS.append(rule)
 
 
-def unregister_channels(*, extension: str) -> None:
-    """Withdraw every channel rule *extension* registered."""
-    _CHANNELS[:] = [rule for rule in _CHANNELS if rule.extension != extension]
-
-
 def channel_rules() -> tuple[ChannelRule, ...]:
     """Every channel rule, highest rank first, registration order within a rank."""
     return tuple(sorted(_CHANNELS, key=lambda rule: -rule.rank))

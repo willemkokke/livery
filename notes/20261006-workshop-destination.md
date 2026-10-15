@@ -322,7 +322,6 @@ every kind the check judges"). What changes:
 | the python-only checks `lint.docrefs`, `lint.docstrings` | the mkdocstrings extension's steps of the lint phase (`mkdocstrings/_refs.py`, `mkdocstrings/_docstrings.py`) | as today: both exist because the reference publishes every docstring, and `lint.docrefs` judges each name in a docstring the site renders against the anchors that reference renders, which it computes through griffe |
 | git-cliff, `cliff.toml`, `CHANGELOG.md` | `_cliff`, the `cliff.toml` fragment | the changelog extension; `release-notes` on its module; the base keeps the provider protocol and asks |
 | the agent's entry file, `.workshop/fragments/`, `.claude/`, the hooks verb | `_shipped_files._agent_outputs`, `_hooks` | the claude extension's dynamic fragments over `guidance(root, AGENT)`; `hooks.pre-bash` its verb |
-| the python kinds and backends | nothing: the kind registry went in step 7's P6, the backends in P5 | the python, cpp, cmake, nanobind, conan and unreal extensions (phase 11) |
 | the layering check's python parse | the `references` query, which the python extension answers from its parse (`livery.extensions.python._parse`); the python extension's runner-terminal and declared-imports steps read that parse | the `references` query: a language extension answers what a source references; rules register against it |
 | the registry kinds and their defaults | `_registries._ECOSYSTEM` | ecosystems as registrations (phase 13) |
 
@@ -1656,11 +1655,9 @@ neither needs nor rules out).
 
 | Temporary | Replaced by |
 | --- | --- |
-| `register_check`, `contribute_job`, `register_slot`, `register_site_file`, `register_release_notes`, `register_fragment`, `register_section`, `register_ast_rule`, and the `[checks.<tool>.<role>]`, `[options]`, `[for]`, `tools` attributes | `extension.toml`, read at mount (phase 10, 11) |
-| `Declared` records in Python | `[contract.<contract>.<table>]` and the composed schema under `.workshop/schema/` (phase 10b) |
-| the Python bodies of eight tool checks | their words in `extension.toml` (phase 10c) |
-| the coverage machinery in the base and the python extension, reading the coverage extension's `[coverage]` keys | the coverage extension's own modules (phase 12e, P2b) |
+| `register_site_file`, which the docs extension calls when its tasks module is imported | the whole-file fragment that replaces `_site_files` (phase 12a) |
 | `_site_files` | a whole-file fragment (phase 12a) |
+| the base's declarations of the `python.dev-group`, `python.docs-group` and `python.test.addopts` queries | the python extension's own declarations, once it leaves the workshop wheel (step 8) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |

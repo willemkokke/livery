@@ -46,7 +46,7 @@ def registry() -> Iterator[None]:
 def empty(registry: None) -> None:
     """An empty step registry, so a generated tree holds the test's steps alone."""
     del registry
-    _steps.restore(({}, {}))
+    _steps.restore({})
 
 
 @pytest.fixture

@@ -20,8 +20,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
 convention = "google"
 
 [lint.per-file-ignores]
-# The claims: each line is a category's patterns for a present kind,
-# with the rules a step withholds there.
+# The claims: each line is a category's patterns for a set of
+# extensions a member holds, with the rules a step withholds there.
 "packages/**/docs/examples/**/*.py" = ["B", "C4", "D", "E", "F401", "F811", "F841", "I", "RUF", "SIM", "UP"]
 "packages/**/tests/**" = ["D1"]
 "packages/**/tests/**/*_test.py" = ["D1"]

@@ -27,12 +27,9 @@ _FAILURES = (BaseException,)
 
 @pytest.fixture
 def restored_steps():
-    before, withdrawn = dict(_steps._STEPS), dict(_steps._WITHDRAWN)
+    state = _steps.snapshot()
     yield
-    _steps._STEPS.clear()
-    _steps._STEPS.update(before)
-    _steps._WITHDRAWN.clear()
-    _steps._WITHDRAWN.update(withdrawn)
+    _steps.restore(state)
 
 
 def _this_checkout_or_skip(root: Path) -> None:
@@ -137,7 +134,7 @@ def test_a_withdrawn_steps_file_is_kept_when_edited_and_removed_when_unedited(
     assert "C or C++" in (member / ".native-style").read_text()
     assert deliver(root) == []
     # The step withdrawn: the edited arm first, kept and named.
-    unregister_step("lint.native-style", by="acme.brand")
+    unregister_step("lint.native-style")
     (member / ".native-style").write_text("mine\n")
     # The gate's prose follows the withdrawn step too; the package's
     # lines are the ones under test.
@@ -151,7 +148,7 @@ def test_a_withdrawn_steps_file_is_kept_when_edited_and_removed_when_unedited(
     (member / ".native-style").unlink()
     register_step(record)
     deliver(root)
-    unregister_step("lint.native-style", by="acme.brand")
+    unregister_step("lint.native-style")
     assert [line for line in deliver(root) if "packages/" in line] == [
         "  removed packages/native/.native-style: no listed extension renders it"
     ]
@@ -237,8 +234,8 @@ def test_unregistering_a_tools_steps_removes_every_trace(restored_steps) -> None
         )
     composed = compose_project(_data())
     assert "[tool.acme]" in composed["pyproject.toml"]
-    unregister_step("typecheck.acme", by="acme.brand")
-    unregister_step("typecomplete.acme", by="acme.brand")
+    unregister_step("typecheck.acme")
+    unregister_step("typecomplete.acme")
     composed = compose_project(_data())
     assert "[tool.acme" not in composed["pyproject.toml"]
     assert "acme" not in {tool for tool, _ in tools_for(("python",))}

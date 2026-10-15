@@ -994,21 +994,16 @@ def test_declared_jobs_join_their_points_under_the_listed_name(package: Path) ->
         builtin_schedule,
         point_by_name,
         verdict_needs,
-        withdraw_job,
     )
 
     found = _declare(package, JOB + "gates = true\n")
-    try:
-        assert register_declared("acme.listed", found.additions) is False
-        names = [job.name for job in point_by_name(None)["gate"].jobs]
-        assert names.index("prose") == names.index("gate") - 1
-        assert "prose" in verdict_needs("gate")
-        assert (
-            Entry("gate", "prose", "acme.prose", source="acme.listed")
-            in builtin_schedule()
-        )
-    finally:
-        withdraw_job("gate", "prose")
+    assert register_declared("acme.listed", found.additions) is False
+    names = [job.name for job in point_by_name(None)["gate"].jobs]
+    assert names.index("prose") == names.index("gate") - 1
+    assert "prose" in verdict_needs("gate")
+    assert (
+        Entry("gate", "prose", "acme.prose", source="acme.listed") in builtin_schedule()
+    )
 
 
 def test_the_tasks_an_extension_defines_are_read_from_its_sources(

@@ -2447,26 +2447,6 @@ def _list_phase(
     return listings, unreachable
 
 
-def _plan_refresh(
-    record: Record, listing: list[_toolfetch.Release]
-) -> list[_toolfetch.Release]:
-    """Every listed release the chain does not hold, down to its floor.
-
-    Not just the ones above the base: an interior gap — a hole a previous
-    gather reported — is this walk's to fill too, or nobody fills it. Below
-    the floor stays `prime`'s business, because depth is a budget and a
-    refresh must not silently spend it.
-    """
-    known = set(_surfaces.versions(record))
-    floor = _surfaces.floor(record)
-    return [
-        release
-        for release in listing
-        if release.version not in known
-        and _version_tuple(release.version) >= _version_tuple(floor)
-    ]
-
-
 def _plan_prime(
     record: Record, listing: list[_toolfetch.Release], count: int
 ) -> tuple[list[_toolfetch.Release], str]:

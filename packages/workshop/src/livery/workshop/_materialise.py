@@ -163,16 +163,6 @@ def _digest(target: Path) -> str:
     return digest.hexdigest()
 
 
-def write_lf(path: Path, text: str) -> None:
-    r"""Write *text* with LF endings on every platform.
-
-    ``Path.write_text`` translates ``\n`` to the platform separator;
-    generated files are written on one machine and linted on another,
-    so their bytes cannot depend on which one wrote them.
-    """
-    path.write_text(text, encoding="utf-8", newline="\n")
-
-
 def _entry(
     link: Path,
     target: Path,

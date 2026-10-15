@@ -20,8 +20,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
 convention = "google"
 
 [lint.per-file-ignores]
-# The claims: each line is a category's patterns for a present kind,
-# with the rules a step withholds there.
+# The claims: each line is a category's patterns for a set of
+# extensions a member holds, with the rules a step withholds there.
 {% for pattern, codes in per_file_ignores %}"{{ pattern }}" = [{% for code in codes %}"{{ code }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 {% endfor %}# The composed tasks.py opens with the header the fragment engine
 # writes, whose lines it does not wrap.

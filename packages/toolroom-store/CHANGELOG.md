@@ -1,6 +1,6 @@
-<!-- Seeded from the template channel (package-python kind) at
-     birth; this file is the workspace's own. Edit it directly:
-     the template never rewrites it.
+<!-- Seeded from the changelog extension's seeds at birth; this
+     file is the workspace's own. Each release records its entry at
+     the top, and an edit stays.
 -->
 # Changelog
 

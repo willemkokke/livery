@@ -578,13 +578,6 @@ def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str
     return str(made["token"])
 
 
-#: Gitea's forge URL as both sides see it: the compose hostname,
-#: which the runner resolves natively and the host through its
-#: taught /etc/hosts alias. Every lane has one; `Lane.alias` is the
-#: general form, and this name serves the Gitea-only callers.
-ALIAS_URL = "http://gitea:3000"
-
-
 @dataclass(frozen=True)
 class LoopMember:
     """One member of the loop: its directory and the template it is born from.
@@ -645,11 +638,6 @@ LOOP_MEMBERS: tuple[LoopMember, ...] = (
     LoopMember("loop-native", "nanobind-module"),
     LoopMember("loop-cpp", "cpp-library"),
 )
-
-
-def loop_member(name: str) -> LoopMember | None:
-    """The loop's member named *name*; None when the loop has none of that name."""
-    return next((member for member in LOOP_MEMBERS if member.name == name), None)
 
 
 #: The member that contributes a point, and the point's name.

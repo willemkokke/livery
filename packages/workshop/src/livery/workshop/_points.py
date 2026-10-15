@@ -773,13 +773,6 @@ def contribute_job(
     )
 
 
-def withdraw_job(point: str, name: str) -> None:
-    """Remove the contributed job *name* from *point*, and every join of it."""
-    _CONTRIBUTED_JOBS.pop((point, name), None)
-    for key in [key for key in _JOINED_JOBS if key[:2] == (point, name)]:
-        del _JOINED_JOBS[key]
-
-
 def snapshot(
     *, initial: bool = False
 ) -> tuple[
@@ -1076,10 +1069,6 @@ def dispatchable(root: Path | None) -> tuple[str, ...]:
         and not any(item.required for item in point.inputs)
     )
 
-
-#: The workflow file each point's shell is: the gate and the merge
-#: point share one, the nightly and the release have their own.
-WORKFLOWS = {point.name: point.workflow for point in DECLARED}
 
 #: The events that trigger each point's runs, in the forges' words.
 EVENTS = {point.name: point.events for point in DECLARED}

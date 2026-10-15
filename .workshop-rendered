@@ -9,9 +9,9 @@
   "mypy.ini": "ca261290a85e1ba04c7d79e55ae3bb0784d8d96bee398c5cfe8c9125080cf642",
   "pyproject.toml": "4382f05c9c889f08778d9143d8ea56abd9141495b5cc52d5310fe282039de549",
   "pyrefly.toml": "d84ad5f74d8e58f1118b648fa87b58638424da541b340f948833625bb2c65542",
-  "pyrightconfig.json": "3608ed126cfbb82925bb7e392cceb650e9e72bff7c8063ab028fba0d69b9d0c2",
+  "pyrightconfig.json": "10f80e06d041460fd07dbfb79dcbe9a5359fdc7f21a592e199b661e3c7901f28",
   "pytest.toml": "f2503364a5603ed72b314af749ec560fabf1fdbe29df3ae49cc404069ff5b2c6",
-  "ruff.toml": "3d4bed46d913747526b5418509d34e8293dda036f256b2fb2d6ebb3647262e83",
+  "ruff.toml": "f8ff1df1a7fe19b0ac20e168ac6e6be08a6486b483a55565a1b65aae8cd1dda5",
   "tasks.py": "7e8d6b67ae153fbb7f4cd6d10f3a8dc41fd50573fcd9e7a64ee3cf6d8129df1d",
   "ty.toml": "99649d6aaa7b3ed71e974bdccae226f1c73da80430503dcd11d8b328460d698c"
 }

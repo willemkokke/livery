@@ -17,16 +17,11 @@ from livery.workshop._prose import (
     fragments,
     guidance,
     parse_name,
-    register_fragment,
-    register_section,
     render_compositions,
     render_gate,
     render_tools,
     render_verbs,
-    sections,
     shipped,
-    unregister_fragment,
-    unregister_section,
 )
 from livery.workshop._steps import StepRecord, register_step
 from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
@@ -37,10 +32,8 @@ WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
 
 @pytest.fixture
 def restored():
-    prose = _prose.snapshot()
     steps = _steps.snapshot()
     yield
-    _prose.restore(prose)
     _steps.restore(steps)
 
 
@@ -101,7 +94,7 @@ def test_a_name_outside_the_convention_refuses_naming_the_file(tmp_path: Path) -
 
 def test_an_unknown_section_or_a_kind_in_the_name_refuses_naming_the_file() -> None:
     with pytest.raises(
-        ProseError, match=r"lore\.acme\.md: section 'lore' is not one the registry"
+        ProseError, match=r"lore\.acme\.md: section 'lore' is not one of the sections"
     ):
         parse_name("lore.acme.md")
     with pytest.raises(ProseError, match="the sections are identity, voice, standards"):
@@ -183,74 +176,10 @@ def test_a_fragment_for_both_readers_beside_its_twin_refuses_for_that_reader(
     assert house.source is not None and house.source.read_text() == "# agent\n"
 
 
-def test_a_section_registered_twice_or_after_an_unknown_one_refuses(restored) -> None:
-    register_section("brand", after="rules", extension="acme.brand")
-    assert sections()[3:5] == ("rules", "brand")
-    with pytest.raises(
-        ProseError, match=r"registers section 'brand', which acme\.brand already"
-    ):
-        register_section("brand", after="rules", extension="acme.house")
-    with pytest.raises(
-        ProseError, match="after 'nope', which no extension registered; the sections"
-    ):
-        register_section("more", after="nope", extension="acme.brand")
-    with pytest.raises(
-        ProseError, match="withdraws section 'rules', which is the base's"
-    ):
-        unregister_section("rules", by="livery.workshop")
-    with pytest.raises(
-        ProseError, match=r"withdraws section 'brand', which acme\.brand registered"
-    ):
-        unregister_section("brand", by="acme.house")
-    with pytest.raises(
-        ProseError, match="withdraws section 'lore', which no extension registered"
-    ):
-        unregister_section("lore", by="acme.brand")
-    register_fragment(
-        "brand", "thing", lambda root, audience: "# T\n", extension="acme.brand"
-    )
-    with pytest.raises(ProseError, match=r"while brand\.thing\.md still belongs to it"):
-        unregister_section("brand", by="acme.brand")
-    unregister_fragment("brand.thing.md", by="acme.brand")
-    unregister_section("brand", by="acme.brand")
-    assert "brand" not in sections()
-
-
-def test_a_rendered_fragment_outside_the_vocabulary_or_registered_twice_refuses(
-    restored,
-) -> None:
-    def render(root: Path, audience: str | None) -> str:
-        return "# R\n"
-
-    register_fragment("rules", "acme", render, extension="acme.brand")
-    with pytest.raises(
-        ProseError, match=r"registers fragment rules\.acme\.md, which acme\.brand"
-    ):
-        register_fragment("rules", "acme", render, extension="acme.house")
-    with pytest.raises(
-        ProseError, match="section 'lore' is not one the registry knows"
-    ):
-        register_fragment("lore", "acme", render, extension="acme.brand")
-    with pytest.raises(
-        ProseError, match="a topic is never named 'agent', an audience is"
-    ):
-        register_fragment("rules", "agent", render, extension="acme.brand")
-    with pytest.raises(
-        ProseError, match=r"withdraws fragment rules\.acme\.md, which acme\.brand"
-    ):
-        unregister_fragment("rules.acme.md", by="acme.house")
-    with pytest.raises(
-        ProseError, match=r"withdraws fragment rules\.none\.md, which no extension"
-    ):
-        unregister_fragment("rules.none.md", by="acme.brand")
-    unregister_fragment("rules.acme.md", by="acme.brand")
-
-
 def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_order(
     tmp_path: Path, restored
 ) -> None:
     root = _workspace(tmp_path, "acme.brand")
-    register_section("brand", after="rules", extension="acme.brand")
     listed = shipped("livery.workshop", WORKSHOP_CONTENT) + shipped(
         "acme.brand",
         _extension(
@@ -260,11 +189,10 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
             voice__tone__human="# warm\n",
             rules__house="# house\n",
             identity__acme="# acme\n",
-            brand__thing="# thing\n",
         ),
     )
-    # Sections in the base's order, the registered one after its anchor,
-    # the mounted extensions in mount order inside a section.
+    # Sections in the base's order, the mounted extensions in mount order
+    # inside a section.
     assert _names(root, listed, AGENT) == [
         "identity.acme.md",
         "voice.interaction.md",
@@ -272,7 +200,6 @@ def test_each_reader_gets_its_audience_the_shared_fragments_and_the_section_orde
         "standards.documentation.md",
         "rules.workshop.md",
         "rules.house.md",
-        "brand.thing.md",
     ]
     assert _names(root, listed, HUMAN) == _names(root, listed, AGENT)
     tone = {p.audience: p for p in fragments(root, listed, HUMAN) if p.topic == "tone"}

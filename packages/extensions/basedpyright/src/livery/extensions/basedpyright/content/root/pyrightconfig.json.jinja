@@ -5,10 +5,10 @@
   "include": [{% if packages %}"packages", {% endif %}{% for path in root_tests %}"{{ path }}", {% endfor %}"tasks.py"],
   // A conan recipe is conan's input, read by conan's own interpreter
   // where the conan package lives; the workspace venv never has it, so
-  // the checker that reads the whole tree skips the recipes. The cpp
-  // members are skipped whole: their kind type-checks nothing. A
-  // documentation example is judged for its names by lint and run by
-  // the examples step; it is not typed code.
+  // the checker that reads the whole tree skips the recipes. A member
+  // the venv does not install, a C or C++ one, is skipped whole: it
+  // holds no python to check. A documentation example is judged for its
+  // names by lint and run by the examples step; it is not typed code.
   "exclude": [{% for package in native %}"packages/{{ package.dir }}", {% endfor %}"packages/**/conanfile.py", "packages/**/docs/examples"],
   // The editor and the command line resolve the same environment: the
   // workspace members are editable installs in .venv, so basedpyright

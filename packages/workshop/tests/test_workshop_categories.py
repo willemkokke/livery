@@ -18,7 +18,6 @@ from livery.workshop._categories import (
     channel_of,
     known_categories,
     register_channels,
-    unregister_channels,
 )
 from livery.workshop._packages import Package, discover_packages
 
@@ -58,8 +57,9 @@ PACKAGE_LEVEL = "[extension]\n"
 
 @pytest.fixture
 def brand_extension():
+    channels = list(_categories._CHANNELS)
     yield
-    unregister_channels(extension="acme.brand")
+    _categories._CHANNELS[:] = channels
 
 
 # The refusals first.

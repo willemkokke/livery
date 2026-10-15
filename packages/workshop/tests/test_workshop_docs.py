@@ -1178,11 +1178,8 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
 
 def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> None:
     root = _workspace(tmp_path, docs_table='extensions = ["docs"]\n')
-    # The fallback first: no workspace sheet, the base's own alone.
-    base = tomllib.loads(zensical_config(root))["project"]["extra_css"]
-    assert base and all(
-        sheet.startswith("_extensions/livery.workshop/") for sheet in base
-    )
+    # The fallback first: no sheet anywhere, so no extra css at all.
+    assert "extra_css" not in tomllib.loads(zensical_config(root))["project"]
     assets = root / "docs" / "assets"
     assets.mkdir(parents=True)
     (assets / "site.css").write_text("/* mine */\n")
@@ -1193,7 +1190,6 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
     config = tomllib.loads(zensical_config(root))
     # A package's declared sheet comes before the workspace's own.
     assert config["project"]["extra_css"] == [
-        *base,
         "packages/core/extra.css",
         "assets/site.css",
     ]
@@ -1250,21 +1246,18 @@ def test_extension_assets_are_staged_whole_and_listed_in_cascade_order(
     root = extensioned
     (root / "docs" / "assets").mkdir(parents=True)
     (root / "docs" / "assets" / "site.css").write_text("")
-    assert stage_extension_assets(root) == ["livery.workshop", "acme.theme"]
+    assert stage_extension_assets(root) == ["acme.theme"]
     staged = root / "docs" / "_extensions"
     theme = staged / "acme.theme" / "assets" / "theme.css"
     assert theme.read_text() == "body { color: red }\n"
-    assert (staged / "livery.workshop" / "assets" / "palette.css").is_file()
     config = tomllib.loads(zensical_config(root))
     assert config["project"]["extra_css"] == [
-        "_extensions/livery.workshop/assets/palette.css",
-        "_extensions/livery.workshop/assets/type.css",
         "_extensions/acme.theme/assets/theme.css",
         "assets/site.css",
     ]
     # Rebuilt whole: a sheet the extension no longer ships leaves no copy.
     (tmp_path / "acme-theme-content" / "docs" / "assets" / "theme.css").unlink()
-    assert stage_extension_assets(root) == ["livery.workshop", "acme.theme"]
+    assert stage_extension_assets(root) == ["acme.theme"]
     assert not theme.exists()
     assert "theme.css" not in zensical_config(root)
 

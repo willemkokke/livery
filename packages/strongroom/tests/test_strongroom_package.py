@@ -1,6 +1,6 @@
-# Seeded from the template channel (package-python kind) at
+# Seeded from the python-library template at
 # birth; this file is the workspace's own. Edit it directly:
-# the template never rewrites it.
+# nothing rewrites it.
 """The package's standing contracts, pinned before anything else."""
 
 from __future__ import annotations

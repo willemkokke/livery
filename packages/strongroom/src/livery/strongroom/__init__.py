@@ -1,6 +1,6 @@
-# Seeded from the template channel (package-python kind) at
+# Seeded from the python-library template at
 # birth; this file is the workspace's own. Edit it directly:
-# the template never rewrites it.
+# nothing rewrites it.
 """Content-addressed storage: one address space, every tenant.
 
 The store names bytes by their digest, keeps trees and versions as
