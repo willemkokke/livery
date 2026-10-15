@@ -992,6 +992,7 @@ class _GiteaChecks:
                     created_at=_when(entry.get("created_at")),
                     started_at=_when(entry.get("started_at")),
                     completed_at=_when(entry.get("completed_at")),
+                    ref=str(entry.get("head_branch") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1048,13 +1049,22 @@ class _GiteaChecks:
 
     def dispatch(
         self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
-    ) -> None:
-        """Trigger the workflow file's ``workflow_dispatch`` on *ref*."""
-        self._client.request(
-            f"{self._base}/actions/workflows/{quote(workflow)}/dispatches",
+    ) -> int | None:
+        """Trigger the workflow file's ``workflow_dispatch`` on *ref*; the run's id.
+
+        Asked for ``return_run_details`` (a query parameter here), Gitea
+        answers 200 naming the run it started in ``workflow_run_id``. A
+        server without that answer replies 204 with no body, and None
+        comes back.
+        """
+        answer = self._client.request(
+            f"{self._base}/actions/workflows/{quote(workflow)}/dispatches"
+            "?return_run_details=true",
             method="POST",
             data={"ref": ref, "inputs": dict(inputs or {})},
         )
+        run = (answer or {}).get("workflow_run_id")
+        return None if run is None else int(run)
 
 
 class _GiteaReleases:

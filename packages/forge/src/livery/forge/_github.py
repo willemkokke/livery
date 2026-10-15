@@ -1112,6 +1112,7 @@ class _GithubChecks:
                         if status == "completed"
                         else ""
                     ),
+                    ref=str(entry.get("head_branch") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1192,13 +1193,24 @@ class _GithubChecks:
 
     def dispatch(
         self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
-    ) -> None:
-        """Trigger the workflow file's ``workflow_dispatch`` on *ref*."""
-        self._client.request(
+    ) -> int | None:
+        """Trigger the workflow file's ``workflow_dispatch`` on *ref*; the run's id.
+
+        Asked for ``return_run_details``, GitHub answers 200 naming the
+        run it started in ``workflow_run_id``. A server without that
+        answer replies 204 with no body, and None comes back.
+        """
+        answer = self._client.request(
             f"{self._base}/actions/workflows/{quote(workflow)}/dispatches",
             method="POST",
-            data={"ref": ref, "inputs": dict(inputs or {})},
+            data={
+                "ref": ref,
+                "inputs": dict(inputs or {}),
+                "return_run_details": True,
+            },
         )
+        run = (answer or {}).get("workflow_run_id")
+        return None if run is None else int(run)
 
 
 class _GithubReleases:

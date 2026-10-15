@@ -34,7 +34,13 @@ cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
   finds a pull request by its merge commit only, never by its head.
 - `tags(prefix)` reads `GET /repos/:owner/:repo/git/refs/tags/:prefix`,
   one unpaged answer; no tag under the prefix answers 404. `runs`
-  with a workflow reads that workflow's own listing.
+  with a workflow reads that workflow's own listing, and a run's
+  `ref` is its `head_branch`.
+- `dispatch` asks `?return_run_details=true`, and Gitea answers 200
+  naming the run in `workflow_run_id`, which comes back. A server
+  without the run's details answers 204 with no body: None comes back,
+  and the caller finds the run in `runs` by its event, `ref` and
+  `head_sha`.
 - `pr.is_armed` walks the issue timeline, the one read-only source of
   the schedule; a `close` or `merge_pull` event clears the armed
   state whether or not a cancel event was emitted.

@@ -307,6 +307,11 @@ class Run:
         completed_at: When the run ended, the same way. GitHub reports
             no end for a run; its last update stands in once the run
             is complete.
+        ref: The branch or tag the run checked out, by its short name
+            (``main``, ``v1.2.0``): the head branch GitHub and Gitea
+            name, the ref GitLab names. A caller that dispatched a
+            workflow on a ref tells its run from another ref's by
+            this. Empty when the forge did not say.
     """
 
     id: int
@@ -319,6 +324,7 @@ class Run:
     created_at: str = ""
     started_at: str = ""
     completed_at: str = ""
+    ref: str = ""
 
 
 @dataclass(frozen=True)

@@ -192,6 +192,7 @@ class _RunState:
     started_at: str = ""
     completed_at: str = ""
     steps: tuple[Step, ...] = ()
+    ref: str = ""
 
 
 @dataclass
@@ -242,6 +243,10 @@ class FakeForge:
         capabilities: What livery.forge.Forge.supports answers True
             for. Defaults to every known capability; pass a subset to
             model a forge that declines some by name.
+        dispatch_names_run: Whether livery.forge.Checks.dispatch
+            returns the id of the run it started, as every backend's
+            answer names it. False answers None, as a GitHub or Gitea
+            server without the run's details does.
     """
 
     def __init__(
@@ -251,9 +256,11 @@ class FakeForge:
         version: str = "1.0.0",
         capabilities: tuple[Capability, ...] = _ALL_CAPABILITIES,
         token: str = "",
+        dispatch_names_run: bool = True,
     ) -> None:
         """Build an empty forge for *user* with *capabilities*."""
         self.faults: Faults = Faults()
+        self.dispatch_names_run: bool = dispatch_names_run
         #: The API budget every repository view reports; None, as a forge
         #: that reports none, until a test sets one.
         self.budget: RateBudget | None = None
@@ -413,7 +420,9 @@ class FakeForge:
         state = self._require_repo(owner, name)
         sha = sha or self._sha()
         state.branches[branch] = sha
-        self._start_run(state, sha, workflow="ci.yml", event="push", outcome=outcome)
+        self._start_run(
+            state, sha, workflow="ci.yml", event="push", outcome=outcome, ref=branch
+        )
         return sha
 
     def branch_sha(self, owner: str, name: str, branch: str) -> str:
@@ -506,12 +515,14 @@ class FakeForge:
         workflow: str,
         event: str,
         outcome: Outcome = "success",
+        ref: str = "",
     ) -> _RunState:
         run = _RunState(
             id=self._next_run,
             workflow=workflow,
             head_sha=sha,
             event=event,
+            ref=ref,
             status="queued",
             conclusion="",
             job_id=self._next_job,
@@ -1042,6 +1053,7 @@ class _FakeChecks:
                 created_at=run.created_at,
                 started_at=run.started_at,
                 completed_at=run.completed_at,
+                ref=run.ref,
             )
             for run in selected
         )
@@ -1107,8 +1119,8 @@ class _FakeChecks:
         ref: str,
         inputs: Mapping[str, str] | None = None,
         outcome: Outcome = "success",
-    ) -> None:
-        """Queue a run of *workflow* at *ref*.
+    ) -> int | None:
+        """Queue a run of *workflow* at *ref*; its id under ``dispatch_names_run``.
 
         ``outcome`` is the fake's test knob, as on
         livery.forge.testing.FakeForge.push: the run reaches it when
@@ -1121,9 +1133,15 @@ class _FakeChecks:
                 f"ref {ref} does not exist in {self._owner}/{self._name}",
                 status=404,
             )
-        self._fake._start_run(
-            state, sha, workflow=workflow, event="workflow_dispatch", outcome=outcome
+        run = self._fake._start_run(
+            state,
+            sha,
+            workflow=workflow,
+            event="workflow_dispatch",
+            outcome=outcome,
+            ref=ref,
         )
+        return run.id if self._fake.dispatch_names_run else None
 
 
 class _FakeSchedules:
