@@ -11,9 +11,9 @@ each package, and each says why.
 
 ``test.pytest`` narrows by packages: the workshop names the members a
 run reaches ([livery.workshop.scoped_packages][]), and their suites run
-in one call, with the workspace's own tests
-([livery.workshop.workspace_suite][]) beside them, measured while this
-extension contributes its ``[for.coverage]`` table
+in one call, with the workspace's own tests beside them while the
+root's set holds python ([livery.workshop.scoped_suite][]), measured
+while this extension contributes its ``[for.coverage]`` table
 ([livery.workshop.contributions_for][]). A member whose suite is not
 worker-safe sets the step's ``parallel`` option to false and runs in a
 call of its own, under ``-n 0``. ``examples.pytest`` runs each member's
@@ -32,8 +32,8 @@ from livery.workshop import (
     contributions_for,
     scoped_files,
     scoped_packages,
+    scoped_suite,
     step_option,
-    workspace_suite,
 )
 
 if TYPE_CHECKING:
@@ -72,10 +72,12 @@ EXAMPLES_RUNNER: Query[
 def judge_test(ctx: PhaseContext) -> None:
     """Run the suites of the packages the run reaches, and the workspace's own tests.
 
-    The suites run measured while coverage is listed and this
-    extension's listing contributes its ``[for.coverage]`` table, and
-    with no meter otherwise. While nothing answers
-    ``python.test.runner``, nothing runs, and the step says why.
+    The workspace's own tests run while the root's set holds python,
+    and a line says why when it does not. The suites run measured
+    while coverage is listed and this extension's listing contributes
+    its ``[for.coverage]`` table, and with no meter otherwise. While
+    nothing answers ``python.test.runner``, nothing runs, and the step
+    says why.
     """
     # A package whose examples alone changed runs them, not its suite.
     members = tuple(
@@ -83,8 +85,9 @@ def judge_test(ctx: PhaseContext) -> None:
         for package in scoped_packages(ctx, TEST)
         if package.path not in ctx.examples
     )
-    # The workspace's own tests reach any package, so every run runs them.
-    unit = workspace_suite(ctx.root)
+    # The workspace's own tests reach any package, so every run that
+    # judges them runs them.
+    unit = scoped_suite(ctx, TEST)
     suites = (*members, unit) if unit is not None else members
     if not suites:
         print(f"  {TEST}: no python package and no workspace tests to run")
@@ -93,7 +96,8 @@ def judge_test(ctx: PhaseContext) -> None:
     if run is None:
         print(
             f"  {TEST}: runs nothing; nothing answers {SUITE_RUNNER.name}, which"
-            " the python extension answers while a package holds python"
+            " the python extension answers while the root's set or a package's"
+            " holds python"
         )
         return
     # A suite that is not worker-safe runs in a call of its own under

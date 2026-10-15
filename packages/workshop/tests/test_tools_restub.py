@@ -108,10 +108,9 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
         '[project]\nname = "acme-member"\n'
     )
     (root / "workshop.toml").write_text(contract)
-    # The root's own files run on a language named bare, which no step
-    # judges, and the base's own requirement is left out, so nothing
-    # beyond what the contract requires is a requirement.
-    monkeypatch.setattr("livery.workshop._tools.RUNTIME_LANGUAGE", "bare")
+    # The root lists nothing, so no step judges its own files, and the
+    # base's own requirement is left out, so nothing beyond what the
+    # contract requires is a requirement.
     monkeypatch.setattr("livery.workshop._tools.base_requirements", tuple)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root

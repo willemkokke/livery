@@ -344,8 +344,13 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
 def test_the_tool_profile_derives_from_package_types(
     tmp_path: Path, python_steps: object
 ) -> None:
-    # No packages: the base's uv, and the tools of the steps that judge
-    # the root's own files as python.
+    # No packages and a root listing nothing: the base's uv alone.
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    profile = tool_profile(tmp_path)
+    assert "uv" in profile and "fake" not in profile
+    # A root listing python: its own files hold it, so the tools of the
+    # steps that judge python join.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
     profile = tool_profile(tmp_path)
     assert "uv" in profile and "fake" in profile
 

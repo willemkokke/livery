@@ -39,8 +39,10 @@ modules a type-completeness step verifies,
 writes the compilation database a linter reads,
 [livery.workshop.COMPILE_COMMANDS][]. The workspace's own tests, the
 ``tests`` directory at its root, are a unit of their own,
-[livery.workshop.workspace_suite][], which a test step runs beside
-the packages it judges. A step whose tool of the store is not on
+[livery.workshop.workspace_suite][], which holds the root's set. A
+test step runs them beside the packages it judges while that set
+holds an extension the step names: [livery.workshop.scoped_suite][]
+returns the unit then. A step whose tool of the store is not on
 ``PATH`` refuses with [livery.workshop.undeployed][]: the refusal
 names the tool and the sync that deploys it.
 
@@ -140,6 +142,7 @@ if TYPE_CHECKING:
     from livery.workshop._steps import scoped_files as scoped_files
     from livery.workshop._steps import scoped_packages as scoped_packages
     from livery.workshop._steps import scoped_paths as scoped_paths
+    from livery.workshop._steps import scoped_suite as scoped_suite
     from livery.workshop._steps import selected_files as selected_files
     from livery.workshop._steps import step_option as step_option
     from livery.workshop._tokens import forge_token as forge_token
@@ -192,6 +195,7 @@ __all__ = [
     "scoped_files",
     "scoped_packages",
     "scoped_paths",
+    "scoped_suite",
     "selected_files",
     "shipped_content",
     "step_option",
@@ -252,6 +256,7 @@ _EXPORTS: dict[str, str] = {
     "scoped_files": "livery.workshop._steps",
     "scoped_packages": "livery.workshop._steps",
     "scoped_paths": "livery.workshop._steps",
+    "scoped_suite": "livery.workshop._steps",
     "selected_files": "livery.workshop._steps",
     "step_option": "livery.workshop._steps",
     "undeployed": "livery.workshop._tools",

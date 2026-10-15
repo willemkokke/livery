@@ -33,7 +33,6 @@ from livery.extensions.coverage._format import (
     stored,
 )
 from livery.footman import fail
-from livery.workshop import workspace_suite
 from livery.workshop._packages import WORKSPACE_TESTS
 
 if TYPE_CHECKING:
@@ -55,9 +54,27 @@ def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
 
 
 def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The recorded units: every package's suite, then the workspace's own tests."""
-    unit = workspace_suite(root)
-    return suites_of(packages) + ((unit,) if unit is not None else ())
+    """The recorded units: every package's suite, then the workspace's own tests.
+
+    The workspace's own tests are a unit while a test step runs them
+    (`own_tests`).
+    """
+    return suites_of(packages) + own_tests(root)
+
+
+def own_tests(root: Path) -> tuple[Package, ...]:
+    """The workspace's own tests, as a unit a test step runs; none otherwise.
+
+    The unit holds the root's set, and a test step runs it while that
+    set holds an extension the step names, the rule the test step
+    itself asks ([livery.workshop.scoped_suite][]). A root whose set
+    holds no such extension runs none of its own tests, so no leg
+    leaves a part for them and no record holds them.
+    """
+    from livery.workshop._steps import tested_suite
+
+    unit = tested_suite(root)
+    return (unit,) if unit is not None else ()
 
 
 def suites_that_ran(
@@ -67,8 +84,9 @@ def suites_that_ran(
 
     Every suite after a full gate, the named packages' suites after a
     narrowed or a measured one, none after a skip; the workspace's
-    own tests whenever any suite ran, since every leg that runs a
-    suite runs them. The marker decides, never the data's contexts: a
+    own tests whenever any suite ran and a test step runs them
+    (`own_tests`), since every leg that runs a suite runs them then.
+    The marker decides, never the data's contexts: a
     suite whose tests reach no line that collection had not already
     reached leaves no context of its own under a first-hit tracer,
     and still ran.
@@ -83,8 +101,7 @@ def suites_that_ran(
         ran = tuple(package for package in suites_of(packages) if package.path in named)
     else:
         return ()
-    unit = workspace_suite(root)
-    return ran + ((unit,) if unit is not None else ())
+    return ran + own_tests(root)
 
 
 def request(packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
@@ -558,9 +575,7 @@ def top_up(
             widened = units
         else:
             subset = tuple(package for package in packages if package.path in named)
-            unit = workspace_suite(root)
-            if unit is not None and unit.path in named:
-                subset += (unit,)
+            subset += tuple(unit for unit in own_tests(root) if unit.path in named)
             widened = with_unstored_suites(root, run, packages, subset)
             units = tuple(package for package in widened if package.path not in named)
     if not units:

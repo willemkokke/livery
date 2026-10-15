@@ -323,9 +323,14 @@ def test_a_workspace_with_no_package_requires_uv_from_the_base(
 
     from livery.workshop._contract_keys import BASE_FILE, judge
 
+    # A root listing nothing requires the base's uv alone.
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
-    # The base's uv first, then the tools of the steps that judge the
-    # root's own files, in their registration order.
+    assert [(r.name, r.site) for r in _tools.requirements(tmp_path)] == [
+        ("uv", "the base"),
+    ]
+    # Listing python, the base's uv first, then the tools of the steps
+    # that judge the root's own files, in their registration order.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
     assert [(r.name, r.site) for r in _tools.requirements(tmp_path)] == [
         ("uv", "the base"),
         ("pytest", "step test.pytest"),
@@ -452,12 +457,11 @@ def test_the_three_sites_union_and_each_names_itself(
     assert _tools.tool_names(root)[:2] == ("uv", "pytest")
 
 
-def test_the_root_keeps_its_python_tools_beside_a_native_member_alone(
+def test_the_root_keeps_its_python_tools_beside_a_native_member_while_it_lists_python(
     tmp_path: Path,
 ) -> None:
-    # The root's tasks.py and tests are python whatever the members are,
-    # and the python steps judge them, so their tools stay required
-    # beside a native member alone.
+    # The root's own files hold the root's set. Listing nothing, they
+    # bring no python step's tool beside a native member alone.
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)
@@ -465,8 +469,12 @@ def test_the_root_keeps_its_python_tools_beside_a_native_member_alone(
         'extensions = ["cmake", "conan"]\nname = "acme-native"\n'
     )
     names = _tools.tool_names(tmp_path)
-    assert {"uv", "pytest"} <= set(names)
-    assert "conan" in names  # the native member's own extensions still count
+    assert "pytest" not in names
+    assert {"uv", "conan"} <= set(names)  # the native member's own still count
+    # Listing python, the python steps judge them, and their tools stay.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
+    names = _tools.tool_names(tmp_path)
+    assert {"uv", "pytest", "conan"} <= set(names)
 
 
 # --- the verbs -----------------------------------------------------------------------
@@ -1164,7 +1172,7 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     """
     root = tmp_path / "newborn"
     root.mkdir()
-    (root / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
     told = _tools.store_cannot_supply(root)
     # What is missing, in the tools' own names.
     assert "are not locked" in told

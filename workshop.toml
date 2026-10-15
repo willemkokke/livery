@@ -45,6 +45,10 @@ extensions = [
     # The test runner and its coverage meter, configured by the root
     # pytest.toml and .coveragerc.
     "pytest",
+    # The root's own tests are python, and so is tasks.py. The root's
+    # tests hold the root's set, so the python steps judge them and
+    # pytest runs them.
+    "python",
     # The python formatter and linter, configured by the root ruff.toml.
     "ruff",
     # The type checker over every platform at once, configured by the

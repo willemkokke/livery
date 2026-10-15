@@ -20,10 +20,10 @@ from livery.workshop._verified import read_marker
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
-def _root(tmp_path: Path, ci: str) -> Path:
+def _root(tmp_path: Path, ci: str, listed: str = "[]") -> Path:
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / "workshop.toml").write_text(
-        f'[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\n\n[ci]\n{ci}'
+        f'[workspace]\nextensions = {listed}\n\n[forge]\nkind = "gitea"\n\n[ci]\n{ci}'
     )
     return tmp_path
 
@@ -649,11 +649,16 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
 
 
 def test_a_workspace_tests_change_narrows_to_that_unit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     from livery.workshop._packages import workspace_suite
 
-    root = _root(tmp_path, "affected-legs = true\n")
+    # The root lists python, so a test step naming python runs its own
+    # tests, which hold the root's set.
+    root = _root(tmp_path, "affected-legs = true\n", '["python"]')
     x, y = _member(root, "x"), _member(root, "y")
     (root / "tests").mkdir()
     unit = workspace_suite(root)
@@ -716,8 +721,11 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
 def _proved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, tuple[Package, ...], list[tuple[str, ...]]]:
-    """A root whose tree a check leg proved, two members in it; the runs measured."""
-    root = _root(tmp_path, "affected-legs = true\n")
+    """A root whose tree a check leg proved, two members in it; the runs measured.
+
+    The root lists python, and its own tests hold the root's set.
+    """
+    root = _root(tmp_path, "affected-legs = true\n", '["python"]')
     x, y = _member(root, "x"), _member(root, "y")
     (root / "tests").mkdir()
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)

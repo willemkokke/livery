@@ -1293,7 +1293,7 @@ The parts, each mergeable alone, in this order:
   proof of which extensions compose something in a package.
 - N2 (built, #1676): no list's order means anything; `fm new.project --extensions`
   replaces `--stack`, which goes.
-- N3: the workspace's own tests hold the root list's set, and the
+- N3 (built, #1679): the workspace's own tests hold the root list's set, and the
   stock list of `fm new.project` names python.
 - N4: templates follow the installed set.
 - Then step 8's P1b, cmake's move (#1667), rebased.
@@ -3371,6 +3371,19 @@ neither needs nor rules out).
   2026-09-29 rule that the fix writes an entry's resolved targets once
   and `for` is the truth from then on: cooperation is greedy among the
   installed extensions, and `for` is written only to narrow it.
+
+- 2026-10-15, one kind's N3 (#1679), built: the workspace's own
+  tests, the `tests` unit at the root, hold the root list's set, and a
+  step judges a unit when the unit's set holds an extension the step
+  names (`_steps.judges_unit`), one rule for members and the root
+  alike. The special cases that counted the root's tests as python
+  went: `holds_runtime_language` for the unit, the tool profile's
+  `_held`, `tested`, and pytest's step, which ran them always and now
+  asks the public `scoped_suite`. A root whose set holds no python
+  runs none of its own tests, says why, and coverage expects no part
+  for them. livery's root and the stock list of `fm new.project` name
+  `python`. `pytest.toml`'s `testpaths` still names `tests` whenever
+  the directory exists: the base renders it from the directory alone.
 
 ## Open
 

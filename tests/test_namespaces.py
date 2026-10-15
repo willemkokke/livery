@@ -462,6 +462,7 @@ EXPORTS: dict[str, list[str]] = {
         "scoped_files",
         "scoped_packages",
         "scoped_paths",
+        "scoped_suite",
         "selected_files",
         "shipped_content",
         "step_option",

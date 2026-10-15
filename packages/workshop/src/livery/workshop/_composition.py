@@ -89,10 +89,20 @@ def extension_set(package: Package) -> tuple[str, ...]:
     Its set: the extensions it lists and every one they require, as the
     installed declarations compose them
     ([livery.workshop._composition.closure][]). Empty for a package that
-    lists none. Each distinct list is composed once for each scan of the
-    installed extensions, so a scan taken after an install composes it
-    again.
+    lists none. The workspace's own tests
+    ([livery.workshop.workspace_suite][]) hold the root's set, the
+    extensions ``[workspace] extensions`` lists and every one they
+    require, read from the root's contract on each call. Each distinct
+    list is composed once for each scan of the installed extensions, so
+    a scan taken after an install composes it again.
     """
+    from livery.workshop._packages import WORKSPACE_TESTS
+
+    if package.path == WORKSPACE_TESTS:
+        from livery.workshop._extensions import root_set
+        from livery.workshop._packages import root_of
+
+        return root_set(root_of(package))
     listed = package.extensions
     if not listed:
         return ()

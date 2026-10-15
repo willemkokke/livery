@@ -427,31 +427,62 @@ def test_with_no_suite_to_run_no_pytest_starts(
     )
 
 
-def test_the_test_step_runs_nothing_and_says_why_while_no_package_lists_python(
+def test_a_root_listing_no_python_runs_no_suite_of_its_own_tests_and_says_why(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     registered: None,
 ) -> None:
     calls = _watch(monkeypatch)
+    # The root lists pytest alone, and its own tests hold the root's set.
     _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    (tmp_path / "tests").mkdir()
+    step = registry.step_for("test.pytest")
+    step.run(PhaseContext(root=tmp_path, packages=(one,)))
+    assert [_paths(call) for call in calls] == [("packages/one",)]
+    assert (
+        "  test.pytest: tests skips (the root's set holds no python; list it in"
+        " [workspace] extensions to run them)\n"
+    ) in capsys.readouterr().out
+    # Once the root lists python, its own tests run beside the member's.
+    _workspace(tmp_path, '["pytest", "python"]')
+    step.run(PhaseContext(root=tmp_path, packages=(one,)))
+    assert _paths(calls[-1]) == ("packages/one", "tests")
+
+
+def test_the_test_step_runs_nothing_and_says_why_while_nothing_answers_its_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path, '["pytest", "python"]')
     # A C++ library lists cmake, so no package holds python, and the
-    # workspace's own tests are the one suite the step reaches.
+    # workspace's own tests, which hold the root's set, are the one
+    # suite the step reaches.
     lib = _member(tmp_path, "lib", extensions=("cmake",))
     (tmp_path / "tests").mkdir()
     step = registry.step_for("test.pytest")
-    step.run(PhaseContext(root=tmp_path, packages=(lib,)))
+
+    def unanswered(root: Path, query: object) -> None:
+        del root, query
+
+    with monkeypatch.context() as patched:
+        patched.setattr("livery.extensions.pytest._steps.answer", unanswered)
+        step.run(PhaseContext(root=tmp_path, packages=(lib,)))
     assert calls == []
     out = capsys.readouterr().out
     assert "test.pytest: packages/lib skips (not a python package)" in out
     assert (
         "test.pytest: runs nothing; nothing answers python.test.runner, which the"
-        " python extension answers while a package holds python"
+        " python extension answers while the root's set or a package's holds"
+        " python"
     ) in out
-    # Once a package lists python, its suite runs beside the workspace's own.
-    one = _member(tmp_path, "one")
-    step.run(PhaseContext(root=tmp_path, packages=(lib, one)))
-    assert [_paths(call) for call in calls] == [("packages/one", "tests")]
+    # The root's python answers, and the workspace's own tests run alone.
+    step.run(PhaseContext(root=tmp_path, packages=(lib,)))
+    assert [_paths(call) for call in calls] == [("tests",)]
 
 
 def test_the_examples_step_without_a_runner_skips_by_name(
@@ -538,7 +569,7 @@ def test_a_whole_run_runs_every_suite_in_one_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
 ) -> None:
     calls = _watch(monkeypatch)
-    _workspace(tmp_path)
+    _workspace(tmp_path, '["pytest", "python"]')
     one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
     (tmp_path / "tests").mkdir()
     ctx = PhaseContext(root=tmp_path, packages=(one, two), point="nightly")

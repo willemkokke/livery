@@ -37,7 +37,7 @@ RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
     ("_packages", "python"): (
         1,
-        "the runtime's language, the extension the root's own files hold",
+        "the runtime's language: a member holding it is a distribution of it",
     ),
     ("_packages", "pyproject.toml"): (
         1,
@@ -80,6 +80,11 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "the loop's root project file, rendered again by the pass; phase 15"
         " moves _e2e out of the base",
+    ),
+    ("_new_project", "python"): (
+        1,
+        "fm new.project writes the stock list, which names python for the"
+        " workspace's own tests; ruled to stay, #1673 F3",
     ),
     ("_publish", "python"): (1, "the python registry a publish targets; phase 13"),
     ("_registries", "conan"): (3, "the registry tables; phase 13"),

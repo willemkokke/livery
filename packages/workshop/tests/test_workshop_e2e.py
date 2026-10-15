@@ -2130,6 +2130,7 @@ def test_the_plain_pass_lists_the_stock_list_without_the_site() -> None:
         "changelog",
         "coverage",
         "pytest",
+        "python",
         "ruff",
     )
 
