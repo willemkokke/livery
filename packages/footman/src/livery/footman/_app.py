@@ -249,13 +249,7 @@ def resolve_task_files(
     must see exactly what the run will.
     """
     cwd = cwd or Path.cwd()
-    mode = _config.cascade_mode(_config_arg(g))
-    if mode == "none":
-        ceiling = cwd
-    elif mode == "filesystem":
-        ceiling = Path(cwd.anchor)
-    else:
-        ceiling = _paths.find_repo_root(cwd)
+    ceiling = _config.cascade_ceiling(cwd, _config_arg(g))
     cfg = _config.load_config(
         cwd,
         ceiling,

@@ -80,6 +80,13 @@ it. Any real `fm` run rebuilds the manifest as part of its work, so when
 you want the new task on the menu right now, run anything — `fm --list` is
 the cheapest — and the very next <kbd>Tab</kbd> knows it.
 
+A program that changes which tasks a directory offers, by installing a
+distribution that brings new ones, starts the same detached rebuild for
+that directory with `refresh_completion(directory)` from the
+[API reference](_generated/api.md), so the next <kbd>Tab</kbd> there offers
+the new tasks without waiting for a run or for `max-age`. It starts nothing
+where `max-age` is `"off"`.
+
 Your **user-level** files are the exception, because they are the ones you
 edit expressly to change what `fm` offers: the user config and
 `~/.config/footman/tasks.py`. Each manifest records what those looked like

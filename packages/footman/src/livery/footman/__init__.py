@@ -122,6 +122,7 @@ if TYPE_CHECKING:
     from livery.footman._paths import builtins as builtins
     from livery.footman._paths import directory_variable as directory_variable
     from livery.footman._paths import tasks_file_name as tasks_file_name
+    from livery.footman._refresh import refresh_completion as refresh_completion
     from livery.footman._registry import GlobalOption as GlobalOption
     from livery.footman._registry import Group as Group
     from livery.footman._registry import Tasks as Tasks
@@ -262,6 +263,7 @@ __all__ = [
     "prompt",
     "real_stderr",
     "recording",
+    "refresh_completion",
     "requires",
     "requires_dep",
     "requires_env",
@@ -535,6 +537,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import _manifest
 
         return _manifest.task_tree
+    if name == "refresh_completion":
+        from livery.footman import _refresh
+
+        return _refresh.refresh_completion
     if name in ("App", "Brand"):
         from livery.footman import _application as app
 
