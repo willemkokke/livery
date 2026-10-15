@@ -3437,6 +3437,21 @@ neither needs nor rules out).
   effect on a package lives in its code is refused in a package's list
   (F5).
 
+- 2026-10-15, Willem (#1685): using an extension must be all the agent
+  needs to know what the extension provides and how to use it. No
+  extension shipped guidance prose, and the generated fragments named
+  verbs alone. Built: `verbs.extensions.md` gives each extension of the
+  installed set a block read from its declaration: its `[extension]
+  description` (a key the kit requires), its verbs with their help's
+  first line (a step's verb sits in the block of the extension that
+  owns the step, through `replaces` too), its templates, its contract
+  keys and the step options a package may set with their docs, the
+  steps a root contract can switch on, and the targets it contributes
+  to and leaves out with `without`. The kit's `declaration-documented`
+  clause replaces `contract-keys-documented` and holds the description,
+  every verb, key, template and option to its doc line. For this
+  repository the fragment is 148 lines.
+
 ## Open
 
 Each with its options, what each option does not cover, and a
