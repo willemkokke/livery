@@ -25,6 +25,7 @@ from livery.workshop._packages import Package
 from workshop_coverage_meter import (
     asked,
     install_meter,
+    leave_part,
     meter,
     part,
     ran,
@@ -728,7 +729,6 @@ def test_a_leg_that_ran_its_suites_and_left_no_part_of_any_refuses(
 def test_a_part_that_does_not_validate_refuses_naming_the_file_and_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, write_marker
 
     n = _native_suite(tmp_path, "n")
@@ -737,9 +737,7 @@ def test_a_part_that_does_not_validate_refuses_naming_the_file_and_key(
     put = _capture_leaves(monkeypatch)
     # A part the measurer left in the workspace: its counts name a line
     # that is no statement.
-    left = _readings.write_part(
-        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1})}, "gcov"
-    )
+    left = leave_part(tmp_path, "packages/n", {_NATIVE: {1: 1}})
     broken = json.loads(left.read_text())
     broken["files"][_NATIVE]["counts"] = [[1, 1], [9, 2]]
     left.write_text(json.dumps(broken))
@@ -1082,13 +1080,10 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
 def test_a_leg_that_cannot_leave_its_lines_is_red_and_a_skipped_leg_leaves_its_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, VERIFIED, write_marker
 
     n = _native_suite(tmp_path, "n")
-    _readings.write_part(
-        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1})}, "gcov"
-    )
+    leave_part(tmp_path, "packages/n", {_NATIVE: {1: 1}})
     # A marker with no label leaves the parts no key: the leg is red.
     write_marker(tmp_path, FULL, leg="")
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
@@ -2217,11 +2212,7 @@ def _native_unit(
     root: Path, path: str, counts: dict[int, int], *, run: str = "7"
 ) -> coverage_record.Unit:
     """A native suite's unit: gcov's counts of the source's lines."""
-    from livery.extensions.cmake import _readings
-
-    written = _readings.write_part(
-        root, path, {_NATIVE: _readings.Reading(lines=counts)}, "gcov"
-    )
+    written = leave_part(root, path, {_NATIVE: counts})
     held = json.loads(written.read_text())
     written.unlink()
     return stored_unit(path, (held,), run=run)
@@ -2230,7 +2221,6 @@ def _native_unit(
 def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake import _readings
     from livery.workshop._verified import FULL, write_marker
 
     x = _suite(tmp_path, "x")
@@ -2241,9 +2231,7 @@ def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
         '[workspace]\nextensions = ["acme.meter", "coverage"]\n'
     )
     meter(tmp_path, units={"packages/x": part(tmp_path, "packages/x", {x_source: [1]})})
-    _readings.write_part(
-        tmp_path, "packages/n", {_NATIVE: _readings.Reading(lines={1: 1, 2: 0})}, "gcov"
-    )
+    leave_part(tmp_path, "packages/n", {_NATIVE: {1: 1, 2: 0}})
     write_marker(tmp_path, FULL, leg="check-a")
     put = _capture_leaves(monkeypatch)
     _in_ci(monkeypatch, "check-a")

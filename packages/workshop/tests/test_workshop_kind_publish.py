@@ -16,6 +16,7 @@ from livery.workshop import _publish
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_release
 from livery.workshop._registries import RegistryTarget
+from workshop_installed import skip_unless_installed
 
 # The wheels job is nanobind's, added as the mount adds it.
 from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
@@ -289,6 +290,7 @@ def test_a_member_whose_extensions_answer_no_registry_refuses_the_wave_naming_it
     The wave refuses before anything uploads or any tag is cut, and the
     extension released beside it stays unpublished too.
     """
+    skip_unless_installed("cmake")
     root = cross_train
     _lists(root, "geometry", '["cmake"]')
     ledger = _Ledger()
@@ -714,6 +716,7 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
 def test_the_folder_target_round_trips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     package = _render_library(tmp_path, monkeypatch)
     share = tmp_path / "share"
     assert _conan.publish(package, str(share), version="0.0.0", local=True)
@@ -744,6 +747,7 @@ def test_the_folder_target_round_trips(
 def test_the_rig_conan_registry_round_trips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     import os
     import urllib.request
 

@@ -58,6 +58,7 @@ dev = [
     "livery-extensions-basedpyright",
     "livery-extensions-clang-format",
     "livery-extensions-clang-tidy",
+    "livery-extensions-cmake",
     "livery-extensions-mypy",
     "livery-extensions-pytest",
     "livery-extensions-ruff",

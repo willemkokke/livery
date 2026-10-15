@@ -26,6 +26,13 @@ dependencies = [
     "livery-workshop>=0.10.0",
 ]
 
+[project.optional-dependencies]
+# What this package's own suite needs beyond its dependencies: the cmake
+# extension, a distribution of its own, which the suite's workspaces list
+# as data. The release's isolated leg installs the wheel with this
+# extra, so the suite finds cmake installed there too.
+test = ["livery-extensions-cmake>=0.0.0"]
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

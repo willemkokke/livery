@@ -24,6 +24,7 @@ from livery.workshop._steps import (
     step_names,
     unregister_step,
 )
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -203,6 +204,7 @@ def test_a_record_names_its_phase_and_step() -> None:
 def test_an_after_naming_a_step_the_workspace_did_not_mount_orders_nothing(
     restored_registries,
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.workshop._steps import installed_step, steps_by_name, with_earlier
 
     # clang-tidy's lint runs after cmake's configure, which registers only

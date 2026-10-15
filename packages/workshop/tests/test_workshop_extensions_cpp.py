@@ -9,6 +9,7 @@ import pytest
 
 from livery.workshop import _lifecycle
 from livery.workshop._packages import Package
+from workshop_installed import skip_unless_installed
 
 #: A recipe with a version and one requirement, as a born library's has.
 RECIPE = (
@@ -135,6 +136,7 @@ def test_a_missing_compiler_is_named_for_a_package_holding_cpp(
 def test_a_consumer_recipe_answers_no_distribution_and_no_registry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.footman import Failed
     from livery.workshop import _registries
     from livery.workshop._queries import DISTRIBUTIONS, REGISTRY, answer
@@ -200,23 +202,21 @@ def test_a_consumer_recipe_answers_no_version_and_no_version_file(
     assert answer(listing, VERSION_FILES) == (listing.directory / "conanfile.py",)
 
 
-def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> None:
+def test_the_wheel_ships_cpp_and_conan() -> None:
     from livery.workshop._extensions import declaration
 
     found = {
         entry.name: entry.value
-        for entry in importlib.metadata.entry_points(group="workshop.extensions")
+        for entry in importlib.metadata.distribution("livery-workshop").entry_points
+        if entry.group == "workshop.extensions"
     }
-    for name in ("cmake", "cpp", "conan"):
+    for name in ("cpp", "conan"):
         assert found[name] == f"livery.extensions.{name}"
         declared = declaration(name)
         assert declared is not None
-    cmake = declaration("cmake")
     conan = declaration("conan")
-    assert cmake is not None
     assert conan is not None
-    # cmake names no language, and conan packages C and C++.
-    assert cmake.requires == ()
+    # conan packages C and C++.
     assert conan.requires == ("cpp",)
 
 

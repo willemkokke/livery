@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+from workshop_installed import skip_unless_installed
+
 SRC = Path(__file__).resolve().parents[1] / "src"
 ROOT = Path(__file__).resolve().parents[3]
 MANIFESTS = ("pyproject.toml", "conanfile.py")
@@ -221,12 +223,14 @@ def judge(
 
 
 def test_the_words_are_the_package_level_extensions_and_the_registry_kinds() -> None:
+    skip_unless_installed("cmake")
     # The scan has something to look for: every extension a package may
     # list, and the registry kind no extension is named after.
     assert {"cmake", "conan", "cpp", "nanobind", "python", "container"} <= _words()
 
 
 def test_the_base_names_no_word_beyond_its_allowance() -> None:
+    skip_unless_installed("cmake")
     found = scan(SRC, _words())
     assert judge(found, RUNTIME, _counts(ALLOWANCE)) == []
 
@@ -343,6 +347,7 @@ def tool_scan(src: Path, tools: set[str]) -> Counter[tuple[str, str]]:
 
 
 def test_the_base_names_no_tool_an_extension_brings() -> None:
+    skip_unless_installed("cmake")
     import livery.workshop
 
     if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):

@@ -403,8 +403,11 @@ release train runs it, once per resolution `[release] prove` lists
 per package and which `fm check` runs, joins the gate's steps when it
 serves the tree side: cmake's `build.configure` and `build.compile`
 build each package that holds cmake before its `test.ctest` runs. The
-builds of python, conan and nanobind serve the isolated side alone:
-each builds what a release publishes, which the gate does not build.
+cmake extension is a distribution of its own,
+`livery-extensions-cmake`, listed as `cmake` in a package's
+`extensions`. The builds of python, conan and nanobind serve the
+isolated side alone: each builds what a release publishes, which the
+gate does not build.
 
 The release train stamps, builds, tests and publishes a package, and
 `fm release.verify` verifies a released version, through these phases:
@@ -1548,31 +1551,12 @@ suite and measurer, each file's statements and the lines that ran,
 with its branches, functions and classes where the measurer names
 them. A python suite's part is the pytest extension's reduction of
 coverage.py's data, made on the check leg once for each suite. A
-native suite's holds the most its measurer gives: the gate build is
-instrumented for the compiler
-family CMake detected (gcc with `--coverage`, clang and apple-clang
-with `-fprofile-instr-generate -fcoverage-mapping`), ctest runs, and
-the measurer beside that compiler reads the run. gcov's JSON gives
-each line's count, each line's branches by index with an exception's
-path tagged, and the functions. llvm-profdata and llvm-cov's JSON
-export give each line's count as llvm-cov's own line view counts it,
-each condition's two branches, the functions, named by the demangler
-beside the compiler, each code region as a range with a macro counted
-where it is called, and the code the preprocessor removed as excluded
-lines. A run
-built with MSVC is measured by Microsoft's Code Coverage engine,
-`dotnet-coverage`, a tool of the store that cmake's `[for.coverage]`
-table requires as `dotnet_coverage@windows`, with the .NET SDK it runs
-on, so a workspace that does not list coverage locks and installs
-neither: each test executable is instrumented statically for the run,
-ctest runs under the collector, its verdict is read from the report
-ctest writes, and the Cobertura report gives each line's count, how
-many of a line's branches ran, and the methods. On Windows the gate
-builds with MSVC unless `CXX` names another compiler, entering the
-newest Visual Studio's C++ build tools itself when `cl` is not already
-on PATH. The result is one part per package under
-`.workshop/coverage/parts/`, named after its measurer. A host with the
-compiler and without its measurer refuses on that leg by name. The
+native suite's part is the cmake extension's, a distribution of its
+own, `livery-extensions-cmake`: it instruments the gate build for the
+compiler family CMake detects, reads the run with the measurer beside
+that compiler, and leaves one part per package under
+`.workshop/coverage/parts/`, named after its measurer. Its page says
+what each measurer gives. The
 union across legs merges each file's parts by the line format's rules:
 the readings at the content the checkout holds and by one measurer
 merge, and a reading of other content or by another measurer is named

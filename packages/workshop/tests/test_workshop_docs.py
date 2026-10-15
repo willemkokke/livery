@@ -1521,10 +1521,9 @@ _DRAWN = 'extensions = ["docs", "acme.meter", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.cmake._readings import Reading, write_part
     from livery.extensions.docs import _site as _docs
     from livery.workshop._steps import steps_by_name
-    from workshop_coverage_meter import install_meter
+    from workshop_coverage_meter import install_meter, leave_part
 
     install_meter(tmp_path, monkeypatch)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
@@ -1537,12 +1536,7 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     # below: a native measurer's lines.
     source = root / "packages" / "core" / "src" / "acme" / "core" / "mod.py"
     source.write_text("a = 1\n")
-    write_part(
-        root,
-        "packages/core",
-        {"packages/core/src/acme/core/mod.py": Reading(lines={1: 1})},
-        "gcov",
-    )
+    leave_part(root, "packages/core", {"packages/core/src/acme/core/mod.py": {1: 1}})
     report = root / "packages" / "core" / "htmlcov"
     page = root / "packages" / "core" / "docs" / "_generated" / "coverage.md"
     # Docs alone, and docs beside an awake coverage whose entry leaves
@@ -1573,9 +1567,8 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
 def test_the_deploy_phase_draws_main_s_record_where_the_legs_left_no_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.extensions.cmake._readings import Reading, write_part
     from livery.extensions.coverage import _pages
-    from workshop_coverage_meter import stored_unit
+    from workshop_coverage_meter import leave_part, stored_unit
 
     root = _workspace(tmp_path, docs_table='extensions = ["docs", "coverage"]\n')
     _declare_generators(
@@ -1589,11 +1582,8 @@ def test_the_deploy_phase_draws_main_s_record_where_the_legs_left_no_data(
     assert _pages.draw(root, merged=False) == []
     # The deploy phase's step draws the store's units in the legs' place:
     # the parts a leg made, as main's record keeps them.
-    written = write_part(
-        root,
-        "packages/core",
-        {"packages/core/src/core/mod.c": Reading(lines={1: 1, 2: 0})},
-        "gcov",
+    written = leave_part(
+        root, "packages/core", {"packages/core/src/core/mod.c": {1: 1, 2: 0}}
     )
     stored = stored_unit("packages/core", (json.loads(written.read_text()),))
     written.unlink()
@@ -2133,6 +2123,7 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
                 "packages/extensions/changelog/src",
                 "packages/extensions/clang-tidy/src",
                 "packages/extensions/claude/src",
+                "packages/extensions/cmake/src",
                 "packages/extensions/pytest/src",
                 "packages/forge/src",
                 "packages/git/src",
@@ -2480,6 +2471,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/clang-format": "workshop.extensions.clang-format",
         "extensions/clang-tidy": "workshop.extensions.clang-tidy",
         "extensions/claude": "workshop.extensions.claude",
+        "extensions/cmake": "workshop.extensions.cmake",
         "extensions/mypy": "workshop.extensions.mypy",
         "extensions/pyrefly": "workshop.extensions.pyrefly",
         "extensions/pytest": "workshop.extensions.pytest",

@@ -435,7 +435,7 @@ def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
         " installed extension or the base declares; the build phase's are "
     )
     listed = refused.rpartition("the build phase's are ")[2].split(", ")
-    assert {"python:build.python", "cmake:build.configure"} <= set(listed)
+    assert {"python:build.python", "conan:build.conan"} <= set(listed)
     # An owner nothing installs, in a phase no step is installed in.
     assert _refusal(
         package,

@@ -19,6 +19,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop import _devenv, _e2e
 from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
+from workshop_installed import skip_unless_installed
 from workshop_rig import Machine, machine_fixture, modes_bind, rig_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -693,6 +694,7 @@ def test_an_extension_with_no_step_refuses(monkeypatch: pytest.MonkeyPatch) -> N
 def test_the_list_is_the_extension_under_test_and_what_its_members_need(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    skip_unless_installed("cmake")
     # Its set takes in what it requires, so the list names beside it only
     # what the members' templates need, as their canonical list: a
     # creation installs nothing, so the root lists them before the
@@ -763,6 +765,7 @@ def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
 def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    skip_unless_installed("cmake")
     _fake_declarations(
         monkeypatch,
         {"typed": _declared("python"), "both": _declared("python", "conan")},
@@ -802,6 +805,7 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
 
 
 def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) -> None:
+    skip_unless_installed("cmake")
     import tomllib
 
     from livery.workshop._templates import render_member

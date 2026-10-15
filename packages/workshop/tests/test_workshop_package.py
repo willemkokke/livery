@@ -27,6 +27,39 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
     assert getattr(livery, "__file__", None) is None
 
 
+#: The extensions the workshop's wheel ships beside the base, each by the
+#: name a contract lists to the package it mounts from. Each extension
+#: that leaves the wheel for a distribution of its own leaves this pin.
+SHIPPED = {
+    "conan": "livery.extensions.conan",
+    "coverage": "livery.extensions.coverage",
+    "cpp": "livery.extensions.cpp",
+    "docs": "livery.extensions.docs",
+    "mkdocstrings": "livery.extensions.mkdocstrings",
+    "nanobind": "livery.extensions.nanobind",
+    "python": "livery.extensions.python",
+}
+
+
+def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
+    import tomllib
+    from importlib.metadata import distribution
+    from pathlib import Path
+
+    declared = {
+        entry.name: entry.value
+        for entry in distribution("livery-workshop").entry_points
+        if entry.group == "workshop.extensions"
+    }
+    assert declared == SHIPPED
+    # The build ships the base's root and each of theirs, and no other.
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")
+    )
+    roots = project["tool"]["uv"]["build-backend"]["module-name"]
+    assert roots == ["livery.workshop", *sorted(SHIPPED.values())]
+
+
 def test_the_surface_is_declared() -> None:
     assert workshop_module.__all__ == [
         "AGENT",

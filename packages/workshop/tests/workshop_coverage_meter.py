@@ -6,19 +6,23 @@ measurer's reduction of the data a run left. The fake extension
 reduction hands back the parts a test left in ``meter.json`` at the
 workspace root, and writes what a leg asked of it to ``asked.json``.
 A record's unit keeps its parts in the stored form: `stored_unit`
-makes one of parts as JSON holds them, and `ran` reads one back.
+makes one of parts as JSON holds them, and `ran` reads one back. A
+native measurer leaves its parts in the workspace itself, and
+`leave_part` leaves one there as it would.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from livery import git
 from livery.extensions.coverage import _format as fmt
+from livery.extensions.coverage._parts import PARTS
 from livery.extensions.coverage._record import Unit
 from workshop_extension_fakes import fake_extensions, fake_steps
 
@@ -118,6 +122,35 @@ def part(
             counts=dict.fromkeys(ran, 1),
         )
     return fmt.encode(fmt.Part(unit, measurer, entries))
+
+
+def leave_part(
+    root: Path,
+    unit: str,
+    files: Mapping[str, Mapping[int, int]],
+    *,
+    measurer: fmt.Measurer = GCOV,
+) -> Path:
+    """Leave *measurer*'s part of *unit* where a native measurer leaves it; its path.
+
+    Each file's statements are the lines *files* gives it, each with
+    the times it ran; its digest is the file's own where *root* holds
+    it, else empty. The part lands under ``PARTS``, in a directory named
+    after the measurer, as ``<unit's slug>.json``.
+    """
+    entries: dict[str, fmt.Entry] = {}
+    for name, lines in files.items():
+        source = root / name
+        entries[name] = fmt.Entry(
+            digest=fmt.digest(source.read_bytes()) if source.is_file() else "",
+            statements=frozenset(lines),
+            counts={line: runs for line, runs in lines.items() if runs > 0},
+        )
+    path = root / PARTS / measurer.name / f"{git.slug(unit)}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = fmt.encode(fmt.Part(unit, measurer, entries))
+    path.write_text(json.dumps(encoded, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def stored_unit(

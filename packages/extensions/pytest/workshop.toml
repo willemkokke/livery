@@ -32,3 +32,8 @@ name = "workshop.extensions.pytest"
 path = "packages/git"
 kind = "test"
 floor = "0.1.0"
+
+[[depends]]
+path = "packages/extensions/cmake"
+kind = "test"
+floor = "0.0.0"

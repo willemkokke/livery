@@ -28,6 +28,7 @@ from livery.workshop._extensions import distribution_of
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import render_member
 from workshop_extension_fakes import fake_extensions, withheld
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -784,6 +785,7 @@ _MISSING_TOOLS = tuple(tool for tool in _TOOLCHAIN if shutil.which(tool) is None
 def test_cpp_executable_births_an_executable_that_builds_and_runs(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     root = _workspace(tmp_path / "acme", "cmake", "conan")
     render_member(root, "tool", "cpp-executable")
     tool = root / "packages" / "tool"

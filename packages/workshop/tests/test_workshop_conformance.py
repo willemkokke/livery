@@ -23,6 +23,7 @@ from livery.workshop._steps import (
     steps_by_name,
 )
 from livery.workshop.testing import CLAUSES, Subject, builtin_subject, judge
+from workshop_installed import skip_unless_installed
 
 EXTENSION = "acme.extension"
 
@@ -131,6 +132,7 @@ def test_a_probe_of_the_empty_set_is_named_none(
 def test_a_step_after_nothing_or_after_itself_breaks_the_step_order(
     acme: None,
 ) -> None:
+    skip_unless_installed("cmake")
     # The fallback first: a step after one an installed extension declares
     # and the workspace did not mount, cmake's configure, breaks nothing.
     register_step(
@@ -768,6 +770,28 @@ def test_a_step_registered_without_its_extension_breaks_the_gate_lines(
     ]
 
 
+def test_a_step_named_by_the_name_its_package_is_listed_by_keeps_the_gate_lines(
+    acme: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A contract lists an installed extension by its entry point's name,
+    # which names the package the subject is: the step carries that name.
+    monkeypatch.setattr(
+        "livery.workshop._extensions.extension_package",
+        lambda name: EXTENSION if name == "acme" else name,
+    )
+    register_step(StepRecord("acme-listed", "lint", _idle, extension="acme"))
+    register_step(StepRecord("acme-other", "lint", _idle, extension="acme.other"))
+    steps = (step_for("lint.acme-listed"), step_for("lint.acme-other"))
+    found = _names(Subject(EXTENSION, steps=steps), "gate-lines")
+    assert [
+        line for line in found if "names" in line and "as its extension" in line
+    ] == [
+        "gate-lines: step lint.acme-other: names acme.other as its extension; the"
+        " gate says who registered a step by it, and acme.extension registered this"
+        " one"
+    ]
+
+
 def test_a_walk_that_starts_a_step_with_nothing_to_read_breaks_the_gate_lines(
     acme: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -896,17 +920,20 @@ def _checks_package(*extensions: str) -> Package:
 
 
 def test_the_builtin_steps_pass_every_clause() -> None:
+    from livery.workshop._composition import package_level
+    from livery.workshop._extensions import installed_declaration, installed_extensions
+
     subject = builtin_subject()
-    # A package that lists nothing, and one listing each package-level
-    # extension the workshop's wheel ships.
-    assert set(subject.sets) >= {
-        (),
-        ("cmake",),
-        ("conan",),
-        ("cpp",),
-        ("nanobind",),
-        ("python",),
+    # A package that lists nothing, and one listing each installed
+    # package-level extension: those the workshop's wheel ships, and
+    # those of their own distributions installed here, such as cmake.
+    installed = {
+        (name,)
+        for name in installed_extensions()
+        if package_level(name, installed_declaration)
     }
+    assert installed >= {("conan",), ("cpp",), ("nanobind",), ("python",)}
+    assert set(subject.sets) == {(), *installed}
     assert {record.name for record in subject.steps} == {
         "drift.check",
         "provenance.check",

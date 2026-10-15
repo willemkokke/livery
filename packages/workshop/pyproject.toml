@@ -80,7 +80,6 @@ test = ["griffelib>=2.2.0"]
 # lists: each maps to the package beside its extension.toml, which the
 # mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
-cmake = "livery.extensions.cmake"
 conan = "livery.extensions.conan"
 coverage = "livery.extensions.coverage"
 cpp = "livery.extensions.cpp"
@@ -140,7 +139,6 @@ Repository = "https://github.com/willemkokke/livery"
 # with no __init__.py.
 module-name = [
     "livery.workshop",
-    "livery.extensions.cmake",
     "livery.extensions.conan",
     "livery.extensions.coverage",
     "livery.extensions.cpp",

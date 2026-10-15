@@ -13,14 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.cmake._readings import Reading, write_part
 from livery.extensions.docs import _site as _docs
 from livery.footman import Failed, fail
 from livery.workshop import PhaseContext
 from livery.workshop._packages import discover_packages
 from livery.workshop._phases import run_phase
 from livery.workshop._steps import StepRecord, register_step, steps_by_name
-from workshop_coverage_meter import install_meter, stored_unit
+from workshop_coverage_meter import install_meter, leave_part, stored_unit
 
 _FAILURES = (SystemExit, Failed)
 
@@ -71,7 +70,7 @@ def _mount(root: Path) -> None:
 
 def _measured(root: Path) -> None:
     """Leave a native measurer's part for the member's source, as a gate run would."""
-    write_part(root, "packages/core", {SOURCE: Reading(lines={1: 1, 2: 0})}, "gcov")
+    leave_part(root, "packages/core", {SOURCE: {1: 1, 2: 0}})
 
 
 def _failed(capsys: pytest.CaptureFixture[str], step: str) -> bool:
@@ -409,9 +408,7 @@ def test_the_publish_draws_main_s_record_into_the_built_site(
     assert {"docs.coverage", "deploy.coverage"} <= set(steps_by_name())
     # Main's record holds the member's part as a leg made it; this
     # machine holds no data at all.
-    written = write_part(
-        root, "packages/core", {SOURCE: Reading(lines={1: 3, 2: 0})}, "gcov"
-    )
+    written = leave_part(root, "packages/core", {SOURCE: {1: 3, 2: 0}})
     part = json.loads(written.read_text())
     written.unlink()
     held = {"check-a": {"packages/core": stored_unit("packages/core", (part,))}}

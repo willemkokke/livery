@@ -9,6 +9,7 @@ import pytest
 
 from livery.workshop import discover_packages, verify_workspace
 from livery.workshop._packages import RULES, Package, write_edges
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -542,6 +543,7 @@ def _tree(root: Path) -> dict[str, str]:
 def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.footman import Failed
     from livery.workshop import _lifecycle
     from livery.workshop._packages import declare_edge
