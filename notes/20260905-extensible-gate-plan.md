@@ -3217,8 +3217,9 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     test that runs the builder lands with the docs layer slice, whose
     examples check needs the builder under test. Owner: the phase.
 28. A per-project opt-out of one target's opinions beyond deleting
-    a name from `for`, a negative spelling say. Not built until
-    wanted. Owner: Willem.
+    a name from `for`, a negative spelling say. Built on 2026-10-15
+    as a root entry's `without` (#1687), which replaces `for`; see
+    the destination note's decision record.
 29. Whether a verb passes arguments through to its tool,
     `fm test.pytest <paths> -- <arguments>` say, as `fm test` passed
     pytest's own before #979. The generated verbs take paths and the
