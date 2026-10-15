@@ -4,6 +4,7 @@
 # package's own .clang-format sets the style.
 
 [extension]
+description = "The C and C++ formatter clang-format, judging each C or C++ package against the style in its .clang-format; under --fix it rewrites the files."
 api-version = 1
 
 # The packages that carry C or C++.

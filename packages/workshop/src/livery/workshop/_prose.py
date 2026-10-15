@@ -478,44 +478,25 @@ def composed_tree(root: Path) -> dict[str, Any] | None:
     return tree
 
 
-def _collect(
-    node: dict[str, Any],
-    prefix: str,
-    inherited: str,
-    by_extension: dict[str, list[str]],
-) -> None:
-    """Every visible task under *node* by the extension that mounted it.
-
-    Addresses carry *prefix*; a group's ``default`` task is the group's
-    own address, the way it is run.
-    """
-    tasks = node.get("tasks")
-    if isinstance(tasks, dict):
-        for name, task in tasks.items():
-            if not isinstance(task, dict) or task.get("hidden") is True:
-                continue
-            extension = str(task.get("mounted_from") or inherited)
-            address = prefix[:-1] if name == "default" and prefix else f"{prefix}{name}"
-            by_extension.setdefault(extension, []).append(address)
-    groups = node.get("groups")
-    if isinstance(groups, dict):
-        for name, sub in groups.items():
-            if not isinstance(sub, dict) or sub.get("hidden") is True:
-                continue
-            extension = str(sub.get("mounted_from") or inherited)
-            _collect(sub, f"{prefix}{name}.", extension, by_extension)
-
-
 def render_verbs(root: Path, audience: str | None) -> str:
-    """The verbs by the extension that provides them, the repository's own last."""
+    """The verbs by provider, then what each extension of the installed set provides.
+
+    The composed tree's verbs open it: the base's, those of each plugin
+    no extension of the set carries, and the repository's own last.
+    Then each extension of the installed set, in composition order, has
+    a block, read from its declaration: what it does, its verbs, its
+    templates, its contract keys and step options, the steps it
+    declares off, and the extensions it cooperates with. Without a
+    tree, as a workspace without a tasks file has, the blocks stand
+    alone; with neither a verb nor an extension, the fragment is left
+    out.
+    """
+    from livery.workshop._capabilities import blocks, render_block, verbs_by_provider
     from livery.workshop._extensions import stack_names
 
     tree = composed_tree(root)
-    if tree is None:
-        return ""
-    by_extension: dict[str, list[str]] = {}
-    _collect(tree, "", REPOSITORY, by_extension)
-    if not by_extension:
+    found, by_extension = blocks(root, verbs_by_provider(tree) if tree else {})
+    if not found and not by_extension:
         return ""
     mounted = [
         extension for extension in stack_names(root) if extension in by_extension
@@ -528,24 +509,39 @@ def render_verbs(root: Path, audience: str | None) -> str:
     ordered = [*mounted, *others, *([REPOSITORY] if REPOSITORY in by_extension else [])]
     prog = footman.prog()
     lines = ["# The verbs by extension", ""]
-    if audience == HUMAN:
-        lines.append(
-            f"`{prog}` composes these verbs from the mounted extensions and the"
-            f" repository's own tasks file; `{prog} <verb> --help` describes one."
-        )
-    else:
-        lines.append(
-            f"Every job goes through `{prog}`; these are its verbs, by the extension"
-            f" that provides them. Verbs hidden from `--help`, which CI and other"
-            f" verbs call, are not listed; `{prog} --all --help` shows them:"
-        )
-    lines.append("")
-    for extension in ordered:
-        lines.append(
-            f"- {extension or 'this repository'}:"
-            f" {', '.join(sorted(by_extension[extension]))}"
-        )
-    return "\n".join(lines) + "\n"
+    if ordered:
+        if audience == HUMAN:
+            lines.append(
+                f"`{prog}` composes these verbs from the base, the plugins the"
+                " project mounts and the repository's own tasks file, and an"
+                f" extension's verbs are in its section below; `{prog} <verb>"
+                " --help` describes one."
+            )
+        else:
+            lines.append(
+                f"Every job goes through `{prog}`; these are its verbs, by what"
+                " provides them: the base, each plugin the project mounts, and"
+                " the repository's own tasks file. An extension's verbs are in"
+                " its block below. Verbs hidden from `--help`, which CI and other"
+                f" verbs call, are not listed; `{prog} --all --help` shows them:"
+            )
+        lines.append("")
+        for extension in ordered:
+            verbs = sorted(verb.address for verb in by_extension[extension])
+            lines.append(f"- {extension or 'this repository'}: {', '.join(verbs)}")
+        lines.append("")
+    if found:
+        lines += [
+            "Each extension the workspace installs, listed or required by one"
+            " listed, has a block below: what it does, its verbs, its templates,"
+            " the contract keys and step options it reads, and the installed"
+            " extensions it contributes to. A package turns any step off with"
+            " `enabled = false` in its `[phases.<phase>.<step>]` table.",
+            "",
+        ]
+        for block in found:
+            lines += render_block(block, audience)
+    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def render_compositions(root: Path, audience: str | None) -> str:

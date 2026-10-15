@@ -579,6 +579,26 @@ def test_a_rendered_fragment_lands_under_its_header_and_leaves_with_its_record(
     assert ".workshop/fragments/rules.acme.md" not in local_receipts(root)
 
 
+def test_a_newly_listed_extension_s_block_arrives_at_the_next_sync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._extensions import installed_declaration
+
+    monkeypatch.setattr(footman, "prog", lambda: "fm")
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    delivered = root / ".workshop" / "fragments" / "verbs.extensions.md"
+    assert "## claude\n" in delivered.read_text()
+    assert "## cpp\n" not in delivered.read_text()
+    # Listing it is the whole step: the next sync delivers its block.
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["claude", "cpp"]\n')
+    lines = sync_workspace(root)
+    assert "  updated .workshop/fragments/verbs.extensions.md" in lines
+    found = installed_declaration("cpp")
+    assert found is not None and found.description
+    assert f"## cpp\n\n{found.description}\n" in delivered.read_text()
+
+
 def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(
     tmp_path: Path, restored
 ) -> None:

@@ -1,8 +1,9 @@
 """Read an extension's declaration file, ``extension.toml``, without importing it.
 
 An extension declares itself in one ``extension.toml``, beside the
-package its ``workshop.extensions`` entry point names: the workshop API
-version it is written for, its plugin, the extensions it requires, the
+package its ``workshop.extensions`` entry point names: what it does, the
+workshop API version it is written for, its plugin, the extensions it
+requires, the
 phases it declares and the steps it adds to a package's lifecycle
 phases and to the gate's phases, the queries it declares and the ones
 it answers, the tools it runs, its CI jobs, the contract keys it owns,
@@ -228,6 +229,9 @@ class Declaration:
         extension: The name the extension is listed by.
         package: The package its entry point names, where its references live.
         path: The declaration file.
+        description: What the extension does, in a sentence or two,
+            which the agent's guidance and the site's development pages
+            open its block with; empty for none.
         api_version: The workshop API version it is written for.
         plugin: The footman plugin carrying its verbs; empty for none.
         requires: The extensions it cannot work without.
@@ -273,6 +277,7 @@ class Declaration:
     extension: str
     package: str
     path: Path
+    description: str = ""
     api_version: int = API_VERSION
     plugin: str = ""
     requires: tuple[str, ...] = ()
@@ -490,6 +495,7 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         extension,
         package,
         path,
+        description=str(identity.get("description", "")).strip(),
         api_version=int(identity.get("api-version", API_VERSION)),
         plugin=str(identity.get("plugin", "")),
         requires=tuple(str(name) for name in identity.get("requires", ())),
@@ -1923,13 +1929,24 @@ def _defined(body: list[ast.stmt]) -> set[str]:
 def defined_tasks(directory: Path) -> frozenset[str]:
     """The tasks the modules under *directory* define, ``<group>.<task>``, read by AST.
 
-    A module-level ``<name> = group("<group>")`` defines a group, and
+    The names `task_docs` reads, without their doc lines.
+    """
+    return frozenset(task_docs(directory))
+
+
+def task_docs(directory: Path) -> dict[str, str]:
+    """Each task the modules under *directory* define to its doc line, read by AST.
+
+    A task is named ``<group>.<task>``. Its doc line is the first line
+    of the function's docstring, which footman shows as the verb's
+    help; empty for a function without one. A module-level
+    ``<name> = group("<group>")`` defines a group, and
     ``<name> = <parent>.group("<sub>")`` one beneath another. A function
-    decorated ``@<name>.task`` defines a task in that group, named by the
-    decorator's ``name=`` or else as footman names it: the function's
-    name, a trailing underscore dropped, underscores as dashes. A group
-    another module defines is followed through ``from ... import``.
-    Nothing is imported.
+    decorated ``@<name>.task`` defines a task in that group, named by
+    the decorator's ``name=`` or else as footman names it: the
+    function's name, a trailing underscore dropped, underscores as
+    dashes. A group another module defines is followed through
+    ``from ... import``. Nothing is imported.
     """
     package = ".".join(directory.parts[-1:])
     modules: dict[str, ast.Module] = {}
@@ -1952,7 +1969,7 @@ def defined_tasks(directory: Path) -> frozenset[str]:
                     group = groups.get((source, alias.name))
                     if group is not None:
                         groups.setdefault((dotted, alias.asname or alias.name), group)
-    tasks: set[str] = set()
+    tasks: dict[str, str] = {}
     for dotted, tree in modules.items():
         for node in tree.body:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1979,8 +1996,9 @@ def defined_tasks(directory: Path) -> frozenset[str]:
                     ),
                     node.name.rstrip("_").replace("_", "-"),
                 )
-                tasks.add(f"{group}.{named}")
-    return frozenset(tasks)
+                doc = (ast.get_docstring(node) or "").strip()
+                tasks[f"{group}.{named}"] = doc.splitlines()[0] if doc else ""
+    return tasks
 
 
 def _group_assigned(

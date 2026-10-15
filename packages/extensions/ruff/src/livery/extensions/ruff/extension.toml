@@ -6,6 +6,7 @@
 # excludes under --force-exclude, as a file ruff finds itself does.
 
 [extension]
+description = "The python formatter and linter ruff, over the python files they claim and each conan package's recipe, configured by the root ruff.toml; under --fix they rewrite the files."
 api-version = 1
 
 # Ruff judges a python package's python files, and a conan package's

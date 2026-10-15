@@ -409,6 +409,265 @@ def test_the_verbs_fragment_reads_the_composed_tree_or_stays_out(
     assert render_verbs(root, HUMAN) != agent
 
 
+#: The root of this repository, whose own block the golden pins.
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _verbs_workspace(root: Path, monkeypatch: pytest.MonkeyPatch, entries: str) -> Path:
+    """A workspace listing *entries*, a TOML array's items, under the runner fm."""
+    import livery.footman as footman
+
+    root.mkdir(parents=True)
+    (root / "workshop.toml").write_text(f"[workspace]\nextensions = [{entries}]\n")
+    monkeypatch.setattr(footman, "prog", lambda: "fm")
+    return root
+
+
+def test_an_extension_declaring_nothing_else_renders_its_description_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path, monkeypatch, quiet='[extension]\ndescription = "Says no more."\n'
+    )
+    root = _verbs_workspace(tmp_path / "ws", monkeypatch, '"acme.absent", "acme.quiet"')
+    # No tasks file, so no tree: the blocks stand alone. A listed name no
+    # installed distribution declares is named with what installs it.
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: None)
+    agent = render_verbs(root, AGENT)
+    assert agent.endswith(
+        "## acme.absent\n\n"
+        "No installed distribution declares it yet; `fm sync` installs it.\n\n"
+        "## acme.quiet\n\nSays no more.\n"
+    )
+    assert "- livery.workshop" not in agent
+    assert render_verbs(root, HUMAN).endswith("## acme.quiet\n\nSays no more.\n")
+
+
+def test_an_extension_s_block_names_every_item_its_declaration_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        lint="""
+        [extension]
+        description = "Acme's checks."
+        plugin = "{package}"
+
+        [contract.root.acme]
+        types = ["table"]
+        doc = "acme's settings"
+
+        [contract.package.acme.depth]
+        types = ["int"]
+        doc = "how deep acme reads"
+
+        [phases.lint.acme]
+        main = "{package}._steps:noop"
+
+        [phases.lint.acme.options.strict]
+        type = "bool"
+        default = false
+        doc = "judge every rule"
+
+        [phases.lint.acme-slow]
+        main = "{package}._steps:noop"
+        enabled = false
+
+        [templates.acme-app]
+        doc = "an acme app"
+        extensions = []
+
+        [for."acme.pages"]
+
+        [for."acme.site"]
+        """,
+        pages='[extension]\ndescription = "Acme\'s pages."\n',
+        site='[extension]\ndescription = "Acme\'s site."\n',
+    )
+    root = _verbs_workspace(
+        tmp_path / "ws",
+        monkeypatch,
+        '{ name = "acme.lint", without = ["acme.site"] }, "acme.pages", "acme.site"',
+    )
+    tree = {
+        "tasks": {"check": {"mounted_from": "livery.workshop", "help": "Gate."}},
+        "groups": {
+            "lint": {
+                "mounted_from": "livery.workshop",
+                "tasks": {
+                    "default": {"help": "Run every lint step."},
+                    "acme": {"help": "Run the lint.acme step alone.\nThe rest."},
+                },
+            },
+            "acme": {
+                "mounted_from": "acme.lint",
+                "tasks": {"serve": {"help": "Serve acme."}, "leg": {"hidden": True}},
+            },
+        },
+    }
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: tree)
+    agent = render_verbs(root, AGENT)
+    # The step's verb leaves the base's line for the block of the
+    # extension that declares the step, with its plugin's verbs.
+    assert "- livery.workshop: check, lint\n" in agent
+    assert (
+        "## acme.lint\n\n"
+        "Acme's checks.\n\n"
+        "- `fm acme.serve`: Serve acme.\n"
+        "- `fm lint.acme`: Run the lint.acme step alone.\n"
+        "- template `acme-app`, `fm new.package <name> acme-app`: an acme app\n"
+        "- `[acme]` in the root contract: acme's settings\n"
+        "- `[acme] depth` in a package contract: how deep acme reads\n"
+        "- `[phases.lint.acme] strict` in a package contract, bool, default"
+        " false: judge every rule\n"
+        "- `[phases.lint.acme-slow] enabled = true` in the root contract: turns"
+        " on the step, which the extension declares off\n"
+        "- contributes to acme.pages\n"
+        "- leaves out acme.site, named in `without` in its root entry\n"
+        "\n## acme.pages\n"
+    ) in agent
+    assert "acme.leg" not in agent
+    human = render_verbs(root, HUMAN)
+    assert "| `fm acme.serve` | verb | Serve acme. |\n" in human
+    assert "| `acme-app` | template | an acme app |\n" in human
+    assert "| `[acme] depth` | package contract key | how deep acme reads |\n" in human
+    assert (
+        "| `[phases.lint.acme] strict` | package step option, bool, default false"
+        " | judge every rule |\n"
+    ) in human
+    assert (
+        "| `[phases.lint.acme-slow] enabled = true` | root contract switch |"
+    ) in human
+    assert "Contributes to acme.pages.\n" in human
+    assert "Its root entry leaves out acme.site with `without`.\n" in human
+
+
+def test_a_step_another_extension_replaces_is_listed_under_the_replacer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        owner="""
+        [extension]
+        description = "Acme's first lint."
+
+        [phases.lint.acme]
+        main = "{package}._steps:noop"
+        """,
+        taker="""
+        [extension]
+        description = "Acme's faster lint."
+        requires = ["acme.owner"]
+
+        [phases.lint.acme]
+        main = "{package}._steps:noop"
+
+        [phases.lint.acme.replaces]
+        "acme.owner:lint.acme" = "it reads faster"
+        """,
+    )
+    # The owner comes first in composition order, since the taker
+    # requires it; the step's verb still goes to the taker.
+    root = _verbs_workspace(tmp_path / "ws", monkeypatch, '"acme.taker"')
+    tree = {
+        "groups": {
+            "lint": {
+                "mounted_from": "livery.workshop",
+                "tasks": {"acme": {"help": "Run the lint.acme step alone."}},
+            },
+        },
+    }
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: tree)
+    agent = render_verbs(root, AGENT)
+    assert agent.endswith(
+        "## acme.owner\n\n"
+        "Acme's first lint.\n\n"
+        "## acme.taker\n\n"
+        "Acme's faster lint.\n\n"
+        "- `fm lint.acme`: Run the lint.acme step alone.\n"
+    )
+    assert "- livery.workshop" not in agent
+
+
+def test_a_pipe_in_a_doc_is_escaped_in_the_site_s_table_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import re
+
+    from workshop_extension_fakes import fake_extensions
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        piped="""
+        [extension]
+        description = "Acme's modes."
+
+        [contract.package.acme.mode]
+        types = ["str"]
+        doc = "how acme reads: fast | full"
+        """,
+    )
+    root = _verbs_workspace(tmp_path / "ws", monkeypatch, '"acme.piped"')
+    monkeypatch.setattr(_prose, "composed_tree", lambda root: None)
+    human = render_verbs(root, HUMAN)
+    row = "| `[acme] mode` | package contract key | how acme reads: fast \\| full |"
+    assert f"{row}\n" in human
+    # Split on the pipes no backslash escapes, the row keeps the header's
+    # three columns.
+    header = "| item | kind | what it does |"
+    assert header in human
+    cells = [re.split(r"(?<!\\)\|", line)[1:-1] for line in (header, row)]
+    assert [len(found) for found in cells] == [3, 3]
+    # The agent's list is no table, so its line keeps the pipe as written.
+    assert (
+        "- `[acme] mode` in a package contract: how acme reads: fast | full\n"
+        in render_verbs(root, AGENT)
+    )
+
+
+def test_this_repository_s_block_for_one_extension_matches_its_golden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    import livery.footman as footman
+    from livery.workshop._capabilities import blocks, render_block, verbs_by_provider
+    from livery.workshop._extensions import installed_declaration, workspace_names
+    from workshop_goldens import FIXTURES, match
+
+    missing = [
+        name for name in workspace_names(ROOT) if not installed_declaration(name)
+    ]
+    if missing:
+        pytest.skip(f"not installed here: {', '.join(missing)}")
+    if shutil.which("fm") is None:
+        pytest.skip("no fm on PATH to list this repository's verbs")
+    monkeypatch.setattr(footman, "prog", lambda: "fm")
+    # The listing of this repository's own runner, never this process's.
+    monkeypatch.setattr(_prose, "_own_root", lambda: None)
+    _prose.forget_trees()
+    tree = _prose.composed_tree(ROOT)
+    assert tree is not None
+    found, _rest = blocks(ROOT, verbs_by_provider(tree))
+    (python,) = [block for block in found if block.extension == "python"]
+    rendered = {
+        f"python.{audience}.md": "\n".join(render_block(python, audience))
+        for audience in (AGENT, HUMAN)
+    }
+    match(
+        rendered, FIXTURES / "capability-block", tmp_path / "render", suffix=".golden"
+    )
+
+
 def test_the_compositions_and_tools_fragments_render_what_is_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cmake_steps: object
 ) -> None:

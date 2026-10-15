@@ -3,6 +3,7 @@
 # when the step runs.
 
 [extension]
+description = "The test runner pytest: each python package's suite and its documentation examples, run in the workspace's environment. While coverage is listed, it measures every python suite for it."
 api-version = 1
 
 # pytest is the record's tool in the store, for the typed handle the

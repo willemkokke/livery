@@ -4,6 +4,7 @@
 # judge, and what fm doctor and fm env.check look for on the host.
 
 [extension]
+description = "C and C++ as languages: which of a package's files are sources, tests and test support, and the compilers the host must provide."
 api-version = 1
 
 # What a C or C++ package's paths are to it: the sources and headers,

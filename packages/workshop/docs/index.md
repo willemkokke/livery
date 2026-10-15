@@ -67,8 +67,11 @@ Beside that package sits its `extension.toml`, which the mount and the
 contract judge read without importing the extension. The file is a
 contract like `workshop.toml`: kebab-case keys, every key judged, and a
 refusal naming the file, the key, what the table takes and the nearest
-spelling. Every key is optional:
+spelling. Every key is optional to the mount:
 
+- `[extension] description`, what the extension does in a sentence or
+  two, which opens its block in the agent's guidance and on the site's
+  development pages; the conformance kit requires it;
 - `[extension] api-version`, the extension API it was written for,
   refused at mount when it is not this workshop's;
 - `[extension] plugin`, the footman plugin carrying its verbs, mounted
@@ -772,8 +775,10 @@ CI job's entries name is one the extension defines, read from its
 sources; every category a step's claims name is one the workshop
 knows, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
-every contract key an extension declares carries a doc; every
-extension a template lists composes something in a package, unless
+an `extension.toml` carries an `[extension] description`, and every
+verb its plugin defines and every contract key, template and step
+option it declares carries its doc line, each one missing named
+(`declaration-documented`); every extension a template lists composes something in a package, unless
 another it lists requires it, and the set of the template's list holds
 every extension the template's chain needs (`template-composes`); a step's
 fragments render with the kit's probe answers, the
@@ -971,9 +976,19 @@ agent's set flat under `.workshop/fragments/`, a shipped file byte for
 byte and an edited copy kept and named, and writes the entry file from
 it in section order, the repository's own `fragments/` last. The gate,
 verbs, compositions and tools sections render from the registries, so
-no fragment names a checker by hand. The compositions section names
-each set of extensions the packages hold, by the shortest list that
-composes it, with its packages and the gate phases that judge them.
+no fragment names a checker by hand. The verbs section lists the verbs
+of the base, of each plugin no extension carries and of the
+repository's own tasks file, then gives each extension of the installed
+set a block read from its declaration: its description, its verbs with
+the first line of each one's help, its templates, its contract keys and
+step options with their docs and where each is written, the steps it
+declares off with the switch that turns each on, and the installed
+extensions it contributes to and those its root entry leaves out with
+`without`, as `fm extensions` prints them. Listing an extension is the
+whole step: the next `fm sync` delivers its block. The compositions
+section names each set of extensions the packages hold, by the
+shortest list that composes it, with its packages and the gate phases
+that judge them.
 
 Each rule over the sources is a step of the layering phase: the
 base's two (the base importing no extension, and the sibling

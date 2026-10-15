@@ -6,6 +6,7 @@
 # it is code, imported when it runs.
 
 [extension]
+description = "The type checker basedpyright, warnings as errors, over the python files the root pyrightconfig.json names, and a step that judges every public API type-complete, which a workspace turns on."
 api-version = 1
 
 [phases.typecheck.basedpyright]

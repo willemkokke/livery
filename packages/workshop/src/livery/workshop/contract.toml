@@ -552,7 +552,11 @@ doc = "a shipped file of the base or of an extension this one requires, <owner>:
 
 [contract.extension.extension]
 types = ["table"]
-doc = "the extension's identity: its workshop API version, its plugin, the extensions it requires, and what it waits for while dormant"
+doc = "the extension's identity: what it does, its workshop API version, its plugin, the extensions it requires, and what it waits for while dormant"
+
+[contract.extension.extension.description]
+types = ["str"]
+doc = "what the extension does, in a sentence or two, which opens its block in the agent's guidance and the site's development pages; the conformance kit requires it"
 
 [contract.extension.extension.api-version]
 types = ["int"]

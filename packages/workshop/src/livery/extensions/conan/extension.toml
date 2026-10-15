@@ -2,6 +2,7 @@
 # and its release to a conan remote or the forge's releases.
 
 [extension]
+description = "A C or C++ package's conan recipe: its version stamped, its package built into the conan cache, and its release published to a conan remote or the forge's releases."
 api-version = 1
 # Conan packages C and C++, so a package that lists conan is a C or C++
 # package.

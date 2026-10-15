@@ -1,0 +1,19 @@
+## python
+
+Python distributions: each package's version stamped, its wheel and sdist built, published and verified, its suite run against the installed wheel, and the layering rules over the python sources. Its run phase starts the scripts a pyproject.toml names.
+
+| item | kind | what it does |
+| --- | --- | --- |
+| `fm layering.declared-imports` | verb | Run the layering.declared-imports step alone, over the named paths or the workspace. |
+| `fm layering.private-reaches` | verb | Run the layering.private-reaches step alone, over the named paths or the workspace. |
+| `fm layering.runner-terminal` | verb | Run the layering.runner-terminal step alone, over the named paths or the workspace. |
+| `python-library` | template | a python library: a typed module, its tests, and a pyproject.toml uv builds |
+| `python-cli` | template | a python command line: a python library whose script on PATH runs its main() |
+| `[python]` | root contract key | the python extension's settings for the workspace |
+| `[python] private-reaches` | root contract key | each reach into another distribution's private name the private-reaches rule allows, with its reason; an entry no source uses any more refuses |
+| `[python] private-reaches[]` | root contract key | one allowed reach: the distribution that reaches, the private it reaches, and why |
+| `[python] private-reaches[].from` | root contract key | the distribution whose source reaches |
+| `[python] private-reaches[].reaches` | root contract key | the private it reaches, by its dotted path |
+| `[python] private-reaches[].reason` | root contract key | why the reach stays, and the public seam that will replace it |
+
+Contributes to pytest.

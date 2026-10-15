@@ -4,6 +4,7 @@
 # and libraries the host provides.
 
 [extension]
+description = "A CMake project's gate build, configured and compiled, and its tests run through ctest, in whatever language the project builds, with the compilers the host provides."
 api-version = 1
 
 # The tools the gate build runs: cmake configures and builds with the
