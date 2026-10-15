@@ -69,7 +69,7 @@ def test_a_root_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
     suffix = "; the gate's --fix rewrites it"
     # The refusals first: an implied entry, an order that is not
     # composition order, an extension listed twice, and a table entry
-    # whose `for` is its default.
+    # that leaves out no target.
     for listed, canonical, why in (
         (
             '["acme.brand", "acme.base"]',
@@ -90,8 +90,7 @@ def test_a_root_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
         (
             '[{ name = "acme.brand" }]',
             '["acme.brand"]',
-            "the entry for acme.brand names its default targets, which the name"
-            " alone says",
+            "the entry for acme.brand leaves out no target, which the name alone says",
         ),
     ):
         root_contract(tmp_path, listed)
@@ -169,12 +168,12 @@ def test_an_array_the_writer_does_not_read_is_named_until_a_person_writes_it(
         assert "its canonical list is" in problem
         assert _extensions.write_extensions(tmp_path) == []
         assert contract.read_text() == text
-    # A table entry that is more than a name and a `for` of names is the
-    # contract judge's to name: the list is not judged canonical until
-    # it goes.
+    # A table entry that is more than a name and a `without` of names is
+    # the contract judge's to name: the list is not judged canonical
+    # until it goes.
     for listed in (
         '[{ name = "acme.zeta", version = "1" }, "acme.alpha"]',
-        '[{ name = "acme.zeta", for = "acme.alpha" }, "acme.alpha"]',
+        '[{ name = "acme.zeta", without = "acme.alpha" }, "acme.alpha"]',
     ):
         root_contract(tmp_path, listed)
         assert _extensions.root_list_problems(tmp_path) == []
@@ -656,13 +655,12 @@ def test_a_for_table_s_tools_are_required_only_while_the_table_applies(
 
     fake_extensions(tmp_path, monkeypatch, house=_TOOLED_HOUSE, python="", cpp="")
     # The absences first: the target unlisted, then listed while the
-    # house's own entry points it at another target.
+    # house's own entry leaves it out.
     root_contract(tmp_path, '["acme.house"]')
     assert _extensions.extension_tools(tmp_path) == {"acme.house": ()}
     assert "docker" not in tool_names(tmp_path)
     root_contract(
-        tmp_path,
-        '["acme.python", "acme.cpp", { name = "acme.house", for = ["acme.cpp"] }]',
+        tmp_path, '["acme.python", { name = "acme.house", without = ["acme.python"] }]'
     )
     assert _extensions.extension_tools(tmp_path)["acme.house"] == ()
     assert "docker" not in tool_names(tmp_path)
@@ -718,12 +716,11 @@ def test_contributions_for_a_target_follow_the_graft_and_what_requires_it(
         ),
     )
     # The empty answers first: a target the workspace does not list, and
-    # a contribution whose listing points it at another target.
+    # a contribution whose listing leaves the target out.
     root_contract(tmp_path, '["acme.house"]')
     assert contributions_for("acme.python", tmp_path) == {}
     root_contract(
-        tmp_path,
-        '["acme.python", "acme.cpp", { name = "acme.house", for = ["acme.cpp"] }]',
+        tmp_path, '["acme.python", { name = "acme.house", without = ["acme.python"] }]'
     )
     assert contributions_for("acme.python", tmp_path) == {}
     # Then the table the mount grafts, as the file holds it, and the
@@ -746,23 +743,25 @@ def _mount(root: Path) -> None:
         _extensions.mount_extensions(root)
 
 
-def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_named(
+def test_a_without_naming_a_target_the_house_has_no_table_for_mounts_and_is_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
-    # The mount goes on without the target, and `layering.graph`,
-    # which runs inside a working fm, names the entry.
+    # The mount goes on, the house contributing to every other target,
+    # and `layering.graph`, which runs inside a working fm, names the
+    # entry and the target.
     _house(tmp_path, monkeypatch)
     fake_extensions(tmp_path, monkeypatch, cpp="")
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = [\n    "acme.cpp",\n'
-        '    { name = "acme.house", for = ["acme.cpp"] },\n    "acme.python",\n]\n'
+        '    { name = "acme.house", without = ["acme.cpp"] },\n    "acme.python",\n]\n'
     )
     _mount(tmp_path)
-    assert not _grafted()
+    assert _grafted()
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
-        "[workspace] extensions: the entry for acme.house names acme.cpp in `for`,"
-        " and acme.house declares no contribution for it; remove it from `for`"
+        "[workspace] extensions: the entry for acme.house names acme.cpp in"
+        " `without`, and acme.house declares no contribution for it; remove it"
+        " from `without`"
     )
 
 
@@ -1125,49 +1124,66 @@ def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
         _mount(tmp_path)
 
 
-def test_a_root_entry_s_for_opts_out_and_one_naming_its_default_is_written_as_its_name(
+def test_a_root_entry_s_without_opts_out_and_an_empty_one_is_written_as_its_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     _house(tmp_path, monkeypatch)
     fake_extensions(tmp_path, monkeypatch, cpp="")
-    # The refusals first: a target no list holds, and one the house
-    # declares nothing for.
-    root_contract(tmp_path, '[{ name = "acme.house", for = ["acme.cpp"] }]')
+    # The refusals first, each naming the entry and the target: a target
+    # the installed set does not hold, and one the house declares
+    # nothing for.
+    root_contract(tmp_path, '[{ name = "acme.house", without = ["acme.python"] }]')
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
-        "[workspace] extensions: the entry for acme.house names acme.cpp in `for`,"
-        " and does not list it; list it, or remove it from `for`"
+        "[workspace] extensions: the entry for acme.house names acme.python in"
+        " `without`, and the installed set does not hold it; list it, or remove"
+        " it from `without`"
     )
-    # Cooperation is the default: listed by name, the house contributes
-    # to every target it declares a table for.
+    root_contract(
+        tmp_path, '["acme.cpp", { name = "acme.house", without = ["acme.cpp"] }]'
+    )
+    (problem,) = _extensions.closure_problems(tmp_path)
+    assert problem == (
+        "[workspace] extensions: the entry for acme.house names acme.cpp in"
+        " `without`, and acme.house declares no contribution for it; remove it"
+        " from `without`"
+    )
+    # Cooperation is greedy: listed by name, the house contributes to
+    # every target it declares a table for.
     root_contract(tmp_path, '["acme.house", "acme.python"]')
     assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
     _mount(tmp_path)
     assert _grafted()
     _steps.unregister_step("lint.house")
-    # A `for` leaving the target out is the workspace's opt-out: the fix
-    # keeps it, and nothing grafts.
-    root_contract(tmp_path, '[{ name = "acme.house", for = [] }, "acme.python"]')
+    # A `without` naming the target is the workspace's opt-out: the fix
+    # keeps it, nothing grafts, and fm extensions names what is off.
+    root_contract(
+        tmp_path, '[{ name = "acme.house", without = ["acme.python"] }, "acme.python"]'
+    )
     assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.write_extensions(tmp_path) == []
     assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
     _mount(tmp_path)
     assert not _grafted()
-    # A `for` naming exactly the default says no more than the name, and
-    # the fix writes the name in its place, its comment kept.
+    described = _extensions.describe_extensions(tmp_path)
+    assert "    without: acme.python" in described
+    assert "    for: acme.python" not in described
+    # An empty `without` says no more than the name, and the fix writes
+    # the name in its place, its comments kept.
     contract = tmp_path / "workshop.toml"
     contract.write_text(
         "[workspace]\nextensions = [\n"
-        '    { name = "acme.house", for = ["acme.python"] },  # the opinions\n'
+        "    # The house.\n"
+        '    { name = "acme.house", without = [] },  # the opinions\n'
         '    "acme.python",\n]\n'
     )
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
-        '[workspace] extensions is [{ name = "acme.house", for = ["acme.python"] },'
+        '[workspace] extensions is [{ name = "acme.house", without = [] },'
         ' "acme.python"], and its canonical list is ["acme.house", "acme.python"];'
-        " the entry for acme.house names its default targets, which the name"
-        " alone says; the gate's --fix rewrites it"
+        " the entry for acme.house leaves out no target, which the name alone"
+        " says; the gate's --fix rewrites it"
     )
     assert _extensions.write_extensions(tmp_path) == [
         '  layering: [workspace] extensions is ["acme.house", "acme.python"], its'
@@ -1175,23 +1191,24 @@ def test_a_root_entry_s_for_opts_out_and_one_naming_its_default_is_written_as_it
     ]
     assert contract.read_text() == (
         "[workspace]\nextensions = [\n"
+        "    # The house.\n"
         '    "acme.house",  # the opinions\n'
         '    "acme.python",\n]\n'
     )
+    assert _extensions.closure_problems(tmp_path) == []
 
 
-def test_an_implied_root_entry_carrying_for_is_kept(
+def test_an_implied_root_entry_carrying_without_is_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     _house(tmp_path, monkeypatch)
     fake_extensions(
         tmp_path, monkeypatch, brand='[extension]\nrequires = ["acme.house"]\n'
     )
-    # Its `for` is the default: the entry says nothing its requirer's
-    # does not, so the list leaves it out.
+    # An empty `without` leaves out nothing: the entry says nothing its
+    # requirer's does not, so the list leaves it out.
     root_contract(
-        tmp_path,
-        '[{ name = "acme.house", for = ["acme.python"] }, "acme.brand", "acme.python"]',
+        tmp_path, '[{ name = "acme.house", without = [] }, "acme.brand", "acme.python"]'
     )
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem.endswith(
@@ -1200,12 +1217,96 @@ def test_an_implied_root_entry_carrying_for_is_kept(
     )
     # An opt-out has no other place to be written: the implied entry
     # carrying it stays, and the house contributes nothing.
-    listed = '[{ name = "acme.house", for = [] }, "acme.brand", "acme.python"]'
+    listed = (
+        '[{ name = "acme.house", without = ["acme.python"] }, "acme.brand",'
+        ' "acme.python"]'
+    )
     root_contract(tmp_path, listed)
     assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.write_extensions(tmp_path) == []
     _mount(tmp_path)
     assert not _grafted()
+    # The fix moves it into composition order with its comments.
+    contract = tmp_path / "workshop.toml"
+    contract.write_text(
+        "[workspace]\nextensions = [\n"
+        '    "acme.python",\n'
+        "    # The house, kept for its opt-out.\n"
+        '    { name = "acme.house", without = ["acme.python"] },  # no opinions\n'
+        '    "acme.brand",\n]\n'
+    )
+    assert _extensions.write_extensions(tmp_path) == [
+        f"  layering: [workspace] extensions is {listed}, its canonical list"
+    ]
+    assert contract.read_text() == (
+        "[workspace]\nextensions = [\n"
+        "    # The house, kept for its opt-out.\n"
+        '    { name = "acme.house", without = ["acme.python"] },  # no opinions\n'
+        '    "acme.brand",\n'
+        '    "acme.python",\n]\n'
+    )
+    assert _extensions.closure_problems(tmp_path) == []
+
+
+#: A house's steps for two languages, each registered while its language is listed.
+_HOUSES = (
+    _HOUSE
+    + """
+[for."acme.cpp".phases.lint.house-cpp]
+main = "{package}._steps:noop"
+"""
+)
+
+#: The house's table for a third language, as a later release declares it.
+_HOUSE_RUST = """
+[for."acme.rust".phases.lint.house-rust]
+main = "{package}._steps:noop"
+"""
+
+
+def test_a_target_listed_after_the_opt_out_was_written_gets_the_contribution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, house=_HOUSES, python="", cpp="", rust="")
+    contract = tmp_path / "workshop.toml"
+    # The opt-out first: the house leaves cpp out, and nothing grafts.
+    root_contract(
+        tmp_path, '["acme.cpp", { name = "acme.house", without = ["acme.cpp"] }]'
+    )
+    assert _extensions.closure_problems(tmp_path) == []
+    _mount(tmp_path)
+    assert "lint.house-cpp" not in _steps.steps_by_name()
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
+    # A target listed after the opt-out was written gets the house's
+    # contribution, and the opt-out stays as it was written.
+    assert _extensions.list_in_root(tmp_path, ["acme.python"]) == []
+    assert contract.read_text() == (
+        '[workspace]\nextensions = ["acme.cpp", { name = "acme.house", without ='
+        ' ["acme.cpp"] }, "acme.python"]\n'
+    )
+    assert _extensions.closure_problems(tmp_path) == []
+    _mount(tmp_path)
+    assert _grafted()
+    assert "lint.house-cpp" not in _steps.steps_by_name()
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
+    described = _extensions.describe_extensions(tmp_path)
+    assert "    for: acme.python" in described
+    assert "    without: acme.cpp" in described
+    _steps.unregister_step("lint.house")
+    # A table a later release of the house declares reaches a listed
+    # target the same way, with no change to the list.
+    assert _extensions.list_in_root(tmp_path, ["acme.rust"]) == []
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
+    fake_extensions(
+        tmp_path, monkeypatch, house=_HOUSES + _HOUSE_RUST, python="", cpp="", rust=""
+    )
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == (
+        "acme.python",
+        "acme.rust",
+    )
+    _mount(tmp_path)
+    assert "lint.house-rust" in _steps.steps_by_name()
+    assert "lint.house-cpp" not in _steps.steps_by_name()
 
 
 def test_rewriters_run_in_composition_order_and_after(
@@ -1258,6 +1359,6 @@ def test_a_root_without_a_contract_lists_no_extensions_and_declares_nothing(
     # tests do, reads an empty list rather than a missing file.
     monkeypatch.setattr(_extensions, "workspace_root", lambda start=None: tmp_path)
     assert _extensions.extension_entries(tmp_path) == ()
-    assert _extensions.extension_targets(tmp_path) == {}
+    assert _extensions.left_out(tmp_path) == {}
     assert _extensions.extension_tools(tmp_path) == {}
     assert _extensions.resolved_targets(tmp_path) == {}

@@ -236,21 +236,34 @@ A footman plugin that declares no extension is never offered as one.
 The mount registers a `[for.<target>]` table once both its owner and its
 target are mounted, so a house with opinions on several languages
 contributes to each only where the language is listed. Cooperation is
-the default: an extension contributes to every target of the installed
-set it declares a table for. A root entry opts the workspace out with
-`for`, the targets it contributes to,
-`{ name = "acme.house", for = ["python"] }`: a target it leaves out
-gets none of the house's opinions, and a name no list holds refuses.
-A `for` naming exactly the default targets says nothing the name does
-not, and the `--fix` of `layering.graph` writes the name alone. A
-package opts out of one step at the step's address in its own
-contract, `[phases.<phase>.<step>] enabled = false`. A name the
-extension declares no contribution for mounts nothing, and
-`layering.graph` names the entry.
+greedy: an extension contributes to every target of the installed set
+it declares a table for. That includes a target listed later, and a
+target a later release of the extension declares a table for, with no
+change to the lists. A root entry opts the workspace out with
+`without`, the targets the extension contributes nothing to:
+
+```toml
+[workspace]
+extensions = [
+    { name = "acme.house", without = ["cpp"] },
+    "cpp",
+    "python",
+]
+```
+
+Here the house, with a table for each language, contributes to python
+and nothing to cpp, and a language listed later gets its contribution.
+`layering.graph` names an entry whose `without` names a target the
+extension declares no table for, or one the installed set does not
+hold, naming the entry and the target. Its `--fix` writes an entry
+whose `without` is empty as the name alone. A package opts out of one
+step at the step's address in its own contract,
+`[phases.<phase>.<step>] enabled = false`.
 `fm extensions` prints the base, then each extension in mount order,
-who requires it, the packages whose sets hold it, its tools, its
-targets, whether it is dormant and what would wake it, and
-each step it declares off with whether the root contract turns it on.
+who requires it, the packages whose sets hold it, its tools, the
+targets it contributes to (`for:`), the targets its entry leaves out
+(`without:`), whether it is dormant and what would wake it, and each
+step it declares off with whether the root contract turns it on.
 
 A package's `extensions` names the extensions it is composed of. Its
 set is that list and every extension the list requires, transitively,
@@ -267,7 +280,7 @@ alone, with no options.
 
 The root's list is written the same way: its canonical list holds no
 extension another listed one requires, unless the entry carries a
-`for`, since an opt-out has no other place to be written, and comes
+`without`, since an opt-out has no other place to be written, and comes
 in composition order. `layering.graph` names a root list in any other
 form, and its `--fix` rewrites it, keeping each entry's comment lines.
 

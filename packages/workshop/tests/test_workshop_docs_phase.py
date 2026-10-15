@@ -141,12 +141,12 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         _docs.run_site_phase(root, _docs.DOCS_PHASE)
         _docs.run_site_phase(root, _docs.DEPLOY_PHASE)
 
-    # Coverage listed with a `for` list that leaves docs out: its
-    # [for.docs] table adds no step to either phase. The API reference
-    # unlisted adds none either. A package step naming an extension no
-    # package holds runs over no package.
+    # Coverage listed with an entry that leaves docs out: its [for.docs]
+    # table adds no step to either phase. The API reference unlisted adds
+    # none either. A package step naming an extension no package holds
+    # runs over no package.
     root = _workspace(
-        tmp_path, '["docs", "acme.meter", { name = "coverage", for = [] }]'
+        tmp_path, '["docs", "acme.meter", { name = "coverage", without = ["docs"] }]'
     )
     _mount(root)
     assert not {"docs.coverage", "deploy.coverage", "docs.mkdocstrings"} & set(

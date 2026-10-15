@@ -216,7 +216,7 @@ def test_without_coverage_no_coveragerc_is_written_and_the_dev_group_carries_no_
     assert not METER_DATA & set((root / ".gitignore").read_text().splitlines())
     # Listed beside coverage with its contribution taken off its entry,
     # pytest still measures nothing.
-    _listed(root, '[{ name = "pytest", for = [] }, "coverage"]')
+    _listed(root, '[{ name = "pytest", without = ["coverage"] }, "coverage"]')
     assert not (root / ".coveragerc").exists()
     assert not METER & set(_dev_group(root))
     # Listed beside coverage, it measures for it: the configuration, the
@@ -228,6 +228,39 @@ def test_without_coverage_no_coveragerc_is_written_and_the_dev_group_carries_no_
     # Taken off again, the sync withdraws the file it wrote.
     _listed(root, '["pytest"]')
     assert not (root / ".coveragerc").exists()
+
+
+def test_coverage_leaving_docs_out_adds_no_docs_step_and_pytest_still_measures_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._extensions import closure_problems, contributing, dormancy
+    from livery.workshop._steps import steps_by_name
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    coverage_steps = {"docs.coverage", "deploy.coverage"}
+    state = registry.snapshot()
+    try:
+        # Coverage's entry leaves docs out: its [for.docs] steps are absent
+        # from both site phases, and pytest's [for.coverage] table, which
+        # no entry leaves out, still applies.
+        _listed(root, '[{ name = "coverage", without = ["docs"] }, "docs", "pytest"]')
+        assert closure_problems(root) == []
+        assert not coverage_steps & set(steps_by_name())
+        assert contributing(root) == {"pytest": ("coverage",)}
+        assert dormancy(root) == {}
+        assert (root / ".coveragerc").is_file()
+        assert set(_dev_group(root)) >= METER
+        # Listed by name, coverage contributes its docs steps too.
+        _listed(root, '["coverage", "docs", "pytest"]')
+        assert closure_problems(root) == []
+        assert coverage_steps <= set(steps_by_name())
+        assert contributing(root) == {"coverage": ("docs",), "pytest": ("coverage",)}
+    finally:
+        registry.restore(state)
 
 
 def test_the_delivered_coveragerc_names_each_file_from_the_workspace_root(
@@ -555,7 +588,7 @@ def test_the_suites_run_measured_while_pytest_measures_for_coverage(
     # contribution taken off its entry; then pytest measures for it.
     for extensions, measured in (
         ('["pytest"]', False),
-        ('[{ name = "pytest", for = [] }, "coverage"]', False),
+        ('[{ name = "pytest", without = ["coverage"] }, "coverage"]', False),
         ('["pytest", "coverage"]', True),
     ):
         (tmp_path / "workshop.toml").write_text(

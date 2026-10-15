@@ -341,7 +341,7 @@ def test_a_for_table_s_files_arrive_while_it_applies(
     # contribution taken off the entry. Neither file arrives.
     for listed in (
         '["acme.house"]',
-        '["acme.python", { name = "acme.house", for = [] }]',
+        '["acme.python", { name = "acme.house", without = ["acme.python"] }]',
     ):
         root_contract(root, listed)
         found = written()

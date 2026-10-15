@@ -388,8 +388,9 @@ def _contributed(subject: Package | Path, extension: str) -> frozenset[str]:
     """The listed targets *extension*'s listing contributes to in *subject*'s workspace.
 
     The rule [livery.workshop.contributions_for][] reads a target's
-    tables by: the entry's ``for`` list when it has one, otherwise every
-    listed target the extension declares a ``[for.<target>]`` table for.
+    tables by: every listed target the extension declares a
+    ``[for.<target>]`` table for, except those its root entry's
+    ``without`` names.
     """
     from livery.workshop._extensions import extension_names, resolved_targets
 

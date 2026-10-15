@@ -259,19 +259,19 @@ doc = "the URL template task names in --help, --list and --json rows link to, fo
 
 [contract.root.workspace.extensions]
 types = ["list"]
-doc = "the extensions the workspace mounts with what they require, each by name, written as the canonical list: no extension another listed one requires unless its entry carries for, in composition order"
+doc = "the extensions the workspace mounts with what they require, each by name, written as the canonical list: no extension another listed one requires unless its entry carries without, in composition order"
 
 [contract.root.workspace."extensions[]"]
 types = ["str", "table"]
-doc = "one extension: its name, or a table with its name and targets"
-
-[contract.root.workspace."extensions[]".for]
-types = ["strs"]
-doc = "the extensions this one contributes to, which a workspace narrows to opt out of a target; every one of the installed set it declares a contribution for when absent"
+doc = "one extension: its name, or a table with its name and the targets it leaves out"
 
 [contract.root.workspace."extensions[]".name]
 types = ["str"]
 doc = "the extension's name"
+
+[contract.root.workspace."extensions[]".without]
+types = ["strs"]
+doc = "the extensions this one contributes nothing to, each one of the installed set it declares a contribution for; it contributes to every other one, one listed later included, and to all of them when absent"
 
 [contract.root.workspace.hosts]
 types = ["strs"]
