@@ -853,7 +853,8 @@ def checkout_index(
 
     The members are [livery.workshop._e2e.dev_members][]: the workshop,
     what it depends on, and the extensions a birth lists. Each is built
-    with ``uv build`` at the version its manifest declares, and
+    by `build_content_named`, at the version its manifest declares with
+    a local segment naming its content, and
     [livery.workshop._e2e.write_dev_index][] lays the wheels out. Named
     first in ``UV_INDEX``, the index serves every distribution it holds,
     whatever its version, because uv takes a package from the first
@@ -867,26 +868,52 @@ def checkout_index(
     """
     import tempfile
 
-    import livery.toolroom.tools as toolroom
     from livery.workshop._packages import discover_packages
 
     members = set(dev_members(root, extensions))
+    with tempfile.TemporaryDirectory() as scratch:
+        built = Path(scratch) / "wheels"
+        for package in discover_packages(root):
+            if package.member in members:
+                build_content_named(package, root, built)
+        write_dev_index(folder, sorted(built.glob("*.whl")))
+    return folder.as_uri()
+
+
+def build_content_named(package: Package, root: Path, out: Path) -> Path:
+    """Build *package*'s wheel into *out*, at a version naming its content; the wheel.
+
+    The build reads a copy of the package's directory, without its build
+    outputs and environments. The copy's version gains a local segment,
+    a digest of the copy's files, so the wheel's file name changes
+    whenever its content does. uv caches an installed wheel by its file
+    name and the place it came from, and installs the cached copy again
+    without reading a newer file of that name (measured). The package's
+    own files stay as they are. *root* is the workspace *package*
+    belongs to, whose stamp phase writes the version.
+
+    Raises:
+        Failed: when nothing in the package's set answers its version,
+            or adds a step to the stamp phase.
+    """
+    import tempfile
+
+    import livery.toolroom.tools as toolroom
+
     skipped = shutil.ignore_patterns(
         ".venv", "dist", "build", "__pycache__", "_docs", "*.egg-info"
     )
     with tempfile.TemporaryDirectory() as scratch:
-        built = Path(scratch) / "wheels"
-        for package in discover_packages(root):
-            if package.member not in members:
-                continue
-            copy = Path(scratch) / "copies" / package.member
-            shutil.copytree(package.directory, copy, ignore=skipped)
-            _stamp_content(replace(package, directory=copy), root)
-            toolroom.uv.opts(cwd=root, recorded=False)(
-                "build", "--wheel", "--out-dir", str(built), str(copy)
-            )
-        write_dev_index(folder, sorted(built.glob("*.whl")))
-    return folder.as_uri()
+        copy = Path(scratch) / "copy" / package.member
+        shutil.copytree(package.directory, copy, ignore=skipped)
+        _stamp_content(replace(package, directory=copy), root)
+        built = Path(scratch) / "built"
+        toolroom.uv.opts(cwd=root, recorded=False)(
+            "build", "--wheel", "--out-dir", str(built), str(copy)
+        )
+        (wheel,) = built.glob("*.whl")
+        out.mkdir(parents=True, exist_ok=True)
+        return Path(shutil.copy2(wheel, out / wheel.name))
 
 
 def _stamp_content(package: Package, root: Path) -> None:
