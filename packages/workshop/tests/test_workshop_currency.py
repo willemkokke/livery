@@ -74,20 +74,22 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
         del root
         ran.append(args)
 
+    def render(root: Path) -> list[str]:
+        del root
+        ran.append(("render",))
+        return []
+
     def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
-        # Declared once the named step ran: "sync", "pip", or never.
+        # Declared once the named step ran: "sync", "render", or never.
         done = {args[0] for args in ran}
         return names if declares["after"] in done else ()
 
     monkeypatch.setattr(_reconcile, "_reexec", reexec)
     monkeypatch.setattr("livery.workshop._uv.run_uv", run_uv)
+    monkeypatch.setattr("livery.workshop._shipped_files.deliver_project_file", render)
     monkeypatch.setattr("livery.workshop._extensions.declared_now", declared_now)
     monkeypatch.setattr(
         "livery.workshop._extensions.unmounted", lambda start: ("mypy",)
-    )
-    monkeypatch.setattr(
-        "livery.workshop._extensions.extension_entries",
-        lambda start: (("ruff", "livery-extensions-ruff"), ("mypy", "acme-mypy")),
     )
     # The refusals first. A --locked sync installs nothing outside the
     # lock: refused before anything renders or locks, naming the list that
@@ -106,17 +108,18 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
     )
     assert ran == [("sync", "--locked")]
     assert handed == []
-    # Installed, and still no distribution declares it.
+    # Installed, and still no distribution declares it: the project file
+    # is written alone, and uv sync locks and installs from it.
     ran.clear()
     with pytest.raises(Failed, match="installing it found no distribution"):
-        require_mounted(tmp_path)
-    assert [args[:2] for args in ran] == [("sync",), ("pip", "install")]
-    assert ran[1][-1] == "acme-mypy"  # the listed one alone, by its distribution
-    # A newly listed extension: uv sync cannot install what the dev group
-    # does not name yet, so it is installed directly, and the handoff that
-    # would mount it cannot start: refused all the same.
+        require_mounted(tmp_path, ("--offline",))
+    assert ran == [("sync", "--offline"), ("render",), ("sync", "--offline")]
+    assert handed == []
+    # A newly listed extension: the lock does not name it yet, so the
+    # install writes it into the dev group and syncs, and the handoff
+    # that would mount it cannot start: refused all the same.
     ran.clear()
-    declares["after"] = "pip"
+    declares["after"] = "render"
     with pytest.raises(Failed, match="mypy installed, and this process cannot mount"):
         require_mounted(tmp_path)
     assert handed == [_reconcile.INSTALLED]

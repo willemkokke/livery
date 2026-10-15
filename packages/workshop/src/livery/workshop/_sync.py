@@ -357,26 +357,33 @@ def require_mounted(
     it would remove its files and its tools as withdrawn. When the
     environment holds it now, or holds it once ``uv sync`` ran with
     *flags*, the sync hands itself to a fresh process, which mounts it.
-    A newly listed extension's distribution reaches the dev group only
-    through the render, so ``uv sync`` cannot install it: with
-    *install*, it is installed into the environment directly, and the
-    fresh process's render writes its line and its ``uv sync``
-    reconciles the environment with the lock. One no distribution
-    declares even then refuses, naming it and the list that brings it,
-    before a file is touched, and so does a handoff that cannot start.
+
+    A newly listed extension is in no lock yet, so that ``uv sync``
+    cannot install it. With *install*, it is installed the way the
+    workspace resolves it: the project file alone is written again,
+    and its dev group names the extension's distribution, then ``uv
+    sync`` locks and installs through the file's ``[tool.uv.sources]``
+    and indexes. An extension the workspace sources from a path or
+    from git installs from there. The fresh process then renders every
+    file with the extension mounted.
+
+    One no distribution declares even then refuses, naming it and the
+    list that brings it, and so does a handoff that cannot start. Each
+    refusal, and an install that fails, first puts back the project
+    file, its receipt and ``uv.lock`` as they were before the install,
+    so nothing is rendered or locked.
 
     Raises:
-        Failed: when a listed extension cannot be mounted in this process.
+        Failed: when a listed extension cannot be mounted in this process,
+            or the install fails.
     """
     from livery.workshop import _reconcile
     from livery.workshop._extensions import (
         declared_now,
-        extension_entries,
         stale_declarations,
         unmounted,
         where_listed,
     )
-    from livery.workshop._pythons import venv_python
     from livery.workshop._uv import run_uv
 
     missing = unmounted(root)
@@ -390,19 +397,13 @@ def require_mounted(
         run_uv("sync", *flags, root=root)
         installed = declared_now(missing)
     absent = [name for name in missing if name not in installed]
+    held: dict[str, bytes | None] = {}
     if absent and install:
-        dists = [dist for name, dist in extension_entries(root) if name in absent]
-        python = str(venv_python(root / ".venv"))
-        run_uv("pip", "install", "--python", python, *dists, root=root)
+        held = _install_listed(root, flags)
         installed = declared_now(missing)
         absent = [name for name in missing if name not in installed]
-    if installed:
-        print(
-            f"  extensions installed by this sync: {', '.join(installed)}; the sync"
-            " continues with them mounted"
-        )
-        _reconcile._reexec(root, _reconcile.INSTALLED)  # pyright: ignore[reportPrivateUsage]
     if absent:
+        _put_back(root, held)
         why = (
             "and installing it found no distribution declaring it"
             if install
@@ -417,10 +418,64 @@ def require_mounted(
             " distribution that ships each, or remove the entry. Nothing was"
             " rendered or locked"
         )
+    print(
+        f"  extensions installed by this sync: {', '.join(installed)}; the sync"
+        " continues with them mounted"
+    )
+    _reconcile._reexec(root, _reconcile.INSTALLED)  # pyright: ignore[reportPrivateUsage]
+    _put_back(root, held)
     fail(
         f"{', '.join(installed)} installed, and this process cannot mount"
         f" them: run `{footman.prog()} sync` again. Nothing was rendered or locked"
     )
+
+
+def _install_listed(root: Path, flags: tuple[str, ...]) -> dict[str, bytes | None]:
+    """Install the missing listed extensions the way the workspace resolves them.
+
+    Writes the project file alone, whose dev group names each listed
+    extension's distribution, then runs ``uv sync`` with *flags*, which
+    locks first. Besides the environment, the install writes three
+    files: the project file, its receipt and ``uv.lock``. An install
+    that fails puts them back before the failure goes on.
+
+    Returns:
+        What each of the three files held before, None for one that was
+        not there, for a refusal that puts them back.
+    """
+    from livery.workshop._fragment_engine import RENDERED_MANIFEST
+    from livery.workshop._shipped_files import PROJECT_FILE, deliver_project_file
+    from livery.workshop._uv import run_uv
+
+    held = {
+        name: (root / name).read_bytes() if (root / name).is_file() else None
+        for name in (PROJECT_FILE, RENDERED_MANIFEST, "uv.lock")
+    }
+    try:
+        for line in deliver_project_file(root):
+            print(line)
+        run_uv("sync", *flags, root=root)
+    except BaseException:
+        _put_back(root, held)
+        raise
+    return held
+
+
+def _put_back(root: Path, held: dict[str, bytes | None]) -> None:
+    """Write back each file of *held* that moved, or remove one that was not there."""
+    moved: list[str] = []
+    for name, body in held.items():
+        path = root / name
+        now = path.read_bytes() if path.is_file() else None
+        if now == body:
+            continue
+        moved.append(name)
+        if body is None:
+            path.unlink()
+        else:
+            path.write_bytes(body)
+    if moved:
+        print(f"  put back as they were before the install: {', '.join(moved)}")
 
 
 def bring_current(root: Path, *, interactive: bool, fetched: bool = False) -> None:
@@ -626,13 +681,22 @@ def sync(
     that code; the handoff is named, and a process that cannot be
     started continues on the loaded code and says so. An extension the
     workspace lists that the command started without is mounted the
-    same way before anything renders or locks
-    ([livery.workshop._sync.require_mounted][]): a sync never renders
-    without one. A ``uv sync`` that moves or removes the distribution
-    of the workshop, or of an extension the command mounted, hands the
-    rest of the sync over the same way, before anything reads it again:
-    this process found it where the install no longer puts it. A
-    handoff that cannot start then refuses, and the next sync completes.
+    same way before anything renders or locks: a sync never renders
+    without one. A newly listed extension is installed first, the way
+    the workspace resolves it: the sync writes the project file alone,
+    whose dev group then names the extension's distribution, and runs
+    ``uv sync``, which locks and installs through the file's
+    ``[tool.uv.sources]`` and indexes. So an extension the workspace
+    sources from a path or from git installs from there. When no
+    installed distribution declares the extension even then, the sync
+    refuses, naming the extension and the list that brings it. Before
+    that refusal, and when the install fails, it puts the project file,
+    its receipt and ``uv.lock`` back as they were. A ``uv sync`` that
+    moves or removes the distribution of the workshop, or of an
+    extension the command mounted, hands the rest of the sync over the
+    same way, before anything reads it again: this process found it
+    where the install no longer puts it. A handoff that cannot start
+    then refuses, and the next sync completes.
 
     Shell completion answers from a manifest this command wrote as it
     started, from what was installed then. A sync that changed the

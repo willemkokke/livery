@@ -617,6 +617,49 @@ def write_rendered(directory: Path, receipts: Mapping[str, str]) -> None:
     )
 
 
+def _write(root: Path, output: Output, recorded: str | None) -> tuple[bool, str]:
+    """Write *output* when its receipt allows; whether the file holds it, and the line.
+
+    A missing file is written, and a file whose bytes are still what the
+    engine last wrote, *recorded*, is rewritten. A file edited since is
+    kept, and so is one with no receipt whose bytes differ: the file
+    then does not hold the output, and the line names it. The line is
+    empty when the file already holds the output.
+    """
+    target = root / output.path
+    if not target.is_file():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(output.body)
+        return True, f"  wrote {output.path}"
+    existing = _committed(target)
+    if existing == output.body:
+        return True, ""
+    if recorded is not None and _owned(existing) == recorded:
+        target.write_bytes(output.body)
+        return True, f"  updated {output.path}"
+    return False, (
+        f"  kept {output.path}: edited here, so it is not rewritten;"
+        " delete it to take the rendered file"
+    )
+
+
+def write_root_file(root: Path, output: Output) -> list[str]:
+    """Write one file at the root as `apply` writes it, and its receipt; the lines.
+
+    *output* is a file a commit holds, at the root, never in a package.
+    Every other file and receipt stays as it is: unlike `apply`, this
+    withdraws nothing, so it writes one file while the rest of the
+    delivery waits. A file edited here is kept and named, as `apply`
+    keeps it.
+    """
+    receipts = read_rendered(root)
+    held, line = _write(root, output, receipts.get(output.path))
+    if held:
+        receipts[output.path] = _owned(output.body)
+        write_rendered(root, receipts)
+    return [line] if line else []
+
+
 def apply(
     root: Path,
     outputs: Sequence[Output],
@@ -657,24 +700,11 @@ def apply(
         rendered.add(output.path)
         home = home_of(output.path)
         name = output.path.removeprefix(f"{home}/") if home else output.path
-        target = root / output.path
-        recorded = receipts[home].get(name)
-        if not target.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(output.body)
-            lines.append(f"  wrote {output.path}")
-        elif (existing := _committed(target)) == output.body:
-            pass
-        elif recorded is not None and _owned(existing) == recorded:
-            target.write_bytes(output.body)
-            lines.append(f"  updated {output.path}")
-        else:
-            lines.append(
-                f"  kept {output.path}: edited here, so it is not rewritten;"
-                " delete it to take the rendered file"
-            )
-            continue
-        receipts[home][name] = _owned(output.body)
+        held, line = _write(root, output, receipts[home].get(name))
+        if line:
+            lines.append(line)
+        if held:
+            receipts[home][name] = _owned(output.body)
     for home in homes:
         for name, recorded in sorted(receipts[home].items()):
             path = f"{home}/{name}" if home else name

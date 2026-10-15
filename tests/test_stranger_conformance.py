@@ -306,17 +306,10 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
             "extensions = []", 'extensions = ["cmake", "nanobind"]', 1
         )
     )
-    # cmake ships as a distribution of its own, which the sync installs
-    # from an index, so this checkout's index serves it.
-    from livery.workshop._e2e import checkout_index
-
-    index = checkout_index(ROOT, tmp_path / "checkout-index", ("cmake", "nanobind"))
+    # cmake ships as a distribution of its own, which the project file's
+    # region sources from this checkout: the sync installs it from there.
     synced = subprocess.run(
-        ["uv", "run", "fm", "sync"],
-        cwd=root,
-        env={**env, "UV_INDEX": index},
-        capture_output=True,
-        text=True,
+        ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
     )
     assert synced.returncode == 0, f"{synced.stdout}\n{synced.stderr}"
     # Listed before any member of their kind exists, as a person lists
