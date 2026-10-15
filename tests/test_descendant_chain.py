@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import tomllib
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -281,6 +282,29 @@ def _entered(fm: Path, workspace: Path, env: dict[str, str]) -> dict[str, str]:
     return applied
 
 
+def _build_named(
+    workspace: Path, member: str, out: Path, tree: Path | None = None
+) -> Path:
+    """Build *workspace*'s *member* into *out*, named by its content; the wheel.
+
+    Every wheel the chain builds goes through here. A run's temporary
+    tree can sit at the same path as an earlier run's, and uv installs
+    a wheel it cached then by its file name and that path: a wheel
+    named by its version alone installed the earlier run's code
+    (measured). *tree* is a copy of the member's directory to build in
+    its place.
+    """
+    from livery.workshop._e2e import build_content_named
+    from livery.workshop._packages import discover_packages
+
+    (package,) = (
+        found for found in discover_packages(workspace) if found.member == member
+    )
+    if tree is not None:
+        package = replace(package, directory=tree)
+    return build_content_named(package, workspace, out)
+
+
 def _publish(index: Path, wheels: list[Path]) -> None:
     """Add *wheels* to the checkout *index*, beside what it serves already.
 
@@ -503,11 +527,7 @@ def _chain(
     assert clean.stdout.strip() == ""
 
     # -- 3. the home releases its wheel -------------------------------
-    _run(
-        ["uv", "build", "--wheel", "-o", str(wheelhouse), f"packages/{BRAND}"],
-        home,
-        env,
-    )
+    _build_named(home, BRAND, wheelhouse)
 
     # -- 4. the branded App begets the child --------------------------
     tool = tmp_path / "brand-tool"
@@ -782,8 +802,7 @@ def _chain(
     # The bumped base joins the checkout index, which serves both
     # versions; the upgrades below take the newer.
     improved_wheels = tmp_path / "base-improved-wheels"
-    _run(["uv", "build", "--wheel", "-o", str(improved_wheels)], improved, env)
-    _publish(index, sorted(improved_wheels.glob("*.whl")))
+    _publish(index, [_build_named(ROOT, "workshop", improved_wheels, improved)])
 
     # The home takes the base bump the real way: the lock moves to the
     # new wheel, sync refreshes the environment (the bumped member's
@@ -800,11 +819,7 @@ def _chain(
     _run(["uv", "sync"], home, env)
     home_fm = home / ".venv" / "bin" / "fm"
     _run([str(home_fm), "sync"], home, _hermetic(env, home / ".venv"), check=False)
-    _run(
-        ["uv", "build", "--wheel", "-o", str(wheelhouse), f"packages/{BRAND}"],
-        home,
-        env,
-    )
+    _build_named(home, BRAND, wheelhouse)
 
     # The child updates: new brand and base wheels arrive, then the
     # composed files move to what they ship.

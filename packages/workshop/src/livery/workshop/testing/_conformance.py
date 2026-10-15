@@ -36,7 +36,12 @@ from livery.workshop._steps import (
 )
 
 if TYPE_CHECKING:
-    from livery.workshop._declaration import Additions, Declaration, Reference
+    from livery.workshop._declaration import (
+        Additions,
+        Declaration,
+        DeclaredTemplate,
+        Reference,
+    )
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,7 @@ WORDS_ARE_ANSWERABLE = "words-are-answerable"
 PLUGIN_IS_AN_ENTRY_POINT = "plugin-is-an-entry-point"
 REQUIREMENTS_IN_METADATA = "requirements-in-metadata"
 CONTRACT_KEYS_DOCUMENTED = "contract-keys-documented"
+TEMPLATE_COMPOSES = "template-composes"
 FRAGMENT_DRIFT = "fragment-drift"
 WITHDRAWN_FILE = "withdrawn-file"
 WALK_ORDER = "walk-order"
@@ -698,6 +704,103 @@ def _contract_keys_documented(subject: Subject) -> list[Violation]:
     ]
 
 
+# The templates an extension declares.
+
+
+def _own_templates(subject: Subject) -> dict[str, DeclaredTemplate]:
+    """The templates the subject's declaration file declares, by name.
+
+    The base's are those of its ``contract.toml``. A declaration file
+    that refuses declares none here: ``declaration-validates`` names
+    it. A template takes the name an installed distribution declares
+    its extension under, which a chain names, and the package's own
+    without one.
+    """
+    from livery.workshop._contract_keys import BASE_FILE
+    from livery.workshop._declaration import template_declarations, template_specs_of
+    from livery.workshop._extensions import extension_package, installed_extensions
+
+    if subject.extension == BASE_EXTENSION:
+        data = tomllib.loads(BASE_FILE.read_text("utf-8"))
+        return template_specs_of(data, BASE_FILE, extension=BASE_EXTENSION)
+    if _declared_of(subject) is None:
+        return {}
+    named = [
+        name
+        for name in installed_extensions()
+        if extension_package(name) == subject.extension
+    ]
+    extension = named[0] if named else subject.extension
+    found = template_declarations(extension, subject.extension)
+    return {template.name: template for template in found}
+
+
+def _template_composes(subject: Subject) -> list[Violation]:
+    from livery.footman import Failed
+    from livery.workshop._composition import closure, implied
+    from livery.workshop._declaration import DeclarationError
+    from livery.workshop._extensions import GROUP, installed_declaration, why_inert
+    from livery.workshop._seeds import available_templates, chain_needs, template_chain
+
+    own = _own_templates(subject)
+    if not own:
+        return []
+    try:
+        known = {**available_templates(), **own}
+    except Failed as error:
+        return [
+            Violation(TEMPLATE_COMPOSES, f"extension {subject.extension}", str(error))
+        ]
+    violations: list[Violation] = []
+    for name, template in sorted(own.items()):
+        where = f"template {name}"
+        try:
+            members = closure(template.extensions, installed_declaration)
+            required = implied(members, installed_declaration)
+            for entry in dict.fromkeys(template.extensions):
+                if entry in required:
+                    continue
+                if installed_declaration(entry) is None:
+                    violations.append(
+                        Violation(
+                            TEMPLATE_COMPOSES,
+                            where,
+                            f"lists {entry}, which no installed distribution declares"
+                            f" in {GROUP}, so nothing shows that it composes"
+                            " something in a package",
+                        )
+                    )
+                elif why := why_inert(entry):
+                    violations.append(
+                        Violation(
+                            TEMPLATE_COMPOSES,
+                            where,
+                            f"lists {entry}, which composes nothing in a package:"
+                            f" {why}; fm new.package refuses the template",
+                        )
+                    )
+        except DeclarationError as error:
+            violations.append(Violation(TEMPLATE_COMPOSES, where, str(error)))
+            continue
+        try:
+            chain = template_chain(name, known)
+        except Failed as error:
+            violations.append(Violation(TEMPLATE_COMPOSES, where, str(error)))
+            continue
+        violations += [
+            Violation(
+                TEMPLATE_COMPOSES,
+                where,
+                f"its chain needs {needed}, which the set of its extensions does not"
+                " hold; a package born from it holds that set alone, so no step that"
+                f" names {needed} judges it",
+            )
+            for needed in chain_needs(chain)
+            if needed not in members
+        ]
+    return violations
+
+
 # An extension's configuration files, through the workshop's own render.
 
 
@@ -1114,6 +1217,13 @@ CLAUSES: tuple[Clause, ...] = (
         CONTRACT_KEYS_DOCUMENTED,
         "Every contract key an extension declares carries a doc.",
         _contract_keys_documented,
+    ),
+    Clause(
+        TEMPLATE_COMPOSES,
+        "Every extension a template lists composes something in a package,"
+        " unless another it lists requires it, and the set of the template's"
+        " list holds every extension its chain needs.",
+        _template_composes,
     ),
     Clause(
         FRAGMENT_DRIFT,

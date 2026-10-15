@@ -2,7 +2,9 @@
 
 Every extension is one kind, and two lists name them: the root
 ``workshop.toml``'s ``[workspace] extensions`` and each package's
-``workshop.toml``, the extensions it is composed of. A list's set is
+``workshop.toml``, the extensions it is composed of. The root's list
+takes any extension, and a package's list one whose declarations
+show it composes something in a package. A list's set is
 the list and every extension it requires. The installed set is the
 root's set and every package's set: a sync installs it, and mounting
 reads it, the base first, then the installed set in composition
@@ -307,8 +309,8 @@ def composes_per_package(extension: str) -> bool:
     tools, shipped files, CI jobs, verbs, templates and ``requires``
     itself compose nothing in a package. An extension whose code alone
     reads a package's set is not seen: the declarations define what
-    composes. An installed declaration that cannot be read names
-    nothing.
+    composes, so a package's list refuses such an extension. An
+    installed declaration that cannot be read names nothing.
     """
     from livery.workshop._phases import PACKAGE_LEVEL, declared_phases
     from livery.workshop._queries import declared_queries
@@ -368,6 +370,37 @@ def _named_by_steps() -> frozenset[str]:
             for fragment in record.fragments:
                 found.update(fragment.extensions)
     return frozenset(found)
+
+
+def why_inert(extension: str) -> str:
+    """What *extension* does instead of composing a package; empty when it composes.
+
+    The proof is `composes_per_package`'s. For an extension that
+    composes nothing, the words say what its own steps
+    judge: every package that holds one of the extensions they name,
+    the workspace as a whole when they name none, or that it declares
+    no step. A refusal of the extension in a package's list, or in a
+    template's, reads them after ``composes nothing in a package:``.
+    """
+    if composes_per_package(extension):
+        return ""
+    found = installed_declaration(extension)
+    steps = _declared_steps(found) if found is not None else []
+    named: dict[str, None] = {}
+    for record in steps:
+        named.update(dict.fromkeys(record.extensions))
+    if named:
+        return f"its steps judge every package that holds {_either(list(named))}"
+    if steps:
+        return "its steps judge the workspace as a whole"
+    return "it declares no step"
+
+
+def _either(names: list[str]) -> str:
+    """*names* as a sentence offers them: ``a``, ``a or b``, ``a, b or c``."""
+    if len(names) < 2:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 def root_set(start: Path | None = None) -> tuple[str, ...]:
@@ -1401,8 +1434,10 @@ def closure_problems(start: Path | None = None) -> list[str]:
     on is one a listed extension declares off (``enabled_problems``);
     when the root's list is its canonical one (``root_list_problems``);
     and when every package's list is a valid composition in its
-    canonical form (``composition_problems``). The gate's ``--fix``
-    writes each list in its canonical form (``write_extensions``).
+    canonical form, each of its entries composing something in a
+    package (``composition_problems``). The gate's ``--fix`` writes
+    each list in its canonical form and moves a package's entry that
+    composes nothing to the root's list (``write_extensions``).
     """
     root = workspace_root(start)
     installed = set(installed_set(start))
@@ -1614,18 +1649,22 @@ def composition_problems(root: Path) -> list[str]:
     Judged for each package whose entries are names installed
     distributions declare: every extension its set requires is
     installed, each lifecycle phase can run as the set's extensions
-    declare it ([livery.workshop._phases.phase_problems][]), the set's
-    declared order has a start, and the list is the canonical one,
-    which the gate's ``--fix`` writes
-    ([livery.workshop._composition.canonical][]). A requirement joins
-    the set whatever it declares, so no other list needs to name it. A
-    cycle of requirements shows in every package whose set holds one of
-    its members, since a set is closed under requires.
+    declare it ([livery.workshop._phases.phase_problems][]), each entry
+    no other entry requires composes something in a package, itself or
+    through what it requires (`why_inert`), the set's declared order
+    has a start, and the list is the canonical one
+    ([livery.workshop._composition.canonical][]). The gate's ``--fix``
+    writes the canonical list and moves an entry that composes nothing
+    to ``[workspace] extensions`` (`write_extensions`). A requirement
+    joins the set whatever it declares, so no other list needs to name
+    it. A cycle of requirements shows in every package whose set holds
+    one of its members, since a set is closed under requires.
     """
-    from livery.workshop._composition import canonical
+    from livery.workshop._composition import canonical, implied
     from livery.workshop._phases import lifecycle_phases, phase_problems, phase_steps
 
     problems: list[str] = []
+    inert: dict[str, str] = {}
     for contract, listed in _package_lists(root):
         if not _composable(listed):
             continue
@@ -1643,6 +1682,18 @@ def composition_problems(root: Path) -> list[str]:
         for phase in lifecycle_phases():
             steps = phase_steps(phase, members, installed_declaration)
             problems += [f"{where}: {line}" for line in phase_problems(phase, steps)]
+        required = implied(members, installed_declaration)
+        for name in dict.fromkeys(names):
+            if name in required:
+                continue
+            if name not in inert:
+                inert[name] = why_inert(name)
+            if inert[name]:
+                problems.append(
+                    f"{where}: `extensions` lists {name}, which composes nothing in a"
+                    f" package: {inert[name]}; list it in [workspace] extensions,"
+                    " where the gate's --fix moves it"
+                )
         try:
             wanted = canonical(names, installed_declaration)
         except OrderCycle as error:
@@ -1782,18 +1833,22 @@ def requirers(start: Path | None = None) -> dict[str, tuple[str, ...]]:
 
 
 def write_extensions(root: Path) -> list[str]:
-    """Write the root's list and each package's in its canonical form.
+    """Write each package's list and the root's in its canonical form.
 
     Returns the lines written, one per list changed.
 
-    The root's list becomes its canonical one (``root_list_problems``),
-    and each package's its canonical one
-    ([livery.workshop._composition.canonical][]). Each entry keeps the
-    comment lines above it and the comment after it on its line, and an
+    Each package's list becomes its canonical one
+    ([livery.workshop._composition.canonical][]) without the entries
+    that compose nothing in a package (`why_inert`), which move to the
+    root's list, and the root's list then becomes its canonical one
+    (``root_list_problems``). Each entry keeps the comment lines above
+    it and the comment after it on its line. A moved entry takes them
+    to the root's list when that list does not hold it yet, and an
     entry left out takes its comments with it. A list the judge refuses
     for another reason, one whose order has no start, and one whose
     array this does not read are left for a person, and the judge names
-    each. Idempotent. A root without a contract lists no extensions, so
+    each; no entry moves while the root's array is not read.
+    Idempotent. A root without a contract lists no extensions, so
     nothing is written.
     """
     from livery.workshop._composition import canonical
@@ -1801,26 +1856,10 @@ def write_extensions(root: Path) -> list[str]:
     contract = root / "workshop.toml"
     if not contract.is_file():
         return []
+    movable = _read_array(contract.read_text(encoding="utf-8"), "workspace") is not None
+    moved: dict[str, _Entry] = {}
+    inert: dict[str, str] = {}
     written: list[str] = []
-    found = _root_list(root)
-    if isinstance(found, _RootList) and found.why:
-        text = contract.read_text(encoding="utf-8")
-        array = _read_array(text, "workspace")
-        if array is not None and _reads_as(array, found.written):
-            entries = [
-                replace(array.entries[index], text=f'"{entry}"')
-                if isinstance(entry, str) and isinstance(found.written[index], dict)
-                else array.entries[index]
-                for index, entry in found.wanted
-            ]
-            contract.write_text(
-                text[: array.start] + _array_text(array, entries) + text[array.end :],
-                encoding="utf-8",
-            )
-            spelled = _spelled_entries(entry for _index, entry in found.wanted)
-            written.append(
-                f"  layering: [workspace] extensions is {spelled}, its canonical list"
-            )
     for package_contract, listed in _package_lists(root):
         if not _composable(listed):
             continue
@@ -1829,25 +1868,83 @@ def write_extensions(root: Path) -> list[str]:
             wanted = canonical(listed, installed_declaration)
         except OrderCycle:
             continue
-        if wanted == listed:
+        leaving: list[str] = []
+        for name in wanted if movable else ():
+            if name not in inert:
+                inert[name] = why_inert(name)
+            if inert[name]:
+                leaving.append(name)
+        kept = tuple(name for name in wanted if name not in leaving)
+        if kept == listed:
             continue
         package_text = package_contract.read_text(encoding="utf-8")
         array = _read_array(package_text, None)
         if array is None or not _reads_as(array, listed):
             continue
         # The canonical list holds each extension once, each one listed.
-        entries = [array.entries[listed.index(name)] for name in wanted]
+        entries = [array.entries[listed.index(name)] for name in kept]
         package_contract.write_text(
             package_text[: array.start]
             + _array_text(array, entries)
             + package_text[array.end :],
             encoding="utf-8",
         )
-        written.append(
-            f"  layering: {where} `extensions` is {_spelled(wanted)},"
-            " its canonical list"
+        for name in leaving:
+            moved.setdefault(name, array.entries[listed.index(name)])
+        if leaving:
+            verb = "composes" if len(leaving) == 1 else "compose"
+            written.append(
+                f"  layering: {where} `extensions` is {_spelled(kept)}, and"
+                f" [workspace] extensions lists {_spoken(leaving)}, which {verb}"
+                " nothing in a package"
+            )
+        else:
+            written.append(
+                f"  layering: {where} `extensions` is {_spelled(kept)},"
+                " its canonical list"
+            )
+    return _write_root(root, moved) + written
+
+
+def _write_root(root: Path, moved: dict[str, _Entry]) -> list[str]:
+    """Add *moved* to the root's list, then write it in its canonical form.
+
+    *moved* maps each extension a package's list gave up to its entry
+    there, with its comments; an extension the root's list holds
+    already is not added again. Returns the line written for the
+    canonical rewrite, if any: the line of each package's list names
+    what moved.
+    """
+    contract = root / "workshop.toml"
+    text = contract.read_text(encoding="utf-8")
+    held = set(workspace_names(root))
+    added = [entry for name, entry in moved.items() if name not in held]
+    array = _read_array(text, "workspace")
+    if added and array is not None:
+        text = (
+            text[: array.start]
+            + _array_text(array, [*array.entries, *added])
+            + text[array.end :]
         )
-    return written
+        contract.write_text(text, encoding="utf-8")
+    found = _root_list(root)
+    if not isinstance(found, _RootList) or not found.why:
+        return []
+    array = _read_array(text, "workspace")
+    if array is None or not _reads_as(array, found.written):
+        return []
+    entries = [
+        replace(array.entries[index], text=f'"{entry}"')
+        if isinstance(entry, str) and isinstance(found.written[index], dict)
+        else array.entries[index]
+        for index, entry in found.wanted
+    ]
+    contract.write_text(
+        text[: array.start] + _array_text(array, entries) + text[array.end :],
+        encoding="utf-8",
+    )
+    spelled = _spelled_entries(entry for _index, entry in found.wanted)
+    return [f"  layering: [workspace] extensions is {spelled}, its canonical list"]
 
 
 def list_in_root(root: Path, names: Iterable[str]) -> list[str]:

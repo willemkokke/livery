@@ -1118,6 +1118,61 @@ def test_the_checkout_index_builds_what_a_newborn_installs(
     assert dict(built) == first
 
 
+def test_a_tree_rebuilt_at_one_version_installs_its_own_code(tmp_path: Path) -> None:
+    # uv caches an installed wheel by its file name and the place it
+    # came from, and installs the cached copy again without reading a
+    # newer file of that name. Two trees built at one version and
+    # served from one folder: the second install carries the second
+    # tree's code, because each build names its content.
+    import sys
+
+    import livery.toolroom.tools as toolroom
+    from livery.workshop._packages import discover_packages
+
+    _member(tmp_path, "probe")
+    member = tmp_path / "packages" / "probe"
+    with (member / "pyproject.toml").open("a") as handle:
+        handle.write(
+            'requires-python = ">=3.11"\n'
+            "[build-system]\n"
+            'requires = ["uv_build>=0.7"]\n'
+            'build-backend = "uv_build"\n'
+        )
+    module = member / "src" / "livery_probe" / "__init__.py"
+    module.parent.mkdir(parents=True)
+    (package,) = discover_packages(tmp_path)
+    served = tmp_path / "served"
+    install = toolroom.uv.opts(
+        env={**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")},
+        recorded=False,
+    )
+    names: list[str] = []
+    for answer in ("first", "second"):
+        module.write_text(f'ANSWER = "{answer}"\n')
+        shutil.rmtree(served, ignore_errors=True)
+        names.append(_e2e.build_content_named(package, tmp_path, served).name)
+        site = tmp_path / f"site-{answer}"
+        install(
+            "pip",
+            "install",
+            "--python",
+            sys.executable,
+            "--target",
+            str(site),
+            "--no-index",
+            "--find-links",
+            str(served),
+            "livery-probe",
+        )
+        installed = (site / "livery_probe" / "__init__.py").read_text()
+        assert installed == f'ANSWER = "{answer}"\n'
+    assert names[0] != names[1]
+    named = r"livery_probe-0\.1\.0\+checkout\.[0-9a-f]{12}-py3-none-any\.whl"
+    assert all(re.fullmatch(named, name) for name in names)
+    # The member's own files keep their version.
+    assert 'version = "0.1.0"\n' in (member / "pyproject.toml").read_text()
+
+
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
     for member in MEMBERS:
         _wheel(tmp_path, member, "0.2.0.dev96+feat.289.loop.9f8f0d0.20260907", age=60)
