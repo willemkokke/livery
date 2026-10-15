@@ -575,10 +575,9 @@ def _add_extension(root: Path, extension: str) -> None:
         print(f"  extension: packages/{extension} already scaffolded")
         return
     import_path = render_member(root, extension, "workshop-extension")
-    # Wired in the birth's own process, whose mount predates the member.
-    # The member holds python alone, and mounting python changes none of
-    # the files the wiring writes; a template that holds more needs the
-    # fresh runner new.package wires its member with.
+    # Wired in the birth's own process: the template needs python, which
+    # the root's list holds, so this process mounted it already, and a
+    # list without python refused the render above.
     wire_member(root, extension)
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")

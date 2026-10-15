@@ -1848,6 +1848,41 @@ def write_extensions(root: Path) -> list[str]:
     return written
 
 
+def list_in_root(root: Path, names: Iterable[str]) -> list[str]:
+    """Add *names* to *root*'s ``[workspace] extensions``, as its canonical list.
+
+    Each name the list does not hold yet joins it as an entry of its
+    own, and the list is then written in its canonical form, as the
+    gate's ``--fix`` writes it (`write_extensions`): each entry keeps
+    its comments, and an entry another listed extension requires
+    leaves the list. A list naming an extension no installed
+    distribution declares keeps the order it is given, and the gate
+    names it. Returns what `write_extensions` returns: a line for each
+    list it wrote.
+
+    Raises:
+        Failed: when the contract has no ``[workspace] extensions``
+            array this reads.
+    """
+    from livery.footman import fail
+
+    contract = root / "workshop.toml"
+    text = contract.read_text(encoding="utf-8")
+    array = _read_array(text, "workspace")
+    if array is None:
+        fail(f"{contract}: no [workspace] extensions array to add to")
+    held = set(workspace_names(root))
+    added = [_Entry(f'"{name}"') for name in dict.fromkeys(names) if name not in held]
+    if added:
+        contract.write_text(
+            text[: array.start]
+            + _array_text(array, [*array.entries, *added])
+            + text[array.end :],
+            encoding="utf-8",
+        )
+    return write_extensions(root)
+
+
 @dataclass(frozen=True)
 class _Entry:
     """One entry of an ``extensions`` array as written, with its comments.

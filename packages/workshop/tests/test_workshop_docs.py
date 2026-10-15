@@ -1091,7 +1091,7 @@ def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
     # Every package's birth writes package-base first, the one home of
     # the docs seeds; a copy in a template would shadow the base's and
     # rot separately.
-    from livery.workshop._seeds import installed_templates, template_files
+    from livery.workshop._seeds import available_templates, template_files
 
     seeds = (
         Path(__file__).resolve().parents[1]
@@ -1105,7 +1105,7 @@ def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
     assert (base / "nav.toml").is_file()
     assert (base / "index.md.jinja").is_file()
     assert sorted(tree.name for tree in seeds.iterdir()) == ["package-base", "project"]
-    for template in installed_templates().values():
+    for template in available_templates().values():
         assert not (template_files(template) / "docs").exists(), template.name
 
 

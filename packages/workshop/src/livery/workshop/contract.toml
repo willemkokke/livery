@@ -853,7 +853,7 @@ doc = "a shipped file of the base or of an extension this one requires, <owner>:
 
 [contract.extension.templates]
 types = ["table"]
-doc = "the templates the extension declares, each one fm new.package <name> <template> creates a package from, read whether a workspace lists the extension or not"
+doc = "the templates the extension declares, each one fm new.package <name> <template> creates a package from, offered while the workspace's installed set holds the extension"
 
 # A template, by the name fm new.package takes: lower-case letters,
 # digits and hyphens. Its files live under content/templates/<name>/

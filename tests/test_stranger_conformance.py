@@ -289,6 +289,36 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
     # git-cliff attempt the author lookup instead of its offline arm.
     for variable in ("FORGE_TOKEN", "GITEA_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"):
         env.pop(variable, None)
+    # The root lists what the two templates need, and the sync installs
+    # it: a creation installs nothing. nanobind requires python, cpp and
+    # conan, and cmake builds the library.
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace(
+            "extensions = []", 'extensions = ["cmake", "nanobind"]', 1
+        )
+    )
+    synced = subprocess.run(
+        ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
+    )
+    assert synced.returncode == 0, f"{synced.stdout}\n{synced.stderr}"
+    # Listed before any member of their kind exists, as a person lists
+    # them before the first C++ package: CI's setup takes the locks the
+    # sync wrote (`sync --locked`), and the gate, the rendered workflows
+    # among what it judges, is green with nothing for cmake to build.
+    for command in (
+        ["uv", "run", "fm", "sync", "--locked"],
+        ["uv", "run", "fm", "check"],
+    ):
+        done = subprocess.run(
+            command, cwd=root, env=env, capture_output=True, text=True
+        )
+        assert done.returncode == 0, (
+            f"{' '.join(command)} exited {done.returncode}:"
+            f"\n{done.stdout}\n{done.stderr}"
+        )
+    assert (root / "conanws.yml").is_file()
+    assert not (root / "packages").exists()
     for name, template in (
         ("geometry", "cpp-library"),
         ("ext", "nanobind-module"),

@@ -126,11 +126,26 @@ def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:
     return root
 
 
+def _lists_also(root: Path, *names: str) -> None:
+    """Add *names* to *root*'s list, written as its canonical list."""
+    from livery.workshop._extensions import list_in_root
+
+    list_in_root(root, names)
+
+
 def _born(root: Path, *templates: str) -> dict[str, Package]:
     """Birth one member of each of *templates* in *root*, as ``fm new.package`` does.
 
-    The members discovered, each by its template.
+    The root lists what each template needs first, as a person does
+    before the creation: a creation installs nothing. The members
+    discovered, each by its template.
     """
+    from livery.workshop._seeds import chain_needs, template_chain
+
+    _lists_also(
+        root,
+        *(needed for name in templates for needed in chain_needs(template_chain(name))),
+    )
     for template in templates:
         render_member(root, TREES[template], template)
     found = {package.member: package for package in discover_packages(root)}
@@ -390,6 +405,35 @@ def test_each_seed_s_member_requires_these_tools(
 #: composing workspace's list and python, as their canonical list.
 PYTHON_ROOT = tuple(sorted((*STACK, "python")))
 
+#: The root's set once a C++ library is born in a workspace listing
+#: `STACK`: the root lists what cpp-library needs first, cmake and
+#: conan, and conan requires cpp. No python among it.
+NATIVE_ROOT_SET = (
+    "basedpyright",
+    "clang-format",
+    "clang-tidy",
+    "cmake",
+    "cpp",
+    "conan",
+    "mypy",
+    "pytest",
+    "ruff",
+)
+
+#: The root's set there when the root lists `PYTHON_ROOT`.
+PYTHON_ROOT_SET = (
+    "basedpyright",
+    "clang-format",
+    "clang-tidy",
+    "cmake",
+    "cpp",
+    "conan",
+    "mypy",
+    "pytest",
+    "python",
+    "ruff",
+)
+
 #: What each python step reads when a change touches the workspace's own
 #: tests alone, in a workspace whose one member is a C++ library and
 #: whose root lists python.
@@ -487,8 +531,11 @@ def test_a_root_listing_no_python_runs_no_suite_of_its_own_tests_and_says_why(
     root = _workspace(tmp_path / "acme", STACK)
     lib, unit = _with_a_library(root)
     # The root's own tests hold the root's set, which holds no python.
-    assert extension_set(unit) == STACK
+    assert extension_set(unit) == NATIVE_ROOT_SET
     assert not holds_runtime_language(unit)
+    # The set holds cmake, which the library's template needs, and
+    # cmake's ctest step runs over one member at a time: never over the
+    # root's own tests.
     assert tested((lib, unit)) == (lib,)
     capsys.readouterr()
     step_for("test.pytest").run(PhaseContext(root=root, packages=(lib,)))
@@ -498,8 +545,15 @@ def test_a_root_listing_no_python_runs_no_suite_of_its_own_tests_and_says_why(
         " [workspace] extensions to run them)\n"
     ) in out
     assert "  test.pytest: no python package and no workspace tests to run\n" in out
-    # A change to the root's tests alone reaches no python step.
-    assert _python_reads(root, lib, unit) == dict.fromkeys(ROOT_TESTS_READ, ())
+    # A change to the root's tests alone reaches no step that names python
+    # alone. ruff names conan too, for a recipe, and the root's set holds
+    # conan, which the library's template needs, so ruff reads them.
+    assert _python_reads(root, lib, unit) == {
+        "format.ruff": ("tests",),
+        "lint.ruff": ("tests",),
+        "typecheck.basedpyright": (),
+        "typecheck.mypy": (),
+    }
 
 
 def test_the_tool_profile_holds_only_what_the_lists_hold(tmp_path: Path) -> None:
@@ -526,7 +580,7 @@ def test_the_workspace_unit_holds_the_root_lists_set(tmp_path: Path) -> None:
     # The unit lists nothing and holds the root's set, python among it,
     # while the library does not.
     assert unit.extensions == ()
-    assert extension_set(unit) == PYTHON_ROOT
+    assert extension_set(unit) == PYTHON_ROOT_SET
     assert [p.path for p in (lib, unit) if holds_runtime_language(p)] == ["tests"]
     # The test phase runs the root's suite beside the library's.
     assert [package.path for package in tested((lib, unit))] == [
@@ -631,6 +685,7 @@ def test_the_sibling_requirement_lands_in_its_ecosystem_s_manifest(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path / "acme")
+    _lists_also(root, "cmake", "nanobind")
     for name, template in (
         ("echo", "python-library"),
         ("core", "python-library"),

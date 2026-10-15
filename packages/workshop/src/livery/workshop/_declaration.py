@@ -41,8 +41,9 @@ A ``[templates.<name>]`` table declares a template ``fm new.package``
 creates a package from: its ``doc``, the ``extensions`` such a package
 lists, and ``extends``, the template whose files come first
 (``DeclaredTemplate``). The base declares its own in the same grammar,
-and a ``[for.<target>]`` table declares none: a template is read while
-it is installed, listed or not.
+and a ``[for.<target>]`` table declares none: a template names the
+extensions it needs in its own ``extensions``, and a workspace offers
+it while its installed set holds the extension that declares it.
 
 ``[extension] dormant-until`` names, as a verb, what another extension
 does for this one by declaring a ``[for.<this>]`` table: until a listed

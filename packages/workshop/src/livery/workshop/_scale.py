@@ -198,15 +198,29 @@ def strip_own_suites(root: Path) -> list[str]:
 def generate(root: Path, counts: dict[str, int]) -> list[tuple[str, str]]:
     """Add the generated members to the workspace at *root*; the members.
 
-    Each member is rendered and added to the roster, then the project
-    is rendered once and the result committed. Locking and installing
-    are left to the first `fm sync`.
+    The root's list takes in what the members' templates need first,
+    written as its canonical list, since a creation installs nothing
+    and judges the list: this checkout's environment, which runs the
+    creation, installs each of them. Each member is rendered and added
+    to the roster, then the
+    project is rendered once and the result committed. Locking and
+    installing are left to the first `fm sync`.
     """
+    from livery.workshop._extensions import list_in_root
     from livery.workshop._packages import declare_edge, discover_packages
+    from livery.workshop._seeds import chain_needs, template_chain
     from livery.workshop._templates import apply_project, render_member
 
     members = member_names(counts)
     python = [name for name, template in members if template == "python-library"]
+    list_in_root(
+        root,
+        (
+            needed
+            for template in dict.fromkeys(template for _name, template in members)
+            for needed in chain_needs(template_chain(template))
+        ),
+    )
     for name, template in members:
         render_member(root, name, template)
     by_path = {package.path: package for package in discover_packages(root)}

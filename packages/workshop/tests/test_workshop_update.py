@@ -601,6 +601,12 @@ def test_new_package_renders_and_wires(
     wired_here(monkeypatch, root)
     with pytest.raises(_FAILURES):
         new_package("Bad Name", "python-library")
+    # The template needs python, which the root lists before the
+    # creation: a creation installs nothing.
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace("extensions = []", 'extensions = ["python"]')
+    )
     new_package("scratch", "python-library")
     assert (root / "packages" / "scratch" / "workshop.toml").is_file()
     assert "livery-scratch" in (root / "pyproject.toml").read_text()

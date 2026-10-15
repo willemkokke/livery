@@ -769,8 +769,12 @@ def test_no_runtime_string_spells_the_default_brand() -> None:
     assert offenders == [], offenders
 
 
-def _wheel_instance(tmp_path: Path) -> Path:
-    """A workspace that takes everything from the installed extensions."""
+def _wheel_instance(tmp_path: Path, listed: str = "python") -> Path:
+    """A workspace that takes everything from the installed extensions.
+
+    Its root lists *listed*, which a template it creates a package from
+    needs.
+    """
     root = tmp_path / "instance"
     root.mkdir()
     (root / "workshop.toml").write_text(
@@ -779,7 +783,7 @@ def _wheel_instance(tmp_path: Path) -> Path:
         'namespace = "acme"\n'
         'authors = [{ name = "A", email = "a@example.com" }]\n'
         'copyright-year = "2026"\n'
-        "extensions = []\n"
+        f'extensions = ["{listed}"]\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
@@ -853,18 +857,18 @@ def test_new_package_writes_the_installed_seeds(
 def test_a_member_is_wired_by_a_runner_started_after_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A process mounts what the packages hold when it starts, and a
-    # nanobind member holds nanobind, whose mount adds the release's
-    # wheels job. new.package seeds the member in a process that
-    # mounted without it, and a runner started after it wires it: the
-    # next command renders what the wiring wrote.
+    # The root lists nanobind before the member is created, as a
+    # creation installs nothing, so the process that creates it mounted
+    # nanobind, whose mount adds the release's wheels job. A runner
+    # started after the member wires it, and the next command renders
+    # what the wiring wrote.
     from livery.workshop import _steps
     from livery.workshop._shipped_files import shipped_drift
     from livery.workshop._templates import new_package
     from workshop_docs_declared import jobs_restored
     from workshop_members import mounted_now, wired_here
 
-    root = _wheel_instance(tmp_path)
+    root = _wheel_instance(tmp_path, "nanobind")
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
@@ -876,7 +880,7 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
     state = _steps.snapshot()
     try:
         with jobs_restored():
-            assert "nanobind" not in mounted_now(root)
+            assert "nanobind" in mounted_now(root)
             handed = wired_here(monkeypatch, root, starting=lambda: mounted_now(root))
             new_package("ext", "nanobind-module")
             # The next command mounts nanobind too, and nothing drifts.

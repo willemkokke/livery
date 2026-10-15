@@ -109,6 +109,29 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     scripts = "Scripts" if sys.platform == "win32" else "bin"
     fm = str(project / ".venv" / scripts / "fm")
     _run([fm, "new.package", "thing", "python-library"], project, env)
+    # The stock list holds python and neither cmake nor conan, which
+    # cpp-library needs: a creation installs nothing, so it refuses
+    # before it writes anything, naming both and what to do.
+    refused = subprocess.run(
+        [fm, "new.package", "geometry", "cpp-library"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode != 0, said
+    assert "the template cpp-library needs cmake (" in said, said
+    assert (
+        "which the workspace's lists do not hold: list them in [workspace]"
+        " extensions and run `fm sync`, then create the package again"
+    ) in said, said
+    assert not (project / "packages" / "geometry").exists()
+    # Listed, as the refusal says, and installed by the sync.
+    from livery.workshop._extensions import list_in_root
+
+    list_in_root(project, ["cmake", "conan"])
+    _run([fm, "sync"], project, env)
     _run([fm, "new.package", "geometry", "cpp-library"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.

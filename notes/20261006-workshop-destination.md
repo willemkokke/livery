@@ -1295,7 +1295,7 @@ The parts, each mergeable alone, in this order:
   replaces `--stack`, which goes.
 - N3 (built, #1679): the workspace's own tests hold the root list's set, and the
   stock list of `fm new.project` names python.
-- N4: templates follow the installed set.
+- N4 (built, #1681): templates follow the installed set.
 - Then step 8's P1b, cmake's move (#1667), rebased.
 - N5: a package's list composes. A package that lists an extension
   that composes nothing in a package refuses.
@@ -3384,6 +3384,28 @@ neither needs nor rules out).
   for them. livery's root and the stock list of `fm new.project` name
   `python`. `pytest.toml`'s `testpaths` still names `tests` whenever
   the directory exists: the base renders it from the directory alone.
+
+- 2026-10-15, one kind's N4 (#1681), built: `fm new.package` offers
+  the templates of the base and of the installed set's extensions.
+  Before anything is written, a template whose chain (each template's
+  `extensions` and each one's declarer) names an extension outside the
+  installed set refuses, naming each with its distribution and saying
+  to list it in `[workspace] extensions` and run `fm sync`; one that is
+  listed and not yet installed refuses naming `fm sync`. A creation
+  installs nothing. The loop's stack, an extension pass, `fm ci.scale`
+  and the armed tests list what their members' templates need before
+  they create them, so `fm ci.e2e --extension=<name>` births a project
+  listing the extension and those needs. This also supersedes the step
+  8 entry above that had `fm new.package --extension` list, sync and
+  render.
+- 2026-10-15, N4's loop (#1681): the plain pass's root now lists cmake,
+  so the `host-allowed` entry the loop's wiring adds after the birth
+  moves the cmake and ninja entries of `toolroom.lock`, and CI's
+  `sync --locked` refused the birth's lock. The wiring now runs the
+  loop's `fm toolroom.lock` after its contract edits and before its
+  push, which skips `fm submit`'s lock check. The fault was the loop's:
+  a root listing cmake and nanobind before any member of their kind is
+  green, which the armed stranger rehearsal now gates.
 
 ## Open
 
