@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -580,3 +583,331 @@ def test_the_uv_sync_step_reads_the_entry_points_again_after_the_install(
     )
     _sync._uv_sync(tmp_path, ("--frozen",))  # pyright: ignore[reportPrivateUsage]
     assert order == ["uv sync --frozen", "rescan"]
+
+
+# An install that moves what a mounted extension ships. The process
+# found the extension's directory as it mounted it, and the `.pth` file
+# an editable install writes is read only when an interpreter starts, so
+# after the uv step this process cannot read a moved extension where it
+# is now. The fallbacks first: a move, a removal, a move between two
+# editable trees that both stay, and a handoff that cannot start. Then
+# the installs that leave every extension where it was, which take the
+# sync's own path.
+
+_MOVING = "relocating"
+_MOVING_PACKAGE = "relocating_ext"
+#: The package of a stand-in for the workshop's own distribution.
+_BASE_PACKAGE = "relocating_workshop"
+
+
+class _Handed(Exception):
+    """A handoff that started: the process ends there, as an exec ends it."""
+
+
+def _handoffs(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Stand in for the handoff to a fresh process; the causes it was asked for."""
+    from livery.workshop import _reconcile
+
+    causes: list[str] = []
+
+    def reexec(root: Path, cause: str) -> None:
+        del root
+        causes.append(cause)
+        raise _Handed(cause)
+
+    monkeypatch.setattr(_reconcile, "_reexec", reexec)
+    return causes
+
+
+def _moving_package(directory: Path, label: str, name: str = _MOVING_PACKAGE) -> None:
+    """Write the package *name* into *directory*: a declaration and one file."""
+    package = directory / name
+    (package / "content" / "root").mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "extension.toml").write_text("[extension]\napi-version = 1\n")
+    (package / "content" / "root" / "relocating.txt").write_text(
+        f"shipped from {label}\n"
+    )
+
+
+def _install(
+    site: Path,
+    source: Path | None = None,
+    *,
+    version: str = "0.1",
+    name: str = _MOVING_PACKAGE,
+) -> None:
+    """Install the distribution of package *name* into *site*, as an installer does.
+
+    Without *source*, a wheel: the package in *site*. With *source*, an
+    editable install of the project there: the package under its
+    ``src``, a ``.pth`` file naming that directory, and the origin in
+    ``direct_url.json``. The extension's distribution declares it in
+    the extensions' entry point group; the workshop's stand-in declares
+    nothing.
+    """
+    info = site / f"{name}-{version}.dist-info"
+    info.mkdir(parents=True)
+    distribution = name.replace("_", "-")
+    (info / "METADATA").write_text(
+        f"Metadata-Version: 2.4\nName: {distribution}\nVersion: {version}\n"
+    )
+    if name == _MOVING_PACKAGE:
+        (info / "entry_points.txt").write_text(
+            f"[workshop.extensions]\n{_MOVING} = {_MOVING_PACKAGE}\n"
+        )
+    if source is None:
+        if not (site / name).is_dir():
+            _moving_package(site, f"the wheel {version}", name)
+        return
+    if not (source / "src" / name).is_dir():
+        _moving_package(source / "src", source.name, name)
+    (site / f"_{name}.pth").write_text(f"{source / 'src'}\n")
+    (info / "direct_url.json").write_text(
+        json.dumps({"url": source.as_uri(), "dir_info": {"editable": True}})
+    )
+
+
+def _uninstall(site: Path, name: str = _MOVING_PACKAGE) -> None:
+    """Remove what an install of *name* put in *site*; an editable tree stays."""
+    shutil.rmtree(site / name, ignore_errors=True)
+    for info in site.glob(f"{name}-*.dist-info"):
+        shutil.rmtree(info)
+    (site / f"_{name}.pth").unlink(missing_ok=True)
+
+
+def _moving_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *paths: Path
+) -> Path:
+    """A workspace listing the extension, run by a process whose path holds *paths*.
+
+    The process scans the installed distributions afresh and reads the
+    extension where it finds it, as its mount does. Returns the root.
+    """
+    from livery.footman import _entries  # pyright: ignore[reportPrivateUsage]
+    from livery.workshop import _extensions
+    from workshop_extension_fakes import read_afresh
+
+    for path in paths:
+        monkeypatch.syspath_prepend(str(path))
+    monkeypatch.setattr(_entries, "_SCAN", None)
+    read_afresh(monkeypatch)
+    root = tmp_path / "work"
+    root.mkdir()
+    (root / "workshop.toml").write_text(f'[workspace]\nextensions = ["{_MOVING}"]\n')
+    monkeypatch.chdir(root)
+    assert _extensions.declaration(_MOVING) is not None
+    return root
+
+
+def _sync_installing(
+    monkeypatch: pytest.MonkeyPatch, install: Callable[[], object]
+) -> list[str]:
+    """Stand in for a sync's steps but two; the steps run, in order.
+
+    The uv step runs *install*, and the delivery after it is the real
+    one, which reads every extension's declaration and content.
+    """
+    from livery.workshop._shipped_files import deliver as delivered
+
+    steps = _recorded_steps(monkeypatch)
+
+    def run_uv(*args: str, root: Path) -> None:
+        del args, root
+        steps.append("uv")
+        install()
+
+    def deliver(root: Path, *, local_only: bool = False) -> list[str]:
+        steps.append("deliver")
+        return delivered(root, local_only=local_only)
+
+    monkeypatch.setattr("livery.workshop._uv.run_uv", run_uv)
+    monkeypatch.setattr("livery.workshop._shipped_files.deliver", deliver)
+    return steps
+
+
+def _moved_and_reinstalled(site: Path, source: Path | None) -> Callable[[], None]:
+    """The install that takes the extension out of *site*, then installs *source*."""
+
+    def install() -> None:
+        _uninstall(site)
+        _install(site, source)
+
+    return install
+
+
+def test_an_install_that_moves_a_mounted_extension_hands_the_sync_to_a_fresh_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _reconcile, _sync
+
+    # A wheel, as an install by name from an index lays it out; the lock
+    # names an editable member at another path, whose `src` joins no path
+    # of this process.
+    site = tmp_path / "site"
+    _install(site)
+    root = _moving_workspace(tmp_path, monkeypatch, site)
+    steps = _sync_installing(
+        monkeypatch, _moved_and_reinstalled(site, tmp_path / "member")
+    )
+    handed = _handoffs(monkeypatch)
+    with pytest.raises(_Handed):
+        _sync.sync_checkout(root)
+    assert handed == [_reconcile.RELOCATED]
+    assert "deliver" not in steps
+    assert (
+        "  the install moved or removed relocating; the sync continues in a fresh"
+        " process, which mounts what is installed now" in capsys.readouterr().out
+    )
+
+
+def test_an_install_that_removes_a_mounted_extension_hands_the_sync_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _reconcile, _sync
+
+    # The fresh process mounts without it, and its own mount names it.
+    site = tmp_path / "site"
+    _install(site)
+    root = _moving_workspace(tmp_path, monkeypatch, site)
+    steps = _sync_installing(monkeypatch, lambda: _uninstall(site))
+    handed = _handoffs(monkeypatch)
+    with pytest.raises(_Handed):
+        _sync.sync_checkout(root)
+    assert handed == [_reconcile.RELOCATED]
+    assert "deliver" not in steps
+
+
+def test_an_install_from_another_tree_hands_the_sync_over_though_the_old_one_stays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _reconcile, _sync
+
+    # An editable install of one tree, replaced by an editable install of
+    # another: the first tree is still there to read, and is no longer
+    # what the environment installs.
+    site = tmp_path / "site"
+    first = tmp_path / "first"
+    _install(site, first)
+    root = _moving_workspace(tmp_path, monkeypatch, site, first / "src")
+    steps = _sync_installing(
+        monkeypatch, _moved_and_reinstalled(site, tmp_path / "second")
+    )
+    handed = _handoffs(monkeypatch)
+    with pytest.raises(_Handed):
+        _sync.sync_checkout(root)
+    assert handed == [_reconcile.RELOCATED]
+    assert "deliver" not in steps
+    assert not (root / "relocating.txt").exists()
+
+
+@pytest.mark.parametrize(
+    "editable", [True, False], ids=["replaced-by-an-editable-tree", "removed"]
+)
+def test_an_install_that_moves_the_workshop_hands_the_sync_over(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    editable: bool,
+) -> None:
+    from livery.workshop import _extensions, _reconcile, _sync
+
+    # The base's own files, its contract, its seeds and its fragments,
+    # are read from the directory this process imported it from. Its
+    # wheel is replaced by an editable tree at another path, or removed;
+    # the extension stays where it was.
+    site = tmp_path / "site"
+    _install(site, name=_BASE_PACKAGE)
+    _install(site)
+    root = _moving_workspace(tmp_path, monkeypatch, site)
+    monkeypatch.setattr(_extensions, "BASE_DISTRIBUTION", "relocating-workshop")
+    monkeypatch.setattr(_extensions, "base_directory", lambda: site / _BASE_PACKAGE)
+
+    def install() -> None:
+        _uninstall(site, _BASE_PACKAGE)
+        if editable:
+            _install(site, tmp_path / "workshop", name=_BASE_PACKAGE)
+
+    steps = _sync_installing(monkeypatch, install)
+    handed = _handoffs(monkeypatch)
+    with pytest.raises(_Handed):
+        _sync.sync_checkout(root)
+    assert handed == [_reconcile.RELOCATED]
+    assert "deliver" not in steps
+    assert (
+        "  the install moved or removed livery.workshop; the sync continues in a"
+        " fresh process, which mounts what is installed now" in capsys.readouterr().out
+    )
+
+
+def test_a_handoff_that_cannot_start_refuses_before_the_moved_extension_is_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.footman import Failed
+    from livery.workshop import _reconcile, _sync
+
+    # The command re-ran once for this cause already: an install that
+    # never settles ends in a refusal, never in a third process.
+    site = tmp_path / "site"
+    _install(site)
+    root = _moving_workspace(tmp_path, monkeypatch, site)
+    steps = _sync_installing(
+        monkeypatch, _moved_and_reinstalled(site, tmp_path / "member")
+    )
+    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", _reconcile.RELOCATED)
+    with pytest.raises(Failed) as refused:
+        _sync.sync_checkout(root)
+    assert "deliver" not in steps
+    assert str(refused.value).startswith(
+        "the install moved or removed relocating, and this process cannot mount"
+        " what is installed now: run `"
+    )
+    assert str(refused.value).endswith(
+        " sync` again. Nothing was delivered after the install"
+    )
+    assert (
+        "re-ran once because the install moved or removed a mounted extension"
+        in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize(
+    ("before", "reinstalled", "delivered"),
+    [
+        # Nothing installed.
+        ("wheel", False, "the wheel 0.1"),
+        # A newer wheel from the index, in the same directory.
+        ("wheel", True, "the wheel 0.2"),
+        # The member stamped to another version: its metadata moves to a
+        # new dist-info directory, and its package stays where it was.
+        ("member", True, "member"),
+    ],
+    ids=["nothing", "wheel-upgraded-in-place", "member-stamped"],
+)
+def test_an_install_that_leaves_every_extension_where_it_was_hands_nothing_over(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    before: str,
+    reinstalled: bool,
+    delivered: str,
+) -> None:
+    from livery.workshop import _sync
+
+    site = tmp_path / "site"
+    member = tmp_path / "member"
+    source = member if before == "member" else None
+    _install(site, source)
+    paths = (site, member / "src") if source is not None else (site,)
+    root = _moving_workspace(tmp_path, monkeypatch, *paths)
+
+    def install() -> None:
+        if reinstalled:
+            _uninstall(site)
+            _install(site, source, version="0.2")
+
+    steps = _sync_installing(monkeypatch, install)
+    handed = _handoffs(monkeypatch)
+    assert _sync.sync_checkout(root) is True
+    assert handed == []
+    assert steps.index("uv") < steps.index("deliver")
+    assert (root / "relocating.txt").read_text() == f"shipped from {delivered}\n"

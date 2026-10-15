@@ -44,6 +44,9 @@ if TYPE_CHECKING:
 #: plugin module is the base arriving.
 SELF = "livery.workshop"
 
+#: The distribution that ships the base.
+BASE_DISTRIBUTION = SELF.replace(".", "-")
+
 #: The entry point group an extension declares itself in: its name
 #: maps to the package that ships its declaration file.
 GROUP = "workshop.extensions"
@@ -526,13 +529,22 @@ def extension_content(extension: str) -> Path | None:
     no content.
     """
     if extension == SELF:
-        content = Path(__file__).resolve().parent / "content"
+        content = base_directory() / "content"
         return content if content.is_dir() else None
     found = declaration(extension)
     if found is None:
         return None
     content = found.path.resolve().parent / "content"
     return content if content.is_dir() else None
+
+
+def base_directory() -> Path:
+    """The directory this process imported the base from.
+
+    The base's own files, its ``content/`` among them, are read from
+    here.
+    """
+    return Path(__file__).resolve().parent
 
 
 def shipped_content(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
@@ -794,6 +806,60 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
     rescan_entry_points()
     declared = _declared()
     return tuple(name for name in names if name in declared)
+
+
+def install_places(names: Iterable[str]) -> dict[str, tuple[str, str, str]]:
+    """Where each of *names*, the base or an extension, is installed, as read here.
+
+    Each place is three parts: the package the extension's entry point
+    names, the declaration file this process reads for it, and the
+    origin the installer recorded in the distribution's
+    ``direct_url.json``, which is empty for a distribution from an
+    index. The file is empty when the directory this process found the
+    package in no longer holds one, and every part is empty for an
+    extension no installed distribution declares. The base, named by
+    ``SELF``, has the same three parts: its package, the directory this
+    process imported it from (empty once that directory holds no
+    ``__init__.py``), and the origin of ``BASE_DISTRIBUTION``; every
+    part is empty when no distribution of that name is installed.
+
+    Read before an install and again after it, a place that differs
+    names an extension this process cannot read where the environment
+    installs it now. The directory a package was found in is kept for
+    the process, and an editable install's path joins ``sys.path`` only
+    when a process starts. The origin tells an editable install's tree
+    that is still on disk from the tree the environment installs.
+    Imports nothing.
+    """
+    declared = _declared()
+    places: dict[str, tuple[str, str, str]] = {}
+    for name in names:
+        if name == SELF:
+            places[name] = _base_place()
+            continue
+        entry = declared.get(name)
+        if entry is None:
+            places[name] = ("", "", "")
+            continue
+        package = entry.value.partition(":")[0]
+        found = declaration_file(package)
+        dist = entry.dist
+        origin = dist.read_text("direct_url.json") if dist is not None else None
+        places[name] = (package, str(found or ""), origin or "")
+    return places
+
+
+def _base_place() -> tuple[str, str, str]:
+    """Where the base is installed, as this process reads it; see `install_places`."""
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        dist = distribution(BASE_DISTRIBUTION)
+    except PackageNotFoundError:
+        return ("", "", "")
+    directory = base_directory()
+    found = str(directory) if (directory / "__init__.py").is_file() else ""
+    return (SELF, found, dist.read_text("direct_url.json") or "")
 
 
 def _note(text: str) -> None:

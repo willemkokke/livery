@@ -42,12 +42,14 @@ _GUARD = "WORKSHOP_RECONCILE_REEXEC"
 MOVED = "moved"
 SYNCED = "synced"
 INSTALLED = "installed"
+RELOCATED = "relocated"
 
 #: Each cause as the guard's note names it.
 _REASONS = {
     MOVED: "the checkout moved",
     SYNCED: "the environment synced",
     INSTALLED: "listed extensions were installed",
+    RELOCATED: "the install moved or removed a mounted extension",
 }
 
 #: Set while the hook's sync runs, so the processes it starts sync
