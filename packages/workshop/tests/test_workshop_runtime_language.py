@@ -36,11 +36,11 @@ def _member(root: Path, name: str, contract: str, *files: str) -> None:
 def test_a_member_holding_the_runtime_s_language_without_a_pyproject_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A package-level extension that cannot work without python.
+    # An extension that cannot work without python.
     fake_extensions(
         tmp_path,
         monkeypatch,
-        binding='[extension]\nlevels = ["package"]\nrequires = ["python"]\n',
+        binding='[extension]\nrequires = ["python"]\n',
     )
     root = tmp_path / "acme"
     # No member here has a pyproject.toml. Two hold the runtime's

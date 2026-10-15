@@ -148,8 +148,8 @@ def fragment_data(data: dict[str, Any]) -> dict[str, Any]:
     The roster is split the way the project file splits it, ``py`` for
     the members with a dev entry and ``native`` for the rest, and the
     per-file ignores the claims render are added for the sets of
-    package-level extensions the members hold, each entry's
-    ``extensions``. A roster with no member renders the ignores of the
+    extensions the members hold, each entry's ``extensions``. A roster
+    with no member renders the ignores of the
     workspace's own unit alone. The fragment engine reads the step
     records' fragments through this.
     """

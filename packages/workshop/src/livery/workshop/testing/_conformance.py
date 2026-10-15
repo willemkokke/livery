@@ -51,8 +51,8 @@ class Subject:
         extension: The extension's package, ``acme.extension``: where its
             ``extension.toml`` sits, which the kit reads as the mount
             does.
-        sets: The sets of package-level extensions the kit probes, each
-            as the list a package writes for it, ``("acme",)``. The
+        sets: The sets of extensions the kit probes, each as the list a
+            package writes for it, ``("acme",)``. The
             category-table clause judges a package listing each, and the
             gate's walk runs over a workspace holding one such package
             for each.
@@ -1154,19 +1154,17 @@ def builtin_subject() -> Subject:
     """The workshop's own steps as a subject, for its own suite.
 
     Its sets are the empty one, whose package the base's table answers
-    for alone, and each installed package-level extension's alone.
+    for alone, and, for each installed extension that composes
+    something in a package
+    ([livery.workshop._extensions.composes_per_package][]), the set of
+    that extension alone.
     """
-    from livery.workshop._composition import package_level
-    from livery.workshop._extensions import installed_declaration, installed_extensions
+    from livery.workshop._extensions import composes_per_package, installed_extensions
 
-    package_level_names = [
-        name
-        for name in installed_extensions()
-        if package_level(name, installed_declaration)
-    ]
+    composing = [name for name in installed_extensions() if composes_per_package(name)]
     return Subject(
         BASE_EXTENSION,
-        sets=((), *((name,) for name in package_level_names)),
+        sets=((), *((name,) for name in composing)),
         steps=tuple(
             record
             for record in steps_by_name().values()

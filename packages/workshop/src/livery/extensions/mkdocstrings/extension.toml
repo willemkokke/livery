@@ -6,8 +6,6 @@
 
 [extension]
 api-version = 1
-# Listed in [workspace] extensions, after docs.
-levels = ["workspace"]
 # Its pages and its tables are the docs extension's site's.
 requires = ["docs"]
 

@@ -307,39 +307,6 @@ def test_the_sync_phase_runs_after_the_tools_and_before_uv(
     assert "the default profile was detected again" in capsys.readouterr().out
 
 
-def test_a_sync_refuses_contracts_writing_kind_before_it_writes_anything(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Every contract writing kind is named, and the tree is left as it was."""
-    from livery.footman import Failed
-    from livery.workshop import _sync
-
-    root = _workspace(tmp_path)
-    for name, contract in (
-        ("core", 'kind = "python"\nname = "acme-core"\n'),
-        ("lib", 'kind = "cpp-conan"\nname = "acme-lib"\n'),
-    ):
-        (root / "packages" / name).mkdir(parents=True)
-        (root / "packages" / name / "workshop.toml").write_text(contract)
-    (root / "packages" / "core" / "pyproject.toml").write_text(
-        '[project]\nname = "acme-core"\n'
-    )
-    before = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
-    monkeypatch.chdir(root)
-    with pytest.raises(Failed) as refused:
-        _sync.sync()
-    assert str(refused.value).splitlines()[1:] == [
-        '  packages/core/workshop.toml: kind = "python" is not a key: a package'
-        ' lists the extensions it is made of; write extensions = ["python"] in'
-        " its place",
-        '  packages/lib/workshop.toml: kind = "cpp-conan" is not a key: a package'
-        ' lists the extensions it is made of; write extensions = ["cmake",'
-        ' "conan"] in its place',
-    ]
-    after = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
-    assert after == before
-
-
 def test_the_sync_phase_runs_the_listed_extensions_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -351,9 +318,8 @@ def test_the_sync_phase_runs_the_listed_extensions_alone(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        prof='[extension]\nlevels = ["package"]\n\n[phases.sync.prof]\n'
-        'main = "{package}._steps:main"\n',
-        over='[extension]\nlevels = ["package"]\nrequires = ["acme.prof"]\n',
+        prof='[extension]\n\n[phases.sync.prof]\nmain = "{package}._steps:main"\n',
+        over='[extension]\nrequires = ["acme.prof"]\n',
     )
     fake_steps(
         tmp_path,

@@ -123,18 +123,6 @@ def _leg(
 # --- refusals first ---------------------------------------------------------
 
 
-def test_nanobind_in_the_workspace_list_is_named_as_package_level(
-    tmp_path: Path,
-) -> None:
-    from livery.workshop._extensions import level_problems
-
-    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["nanobind"]\n')
-    assert level_problems(tmp_path) == [
-        "[workspace] extensions lists nanobind, which is listed in a package's"
-        " `extensions` alone; move it there"
-    ]
-
-
 def test_the_key_in_a_package_that_holds_no_nanobind_refuses_naming_nanobind(
     tmp_path: Path,
 ) -> None:
@@ -147,9 +135,10 @@ def test_the_key_in_a_package_that_holds_no_nanobind_refuses_naming_nanobind(
     )
     # The contract's judge refuses it: the package holds python alone.
     message = _refusal(lambda: _ci.wheel_runners(tmp_path))
-    assert "nanobind is a key of nanobind, which this package's `extensions`" in (
-        message
-    )
+    assert (
+        "nanobind is a key of nanobind, which neither [workspace] extensions nor"
+        " this package's `extensions`"
+    ) in message
     # A contract read with every installed extension taken as listed, as
     # one with no root contract above it is, refuses at the labels' read.
     (tmp_path / "workshop.toml").unlink()
@@ -242,7 +231,6 @@ def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> No
     assert plugins["livery.extensions.nanobind"] == "livery.extensions.nanobind._tasks"
     declared = declaration("nanobind")
     assert declared is not None
-    assert declared.levels == ("package",)
     # The distribution, the extension module's language and its provider.
     assert declared.requires == ("python", "cpp", "conan")
     assert declared.plugin == "livery.extensions.nanobind"
@@ -457,7 +445,7 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
 ) -> None:
     from livery.footman import _registry as registry
     from livery.workshop import _points, _steps
-    from livery.workshop._extensions import mount_extensions, package_extensions
+    from livery.workshop._extensions import installed_set, mount_extensions
     from workshop_docs_declared import jobs_restored
 
     pure = tmp_path / "pure"
@@ -470,9 +458,9 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
     _native(native, "ext", '["ubuntu-latest"]')
     # The fallback first: a workspace whose packages hold no nanobind
     # mounts none, and its release is the publish job alone.
-    assert "nanobind" not in package_extensions(pure)
+    assert "nanobind" not in installed_set(pure)
     # A package that lists nanobind holds it.
-    assert "nanobind" in package_extensions(native)
+    assert "nanobind" in installed_set(native)
     state = _steps.snapshot()
     try:
         for root, jobs in ((pure, ("publish",)), (native, ("wheels", "publish"))):

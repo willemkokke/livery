@@ -141,8 +141,8 @@ def test_layering_graph_names_each_edge_of_a_package_whose_set_reads_no_manifest
 
 # A package's extensions answer what the set answers.
 
-#: A package-level extension's identity, the start of every fake here.
-PACKAGE = '[extension]\nlevels = ["package"]\n'
+#: An extension's identity, the start of every fake here.
+PACKAGE = "[extension]\n"
 
 
 def _listing(tmp_path: Path, *extensions: str) -> Package:

@@ -11,7 +11,7 @@ rewriters; a listed extension's records register at mount, after
 them and in list order, and re-registering a name replaces the
 record.
 
-A step names the package-level extensions it judges, and a package
+A step names the extensions whose packages it judges, and a package
 holding none of them skips it by name: a C++ member is formatted over
 its recipe by a python formatter and over its sources by clang-format
 because each step names an extension it holds. The phases the
@@ -155,8 +155,8 @@ class StepRecord:
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
             step that only judges.
-        extensions: The package-level extensions whose packages the
-            step judges: a package whose set holds one of them
+        extensions: The extensions whose packages the step judges: a
+            package whose set holds one of them
             ([livery.workshop._composition.extension_set][]). A package step
             runs per such member; a workspace step names them so its
             tools and claims reach those packages, or leaves them empty.
@@ -611,8 +611,8 @@ def per_file_ignores(
 ) -> list[tuple[str, tuple[str, ...]]]:
     """The per-file ignores the claims render, pattern to rule codes, sorted.
 
-    *held* is each set of package-level extensions a present package
-    holds. For each set, every claim of a step that judges a package
+    *held* is each set of extensions a present package holds. For
+    each set, every claim of a step that judges a package
     holding it and withholds rules on a category maps to that
     category's patterns in the tables that answer for such a package,
     each under ``packages/**/``, which reaches a member in a group

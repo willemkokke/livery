@@ -65,7 +65,7 @@ def _member(root: Path, name: str) -> Package:
 def _declaring(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **declarations: str
 ) -> Path:
-    """Fake package-level extensions ``acme.<name>`` declaring *declarations*.
+    """Fake extensions ``acme.<name>`` declaring *declarations*.
 
     Each declaration is the ``[templates]`` part of the extension's
     ``extension.toml``. Every template the fakes declare gets a
@@ -77,10 +77,7 @@ def _declaring(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        **{
-            name: '[extension]\nlevels = ["package"]\n\n' + text
-            for name, text in declarations.items()
-        },
+        **{name: "[extension]\n\n" + text for name, text in declarations.items()},
     )
     site = tmp_path / "site" / "acme"
     for name, text in declarations.items():
@@ -111,24 +108,6 @@ def test_a_template_naming_an_uninstalled_extension_refuses_naming_it(
         "the template lua-module lists lua-rocks, which no installed distribution"
         " declares in workshop.extensions; install it, or birth the package from"
         " another template"
-    ) in str(caught.value)
-    assert not (root / "packages" / "thing").exists()
-
-
-def test_a_template_naming_an_extension_a_package_does_not_list_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = _workspace(tmp_path / "acme")
-    _declaring(
-        tmp_path,
-        monkeypatch,
-        lua='[templates.lua-module]\ndoc = "a lua module"\nextensions = ["coverage"]\n',
-    )
-    with pytest.raises(_FAILURES) as caught:
-        render_member(root, "thing", "lua-module")
-    assert (
-        "the template lua-module lists coverage, which a package does not list:"
-        " it is listed in [workspace] extensions alone"
     ) in str(caught.value)
     assert not (root / "packages" / "thing").exists()
 
@@ -234,8 +213,8 @@ def test_a_template_without_its_files_refuses_naming_the_directory(
         ),
         (
             '[templates.lua-module]\ndoc = "a lua module"\n',
-            "templates.lua-module.extensions is missing: the package-level"
-            " extensions a package born from the template lists, [] for none",
+            "templates.lua-module.extensions is missing: the extensions a package"
+            " born from the template lists, [] for none",
         ),
         (
             '[templates.Lua]\ndoc = "a lua module"\nextensions = []\n',

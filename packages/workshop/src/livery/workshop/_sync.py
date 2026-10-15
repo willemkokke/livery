@@ -309,21 +309,22 @@ def continue_on_moved_code(
 def require_mounted(
     root: Path, flags: tuple[str, ...] = (), *, install: bool = True
 ) -> None:
-    """Refuse to render or lock while an extension the workspace lists is unmounted.
+    """Refuse to render or lock while an extension of the installed set is unmounted.
 
-    The extensions mount when the command starts. One the workspace
-    lists and no installed distribution declared then (a commit the sync
-    moved onto lists it, or a person just listed it) registered nothing,
-    and a render or a lock without it would remove its files and its
-    tools as withdrawn. When the environment holds it now, or holds it
-    once ``uv sync`` ran with *flags*, the sync hands itself to a fresh
-    process, which mounts it. A newly listed extension's distribution
-    reaches the dev group only through the render, so ``uv sync`` cannot
-    install it: with *install*, it is installed into the environment
-    directly, and the fresh process's render writes its line and its
-    ``uv sync`` reconciles the environment with the lock. One no
-    distribution declares even then refuses, naming it, before a file is
-    touched, and so does a handoff that cannot start.
+    The extensions mount when the command starts. One the installed set
+    holds and no installed distribution declared then (a commit the sync
+    moved onto lists it, or a person just listed it, in the root's list
+    or a package's) registered nothing, and a render or a lock without
+    it would remove its files and its tools as withdrawn. When the
+    environment holds it now, or holds it once ``uv sync`` ran with
+    *flags*, the sync hands itself to a fresh process, which mounts it.
+    A newly listed extension's distribution reaches the dev group only
+    through the render, so ``uv sync`` cannot install it: with
+    *install*, it is installed into the environment directly, and the
+    fresh process's render writes its line and its ``uv sync``
+    reconciles the environment with the lock. One no distribution
+    declares even then refuses, naming it and the list that brings it,
+    before a file is touched, and so does a handoff that cannot start.
 
     Raises:
         Failed: when a listed extension cannot be mounted in this process.
@@ -334,6 +335,7 @@ def require_mounted(
         extension_entries,
         stale_declarations,
         unmounted,
+        where_listed,
     )
     from livery.workshop._pythons import venv_python
     from livery.workshop._uv import run_uv
@@ -367,10 +369,14 @@ def require_mounted(
             if install
             else f"and a sync with {' '.join(flags)} installs nothing outside the lock"
         )
+        where = where_listed(root)
+        named = ", ".join(
+            f"{name} ({where[name]})" if name in where else name for name in absent
+        )
         fail(
-            f"no installed distribution declares {', '.join(absent)}, which"
-            f" [workspace] extensions lists, {why}: install the distribution that"
-            " ships each, or remove the entry. Nothing was rendered or locked"
+            f"no installed distribution declares {named}, {why}: install the"
+            " distribution that ships each, or remove the entry. Nothing was"
+            " rendered or locked"
         )
     fail(
         f"{', '.join(installed)} installed, and this process cannot mount"

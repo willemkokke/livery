@@ -138,7 +138,7 @@ def test_a_rules_table_refuses_naming_the_layering_step(
     fake_package_extensions(
         tmp_path,
         monkeypatch,
-        lint='[extension]\nlevels = ["package"]\n\n[rules.loud]\njudge = "x:y"\n',
+        lint='[extension]\n\n[rules.loud]\njudge = "x:y"\n',
     )
     with pytest.raises(DeclarationError) as raised:
         installed_declaration("acme.lint")
@@ -199,7 +199,7 @@ def test_the_python_extension_declares_the_step_and_the_mount_registers_it() -> 
     assert step.inputs.widen is not None
     state = _steps.snapshot()
     try:
-        # A package-level extension's workspace-level step registers at
+        # An extension's workspace-level step registers at
         # the mount as its other steps do, while a package lists it.
         assert register_declared("python", declared.additions)
         assert step_for("layering.private-reaches").extension == "python"

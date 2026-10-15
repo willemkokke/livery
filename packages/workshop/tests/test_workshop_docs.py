@@ -296,7 +296,7 @@ def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> N
 def _answering(query: str, value: str, requires: str = "") -> str:
     """A workspace-level extension answering *query* with the literal *value*."""
     return (
-        '[extension]\nlevels = ["workspace"]\n'
+        "[extension]\n"
         + (f'requires = ["{requires}"]\n' if requires else "")
         + f'[queries."{query}"]\nvalue = {value}\n'
     )
@@ -308,10 +308,7 @@ def _relist(root: Path, extensions: str) -> None:
 
 
 #: An extension answering docs.config with its _steps module's writer.
-_WRITER = (
-    '[extension]\nlevels = ["workspace"]\n'
-    '[queries]\n"docs.config" = "{package}._steps:writer"\n'
-)
+_WRITER = '[extension]\n[queries]\n"docs.config" = "{package}._steps:writer"\n'
 
 #: The writer's module: its tables, the scope's root path and its
 #: members, as a TOML list, put in for ``{anchor}`` and ``{members}``.

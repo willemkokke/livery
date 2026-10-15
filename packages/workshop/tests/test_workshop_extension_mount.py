@@ -14,7 +14,7 @@ from livery.workshop._steps import (
     register_step,
     unregister_step,
 )
-from workshop_extension_fakes import fake_extensions, root_contract
+from workshop_extension_fakes import fake_extensions, package_contract, root_contract
 
 _FAILURES = (BaseException,)
 
@@ -247,36 +247,66 @@ def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_
     assert _extensions.unmounted(tmp_path) == ()
 
 
-def test_an_extension_listed_at_the_wrong_level_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_listed_extension_no_distribution_declares_is_named_with_its_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restored_steps: None,
 ) -> None:
     fake_extensions(
-        tmp_path,
-        monkeypatch,
-        native='[extension]\nlevels = ["package"]\n',
-        site="",
+        tmp_path, monkeypatch, native='[extension]\nrequires = ["acme.gone"]\n'
     )
-    # A package-level extension in the workspace list: the gate refuses,
-    # the mount names it and skips it.
-    root_contract(tmp_path, '["acme.native"]')
+    root_contract(tmp_path, '["acme.later"]')
+    package_contract(tmp_path, "core", '["acme.ghost"]')
+    package_contract(tmp_path, "app", '["acme.ghost", "acme.native"]')
     from livery.footman import _registry as registry
 
     with registry.capture():
         assert _extensions.mount_extensions(tmp_path) == ()
-    assert "declares the levels package" in capsys.readouterr().err
-    assert (
-        "[workspace] extensions lists acme.native, which is listed in a"
-        " package's `extensions` alone; move it there"
-    ) in _extensions.closure_problems(tmp_path)
-    # A workspace-level extension in a package's list: named the same way.
-    root_contract(tmp_path, "[]")
-    member = tmp_path / "packages" / "core"
-    member.mkdir(parents=True)
-    (member / "workshop.toml").write_text('extensions = ["acme.site"]\n')
-    assert _extensions.closure_problems(tmp_path) == [
-        "packages/core: `extensions` lists acme.site, which is listed in"
-        " [workspace] extensions alone; move it there"
+    notes = [
+        line.removeprefix("  note: ")
+        for line in capsys.readouterr().err.splitlines()
+        if "no installed distribution declares it" in line
     ]
+    # Each is named with the list that brings it: a package's, the root's,
+    # or the listed extension that requires it.
+    assert [note.partition(", and no installed")[0] for note in notes] == [
+        "extension 'acme.ghost' is listed in the `extensions` of packages/app and"
+        " packages/core",
+        "extension 'acme.gone' is required by acme.native",
+        "extension 'acme.later' is listed in [workspace] extensions",
+    ]
+    assert notes[0].endswith(
+        "install the distribution that ships it (acme-ghost by its name), or"
+        " remove the entry; `fm sync` installs one this workspace builds"
+    )
+    # The sync installs each of them, a package's own among them.
+    assert _extensions.unmounted(tmp_path) == ("acme.ghost", "acme.gone", "acme.later")
+
+
+def test_any_extension_mounts_from_either_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        native='[phases.build.native]\nmain = "{package}._steps:noop"\n',
+        site='[phases.lint.site]\nmain = "{package}._steps:noop"\n',
+    )
+    # One that composes a package in the root's list, and one that
+    # composes nothing in a package in a package's list.
+    assert _extensions.composes_per_package("acme.native")
+    assert not _extensions.composes_per_package("acme.site")
+    root_contract(tmp_path, '["acme.native"]')
+    package_contract(tmp_path, "core", '["acme.site"]')
+    from livery.footman import _registry as registry
+
+    with registry.capture():
+        assert _extensions.mount_extensions(tmp_path) == ("acme.site", "acme.native")
+    steps = _steps.steps_by_name()
+    assert steps["lint.site"].extension == "acme.site"
+    assert steps["build.native"].extension == "acme.native"
+    assert _extensions.closure_problems(tmp_path) == []
 
 
 # The entries of the list: the refusals first, then what a step declared

@@ -1,4 +1,4 @@
-"""Every package of this workspace lists its package-level extensions.
+"""Every package of this workspace lists its extensions.
 
 A package that lists none holds none, so no step judges it and nothing
 builds or releases it. Each contract here lists its extensions.

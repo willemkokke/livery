@@ -68,11 +68,11 @@ WORDS_STEP = (
 def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_nearest(
     package: Path,
 ) -> None:
-    refused = _refusal(package, '[extension]\nlevel = ["workspace"]\n')
+    refused = _refusal(package, '[extension]\nlevels = ["workspace"]\n')
     assert refused == (
         f"{package / 'extension.toml'}:\n"
-        "  [extension] has no key 'level': it takes api-version, dormant-until,"
-        " levels, plugin, requires; did you mean 'levels'?"
+        "  [extension] has no key 'levels': it takes api-version, dormant-until,"
+        " plugin, requires"
     )
     refused = _refusal(package, STEP + "claim = []\n")
     assert "[phases.lint.acme] has no key 'claim'" in refused
@@ -257,26 +257,6 @@ def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
     assert "has no key" not in _refusal(package, STEP + 'narrowing = "paths"\n')
 
 
-def test_a_step_declaring_kinds_refuses_naming_extensions(package: Path) -> None:
-    where = package / "extension.toml"
-    named = (
-        " is extensions: the package-level extensions whose packages the step"
-        " judges, each package whose set holds one"
-    )
-    assert _refusal(package, STEP + 'kinds = ["python"]\n') == (
-        f"{where}: phases.lint.acme.kinds{named}"
-    )
-    # A step under a [for.<target>] table refuses the same way.
-    assert _refusal(
-        package,
-        '[for.docs.phases.lint.acme]\nmain = "acme_declared._steps:judge"\n'
-        'kinds = ["python"]\n',
-    ) == (f"{where}: for.docs.phases.lint.acme.kinds{named}")
-    # The spelling it names reads.
-    (record,) = _declare(package, STEP + 'extensions = ["python"]\n').additions.steps
-    assert record.extensions == ("python",)
-
-
 def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     where = package / "extension.toml"
     # The refusals: no body, a body of the wrong kind for its phase, a
@@ -438,12 +418,9 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     )
 
 
-#: A package-level extension's identity and its one build step, which the
+#: An extension's identity and its one build step, which the
 #: deletion refusals hang a ``deletes`` table on.
-BUILD_STEP = (
-    '[extension]\nlevels = ["package"]\n'
-    '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
-)
+BUILD_STEP = '[extension]\n[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
 
 
 def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
@@ -581,7 +558,7 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
     package: Path,
 ) -> None:
     where = package / "extension.toml"
-    identity = '[extension]\nlevels = ["package"]\n'
+    identity = "[extension]\n"
     # The refusals first: the phase's level says how often a step runs,
     # so a step of a package-level phase names no scope and no
     # extensions; the phase table's own pre and post are gone, and its
@@ -873,7 +850,6 @@ def test_a_contract_key_outside_a_workspace_contract_refuses(package: Path) -> N
 def test_every_key_is_optional(package: Path) -> None:
     found = _declare(package, "")
     assert found.api_version == 1
-    assert found.levels == ("workspace",)
     assert found.plugin == ""
     assert found.additions.steps == ()
 
@@ -883,7 +859,7 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
 ) -> None:
     found = _declare(
         package,
-        '[extension]\nlevels = ["workspace", "package"]\nplugin = "acme.tasks"\n'
+        '[extension]\nplugin = "acme.tasks"\n'
         'requires = ["docs"]\n'
         '[toolroom]\nrequires = ["docker>=27"]\n'
         + STEP
@@ -897,7 +873,6 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
         '[contract.root.acme.mode]\ntypes = ["str"]\nvalues = ["fast", "slow"]\n'
         'doc = "how hard acme looks"\n',
     )
-    assert found.levels == ("workspace", "package")
     assert (found.plugin, found.requires, found.tools) == (
         "acme.tasks",
         ("docs",),

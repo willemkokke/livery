@@ -7,8 +7,6 @@
 
 [extension]
 api-version = 1
-# Listed in [workspace] extensions.
-levels = ["workspace"]
 # The footman plugin that carries the leg's entry, the union and the
 # two verbs a person runs.
 plugin = "livery.extensions.coverage"

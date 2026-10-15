@@ -39,12 +39,9 @@ def _idle(ctx: PhaseContext) -> None:
     del ctx
 
 
-#: A package-level extension whose one table claims ``lib/x.py`` twice at
+#: An extension whose one table claims ``lib/x.py`` twice at
 #: one specificity, for different categories.
-TIED = (
-    '[extension]\nlevels = ["package"]\n\n[categories]\n'
-    'source = ["lib/*.py"]\ntest = ["lib/x*.p*"]\n'
-)
+TIED = '[extension]\n\n[categories]\nsource = ["lib/*.py"]\ntest = ["lib/x*.p*"]\n'
 
 
 def _names(subject: Subject, clause: str) -> list[str]:
@@ -178,8 +175,7 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == [
         f"declaration-validates: extension acme_kit_extension: {declaration}:\n"
         "  [extension] has no key 'level': it takes api-version, dormant-until,"
-        " levels, plugin, requires; did you mean 'levels'?; the mount refuses"
-        " the extension"
+        " plugin, requires; the mount refuses the extension"
     ]
     declaration.write_text(
         '[phases.lint.acme]\nmain = "acme_kit_extension._steps:judge"\n'
@@ -687,7 +683,7 @@ def test_the_later_composed_extension_s_rule_wins_a_tie_between_tables(
 ) -> None:
     from workshop_extension_fakes import fake_package_extensions
 
-    declared = '[extension]\nlevels = ["package"]\n\n[categories]\n{} = ["gen/**"]\n'
+    declared = '[extension]\n\n[categories]\n{} = ["gen/**"]\n'
     fake_package_extensions(
         tmp_path,
         monkeypatch,

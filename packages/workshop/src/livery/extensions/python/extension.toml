@@ -3,8 +3,6 @@
 
 [extension]
 api-version = 1
-# Listed in a package's extensions.
-levels = ["package"]
 
 # The questions about a package this extension answers. Its requirement
 # writer writes into the pyproject for a sibling that holds python; the

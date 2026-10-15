@@ -38,11 +38,11 @@ from workshop_extension_fakes import (
     root_contract,
 )
 
-#: A package-level extension's identity, the start of every package fake.
-PACKAGE = '[extension]\nlevels = ["package"]\n'
+#: An extension's identity, the start of every package fake.
+PACKAGE = "[extension]\n"
 
-#: A workspace-level extension's identity, the start of every workspace fake.
-WORKSPACE = '[extension]\nlevels = ["workspace"]\n'
+#: An extension's identity, the start of every workspace fake.
+WORKSPACE = "[extension]\n"
 
 #: A workspace-level union query, declared by a fake.
 STYLE: Query[tuple[str, ...]] = Query("acme.style")
@@ -274,12 +274,6 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
             " you mean 'public-modules'?",
         ),
         (
-            _answering(**{"public-modules": "public_modules"}),
-            "queries.public-modules answers a question about a package, and this"
-            " extension's levels are workspace; add 'package' to levels, or drop"
-            " the answer",
-        ),
-        (
             PACKAGE + _answering(**{"public-modules": "public_module"}),
             "queries.public-modules names public_module, which acme.odd._steps does"
             " not define at its top level; did you mean 'public_modules'?",
@@ -301,7 +295,6 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
     ],
     ids=[
         "unknown-query",
-        "workspace-level",
         "no-function",
         "no-value",
         "for-unknown-query",

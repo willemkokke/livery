@@ -467,7 +467,7 @@ def _provided(ctx: PhaseContext, key: str, kind: type | tuple[type, ...]) -> obj
 
 
 def _set_of(package: Package) -> tuple[str, ...]:
-    """The package-level extensions *package*'s set holds, as its queries ask them."""
+    """The extensions *package*'s set holds, as its queries ask them."""
     from livery.workshop._composition import extension_set
 
     return extension_set(package)

@@ -1,7 +1,7 @@
 """The vocabulary test: the base names no package extension, tool or coverage verb.
 
 The workshop's base (``livery.workshop``) names
-no package-level extension and no registry kind, the words this test
+no extension that composes a package and no registry kind, the words this test
 looks for, and imports no backend: it asks the extensions a package
 holds instead. It names no tool a listed extension's steps bring, and
 none of the coverage extension's verbs. This test scans the base's
@@ -70,26 +70,6 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         "a GitHub job's conan cache key, read from the recipes; the CI"
         " placement review, #1534",
     ),
-    ("_contract", "cmake"): (
-        1,
-        "the refusal of a contract's kind names the list cpp-conan's packages"
-        " write; kept, as ruled",
-    ),
-    ("_contract", "conan"): (
-        1,
-        "the refusal of a contract's kind names the list cpp-conan's packages"
-        " write; kept, as ruled",
-    ),
-    ("_contract", "nanobind"): (
-        1,
-        "the refusal of a contract's kind names the list python-nanobind's"
-        " packages write; kept, as ruled",
-    ),
-    ("_contract", "python"): (
-        2,
-        "the refusal of a contract's kind names the python kind and the list"
-        " its packages write; kept, as ruled",
-    ),
     ("_devenv", "conan"): (1, "a loop environment's conan home; phase 15"),
     ("_e2e", "nanobind"): (
         1,
@@ -130,19 +110,17 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 
 
 def _words() -> set[str]:
-    """The words the base never names: the package-level extensions and registry kinds.
+    """The words the base never names: extensions composing a package, registry kinds.
 
-    Each installed extension a package may list, and each kind of
-    registry an artifact is published to.
+    Each installed extension that composes something in a package, and
+    each kind of registry an artifact is published to.
     """
     from typing import get_args
 
     from livery.forge import RegistryKind
-    from livery.workshop._extensions import installed_extensions, levels_of
+    from livery.workshop._extensions import composes_per_package, installed_extensions
 
-    extensions = {
-        name for name in installed_extensions() if "package" in levels_of(name)
-    }
+    extensions = {name for name in installed_extensions() if composes_per_package(name)}
     return extensions | set(get_args(RegistryKind))
 
 
@@ -226,8 +204,8 @@ def judge(
         if beyond > allowed:
             problems.append(
                 f"{module}: {word!r} {beyond} time(s), {allowed} allowed;"
-                " the base names no package-level extension and no registry"
-                " kind, so ask the extensions a package holds"
+                " the base names no extension that composes a package and no"
+                " registry kind, so ask the extensions a package holds"
             )
         elif beyond < allowed:
             problems.append(
@@ -260,16 +238,6 @@ def test_every_allowance_entry_states_its_reason(key: tuple[str, str]) -> None:
 #: removes it: a part of the kinds' removal (#1614), an issue, or a phase
 #: of the destination note.
 TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
-    ("_contract", "cmake"): (
-        1,
-        "the refusal of a contract's kind names cmake in the list cpp-conan's"
-        " packages write",
-    ),
-    ("_contract", "conan"): (
-        1,
-        "the refusal of a contract's kind names conan in the list cpp-conan's"
-        " packages write",
-    ),
     ("_ci_generate", "conan"): (
         1,
         "a GitHub job's conan home; the CI placement review, #1534",
@@ -483,11 +451,12 @@ def test_a_new_word_literal_in_the_base_refuses_naming_the_module(
     )
     found = scan(src, {"conan"})
     assert judge(found, {}, {}) == [
-        "_fresh: 'conan' 1 time(s), 0 allowed; the base names no package-level"
-        " extension and no registry kind, so ask the extensions a package holds",
+        "_fresh: 'conan' 1 time(s), 0 allowed; the base names no extension that"
+        " composes a package and no registry kind, so ask the extensions a package"
+        " holds",
         "_fresh: 'pyproject.toml' 1 time(s), 0 allowed; the base names no"
-        " package-level extension and no registry kind, so ask the extensions a"
-        " package holds",
+        " extension that composes a package and no registry kind, so ask the"
+        " extensions a package holds",
     ]
 
 
@@ -496,8 +465,9 @@ def test_the_allowance_only_falls(tmp_path: Path) -> None:
     found = scan(src, {"conan"})
     assert judge(found, {}, {("_fresh", "conan"): 2}) == []
     assert judge(found, {}, {("_fresh", "conan"): 1}) == [
-        "_fresh: 'conan' 2 time(s), 1 allowed; the base names no package-level"
-        " extension and no registry kind, so ask the extensions a package holds"
+        "_fresh: 'conan' 2 time(s), 1 allowed; the base names no extension that"
+        " composes a package and no registry kind, so ask the extensions a package"
+        " holds"
     ]
     assert judge(found, {}, {("_fresh", "conan"): 3}) == [
         "_fresh: 'conan' 2 time(s) now, 3 in the allowance; lower it to what is left"

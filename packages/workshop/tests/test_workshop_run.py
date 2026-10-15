@@ -14,11 +14,10 @@ from livery.workshop._packages import Package, discover_packages
 from livery.workshop._run import RECORD, start
 from workshop_extension_fakes import fake_extensions, fake_steps
 
-#: The fixture's package-level extension: two executables, and a run main
+#: The fixture's extension: two executables, and a run main
 #: that starts the chosen one, read as the run phase's engine key.
 NATIVE = """\
 [extension]
-levels = ["package"]
 
 [queries]
 executables = "{package}._steps:executables"
@@ -43,7 +42,6 @@ def main(ctx):
 #: tree side as it names no side. Both members list it.
 BUILDER = """\
 [extension]
-levels = ["package"]
 
 [phases.build.builder]
 main = "{package}._steps:build"
@@ -387,7 +385,6 @@ def test_outside_a_workspace_the_verb_refuses_and_completion_offers_nothing(
 #: steps say when they run, the second after the owner's.
 EXTRA = """\
 [extension]
-levels = ["package"]
 
 [phases.run.setup]
 main = "{package}._steps:setup"

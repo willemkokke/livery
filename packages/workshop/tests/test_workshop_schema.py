@@ -49,8 +49,8 @@ def test_an_unlisted_extensions_key_is_refused_naming_its_owner(
     alone = compose("root", frozenset({BASE}))
     # A table the extension owns whole refuses at the table.
     assert problems(alone, {"docs": {"title": "Site"}}) == [
-        "docs is a key of docs, which [workspace] extensions does not list;"
-        " list the extension, or remove the key"
+        "docs is a key of docs, which neither [workspace] extensions nor a"
+        " package's `extensions` lists; list the extension, or remove the key"
     ]
     # The editor refuses it too, and its hover names the extension.
     docs = alone["properties"]["docs"]
@@ -59,22 +59,23 @@ def test_an_unlisted_extensions_key_is_refused_naming_its_owner(
     # A package's [docs] is the extension's whole as well.
     package = compose("package", frozenset({BASE}))
     assert problems(package, {"docs": {"api": False}}) == [
-        "docs is a key of docs, which [workspace] extensions does not list;"
-        " list the extension, or remove the key"
+        "docs is a key of docs, which neither [workspace] extensions nor this"
+        " package's `extensions` lists; list the extension, or remove the key"
     ]
     assert package["properties"]["docs"][OWNER] == "docs"
     # An extension's key in a table the base owns refuses at the key.
     fake_extensions(
         tmp_path,
         monkeypatch,
-        review='[extension]\nlevels = ["workspace"]\n\n'
+        review="[extension]\n\n"
         '[contract.package.owners.squads]\ntypes = ["strs"]\n'
         'doc = "the squads that review the package"\n',
     )
     package = compose("package", frozenset({BASE}))
     assert problems(package, {"owners": {"squads": []}}) == [
-        "owners.squads is a key of acme.review, which [workspace] extensions does"
-        " not list; list the extension, or remove the key"
+        "owners.squads is a key of acme.review, which neither [workspace]"
+        " extensions nor this package's `extensions` lists; list the extension,"
+        " or remove the key"
     ]
     squads = package["properties"]["owners"]["properties"]["squads"]
     assert squads["not"] == {} and squads[OWNER] == "acme.review"
@@ -107,11 +108,12 @@ def test_a_list_of_strings_is_refused_whole_and_a_lists_entries_one_by_one() -> 
     assert problems(schema, {"extension": {"requires": ["a", 3]}}) == [
         "extension.requires is a list (['a', 3]); it takes a list of strings"
     ]
-    assert problems(schema, {"extension": {"levels": ["workspace", "house"]}}) == [
-        "extension.levels[] is 'house'; it takes one of workspace, package"
+    # A list's entries are judged one by one.
+    package = compose("package", None)
+    assert problems(package, {"depends": [{"path": "a", "kind": "house"}]}) == [
+        "depends[].kind is 'house'; it takes one of build, runtime, test, tool"
     ]
     # A documented list of strings is refused whole as well.
-    package = compose("package", None)
     generators = {"docs": {"generators": [{"verb": "v", "requires": ["zsh", 3]}]}}
     assert problems(package, generators) == [
         "docs.generators[].requires is a list (['zsh', 3]); it takes a list of strings"

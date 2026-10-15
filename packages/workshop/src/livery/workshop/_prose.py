@@ -315,7 +315,7 @@ def guidance(root: Path, audience: str) -> list[Prose]:
 
 
 def present_extensions(root: Path) -> frozenset[str]:
-    """The package-level extensions a package present in *root* holds."""
+    """The extensions the sets of the packages present in *root* hold."""
     from livery.workshop._composition import extension_set
     from livery.workshop._packages import discover_packages
 
@@ -388,7 +388,7 @@ def render_gate(root: Path, audience: str | None) -> str:
     if audience == HUMAN:
         lines += [
             f"`{prog} check` runs every step below, each registered by an"
-            f" extension; the members hold the package-level extensions {held}.",
+            f" extension; the members hold the extensions {held}.",
             "",
             "| step | tools | packages | rewrites under `--fix` |",
             "| --- | --- | --- | --- |",
@@ -402,7 +402,7 @@ def render_gate(root: Path, audience: str | None) -> str:
         lines += [
             f"`{prog} check` runs these steps in parallel, the rewriters first"
             f" and one at a time under `--fix`; the members hold the"
-            f" package-level extensions {held}.",
+            f" extensions {held}.",
             "",
         ]
         for record in records:
@@ -554,7 +554,7 @@ def render_compositions(root: Path, audience: str | None) -> str:
     A set is named by the shortest list that composes it, the extensions
     joined with ``+``, and is listed with every extension it holds and
     the gate phases that judge a package holding it. A package holding
-    no package-level extension is listed under ``none``.
+    no extension is listed under ``none``.
     """
     from livery.workshop._composition import extension_set, implied, order_or_sorted
     from livery.workshop._extensions import installed_declaration
@@ -577,9 +577,9 @@ def render_compositions(root: Path, audience: str | None) -> str:
         ]
     else:
         lines += [
-            "The sets of package-level extensions the packages hold, each named by"
-            " the shortest list that composes it, with its packages and the gate"
-            " phases that judge them:",
+            "The sets of extensions the packages hold, each named by the shortest"
+            " list that composes it, with its packages and the gate phases that"
+            " judge them:",
             "",
         ]
     named: dict[tuple[str, ...], str] = {}

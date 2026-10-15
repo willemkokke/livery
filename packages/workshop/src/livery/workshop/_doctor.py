@@ -117,9 +117,9 @@ def host(**facts: Any) -> list[Finding]:
     from livery.workshop._env_tasks import missing_host_tools, served_by
     from livery.workshop._extensions import (
         available_extensions,
+        composes_per_package,
         dormancy,
         extension_names,
-        levels_of,
     )
     from livery.workshop._tools import receipts
 
@@ -154,30 +154,27 @@ def host(**facts: Any) -> list[Finding]:
     for module, dist in available_extensions(extension_names(root)):
         # Information, not a fault: an extension a wheel ships that this
         # workspace has no use for is the common case.
-        findings.append(Finding(unlisted(module, dist, levels_of(module))))
+        findings.append(
+            Finding(unlisted(module, dist, per_package=composes_per_package(module)))
+        )
     return findings
 
 
-def unlisted(module: str, dist: str, levels: tuple[str, ...]) -> str:
+def unlisted(module: str, dist: str, *, per_package: bool) -> str:
     """The doctor's line for an installed extension the workspace lists nowhere.
 
-    A workspace-level extension is listed in `[workspace] extensions`
-    and a package-level one in a package's `extensions`; the line names
-    where *levels* let this one be listed, the workspace's list when
-    they name neither.
+    Either list takes any extension. The line names `[workspace]
+    extensions`, and a package's `extensions` too when *per_package*
+    says the extension composes something in a package that holds it
+    ([livery.workshop._extensions.composes_per_package][]).
     """
     named = f" ({dist})" if dist else ""
-    places = [
-        place
-        for level, place in (
-            ("workspace", "[workspace] extensions"),
-            ("package", "a package's extensions"),
-        )
-        if level in levels
-    ] or ["[workspace] extensions"]
+    places = "[workspace] extensions"
+    if per_package:
+        places += " or a package's extensions"
     return (
         f"extensions: {module}{named} is installed and not listed; it does"
-        f" nothing until {' or '.join(places)} names it"
+        f" nothing until {places} names it"
     )
 
 

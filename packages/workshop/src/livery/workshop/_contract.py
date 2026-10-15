@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
@@ -165,87 +164,9 @@ def other_spellings(data: dict[str, Any]) -> list[str]:
     return found
 
 
-#: Each kind a package's contract named, to the extensions a package of
-#: that kind lists in its place. A package lists the extensions it is
-#: made of, and its contract names no kind.
-REMOVED_KINDS: dict[str, tuple[str, ...]] = {
-    "python": ("python",),
-    "python-nanobind": ("nanobind",),
-    "cpp-conan": ("cmake", "conan"),
-}
-
-
 def spelled_list(names: tuple[str, ...] | list[str]) -> str:
     """*names* as a contract spells a list of them: ``["cmake", "conan"]``."""
     return "[" + ", ".join(toml_string(name) for name in names) + "]"
-
-
-def removed_kinds(data: dict[str, Any]) -> list[str]:
-    """The line refusing the ``kind`` package contract *data* writes; empty without one.
-
-    A package lists the extensions it is made of, and its contract
-    names no kind, so ``kind`` refuses wherever it stands. Beside an
-    ``extensions`` list the line says to delete it, naming the list the
-    contract holds. Without one it names the list to write: the one
-    `REMOVED_KINDS` names for the kind, or, for a kind it does not
-    name, the installed extensions a package may list. Read before the
-    judge, which would call the key unknown without naming the list.
-    Nothing rewrites the contract.
-    """
-    if "kind" not in data:
-        return []
-    value = data["kind"]
-    shown = toml_string(value) if isinstance(value, str) else repr(value)
-    spelled = f"kind = {shown}"
-    own = data.get("extensions")
-    if own is not None:
-        listed = (
-            spelled_list([str(name) for name in own])
-            if isinstance(own, list)
-            else repr(own)
-        )
-        return [
-            f"{spelled} is not a key: the package lists its extensions already,"
-            f" extensions = {listed}; delete kind"
-        ]
-    wanted = REMOVED_KINDS.get(value) if isinstance(value, str) else None
-    if wanted is not None:
-        return [
-            f"{spelled} is not a key: a package lists the extensions it is made"
-            f" of; write extensions = {spelled_list(wanted)} in its place"
-        ]
-    from livery.workshop._composition import package_level
-    from livery.workshop._extensions import installed_declaration, installed_extensions
-
-    known = [
-        name
-        for name in installed_extensions()
-        if package_level(name, installed_declaration)
-    ]
-    return [
-        f"{spelled} is not a key: a package lists the extensions it is made of,"
-        f" from the installed ones a package may list, {', '.join(known) or 'none'};"
-        " write extensions = [...] with those it holds in its place"
-    ]
-
-
-def written_kinds(paths: Iterable[Path]) -> dict[Path, str]:
-    """Each package contract of *paths* that writes ``kind``, to the line refusing it.
-
-    Read raw, each contract parsed alone: one that is not there or is
-    not TOML is the judge's to name when the package is read.
-    Discovery reads every member's, so one refusal names them all
-    (`removed_kinds`).
-    """
-    found: dict[Path, str] = {}
-    for path in paths:
-        try:
-            data = tomllib.loads(path.read_text("utf-8"))
-        except (OSError, tomllib.TOMLDecodeError):
-            continue
-        for line in removed_kinds(data):
-            found[path] = line
-    return found
 
 
 #: The contracts this process loaded and judged, by path and the stamps
@@ -294,19 +215,25 @@ def load_contract(path: Path) -> dict[str, Any]:
     changes. The caller gets its own copy.
 
     A contract under ``packages/<name>/`` or ``packages/<group>/<name>/``
-    is a package's, judged against the extensions its workspace's root
-    contract lists and the package-level extensions the package holds:
-    its own set, the extensions it lists and those they require, so a
-    package that lists none is judged against no package-level
-    extension's keys. Any other is a root contract, judged against the
-    extensions it lists itself and the package-level ones its packages
-    hold. Every problem is listed in one refusal
+    is a package's, judged against the root's set, the extensions its
+    workspace's root contract lists and those they require, and the
+    package's own set, the extensions it lists and those they require.
+    So a package holds the keys of what the root lists and of what it
+    lists itself, and no other package's. Any other is a root contract,
+    judged against the workspace's installed set
+    ([livery.workshop._extensions.installed_set][]): the root's set and
+    every package's. Every problem is listed in one refusal
     ([livery.workshop._contract_keys.judge][]).
     """
     import copy
 
+    from livery.workshop._composition import closure
     from livery.workshop._contract_keys import judge, listed_extensions
-    from livery.workshop._extensions import composed_set, package_extensions
+    from livery.workshop._extensions import (
+        installed_declaration,
+        installed_set,
+        listing,
+    )
 
     workspace = _package_workspace(path)
     key = _contract_key(path, workspace)
@@ -320,19 +247,22 @@ def load_contract(path: Path) -> dict[str, Any]:
         if root.is_file():
             own = data.get("extensions")
             entries = [str(name) for name in own] if isinstance(own, list) else []
-            listed = listed_extensions(_root_tables(root)) | set(composed_set(entries))
-        # A kind, and the check tables' spelling of a step's options,
-        # are named before the judge, which would call each unknown.
+            names = [
+                *listed_extensions(_root_tables(root)),
+                *(listing(entry).name for entry in entries),
+            ]
+            listed = frozenset(closure(names, installed_declaration))
+        # The check tables' spelling of a step's options is named before
+        # the judge, which would call it unknown.
         from livery.workshop._packages import removed_option_tables
 
         problems = (
-            removed_kinds(data)
-            or removed_option_tables(data)
+            removed_option_tables(data)
             or other_spellings(data)
             or judge(data, contract="package", where=str(path), listed=listed)
         )
     else:
-        listed = listed_extensions(data) | set(package_extensions(path.parent))
+        listed = listed_extensions(data) | set(installed_set(path.parent))
         problems = other_spellings(data) or judge(
             data, contract="root", where=str(path), listed=listed
         )

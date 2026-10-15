@@ -139,13 +139,10 @@ def test_mkdocstrings_listed_without_docs_refuses_and_its_fix_lists_docs(
         "[workspace] extensions lists mkdocstrings, which depends on docs, and"
         " does not list it; the gate's --fix adds it before mkdocstrings"
     ]
-    # Its step joins the docs phase, which nothing listed declares.
-    with pytest.raises(
-        _FAILURES,
-        match=r"extension 'mkdocstrings' adds steps to the docs phase, which docs"
-        r" declares and the workspace does not list; list docs before mkdocstrings",
-    ):
-        _mount(root)
+    # The root's set holds docs, which mkdocstrings requires: the mount
+    # takes it first, and the step joins the docs phase it declares.
+    _mount(root)
+    assert steps_by_name()["docs.mkdocstrings"].extension == "mkdocstrings"
     assert _extensions.write_extensions(root) == [
         "  layering: [workspace] extensions gains docs before mkdocstrings, which"
         " requires it"
@@ -458,7 +455,7 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
 def _answering(query: str, value: str, requires: str = "") -> str:
     """A workspace-level extension answering *query* with the literal *value*."""
     return (
-        '[extension]\nlevels = ["workspace"]\n'
+        "[extension]\n"
         + (f'requires = ["{requires}"]\n' if requires else "")
         + f'[queries."{query}"]\nvalue = {value}\n'
     )

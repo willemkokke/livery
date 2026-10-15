@@ -9,19 +9,17 @@ below arrives through that dependency.
 
 The workspace contract (`workshop.toml` at the root) lists the
 workspace's extensions in `[workspace] extensions`, in precedence
-order, and each package's contract lists the package-level extensions
-the package is composed of in its own `extensions`; a package that
-lists none holds none. Those lists are the whole of discovery: a
-package installed by accident never changes a repository. A package's
-contract writes no `kind`: one that does refuses, naming the list to
-write in its place, `extensions = ["python"]` for `python` and
-`extensions = ["cmake", "conan"]` for `cpp-conan`, and the refusal
-names every member's contract that writes it. Nothing rewrites them.
-The root's list is required; a contract without it refuses at mount
-and prints the line to add. The base,
+order, and each package's contract lists the extensions the package
+is composed of in its own `extensions`; a package that lists none
+holds none. Every extension is one kind: either list takes any of
+them. A list's set is the list and every extension it requires, and
+the installed set is the root's set and every package's set. Those
+lists are the whole of discovery: a package installed by accident
+never changes a repository. The root's list is required; a contract
+without it refuses at mount and prints the line to add. The base,
 `livery.workshop`, is never listed: importing its plugin registers
-its task surface and then mounts the listed extensions, the
-package-level ones first and then the root's list in its order.
+its task surface and then mounts the installed set, the extensions
+the packages' sets hold first and then the root's list in its order.
 The instance always wins last: its own files (`CLAUDE.project.md`,
 anything below the plugin line in `tasks.py`) are seeded once and
 never rewritten.
@@ -33,20 +31,21 @@ extension that reads it, and a contract holds nothing else: a key no
 extension declares, a key of an extension no list takes, a value of
 the wrong type and a value outside its allowed set each refuse on
 read, naming the file, the key, what the table takes, and the nearest
-spelling. A workspace extension's keys are taken while the root lists
-it; a package-level extension's, in a package's contract while the
-package lists it, and in the root's while any package does. The base declares its own keys the way an
-extension does, in the `contract.toml` its package ships beside its
-code, the keys of `extension.toml` among them.
+spelling. An extension's keys are taken in the root's contract while
+the installed set holds it, and in a package's contract while the
+root's set or the package's own set holds it. The base declares its
+own keys the way an extension does, in the `contract.toml` its
+package ships beside its code, the keys of `extension.toml` among
+them.
 
 The declarations compose into one JSON Schema per contract, and the
 judge validates a contract against it. `fm sync` writes the same
 schemas, one file per contract under `.workshop/schema/`:
 `workshop.json` for the root's contract, `package.json` for a
 package's, `extension.json` for an `extension.toml`. Each holds the keys
-of the base and of the extensions the root contract lists; a key of an
-installed extension the root does not list stays in it as a key that
-takes no value and names its extension. The files follow what is
+of the base and of the extensions of the installed set; a key of an
+installed extension no list holds stays in it as a key that takes no
+value and names its extension. The files follow what is
 installed and listed, and they are written for the checkout alone,
 never committed. The composed `.taplo.toml` points Taplo, the language
 server behind Even Better TOML and other editors' TOML support, at
@@ -67,15 +66,13 @@ spelling. Every key is optional:
 
 - `[extension] api-version`, the extension API it was written for,
   refused at mount when it is not this workshop's;
-- `[extension] levels`, where it may be listed: `"workspace"` in
-  `[workspace] extensions`, `"package"` in a package's own
-  `extensions`; a listing at another level refuses;
 - `[extension] plugin`, the footman plugin carrying its verbs, mounted
   in list order;
-- `[extension] requires`, the extensions it cannot work without: in
-  the root's list, each one before it; for a package-level extension,
-  in the package's set, which takes them in. `layering.graph` keeps
-  them listed, and its `--fix` writes a missing workspace entry;
+- `[extension] requires`, the extensions it cannot work without,
+  which join every set that holds it: a package's set takes them in,
+  whatever they declare; in the root's list, each one is listed before
+  it unless a package's set holds it, and the `--fix` of
+  `layering.graph` writes a missing entry;
 - `[extension] dormant-until`, what another extension does for this one
   by declaring a `[for.<this>]` table, as a verb: coverage says
   `measures`. Until a listed extension contributes such a table, this
@@ -93,8 +90,8 @@ spelling. Every key is optional:
   steps, each with its type. A phase no declaration names refuses
   naming the declared ones, and two extensions declaring one phase
   refuse naming both.;
-- `[phases.<phase>.<step>]`, a step a package-level extension adds to
-  a package's lifecycle phase, with the keys every step takes: `main`,
+- `[phases.<phase>.<step>]`, a step the extension adds to a package's
+  lifecycle phase, with the keys every step takes: `main`,
   `"module:function"` in its own package or the tool's words; `after`,
   the steps it runs after; and the context keys it `provides`, each
   with its type, and `reads`. The step runs once per package whose set
@@ -112,18 +109,18 @@ spelling. Every key is optional:
   the `"module:function"` that answers it, called with the package or
   the workspace root, or `[queries.<name>] value`, a literal answer; an
   answer to a query nobody declares refuses naming the declared ones;
-- `[categories]`, the categories a package-level extension gives its
-  packages' paths, each category to the patterns it takes; a package
-  whose extensions declare categories is answered by them and the base's
-  rules, and its own `[categories]` wins over both;
+- `[categories]`, the categories the extension gives the paths of each
+  package whose set holds it, each category to the patterns it takes;
+  a package whose extensions declare categories is answered by them
+  and the base's rules, and its own `[categories]` wins over both;
 - `[fragments."<target>"]`, a file the extension's code writes, or a
   directory of them when the target ends in `/`: `render`, the
   `"module:function"` called with the workspace root, which answers
   the file's text, or nothing for no file, and for a directory each
   file's path under it to its text or to the shipped file it links
-  to; `local` for files that belong to this checkout alone. A
-  package-level extension's fragment lives while a package lists it,
-  and two extensions writing one path refuse;
+  to; `local` for files that belong to this checkout alone. The
+  fragment lives while the installed set holds the extension, and two
+  extensions writing one path refuse;
 - `[toolroom] requires`, the tools it runs, its verbs' and its
   steps', `["docker?>=27"]`, one of the sites the tool profile reads;
 - `[contract.<contract>.<table>]`, the contract keys it reads, each a
@@ -150,7 +147,7 @@ spelling. Every key is optional:
   deletes, to the reason;
 - `[templates.<name>]`, a template `fm new.package` creates a package
   from: `doc`, one line saying what a package born from it is;
-  `extensions`, the package-level extensions such a package lists; and
+  `extensions`, the extensions such a package lists; and
   `extends`, another template whose files the birth writes first. Its
   files live under `content/templates/<name>/` beside the
   `extension.toml`. A template is read while it is installed, listed or
@@ -168,9 +165,9 @@ tools = ["ruff"]
 claims = [{ category = "source", suffixes = [".py", ".pyi"] }]
 ```
 
-`extensions` names the package-level extensions whose packages the
-step judges: a package whose set, its list and what the list
-requires, holds one of them. A package that lists no extension holds
+`extensions` names the extensions whose packages the step judges: a
+package whose set, its list and what the list requires, holds one of
+them. A package that lists no extension holds
 none, so no such step judges it. A step that names none judges the
 workspace.
 
@@ -241,15 +238,14 @@ opt-out from that target's opinions, and a name the list does not
 carry refuses. A name the extension declares no contribution for
 mounts nothing, and `layering.graph` names the entry.
 `fm extensions` prints the base, then each extension in mount order,
-who requires it, the packages whose sets hold a package-level one, its
-tools, its targets, whether it is dormant and what would wake it, and
+who requires it, the packages whose sets hold it, its tools, its
+targets, whether it is dormant and what would wake it, and
 each step it declares off with whether the root contract turns it on.
 
-A package's `extensions` names the package-level extensions it is
-composed of. Its set is that list and every package-level extension
-the list requires, transitively: requires alone composes a package,
-and `layering.graph` refuses a requirement that no list holds at
-its level. Two extensions that cannot share a package are refused by
+A package's `extensions` names the extensions it is composed of. Its
+set is that list and every extension the list requires, transitively,
+whatever those extensions declare: requires alone composes a package.
+Two extensions that cannot share a package are refused by
 the rules of the phase they both add steps to, two providers of one
 context key or two owners of one executable, never by a rule over the
 pair. A package writes its set as its canonical list, the minimal
@@ -257,14 +253,18 @@ one: no extension another listed one requires, in composition order.
 In that order an extension comes after what it requires; ties go
 alphabetically. `layering.graph` names a list in any other form,
 and its `--fix` rewrites it. A package's entry is the extension's name
-alone: a package-level extension takes no options.
+alone, with no options.
 
-The mount takes the package-level extensions every package's set
+The mount takes the installed set: the extensions every package's set
 holds first, in composition order, then `[workspace] extensions` in
-its order, and composition follows the same order. So a package-level
+its order, each entry after what it requires, and composition follows
+the same order. Any extension mounts from either list. So an
 extension's content, tools and distribution belong to the workspace
-while a package lists it. A set is named by its canonical list joined
-with `+`, such as `cmake+cpp`.
+while any list holds it: one that only a package lists joins the dev
+group, and `fm sync` installs it. While no installed distribution
+declares it, the mount names it with the list that brings it, and a
+sync that cannot install it refuses the same way. A set is named by
+its canonical list joined with `+`, such as `cmake+cpp`.
 
 The base declares its phases in the `[phases]` section of its
 `contract.toml`: `sync`, `clean`, `build`, `format`, `lint`,
@@ -394,8 +394,8 @@ answer. A package-level query is asked with a package,
 `answer(package, query)`, and each extension of the package's set that
 answers is asked in composition order; a workspace-level one is asked
 with the workspace root, `answer(root, query)`, and the extensions the
-workspace mounts answer in mount order: the package-level ones its
-packages hold, then its list. The answers combine by the query's
+workspace mounts answer in mount order: those its packages' sets
+hold, then its list. The answers combine by the query's
 rule, and with nobody answering the query's declared default stands,
 or the rule's answer over nothing. The base declares:
 
@@ -423,10 +423,9 @@ or the rule's answer over nothing. The base declares:
 
 A name no extension declares refuses with the nearest one; an answer
 refuses when it is off the query's `values`. A package-level query is
-asked of the package's set alone, so an extension that a package may
-not list refuses to answer one. A workspace-level query is asked of
-every extension the workspace mounts, a package-level one while a
-package holds it: nanobind, a package-level extension, answers
+asked of the package's set alone, and a workspace-level one of every
+extension the workspace mounts, so any extension answers either:
+nanobind, which composes a package, answers the workspace-level
 `job-built-members`.
 
 An extension also answers under `[for.<target>.queries]`, in the same
@@ -504,7 +503,7 @@ The workshop asks two questions about a path, and `fm explain <path>`
 prints both answers with the extension that supplied each. Its
 **category** says what the file is to its package, `source`, `test`,
 `test-support`, `configuration`, and what an extension adds (`prose`,
-`example`, `asset`, `nav`). A package-level extension declares a
+`example`, `asset`, `nav`). An extension declares a
 pattern table under `[categories]` in its `extension.toml`, and a
 package takes the tables of the extensions it holds over the base's
 own table, which names the documentation's paths and calls the rest
@@ -691,8 +690,8 @@ the vocabulary.
 
 An extension's steps and categories are judged by the conformance kit,
 `livery.workshop.testing`: a `Subject` names the extension, the sets of
-package-level extensions to probe it with, each as the list a package
-writes, and the steps it registers; each clause in `CLAUSES` returns
+extensions to probe it with, each as the list a package writes, and
+the steps it registers; each clause in `CLAUSES` returns
 the violations the subject commits, each naming its clause, and an
 extension's own suite runs every clause on its subject. The clauses so
 far: a per-package configuration file has one owner among the steps
@@ -723,7 +722,21 @@ again, every step names the extension that registered it, which the
 gate prints, and a step with no file to read is named and never
 started. The workshop's own steps pass the same clauses in its test
 suite, probed with a package that lists nothing and one listing each
-installed package-level extension.
+installed extension that composes something in a package.
+
+An extension composes something in a package when it, or an
+extension it requires, declares a step in a package-level phase, an
+answer to a package-level query or `[categories]`, at its top level or
+in a `[for.<target>]` table, or when a step of any installed extension
+names it in `extensions`, itself or through a per-package fragment.
+The installed declarations decide it alone: code that reads a
+package's set is not seen. Workspace-level steps and answers, contract
+keys, tools, shipped files, CI jobs, verbs and templates compose
+nothing in a package. Of the extensions the livery distributions
+ship, cmake, conan, cpp, nanobind and python compose, and the others
+do not. For an installed extension no list names, `fm doctor` names
+a package's `extensions` beside `[workspace] extensions` when it
+composes.
 
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a
@@ -873,9 +886,8 @@ byte and an edited copy kept and named, and writes the entry file from
 it in section order, the repository's own `fragments/` last. The gate,
 verbs, compositions and tools sections render from the registries, so
 no fragment names a checker by hand. The compositions section names
-each set of package-level extensions the packages hold, by the
-shortest list that composes it, with its packages and the gate phases
-that judge them.
+each set of extensions the packages hold, by the shortest list that
+composes it, with its packages and the gate phases that judge them.
 
 Each rule over the sources is a step of the layering phase: the
 base's two (the base importing no extension, and the sibling

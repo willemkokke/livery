@@ -16,9 +16,9 @@ from livery.workshop import _extensions, _steps
 from livery.workshop._composition import (
     OrderCycle,
     canonical,
+    closure,
     combination,
     order,
-    package_set,
 )
 from livery.workshop._contract import load_contract
 from livery.workshop._declaration import Declaration, DeclarationError
@@ -30,19 +30,12 @@ from workshop_extension_fakes import (
     root_contract,
 )
 
-#: A package-level extension's identity, the start of most fakes here.
-PACKAGE = '[extension]\nlevels = ["package"]\n'
+#: An extension's identity, the start of most fakes here.
+PACKAGE = "[extension]\n"
 
 
-def _declared(
-    name: str,
-    *,
-    levels: tuple[str, ...] = ("package",),
-    requires: tuple[str, ...] = (),
-) -> Declaration:
-    return Declaration(
-        name, name, Path(name) / "extension.toml", levels=levels, requires=requires
-    )
+def _declared(name: str, *, requires: tuple[str, ...] = ()) -> Declaration:
+    return Declaration(name, name, Path(name) / "extension.toml", requires=requires)
 
 
 def _lookup(*declared: Declaration) -> Callable[[str], Declaration | None]:
@@ -74,39 +67,61 @@ def test_an_extension_declaring_compatible_before_or_after_refuses_naming_requir
     )
 
 
-def test_a_requirement_no_list_holds_at_its_level_refuses_naming_it(
+def test_a_requirement_joins_the_package_set_whatever_it_declares(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    site = '[phases.lint.site]\nmain = "{package}._steps:noop"\n'
     fake_extensions(
         tmp_path,
         monkeypatch,
         native=PACKAGE + 'requires = ["acme.site", "acme.absent"]\n',
-        site="",
+        site=site,
         runner='[extension]\nrequires = ["acme.python"]\n',
         python=PACKAGE,
     )
     root_contract(tmp_path, '["acme.runner"]')
     package_contract(tmp_path, "core", '["acme.native"]')
+    # The refusals first: a requirement nothing installed declares, and a
+    # root entry's requirement no list holds, which the fix lists.
     assert _extensions.closure_problems(tmp_path) == [
-        "[workspace] extensions lists acme.runner, which requires acme.python, a"
-        " package-level extension no package lists; list acme.python in the"
-        " `extensions` of each package acme.runner serves",
-        "packages/core: acme.native requires acme.site, which [workspace]"
-        " extensions does not list; the gate's --fix adds it",
+        "[workspace] extensions lists acme.runner, which depends on acme.python,"
+        " and does not list it; the gate's --fix adds it before acme.runner",
         "packages/core: acme.native requires acme.absent, which no installed"
         " distribution declares in workshop.extensions; install it",
     ]
-    # The fix lists the workspace's own requirement; a package's set is a
-    # person's choice, and an absent distribution an install.
+    # A package's set holds acme.site, which composes nothing in a package,
+    # whatever it declares: no other list names it, and no fix adds it.
     assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions gains acme.site, which acme.native in"
-        " packages/core requires"
+        "  layering: [workspace] extensions gains acme.python before"
+        " acme.runner, which requires it"
     ]
+    assert _extensions.installed_set(tmp_path) == (
+        "acme.absent",
+        "acme.site",
+        "acme.native",
+        "acme.python",
+        "acme.runner",
+    )
+    # A root entry's requirement a package's set holds needs no entry.
+    root_contract(tmp_path, '["acme.runner"]')
     package_contract(tmp_path, "app", '["acme.python"]')
     assert _extensions.closure_problems(tmp_path) == [
         "packages/core: acme.native requires acme.absent, which no installed"
         " distribution declares in workshop.extensions; install it",
     ]
+    assert _extensions.write_extensions(tmp_path) == []
+    # The set is the list and what it requires, whatever each declares.
+    lookup = _lookup(
+        _declared("nanobind", requires=("python", "site")),
+        _declared("python"),
+        _declared("site"),
+    )
+    assert closure(("nanobind",), lookup) == ("nanobind", "python", "site")
+    # A requirement pulls in whatever it requires in turn.
+    lookup = _lookup(
+        _declared("a", requires=("b",)), _declared("b", requires=("c",)), _declared("c")
+    )
+    assert closure(("a",), lookup) == ("a", "b", "c")
 
 
 def test_an_order_with_no_start_refuses_naming_its_cycle(
@@ -140,7 +155,7 @@ def test_an_order_with_no_start_refuses_naming_its_cycle(
     ]
     # The mount still finds an order, so the sync that repairs it runs, and
     # the fix leaves the list to the person who removes the cycle.
-    assert _extensions.package_extensions(tmp_path) == ("acme.a", "acme.b")
+    assert _extensions.installed_set(tmp_path) == ("acme.a", "acme.b")
     assert _extensions.write_extensions(tmp_path) == []
 
 
@@ -152,8 +167,7 @@ def test_a_package_entry_with_options_or_nothing_installed_refuses_naming_it(
     package_contract(tmp_path, "core", '["acme.python[typed]", "acme.ghost"]')
     assert _extensions.closure_problems(tmp_path) == [
         "packages/core: `extensions` lists 'acme.python[typed]'; a package's entry"
-        " is the extension's name alone, and a package-level extension takes no"
-        " options",
+        " is the extension's name alone, and takes no options",
         "packages/core: `extensions` lists acme.ghost, which no installed"
         " distribution declares in workshop.extensions",
     ]
@@ -180,7 +194,7 @@ def test_a_package_contract_the_mount_cannot_read_lists_nothing_and_the_mount_ru
     package_contract(tmp_path, "app", '["acme.cpp"]')
     broken = package_contract(tmp_path, "core", "[]")
     broken.write_text(contract)
-    assert _extensions.package_extensions(tmp_path) == ("acme.cpp",)
+    assert _extensions.installed_set(tmp_path) == ("acme.cpp",)
     from livery.footman import _registry as registry
 
     with registry.capture():
@@ -243,20 +257,6 @@ def test_a_requirement_missing_from_the_wheels_metadata_fails_the_kit(
 
 
 # What a package's set is.
-
-
-def test_a_set_is_the_list_and_the_package_level_extensions_it_requires() -> None:
-    lookup = _lookup(
-        _declared("nanobind", requires=("python", "site")),
-        _declared("python"),
-        _declared("site", levels=("workspace",)),
-    )
-    assert package_set(("nanobind",), lookup) == ("nanobind", "python")
-    # A requirement pulls in whatever it requires in turn.
-    lookup = _lookup(
-        _declared("a", requires=("b",)), _declared("b", requires=("c",)), _declared("c")
-    )
-    assert package_set(("a",), lookup) == ("a", "b", "c")
 
 
 def test_the_order_puts_requirements_first_and_ties_alphabetically() -> None:
@@ -352,7 +352,7 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
     assert _extensions.write_extensions(tmp_path) == []
 
 
-def test_the_package_level_extensions_mount_first_in_composition_order(
+def test_the_extensions_the_packages_hold_mount_first_in_composition_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     def checked(tool: str, identity: str = "") -> str:
@@ -369,7 +369,6 @@ def test_the_package_level_extensions_mount_first_in_composition_order(
     package_contract(tmp_path, "core", '["acme.native"]')
     package_contract(tmp_path, "app", '["acme.base"]')
     assert _extensions.workspace_names(tmp_path) == ("acme.site",)
-    assert _extensions.package_extensions(tmp_path) == ("acme.base", "acme.native")
     assert _extensions.extension_names(tmp_path) == (
         "acme.base",
         "acme.native",
@@ -399,35 +398,121 @@ def test_outside_a_workspace_the_stack_is_the_base_alone(
     ]
 
 
-def test_a_package_level_extensions_keys_belong_where_a_package_lists_it(
+def test_a_package_contract_key_belongs_where_the_root_or_the_package_lists_its_owner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     keys = "".join(
         f'\n[contract.{contract}.native.depth]\ntypes = ["str"]\ndoc = "how deep"\n'
         for contract in ("root", "package")
     )
-    fake_extensions(tmp_path, monkeypatch, native=PACKAGE + keys)
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        native=PACKAGE + keys,
+        wrapper=PACKAGE + 'requires = ["acme.native"]\n',
+    )
     root_contract(tmp_path, "[]")
     table = '\n[native]\ndepth = "deep"\n'
-    listing = package_contract(tmp_path, "core", '["acme.native"]')
-    listing.write_text(listing.read_text() + table)
-    assert load_contract(listing)["native"] == {"depth": "deep"}
+    # The refusals first: a package whose set does not hold the owner,
+    # while the root's does not either, and the root while no list does.
     other = package_contract(tmp_path, "app", "[]")
     other.write_text(other.read_text() + table)
     with pytest.raises(Failed) as raised:
         load_contract(other)
     assert str(raised.value) == (
-        f"{other}:\n  native.depth is a key of acme.native, which this package's"
-        " `extensions` does not list; list the extension, or remove the key"
+        f"{other}:\n  native.depth is a key of acme.native, which neither"
+        " [workspace] extensions nor this package's `extensions` lists; list the"
+        " extension, or remove the key"
     )
-    # In the root's contract, a package that lists it is enough.
     root = tmp_path / "workshop.toml"
     root.write_text(root.read_text() + table)
-    assert load_contract(root)["native"] == {"depth": "deep"}
-    listing.write_text(listing.read_text().replace('["acme.native"]', "[]"))
     with pytest.raises(Failed) as raised:
         load_contract(root)
     assert str(raised.value) == (
-        f"{root}:\n  native.depth is a key of acme.native, which no package's"
-        " `extensions` lists; list the extension, or remove the key"
+        f"{root}:\n  native.depth is a key of acme.native, which neither"
+        " [workspace] extensions nor a package's `extensions` lists; list the"
+        " extension, or remove the key"
     )
+    # A package whose set holds it, through what its list requires: its
+    # table loads, and so does the root's.
+    listing = package_contract(tmp_path, "core", '["acme.wrapper"]')
+    listing.write_text(listing.read_text() + table)
+    assert load_contract(listing)["native"] == {"depth": "deep"}
+    assert load_contract(root)["native"] == {"depth": "deep"}
+    # The root's list holds it: every package's contract takes the key.
+    root.write_text(
+        root.read_text().replace("extensions = []", 'extensions = ["acme.native"]')
+    )
+    assert load_contract(other)["native"] == {"depth": "deep"}
+
+
+# What composes something in a package: the proof the declarations give.
+
+
+def test_what_composes_a_package_is_read_from_the_declarations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    noop = '"{package}._steps:noop"'
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        # The fallbacks first: what composes nothing in a package.
+        quiet=PACKAGE,
+        keyed='[contract.package.keyed.depth]\ntypes = ["str"]\ndoc = "how deep"\n',
+        judge=(
+            f'[phases.lint.judge]\nmain = {noop}\nextensions = ["acme.named"]\n'
+            '\n[phases.lint.judge.fragments.".acme"]\ntext = "x"\n'
+            'extensions = ["acme.framed"]\n'
+        ),
+        editor='[queries.editor-extensions]\nvalue = ["acme.editor"]\n',
+        # A declaration that cannot be read names nothing, and the others
+        # are judged all the same.
+        broken="[extension]\nbogus = true\n",
+        # Then each way one does: a step names it, itself or through a
+        # per-package fragment; a step in a package's phase; an answer to
+        # a question about a package, at the top level or for a target;
+        # categories; and a requirement that composes.
+        named=PACKAGE,
+        framed=PACKAGE,
+        built=f"[phases.build.built]\nmain = {noop}\n",
+        asked="[queries.public-modules]\nvalue = []\n",
+        targeted='[for."acme.quiet".queries.public-modules]\nvalue = []\n',
+        categorised='[categories]\nsource = ["lua/**"]\n',
+        wrapper=PACKAGE + 'requires = ["acme.built"]\n',
+    )
+    names = (
+        "quiet",
+        "keyed",
+        "judge",
+        "editor",
+        "named",
+        "framed",
+        "built",
+        "asked",
+        "targeted",
+        "categorised",
+        "wrapper",
+    )
+    composing = [
+        name for name in names if _extensions.composes_per_package(f"acme.{name}")
+    ]
+    assert composing == [
+        "named",
+        "framed",
+        "built",
+        "asked",
+        "targeted",
+        "categorised",
+        "wrapper",
+    ]
+    # A name nothing installed declares composes nothing.
+    assert not _extensions.composes_per_package("acme.ghost")
+
+
+def test_the_proof_composes_exactly_cmake_conan_cpp_nanobind_python() -> None:
+    composing = [
+        name
+        for name in _extensions.installed_extensions()
+        if _extensions.composes_per_package(name)
+    ]
+    assert composing == ["cmake", "conan", "cpp", "nanobind", "python"]

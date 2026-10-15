@@ -12,8 +12,6 @@
 
 [extension]
 api-version = 1
-# Listed in a package's extensions.
-levels = ["package"]
 # The footman plugin that carries the verb the wheels job runs.
 plugin = "livery.extensions.nanobind"
 # The distribution, the extension module's language, and the provider

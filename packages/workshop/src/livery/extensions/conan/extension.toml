@@ -3,8 +3,6 @@
 
 [extension]
 api-version = 1
-# Listed in a package's extensions.
-levels = ["package"]
 # Conan packages C and C++, so a package that lists conan is a C or C++
 # package.
 requires = ["cpp"]

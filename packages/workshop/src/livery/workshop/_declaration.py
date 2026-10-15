@@ -2,14 +2,17 @@
 
 An extension declares itself in one ``extension.toml``, beside the
 package its ``workshop.extensions`` entry point names: the workshop API
-version it is written for, the levels it may be listed at, its plugin,
-the extensions it requires, the phases it declares and the steps it
-adds to a package's lifecycle phases and to the gate's phases, the
-queries it declares and the ones it answers, the tools it runs, its
-CI jobs, the contract keys it owns, what it adds to another extension
-while that one is listed, and the earlier extensions' shipped files it
-replaces or deletes. The file is a contract, read as ``workshop.toml``
-is: kebab-case keys, every key judged, every refusal naming the file.
+version it is written for, its plugin, the extensions it requires, the
+phases it declares and the steps it adds to a package's lifecycle
+phases and to the gate's phases, the queries it declares and the ones
+it answers, the tools it runs, its CI jobs, the contract keys it owns,
+what it adds to another extension while that one is listed, and the
+earlier extensions' shipped files it replaces or deletes. The file is
+a contract, read as ``workshop.toml`` is: kebab-case keys, every key
+judged, every refusal naming the file. Every extension is one kind:
+the root's ``[workspace] extensions`` and a package's ``extensions``
+both list any of them, so the file says nothing about where it is
+listed.
 
 A ``[phases.<phase>]`` table declares the phase when it carries
 ``level``, ``gated``, ``after``, ``verb`` or ``keys``
@@ -193,8 +196,9 @@ class DeclaredValue:
 class DeclaredOutput:
     """A file an extension's code writes: a ``[fragments."<target>"]`` table.
 
-    A package-level extension's file is written while a package lists
-    the extension and withdrawn with the last package that did.
+    The file is written while the workspace's installed set holds the
+    extension, the root's list or a package's set, and withdrawn when
+    none does.
 
     Attributes:
         target: The file's path from the workspace root; a path ending
@@ -221,7 +225,6 @@ class Declaration:
         package: The package its entry point names, where its references live.
         path: The declaration file.
         api_version: The workshop API version it is written for.
-        levels: The levels it may be listed at.
         plugin: The footman plugin carrying its verbs; empty for none.
         requires: The extensions it cannot work without.
         dormant_until: What another extension does for this one by
@@ -266,7 +269,6 @@ class Declaration:
     package: str
     path: Path
     api_version: int = API_VERSION
-    levels: tuple[str, ...] = ("workspace",)
     plugin: str = ""
     requires: tuple[str, ...] = ()
     dormant_until: str = ""
@@ -460,9 +462,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
     own_queries = query_specs_of(data, path, extension=extension, package=package)
     reader.query_specs = _known_queries(own_queries, path)
     identity = data.get("extension", {})
-    reader.levels = tuple(
-        str(level) for level in identity.get("levels", ("workspace",))
-    )
     phases = reader.steps(data, ())
     additions = reader.additions(data, (), steps=phases)
     targets = {
@@ -471,9 +470,9 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
     template_specs_of(data, path, extension=extension)  # and so are these
-    queries = reader.answers(data, (), identity)
+    queries = reader.answers(data, ())
     answered = {
-        str(target): reader.answers(table, ("for", str(target)), identity)
+        str(target): reader.answers(table, ("for", str(target)))
         for target, table in data.get("for", {}).items()
     }
     if "executables" in queries and not phases.get("run"):
@@ -487,7 +486,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
         package,
         path,
         api_version=int(identity.get("api-version", API_VERSION)),
-        levels=tuple(str(level) for level in identity.get("levels", ("workspace",))),
         plugin=str(identity.get("plugin", "")),
         requires=tuple(str(name) for name in identity.get("requires", ())),
         dormant_until=str(identity.get("dormant-until", "")),
@@ -544,8 +542,6 @@ class _Reader:
         #: The declared queries an answer in this file may name, the
         #: same way.
         self.query_specs: dict[str, QuerySpec] = {}
-        #: The levels the extension may be listed at, from its identity.
-        self.levels: tuple[str, ...] = ("workspace",)
 
     def refuse(self, where: tuple[str, ...], text: str) -> DeclarationError:
         from livery.workshop._contract_keys import shown
@@ -813,8 +809,8 @@ class _Reader:
                 tuple(where),
                 f'is [fragments."{path}"]: a file the extension\'s code writes names'
                 " its render there, module:function called with the workspace root,"
-                " and a package-level extension's fragment lives while a package"
-                " lists it",
+                " and the fragment lives while the workspace's lists hold the"
+                " extension",
             )
         if "rules" in data:
             # The first rule names the step it is; a bare table names
@@ -868,23 +864,14 @@ class _Reader:
         """Every step *data*'s ``[phases.<phase>.<step>]`` tables declare, by phase.
 
         A phase with no step is left out. A step of a package-level
-        phase runs over the packages whose set holds the extension, so
-        an extension listed at the workspace alone declares none.
+        phase runs over the packages whose set holds the extension.
         """
-        from livery.workshop._phases import PACKAGE_LEVEL
-
         found: dict[str, tuple[StepRecord, ...]] = {}
         for phase, table in data.get("phases", {}).items():
-            spec = self.spec(str(phase), prefix)
+            self.spec(str(phase), prefix)
             named = _step_tables(table)
             if not named:
                 continue
-            if spec.level == PACKAGE_LEVEL and "package" not in self.levels:
-                raise self.refuse(
-                    (*prefix, "phases", str(phase)),
-                    "adds steps to a package's phase, and this extension's levels"
-                    " are workspace; add 'package' to levels, or drop the table",
-                )
             found[str(phase)] = tuple(
                 self.step(str(phase), step, entry, (*prefix, "phases"))
                 for step, entry in named.items()
@@ -1307,7 +1294,7 @@ class _Reader:
         return provides, reads
 
     def answers(
-        self, data: dict[str, Any], prefix: tuple[str, ...], identity: dict[str, Any]
+        self, data: dict[str, Any], prefix: tuple[str, ...]
     ) -> dict[str, Reference | DeclaredValue]:
         """The queries *data*'s ``[queries]`` table answers, each to its answer.
 
@@ -1320,7 +1307,7 @@ class _Reader:
         found: dict[str, Reference | DeclaredValue] = {}
         for name, value in data.get("queries", {}).items():
             if not _declares_query(value):
-                found[str(name)] = self.query(str(name), value, identity, prefix)
+                found[str(name)] = self.query(str(name), value, prefix)
             elif prefix:
                 raise self.refuse(
                     (*prefix, "queries", str(name)),
@@ -1330,25 +1317,17 @@ class _Reader:
         return found
 
     def query(
-        self,
-        name: str,
-        value: object,
-        identity: dict[str, Any],
-        prefix: tuple[str, ...] = (),
+        self, name: str, value: object, prefix: tuple[str, ...] = ()
     ) -> Reference | DeclaredValue:
         """The answer to the query *name*: a function, resolved, or a literal.
 
-        The name is a declared query. A package-level query is answered
-        by the package's set alone, so an extension answers one only
-        when a package may list it. A workspace-level query is asked of
-        every extension the workspace mounts, a package-level one while
-        a package holds it, so an extension of either level answers one.
-        A literal answer is one of the query's values when it declares
-        them. *prefix* is the ``[for.<target>]`` table the answer is
-        under, empty for the top level.
+        The name is a declared query. A workspace-level query is asked
+        of every extension the workspace mounts, a package-level one of
+        each extension a package's set holds, so any extension answers
+        either. A literal answer is one of the query's values when it
+        declares them. *prefix* is the ``[for.<target>]`` table the
+        answer is under, empty for the top level.
         """
-        from livery.workshop._queries import PACKAGE_LEVEL
-
         where = (*prefix, "queries", name)
         spec = self.query_specs.get(name)
         if spec is None:
@@ -1357,14 +1336,6 @@ class _Reader:
             raise self.refuse(
                 where,
                 f"names no query; the queries are {', '.join(self.query_specs)}{hint}",
-            )
-        levels = tuple(str(level) for level in identity.get("levels", ("workspace",)))
-        if spec.level == PACKAGE_LEVEL and PACKAGE_LEVEL not in levels:
-            raise self.refuse(
-                where,
-                "answers a question about a package, and this extension's levels"
-                f" are {', '.join(levels)}; add {PACKAGE_LEVEL!r} to levels, or drop"
-                " the answer",
             )
         if isinstance(value, dict):
             table = cast("dict[str, Any]", value)
@@ -1649,8 +1620,7 @@ class DeclaredTemplate:
         name: The name ``fm new.package`` takes it by.
         extension: The extension that declares it, or the base.
         doc: One line saying what a package born from it is.
-        extensions: The package-level extensions a package born from it
-            lists.
+        extensions: The extensions a package born from it lists.
         extends: The template whose files a birth writes first; empty
             for none.
         path: The file that declares it.
@@ -1722,15 +1692,13 @@ def template_specs_of(
         if listed is None:
             raise reader.refuse(
                 (*where, "extensions"),
-                "is missing: the package-level extensions a package born from"
-                " the template lists, [] for none",
+                "is missing: the extensions a package born from the template"
+                " lists, [] for none",
             )
         if not isinstance(listed, list) or not all(
             isinstance(item, str) for item in cast("list[object]", listed)
         ):
-            raise reader.refuse(
-                (*where, "extensions"), "is a list of package-level extensions"
-            )
+            raise reader.refuse((*where, "extensions"), "is a list of extensions")
         extends = entry.get("extends", "")
         if not isinstance(extends, str):
             raise reader.refuse((*where, "extends"), "is a template's name")
@@ -1828,8 +1796,6 @@ _REMOVED: dict[str, str] = {
     "pre": "goes: a step is named, and a step that runs after it names it in after",
     "post": "goes: a step is named, runs after the steps it names in after, and"
     " does its own cleanup on failure",
-    "kinds": "is extensions: the package-level extensions whose packages the step"
-    " judges, each package whose set holds one",
 }
 
 

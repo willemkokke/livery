@@ -71,8 +71,8 @@ over named packages through [livery.workshop.run_phase_over][]; and
 what the listed extensions declare for an extension is
 [livery.workshop.contributions_for][].
 
-A package-level extension adds steps to a package's lifecycle phases
-under ``[phases.<phase>.<step>]``, with the keys every step takes;
+An extension adds steps to a package's lifecycle phases under
+``[phases.<phase>.<step>]``, with the keys every step takes;
 each runs once per package whose set holds the extension and
 receives the same [livery.workshop.PhaseContext][], which carries the
 keys the steps provide and read. It
