@@ -596,6 +596,8 @@ def test_the_uv_sync_step_reads_the_entry_points_again_after_the_install(
 
 _MOVING = "relocating"
 _MOVING_PACKAGE = "relocating_ext"
+#: The package of a stand-in for the workshop's own distribution.
+_BASE_PACKAGE = "relocating_workshop"
 
 
 class _Handed(Exception):
@@ -617,9 +619,9 @@ def _handoffs(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return causes
 
 
-def _moving_package(directory: Path, label: str) -> None:
-    """Write the extension's package into *directory*: its declaration and one file."""
-    package = directory / _MOVING_PACKAGE
+def _moving_package(directory: Path, label: str, name: str = _MOVING_PACKAGE) -> None:
+    """Write the package *name* into *directory*: a declaration and one file."""
+    package = directory / name
     (package / "content" / "root").mkdir(parents=True)
     (package / "__init__.py").write_text("")
     (package / "extension.toml").write_text("[extension]\napi-version = 1\n")
@@ -628,40 +630,50 @@ def _moving_package(directory: Path, label: str) -> None:
     )
 
 
-def _install(site: Path, source: Path | None = None, *, version: str = "0.1") -> None:
-    """Install the extension's distribution into *site*, laid out as an installer does.
+def _install(
+    site: Path,
+    source: Path | None = None,
+    *,
+    version: str = "0.1",
+    name: str = _MOVING_PACKAGE,
+) -> None:
+    """Install the distribution of package *name* into *site*, as an installer does.
 
     Without *source*, a wheel: the package in *site*. With *source*, an
     editable install of the project there: the package under its
     ``src``, a ``.pth`` file naming that directory, and the origin in
-    ``direct_url.json``.
+    ``direct_url.json``. The extension's distribution declares it in
+    the extensions' entry point group; the workshop's stand-in declares
+    nothing.
     """
-    info = site / f"{_MOVING_PACKAGE}-{version}.dist-info"
+    info = site / f"{name}-{version}.dist-info"
     info.mkdir(parents=True)
+    distribution = name.replace("_", "-")
     (info / "METADATA").write_text(
-        f"Metadata-Version: 2.4\nName: relocating-ext\nVersion: {version}\n"
+        f"Metadata-Version: 2.4\nName: {distribution}\nVersion: {version}\n"
     )
-    (info / "entry_points.txt").write_text(
-        f"[workshop.extensions]\n{_MOVING} = {_MOVING_PACKAGE}\n"
-    )
+    if name == _MOVING_PACKAGE:
+        (info / "entry_points.txt").write_text(
+            f"[workshop.extensions]\n{_MOVING} = {_MOVING_PACKAGE}\n"
+        )
     if source is None:
-        if not (site / _MOVING_PACKAGE).is_dir():
-            _moving_package(site, f"the wheel {version}")
+        if not (site / name).is_dir():
+            _moving_package(site, f"the wheel {version}", name)
         return
-    if not (source / "src" / _MOVING_PACKAGE).is_dir():
-        _moving_package(source / "src", source.name)
-    (site / f"_{_MOVING_PACKAGE}.pth").write_text(f"{source / 'src'}\n")
+    if not (source / "src" / name).is_dir():
+        _moving_package(source / "src", source.name, name)
+    (site / f"_{name}.pth").write_text(f"{source / 'src'}\n")
     (info / "direct_url.json").write_text(
         json.dumps({"url": source.as_uri(), "dir_info": {"editable": True}})
     )
 
 
-def _uninstall(site: Path) -> None:
-    """Remove what an install of the extension put in *site*; an editable tree stays."""
-    shutil.rmtree(site / _MOVING_PACKAGE, ignore_errors=True)
-    for info in site.glob(f"{_MOVING_PACKAGE}-*.dist-info"):
+def _uninstall(site: Path, name: str = _MOVING_PACKAGE) -> None:
+    """Remove what an install of *name* put in *site*; an editable tree stays."""
+    shutil.rmtree(site / name, ignore_errors=True)
+    for info in site.glob(f"{name}-*.dist-info"):
         shutil.rmtree(info)
-    (site / f"_{_MOVING_PACKAGE}.pth").unlink(missing_ok=True)
+    (site / f"_{name}.pth").unlink(missing_ok=True)
 
 
 def _moving_workspace(
@@ -787,6 +799,45 @@ def test_an_install_from_another_tree_hands_the_sync_over_though_the_old_one_sta
     assert handed == [_reconcile.RELOCATED]
     assert "deliver" not in steps
     assert not (root / "relocating.txt").exists()
+
+
+@pytest.mark.parametrize(
+    "editable", [True, False], ids=["replaced-by-an-editable-tree", "removed"]
+)
+def test_an_install_that_moves_the_workshop_hands_the_sync_over(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    editable: bool,
+) -> None:
+    from livery.workshop import _extensions, _reconcile, _sync
+
+    # The base's own files, its contract, its seeds and its fragments,
+    # are read from the directory this process imported it from. Its
+    # wheel is replaced by an editable tree at another path, or removed;
+    # the extension stays where it was.
+    site = tmp_path / "site"
+    _install(site, name=_BASE_PACKAGE)
+    _install(site)
+    root = _moving_workspace(tmp_path, monkeypatch, site)
+    monkeypatch.setattr(_extensions, "BASE_DISTRIBUTION", "relocating-workshop")
+    monkeypatch.setattr(_extensions, "base_directory", lambda: site / _BASE_PACKAGE)
+
+    def install() -> None:
+        _uninstall(site, _BASE_PACKAGE)
+        if editable:
+            _install(site, tmp_path / "workshop", name=_BASE_PACKAGE)
+
+    steps = _sync_installing(monkeypatch, install)
+    handed = _handoffs(monkeypatch)
+    with pytest.raises(_Handed):
+        _sync.sync_checkout(root)
+    assert handed == [_reconcile.RELOCATED]
+    assert "deliver" not in steps
+    assert (
+        "  the install moved or removed livery.workshop; the sync continues in a"
+        " fresh process, which mounts what is installed now" in capsys.readouterr().out
+    )
 
 
 def test_a_handoff_that_cannot_start_refuses_before_the_moved_extension_is_read(

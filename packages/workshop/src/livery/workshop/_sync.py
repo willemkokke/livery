@@ -309,10 +309,13 @@ def continue_on_moved_code(
 def continue_on_moved_extensions(root: Path, moved: tuple[str, ...]) -> None:
     """Hand the sync to a fresh process when its install moved a mounted extension.
 
-    *moved* names the extensions whose distribution the sync's ``uv
-    sync`` moved or removed; when it names none, nothing happens. This
-    process found each extension's directory as it mounted it, and
-    reads its declaration, its shipped files and its code from there.
+    *moved* names the base and the extensions whose distribution the
+    sync's ``uv sync`` moved or removed; when it names none, nothing
+    happens. This process found each extension's directory as it
+    mounted it, and reads its declaration, its shipped files and its
+    code from there; it reads the base's own files, its contract, its
+    seeds and its fragments, from the directory it imported the base
+    from.
     An install that replaces an index's wheel with an editable member
     at another path removes that directory, and the member's path joins
     ``sys.path`` only when a process starts; an install from another
@@ -630,10 +633,10 @@ def sync(
     same way before anything renders or locks
     ([livery.workshop._sync.require_mounted][]): a sync never renders
     without one. A ``uv sync`` that moves or removes the distribution
-    of an extension the command mounted hands the rest of the sync over
-    the same way, before anything reads that extension again: this
-    process found it where the install no longer puts it. A handoff
-    that cannot start then refuses, and the next sync completes.
+    of the workshop, or of an extension the command mounted, hands the
+    rest of the sync over the same way, before anything reads it again:
+    this process found it where the install no longer puts it. A
+    handoff that cannot start then refuses, and the next sync completes.
 
     Shell completion answers from a manifest this command wrote as it
     started, from what was installed then. A sync that changed the
@@ -984,18 +987,18 @@ def _prepare_installs(root: Path) -> None:
 
 
 def _uv_sync(root: Path, flags: tuple[str, ...]) -> tuple[str, ...]:
-    """Run ``uv sync``; the extensions of the installed set whose place it changed.
+    """Run ``uv sync``; of the base and the installed set, those whose place it changed.
 
-    A place is where this process reads an extension and where the
-    environment installs it (`install_places` in the extensions module):
-    an extension whose place differs after the install is one the
-    install moved or removed.
+    A place is where this process reads the base or an extension and
+    where the environment installs it (`install_places` in the
+    extensions module): one whose place differs after the install is
+    one the install moved or removed.
     """
     from livery.footman import rescan_entry_points
-    from livery.workshop._extensions import extension_names, install_places
+    from livery.workshop._extensions import install_places, stack_names
     from livery.workshop._uv import run_uv
 
-    before = install_places(extension_names(root))
+    before = install_places(stack_names(root))
     run_uv("sync", *flags, root=root)
     # The install moves a member stamped to another version to a new
     # dist-info directory, and an entry point scanned before the move

@@ -1089,11 +1089,12 @@ prompt, one profile per platform. A sync whose first act moved the checkout hand
 fresh process on the code now on disk, since the modules it loaded
 are the old code; a re-run that cannot start is named and the sync
 continues on the loaded code. A sync whose `uv sync` moved or removed
-the distribution of an extension it mounted hands the rest over the
-same way, before anything reads that extension again: the lock can
-replace an index's wheel with an editable member at another path, and
-this process found the extension where the wheel was. There a re-run
-that cannot start refuses, and the next `fm sync` completes.
+the distribution of the workshop, or of an extension it mounted, hands
+the rest over the same way, before anything reads it again: the lock
+can replace an index's wheel with an editable member at another path,
+and this process found the workshop's own files or the extension where
+the wheel was. There a re-run that cannot start refuses, and the next
+`fm sync` completes.
 
 The stubs the four type checkers read are materialised too. `fm
 toolroom.restub` writes them into `typings/` at the root, pyright's
