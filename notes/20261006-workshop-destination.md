@@ -3256,8 +3256,20 @@ neither needs nor rules out).
   the coverage extension, their only importer; the 2026-10-13 entry put
   them on the workshop because coverage shipped in its wheel. One
   release wave at the end of the step publishes the workshop, the eight
-  extensions and the tool extensions together. Three choices wait on
-  him (Open, 7).
+  extensions and the tool extensions together.
+- 2026-10-15, Willem, on step 8's remaining choices (#1664): a
+  workshop test that mounts a moved extension as data skips where the
+  extension is not installed, naming its distribution, since a `test`
+  extra naming the extension is a dependency edge back to the
+  workshop, which the cycle check refuses. A package is born from a
+  template whose extension no package lists yet with `fm new.package
+  <name> <template> --extension=<ext>`, which lists the extension,
+  syncs and then renders the template; and an `fm sync` that changed
+  what is installed starts footman's background rebuild of the
+  completion manifest, so completion offers a new extension's tasks at
+  once (#1668). Extensions have public API: python and conan get entry
+  modules exporting what nanobind reads of them, conan's until phase
+  13's per-host artifact replaces carrying packages through releases.
 - 2026-10-15, step 8's P0 (#1665): `livery.workshop` serves each public
   name from its defining module on every read and keeps none, so a test
   that patches a defining module before the first read leaves no fake
@@ -3294,13 +3306,3 @@ recommendation. Owner: Willem, unless named.
    govern carries the admin token and the gate job the run's own, so
    one job would hold both, against the rule that a job takes the
    run's token alone (#1280). Owner: Willem.
-7. **Step 8's three open choices** (#1664). (a) The workshop's tests
-   that mount a moved extension as data: they skip where it is not
-   installed (recommended), since a `test` extra naming the extension
-   is a dependency edge back to the workshop, which the cycle check
-   refuses. (b) A package born from a template whose extension no
-   package lists yet: an `--extension` option on `fm new.package`
-   (recommended), or template names that carry their extension. (c)
-   nanobind's reads of python and conan: entry modules exporting the
-   names it uses (recommended; conan's until phase 13), or queries
-   python and conan answer. Owner: Willem.
