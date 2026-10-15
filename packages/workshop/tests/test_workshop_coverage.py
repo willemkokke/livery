@@ -909,6 +909,11 @@ def test_a_root_listing_no_python_measures_its_packages_and_misses_no_part_for_t
     assert coverage_leg.suites_that_ran(full, tmp_path, (x,)) == (x,)
     assert coverage_leg.units_of(tmp_path, (x,)) == (x,)
     _in_ci(monkeypatch, "gate")
+    # A root contract makes the run expect its runners' legs; here the
+    # run's legs are the one this test puts.
+    monkeypatch.setattr(
+        coverage_union, "expected_legs", lambda root, run: (["check-a"], ["check-a"])
+    )
     _union(monkeypatch, [_leg("check-a", "full", units=units)])
     assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     assert "the union of 1 leg(s) and 0 reused suite(s)" in capsys.readouterr().out
@@ -1504,6 +1509,11 @@ def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branch
     source = _name(tmp_path, "x")
     _own_tests(tmp_path)  # the workspace's own tests, a unit too
     _in_ci(monkeypatch, "gate")
+    # A root contract makes the run expect its runners' legs; here the
+    # run's legs are the one this test puts.
+    monkeypatch.setattr(
+        coverage_union, "expected_legs", lambda root, run: (["check-a"], ["check-a"])
+    )
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     held = coverage_record.Record(
@@ -1733,6 +1743,11 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
     source = _name(tmp_path, "x")
     _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
+    # A root contract makes the run expect its runners' legs; here the
+    # run's legs are the one this test puts.
+    monkeypatch.setattr(
+        coverage_union, "expected_legs", lambda root, run: (["check-a"], ["check-a"])
+    )
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     own = coverage_record.Record(
@@ -1855,6 +1870,11 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     y_source = _name(tmp_path, "y")
     _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
+    # A root contract makes the run expect its runners' legs; here the
+    # run's legs are the one this test puts.
+    monkeypatch.setattr(
+        coverage_union, "expected_legs", lambda root, run: (["check-a"], ["check-a"])
+    )
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     leg = _leg(
         "check-a",
@@ -1958,6 +1978,11 @@ def test_a_push_of_an_unnamed_tree_carries_from_main_alone_and_writes_nothing_ne
     source = _name(tmp_path, "x")
     _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
+    # A root contract makes the run expect its runners' legs; here the
+    # run's legs are the one this test puts.
+    monkeypatch.setattr(
+        coverage_union, "expected_legs", lambda root, run: (["check-a"], ["check-a"])
+    )
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     held = coverage_record.Record(
         {
