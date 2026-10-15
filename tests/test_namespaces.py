@@ -467,6 +467,7 @@ EXPORTS: dict[str, list[str]] = {
         "testing",
         "this_forge",
         "this_repository",
+        "undeployed",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",

@@ -79,6 +79,7 @@ def test_the_surface_is_declared() -> None:
         "testing",
         "this_forge",
         "this_repository",
+        "undeployed",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",
