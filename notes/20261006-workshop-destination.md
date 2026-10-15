@@ -128,20 +128,19 @@ on.
     registry while the mount runs, so no extension's correctness
     depends on its position in the list beyond what `requires` and
     `[for]` state.
-28. **Mount order is the base, then the package-level extensions, then
-    the workspace list.** Package-level extensions mount in requires
-    order over the union of every package's list, then the workspace
-    list in listed order. Composition order is the same order. A
-    workspace extension that names a capability at mount (a check's
-    `kinds`, a category it extends) finds it registered or refuses by
-    name.
+28. **Mount order is the base, then every extension the packages' sets
+    hold, then the root list's set.** The extensions the packages' sets
+    hold mount in composition order over the union of those sets, then
+    the root list in its listed order, each entry after what it
+    requires. Composition order is the same order. An extension that
+    names a capability at mount (a phase it adds a step to, a category
+    it extends) finds it registered or refuses by name.
 29. **Every registration names its tools, and a tool is required only
     while the registration is in use.** A check's tools while a package
-    it judges exists; a package-level extension's while a package lists
-    it; a generator's while the docs extension is listed and a package
-    its claims reach exists; a workspace extension's `tools` while it is
-    listed. A mounted extension whose registrations are unused costs its
-    declaration file's parse and nothing else.
+    it judges exists; a generator's while the docs extension is listed
+    and a package its claims reach exists; an extension's `tools` while
+    any list's set holds it. A mounted extension whose registrations
+    are unused costs its declaration file's parse and nothing else.
 30. **A public name lives in the root's entry module or a public module
     it declares, is documented, type-complete, pinned by a test and
     judged by the conformance kit.** A package's source never imports
@@ -183,8 +182,8 @@ It owns:
 - the contracts: `workshop.toml` at the root and per package, strict,
   every key declared by its owner;
 - package discovery and the workspace graph;
-- the mount: the `workshop.extensions` entry point group, the levels,
-  `requires`, `[for]`, options, the API version check;
+- the mount: the `workshop.extensions` entry point group, the
+  installed set, `requires`, `[for]`, options, the API version check;
 - the registries: checks, fragments and seeds, categories, slots,
   contract keys, CI points and jobs, guidance sections and fragments,
   the release notes provider, AST rules over a language's reader,
@@ -208,36 +207,31 @@ development pages (the docs extension).
 
 ### The sorts of extension
 
-The engine knows two levels, `workspace` and `package`, and nothing
-else about an extension's sort: an extension is what it registers.
-Four sorts exist from a reader's view, and the conformance kit's
-clauses apply by what is registered, not by a declared sort.
+The engine knows one kind of extension: an extension is what it
+registers. The root's `[workspace] extensions` says what the workspace
+wants, and a package's `extensions` says what the package is made of.
+Either list takes any extension. A list's set is the list and every
+extension it requires, transitively, and the installed set is the
+root list's set and every package's set. Three sorts exist from a
+reader's view. No key declares them, and the conformance kit's clauses
+apply by what is registered, not by a declared sort.
 
-| Sort | Level | May register | Seams it uses | Examples |
-| --- | --- | --- | --- | --- |
-| check (tool) | workspace | checks, page generators, tool configuration fragments, editor contributions, tools, options | `[checks.<tool>.<role>]`, `[generators.<name>]`, `[fragments."<target>"]`, `content/`, `tools`, `[options]` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
-| package | package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `[phases]`, `[queries]`, `[categories]`, `seeds/`, `[root-files."<path>"]`, `tools`, `[ci.jobs.<point>.<name>]`, `[checks.<tool>.<role>]`, `[for]` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
-| workspace (product) | workspace | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `[checks.<tool>.<role>]`, `[ci.jobs.<point>.<name>]`, `[slots.<name>]`, `[guidance.<section>]`, `release-notes`, `[rules.<name>]`, `[fragments."<target>"]`, `contributions_for` | docs, changelog, claude, housekeeping, coverage |
+| Sort | May register | Seams it uses | Examples |
+| --- | --- | --- | --- |
+| check (tool) | checks, page generators, tool configuration fragments, editor contributions, tools, options | `[checks.<tool>.<role>]`, `[generators.<name>]`, `[fragments."<target>"]`, `content/`, `tools`, `[options]` | ruff, basedpyright, mypy, ty, pyrefly, pytest, clang-format, clang-tidy; doxygen (phase 12) |
+| package | what a package is composed from: phases, queries, categories, seeds, root files, tools, host tools, toolchains, the layering reader, CI jobs, checks of its own | `[phases]`, `[queries]`, `[categories]`, `seeds/`, `[root-files."<path>"]`, `tools`, `[ci.jobs.<point>.<name>]`, `[checks.<tool>.<role>]`, `[for]` | a language: python, cpp, later rust, go, java; a build system: cmake, nanobind; an ecosystem: conan, later crates, maven, npm; a platform or SDK: unreal |
+| workspace (product) | checks, CI jobs, slots, guidance, the release notes provider, AST rules, fragments, verbs; a registry of its own that other extensions contribute to | `[checks.<tool>.<role>]`, `[ci.jobs.<point>.<name>]`, `[slots.<name>]`, `[guidance.<section>]`, `release-notes`, `[rules.<name>]`, `[fragments."<target>"]`, `contributions_for` | docs, changelog, claude, housekeeping, coverage |
 
 The package sort has four flavours and no sub-sort: a language, a
 build system, an ecosystem and a platform differ in which phases and
 queries they answer, nothing more. `conan` composes with `cpp` and
 `cmake` the way the plan already states, `nanobind` with `python` and
 `cmake`, and `python` carries PyPI inside it because uv and
-`pyproject.toml` are the engine's runtime. A package-level extension
-contributes CI jobs like a workspace one, and its job exists while a
-package lists it: the wheels job is nanobind's, with the runner labels
-its packages declare, and an engine build on its own runners is
+`pyproject.toml` are the engine's runtime. An extension of the package
+sort contributes CI jobs like any other, and its job exists while the
+installed set holds it: the wheels job is nanobind's, with the runner
+labels its packages declare, and an engine build on its own runners is
 unreal's.
-
-No `sort` key is declared. The brief's question, whether to
-define extension types with a load order between them, is answered by
-contract 28 without a new declaration: the level is the order. Every
-package-level extension mounts before any workspace extension, so a
-language's capabilities are registered before a product reads them,
-and a product that names a language's capability at mount gets a
-refusal naming the capability instead of an `AttributeError` at verb
-time.
 
 ### Requiring and extending
 
@@ -277,24 +271,15 @@ its answers and its shipped files, and `fm extensions` and `fm doctor`
 name it dormant with the installed extensions whose declarations would
 wake it.
 
-`compatible` is a third declaration on another axis: composition, not
-contribution. It says two package-level extensions may sit on one
-package, and the validity rule reads it: a package's list is valid when
-every pair is connected through `requires` or compatibility, else the
-package refuses naming the pair. For a package-level pair, a `requires`
-or `for` target counts as compatible: contributing to an extension
-means knowing it, so `[for.python]` without `compatible = ["python"]`
-would be a contradiction to refuse, and deriving it removes the case.
-`compatible` is needed only where neither side requires or contributes
-to the other, `conan` beside `nanobind` for one. The wheel's side is
-one rule as well: a compatibility claim is an extra (contract 15), and
-a reference under `[for.<target>]` that imports its target's public
-names is the same extra, `livery-extensions-nanobind[python]`. So three
-outcomes, each at its own place: a missing `requires` target refuses at
-the listing; an absent `for` target is silence, the entry dormant and
-named; an unconnected pair refuses at the package, naming both.
-`before` and `after` are declared against required or compatible
-extensions, which the derived compatibility covers.
+What composes is `requires` alone: a list's set is the list and every
+extension it requires, transitively, whatever those extensions
+declare. Two extensions where neither requires the other cooperate
+through `[for.<target>]`, a table read only while the installed set
+holds both, as python answers pytest's suite-runner queries under
+`[for.pytest.queries]`. Two extensions that cannot share a package are
+refused by the rules of the phase they both add steps to, two
+providers of one context key or two owners of one executable, never by
+a rule over the pair.
 
 ### Dependencies follow use
 
@@ -303,10 +288,10 @@ dependencies. Contract 29 states the rule per registry, and the parts
 already hold for checks ("a check's tools reach the tool profile for
 every kind the check judges"). What changes:
 
-- a package-level extension's distribution enters the dev group only
-  while some package lists it (the composed `pyproject.toml` lists the
-  distributions of the listed extensions, workspace list plus the
-  union of the packages' lists);
+- an extension's distribution enters the dev group only while some
+  list's set holds it: the composed `pyproject.toml` lists the
+  distributions of the installed set, the root list's set plus every
+  package's set;
 - a generator's tools (doxygen for the C++ reference) are required
   only while the docs extension is listed and a package the generator
   claims exists;
@@ -430,10 +415,10 @@ is the shape if a pair ever needs refusing by name, and none does.
 **Folded into the three.** Slots and contributions become queries an
 extension declares with a combine rule, `docs.members` with `nearest`,
 which others answer. Root files become fragments, since a fragment
-lives exactly while its owner is listed and a package-level extension
-is listed while a package lists it. `[setup]` becomes the configure
-phase. `[rules]` become steps of the layering phase over one parse per
-language. `release-notes` becomes a query with one answer. Options and
+lives exactly while the installed set holds its owner, whichever list
+brings it. `[setup]` becomes the configure phase. `[rules]` become
+steps of the layering phase over one parse per language.
+`release-notes` becomes a query with one answer. Options and
 `listed-with` become `enabled` on the step, declared false by the
 extension and set true at the step's address in the root contract, so
 `basedpyright[typecomplete]` is one line under
@@ -532,18 +517,15 @@ a schema fragment with the shape of the file it describes.
 | Key | Value | Sort | Users today, or the phase that brings one |
 | --- | --- | --- | --- |
 | `[extension] api-version` | int | every | the eight tool extensions, docs |
-| `[extension] levels` | `["workspace"]`, `["package"]` or both | every | the eight, docs |
 | `[extension] plugin` | the footman plugin carrying the verbs | every | docs |
 | `[extension] requires` | extensions it cannot work without, listed before it; it declares for them at the top level | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
-| `[extension] compatible` | extensions it combines with, from either side; a `requires` or `for` target counts as one | package | phase 11 |
-| `[extension] before`, `after` | order within a phase against named extensions | package | phase 11 |
 | `[toolroom] requires` | the tools its verbs need, in the root contract's own table and grammar | every | forge's dev plugin (as a plugin) |
 | `[options]` | option name to what it turns on | every | basedpyright |
 | `[contract.<contract>.<table>]` | the keys it owns, at the table path they have in that contract: `publish = { types = ["str"], values = [...], doc = "..." }` | every | docs |
 | `[checks.<tool>.<role>]` | a check, at the address the contract configures it by: `scope`, `narrowing`, `transport`, `threshold`, `extensions`, `claims`, `tools`, `options`, `inputs`, `after`, and either its words (`judge`, `fix`, `safe-fix`, `env`, `matrix`) or references (`run`, `fix`) | every | the eight, docs |
 | `[generators.<name>]` | a page generator: `extensions`, `claims`, `tools`, `options`, `run` | check | mkdocstrings (phase 11), doxygen (phase 12) |
 | `[fragments."<target>"]` | a dynamic fragment: `render`; files ship under `content/` | every | claude's `CLAUDE.md` (phase 10), docs' override template (phase 12) |
-| `[ci.jobs.<point>.<name>]` | a CI job for a builtin point, under the contract's `[ci]` table: `entries`, `gates`, `installs`, `deploy`, `inputs`, `labels`, `conan-cache`; a package-level extension's job exists while a package lists it | workspace, package | docs (phase 10), nanobind's wheels job (phase 11) |
+| `[ci.jobs.<point>.<name>]` | a CI job for a builtin point, under the contract's `[ci]` table: `entries`, `gates`, `installs`, `deploy`, `inputs`, `labels`, `conan-cache`; an extension's job exists while the installed set holds it | workspace, package | docs (phase 10), nanobind's wheels job (phase 11) |
 | `[slots.<name>]`, `[contributions]` | a slot it declares (`compose`, `default`, `values`), and the values it puts into others' | workspace, check | docs (`docs.members`, `docs.theme`), pytest (dev group lines) |
 | `[guidance.<section>]` | a section (`after`), or `[guidance.<section>.<topic>]` a rendered fragment (`render`); files ship under `content/fragments/` | every | the base's own sections; housekeeping's prose (phase 12) |
 | `release-notes` | a reference to the provider | workspace | changelog (phase 10) |
@@ -658,8 +640,8 @@ Everything else the TOML names is judged without a run:
 | --- | --- |
 | `tools`, and the first word of `judge` | the tool is in the catalogue and the lock, its floor parses through `Spec`, and the first word names a tool the check declares |
 | `claims` | each category is one some extension registers; each suffix starts with a dot |
-| `extensions` on a check or generator | each names a package-level extension that is installed or follows the naming convention |
-| `requires`, `compatible`, `for` | each target exists and may be listed at its level; a `requires` target is in the wheel's `Requires-Dist` and a `for` target is one of its extras (contract 15) |
+| `extensions` on a check or generator | each names an extension that is installed or follows the naming convention |
+| `requires`, `for` | each target exists; a `requires` target is in the wheel's `Requires-Dist` and a `for` target is one of its extras (contract 15) |
 | `after` | names a registered check, and following `after` never returns (an existing clause) |
 | `contributions`, `options` | the slot exists and the value is in its set; the option is one the extension declares |
 | `[contract.<contract>.<table>]` | kebab-case paths, known types, values of those types, a `doc` on every key, no two extensions declaring one key |
@@ -670,7 +652,7 @@ Everything else the TOML names is judged without a run:
 | `[phases.<phase>]` | the phase is one of the nine; across the mounted set one provider per key, a provider for every reader, no cycle |
 | `[queries]` | the name is one the base defines |
 | `[categories]` | the patterns are globs, and specificity never ties within one extension (an existing clause) |
-| `api-version`, `levels`, `plugin` | the version is the engine's, the levels are valid, the plugin is an entry point in the wheel's metadata |
+| `api-version`, `plugin` | the version is the engine's, the plugin is an entry point in the wheel's metadata |
 
 Where each runs: the judge at mount for shape and existence; the gate,
 through the layering check's one parse, for an extension that lives in
@@ -771,7 +753,7 @@ checks are exposed, each extractor naming what it operates on, and
 factor out what the two share. The answer, in `[generators.<name>]`:
 
 - A generator is a `[generators.<name>]` table with `extensions` (the
-  package-level extensions a package lists for the generator to apply;
+  extensions a package lists for the generator to apply;
   a check's `kinds` becomes the same key in phase 11), `claims`
   (categories and suffixes, the same `Claim` a check carries), `tools`,
   `options` and a `run`. The
@@ -1301,6 +1283,28 @@ slices, each mergeable alone:
    vocabulary test's allowance names the runtime, and beside it only
    rows that name the later change removing them (#1534, phases 14 and
    15).
+
+**One kind of extension** (issue #1673, ruled 2026-10-15) is built
+before step 8 continues. Every extension is one kind, `levels` goes,
+and the installed set is the root list's set plus every package's set.
+The parts, each mergeable alone, in this order:
+
+- N1 (built, #1674): one kind; `levels` goes; the installed set; the
+  proof of which extensions compose something in a package.
+- N2: no list's order means anything; `fm new.project --extensions`
+  replaces `--stack`, which goes.
+- N3: the workspace's own tests hold the root list's set, and the
+  stock list of `fm new.project` names python.
+- N4: templates follow the installed set.
+- Then step 8's P1b, cmake's move (#1667), rebased.
+- N5: a package's list composes. A package that lists an extension
+  that composes nothing in a package refuses.
+- Then #1672, reduced.
+
+#1670, `fm sync` failing when its `uv sync` moves a mounted
+extension's distribution, is built after N1 and before P1b merges.
+#1653 sweeps the refusals of removed spellings that remain after N1.
+
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
@@ -1310,7 +1314,10 @@ slices, each mergeable alone:
    under one issue, the names it needs made public and then the move.
    P0 (built, #1665) rewrites the reads of private names that already
    have a public one; then cmake, mkdocstrings, docs, coverage,
-   nanobind, conan, cpp and python, in that order.
+   nanobind, conan, cpp and python, in that order. The birth with
+   `--extension` (the plan's F2) is withdrawn by the one-kind ruling,
+   because a creation never installs, and P1b, cmake's move, waits for
+   N4.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1662,6 +1669,7 @@ neither needs nor rules out).
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
+| the root list's order decides the mount, workspace answers, fragments and rewriters | composition order (#1673's N2) |
 
 ## Decision record
 
@@ -3276,6 +3284,63 @@ neither needs nor rules out).
   behind; a test patches a name where the code under test reads it. The
   in-wheel extensions read 57 private names of the base at 97 places
   after P0, from 71 at 158; cpp reads none.
+- 2026-10-15, Willem, on one kind of extension (#1673): every
+  extension is one kind, and `[extension] levels` goes. With two
+  levels, a template could need a package-level extension that no
+  package listed yet, so it was visible and could not be used, and a
+  reader had to learn two kinds of extension and a list whose order
+  decided precedence. This replaces the two levels, the 2026-10-07
+  ruling that package-level extensions mount first, and step 8's birth
+  with `--extension`. A list's set is the list plus what it requires,
+  transitively, and each list is written in its canonical minimal
+  form. The rulings:
+  - (i) A package listing an extension that composes nothing in a
+    package refuses, judged by the declarations alone.
+  - (ii) Include, as in uv's model: the installed set is the root
+    list's set plus every package's set.
+  - (iii) No list's order means anything; composition order decides
+    everywhere.
+  - livery is a workspace like any other, with no special case for
+    the runtime's language.
+  - A template is listed when the extension that declares it is
+    installed. One that needs an extension that is not installed
+    refuses, naming it. A creation never installs.
+  - Defaults are opt-out. Cooperation among installed extensions is
+    greedy. `for` on a root entry, and
+    `[phases.<phase>.<step>] enabled = false` in a package, are the
+    opt-outs.
+  - The plan's flagged choices F1 to F9 are taken as recommended.
+    Under F8, an implied root entry that carries `for` is kept, and a
+    `for` equal to the default is written as the plain name.
+- 2026-10-15, Willem, on removed spellings (#1653): no code refuses or
+  rewrites a removed key, option or template that no workspace outside
+  this repository wrote; the ordinary refusal of an unknown key,
+  option or name covers it. Such code serves a past that no one
+  outside this repository lived through, and each spelling adds a
+  wording and a test to keep correct. This supersedes the step 7
+  ruling that a contract writing `kind` refuses, naming the list to
+  write.
+- 2026-10-15, Willem, on the follow-ups placed in this work: #1670
+  (`fm sync` failing when its `uv sync` moves a mounted extension's
+  distribution) is built after N1 and before step 8's P1b merges.
+  #1628 closes with step 8's P3a, which deletes `_site_files`. #1662
+  (a description beside each choice in completion) folds into #1672.
+  #1611 is option (b): a docs step declares what it writes outside
+  `docs/_generated/`, and the docs build clears it before the docs
+  phase runs; it is built with step 8's P3.
+- 2026-10-15, one kind's N1 (#1674), built: every `extension.toml`
+  and the `workshop-extension` template drop `levels`, which the
+  contract no longer declares, so a declaration that writes it meets
+  the unknown-key refusal. Either list takes any extension; the mount
+  and the dev group take the installed set; `fm sync` installs a name
+  only a package lists, naming that list. N1 also deletes the `kind`
+  and `kinds` refusals. `composes_per_package`, the proof of ruling
+  (i), reads the installed declarations and finds exactly cmake,
+  conan, cpp, nanobind and python composing in a package; the
+  conformance kit, the doctor and the vocabulary test read it.
+  Measured: `src/` gains 421 lines and loses 577, `tests/` gains 452
+  and loses 539, and the declarations lose 39.
+  Until N2, the root list's order still decides what it did before.
 
 ## Open
 
