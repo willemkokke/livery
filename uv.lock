@@ -15,6 +15,7 @@ members = [
     "livery-extensions-clang-tidy",
     "livery-extensions-claude",
     "livery-extensions-cmake",
+    "livery-extensions-lfs",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",
@@ -807,6 +808,7 @@ dev = [
     { name = "livery-extensions-clang-tidy" },
     { name = "livery-extensions-claude" },
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-lfs" },
     { name = "livery-extensions-mypy" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-pytest" },
@@ -842,6 +844,7 @@ dev = [
     { name = "livery-extensions-clang-tidy", editable = "packages/extensions/clang-tidy" },
     { name = "livery-extensions-claude", editable = "packages/extensions/claude" },
     { name = "livery-extensions-cmake", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-lfs", editable = "packages/extensions/lfs" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-pytest", editable = "packages/extensions/pytest" },
@@ -994,6 +997,23 @@ dependencies = [
 requires-dist = [
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-git", editable = "packages/git" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+
+[[package]]
+name = "livery-extensions-lfs"
+version = "0.0.0"
+source = { editable = "packages/extensions/lfs" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
