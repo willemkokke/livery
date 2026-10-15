@@ -1,11 +1,12 @@
-"""Compose package-level extensions on one package: its set, order, list and name.
+"""Compose extensions on one package: its set, order, list and name.
 
-A package lists the package-level extensions it is made of in its own
-``workshop.toml``. Its set is that list and every package-level
-extension the list requires, transitively: requires alone composes a
-package. Two extensions that cannot share one are refused by the rules
-of the phase they both add steps to, two providers of one key or two
-owners of one executable, never by a rule over the pair.
+A package lists the extensions it is made of in its own
+``workshop.toml``. Its set is that list and every extension the list
+requires, transitively, whatever those extensions declare: requires
+alone composes a package. Two extensions that cannot share one are
+refused by the rules of the phase they both add steps to, two
+providers of one key or two owners of one executable, never by a rule
+over the pair.
 
 Composition order is the order a set mounts in and is named in: an
 extension comes after the extensions it requires, and ties go
@@ -36,9 +37,6 @@ if TYPE_CHECKING:
 #: installed distribution declares.
 Lookup = Callable[[str], "Declaration | None"]
 
-#: The level a package's own list names.
-PACKAGE = "package"
-
 
 class OrderCycle(ValueError):
     """A declared order with no first member: each one comes after another.
@@ -64,7 +62,12 @@ def requirements(name: str, lookup: Lookup) -> tuple[str, ...]:
 
 
 def closure(names: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
-    """*names* and every extension they require, transitively, first met first."""
+    """*names* and every extension they require, transitively, first met first.
+
+    A list's set. A name the lookup finds no declaration for stays in
+    it and requires nothing: a sync installs it, and the mount names it
+    until then.
+    """
     found: dict[str, None] = {}
     pending = list(names)
     while pending:
@@ -75,38 +78,20 @@ def closure(names: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
     return tuple(found)
 
 
-def package_level(name: str, lookup: Lookup) -> bool:
-    """Whether *name* is an installed extension a package may list."""
-    declared = lookup(name)
-    return declared is not None and PACKAGE in declared.levels
-
-
-def package_set(listed: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
-    """The package-level extensions *listed* stands for: the list and what it requires.
-
-    A requirement listed at the workspace alone is the workspace's, and
-    an extension nothing installed declares belongs to no level: both
-    stay out of the set.
-    """
-    return tuple(
-        name for name in closure(listed, lookup) if package_level(name, lookup)
-    )
-
-
 #: Each list a package names, to the scan of the installed extensions it
 #: was composed against and the set it composed to.
 _SETS: dict[tuple[str, ...], tuple[object, tuple[str, ...]]] = {}
 
 
 def extension_set(package: Package) -> tuple[str, ...]:
-    """The package-level extensions *package* holds, which its steps match.
+    """The extensions *package* holds, which its steps match.
 
-    Its set: the extensions it lists and the package-level ones they
-    require, as the installed declarations compose them
-    ([livery.workshop._composition.package_set][]). Empty for a package
-    that lists none. Each distinct list is composed once for each scan
-    of the installed extensions, so a scan taken after an install
-    composes it again.
+    Its set: the extensions it lists and every one they require, as the
+    installed declarations compose them
+    ([livery.workshop._composition.closure][]). Empty for a package that
+    lists none. Each distinct list is composed once for each scan of the
+    installed extensions, so a scan taken after an install composes it
+    again.
     """
     listed = package.extensions
     if not listed:
@@ -118,7 +103,7 @@ def extension_set(package: Package) -> tuple[str, ...]:
     held = _SETS.get(listed)
     if held is not None and held[0] is scan:
         return held[1]
-    found = package_set(listed, installed_declaration)
+    found = closure(listed, installed_declaration)
     _SETS[listed] = (scan, found)
     return found
 
@@ -222,7 +207,7 @@ def canonical(listed: Iterable[str], lookup: Lookup) -> tuple[str, ...]:
     Raises:
         OrderCycle: when the set's declared order has no start.
     """
-    members = package_set(listed, lookup)
+    members = closure(listed, lookup)
     required = implied(members, lookup)
     return tuple(name for name in order(members, lookup) if name not in required)
 

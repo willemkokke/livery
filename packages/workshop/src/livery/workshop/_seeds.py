@@ -205,12 +205,12 @@ def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
     Raises:
         Failed: for a template of the chain whose directory of files is
             missing, and for a born template listing an extension no
-            installed distribution declares, one a package does not
-            list, or a list whose requirements order no start.
+            installed distribution declares, or a list whose
+            requirements order no start.
     """
     from livery.workshop._composition import OrderCycle, canonical
     from livery.workshop._declaration import DeclarationError
-    from livery.workshop._extensions import GROUP, PACKAGE, installed_declaration
+    from livery.workshop._extensions import GROUP, installed_declaration
 
     for template in chain:
         files = template_files(template)
@@ -222,17 +222,11 @@ def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
     born = chain[-1]
     try:
         for name in born.extensions:
-            found = installed_declaration(name)
-            if found is None:
+            if installed_declaration(name) is None:
                 fail(
                     f"the template {born.name} lists {name}, which no installed"
                     f" distribution declares in {GROUP}; install it, or birth the"
                     " package from another template"
-                )
-            if PACKAGE not in found.levels:
-                fail(
-                    f"the template {born.name} lists {name}, which a package does"
-                    " not list: it is listed in [workspace] extensions alone"
                 )
         return canonical(born.extensions, installed_declaration)
     except (DeclarationError, OrderCycle) as error:

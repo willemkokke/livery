@@ -4,7 +4,7 @@ An extension declares steps and category tables that the gate then
 relies on. The kit states what the gate relies on, one clause at a
 time, and judges an extension against it: a
 [livery.workshop.testing.Subject][] names the extension, the sets of
-package-level extensions to probe it with and the steps it registers,
+extensions to probe it with and the steps it registers,
 each [livery.workshop.testing.Clause][] returns the
 [livery.workshop.testing.Violation][]s the subject commits, and
 [livery.workshop.testing.CLAUSES][] lists them in order. An extension's own

@@ -26,7 +26,6 @@ from workshop_extension_fakes import fake_extensions, fake_steps
 METER = """
 [extension]
 api-version = 1
-levels = ["workspace"]
 
 [for.coverage.queries]
 "coverage.measurers" = "{package}._steps:measurers"

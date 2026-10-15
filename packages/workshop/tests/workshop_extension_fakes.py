@@ -1,4 +1,9 @@
-"""Fake extensions for the tests: packages that declare themselves, found by path."""
+"""Fake extensions for the tests: packages that declare themselves, found by path.
+
+A test of what happens before an extension is installed takes an
+installed one away with `withheld`, and puts it back as an install
+would.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ import importlib
 import shutil
 import sys
 import textwrap
+from collections.abc import Callable
 from importlib.metadata import EntryPoint
 from pathlib import Path
 
@@ -32,18 +38,19 @@ def fake_extensions(
     The contract keys' owners are read again for the test alone, so a
     fake's keys never reach a later test.
     """
-    _fake(tmp_path, monkeypatch, modules, real_package_level=True)
+    _fake(tmp_path, monkeypatch, modules, real_composing=True)
 
 
 def fake_package_extensions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **modules: str
 ) -> None:
-    """The fakes of [fake_extensions][], and no real extension a package may list.
+    """The fakes of [fake_extensions][], and no real extension composing a package.
 
-    For a test that judges the package-level set it built: the real
-    ones the workshop installs are left out of the scan.
+    For a test that judges the set it built: the real ones the
+    workshop installs that compose something in a package are left out
+    of the scan.
     """
-    _fake(tmp_path, monkeypatch, modules, real_package_level=False)
+    _fake(tmp_path, monkeypatch, modules, real_composing=False)
 
 
 def _fake(
@@ -51,7 +58,7 @@ def _fake(
     monkeypatch: pytest.MonkeyPatch,
     modules: dict[str, str],
     *,
-    real_package_level: bool,
+    real_composing: bool,
 ) -> None:
     """Write the fakes and put them in footman's scan; see [fake_extensions][]."""
     site = tmp_path / "site"
@@ -76,8 +83,8 @@ def _fake(
         for name in modules
     )
     named = {entry.name for entry in fakes}
-    if not real_package_level:
-        named |= _real_package_level()
+    if not real_composing:
+        named |= _real_composing()
     scanned = tuple(
         entry
         for entry in installed_entry_points()
@@ -96,18 +103,52 @@ def _fake(
     monkeypatch.setattr(_queries, "declared_queries", functools.cache(queries))
 
 
-def _real_package_level() -> set[str]:
-    """The installed extensions whose declaration lists the package level."""
-    from livery.workshop._declaration import read
+def _real_composing() -> set[str]:
+    """The installed extensions that compose something in a package."""
+    return {
+        name
+        for name in _extensions.installed_extensions()
+        if _extensions.composes_per_package(name)
+    }
 
-    found: set[str] = set()
-    for entry in installed_entry_points():
-        if entry.group != _extensions.GROUP:
-            continue
-        declared = read(entry.name, entry.value.partition(":")[0])
-        if declared is not None and "package" in declared.levels:
-            found.add(entry.name)
-    return found
+
+def withheld(monkeypatch: pytest.MonkeyPatch, *extensions: str) -> Callable[[], None]:
+    """Take installed *extensions* away for the test; the function that installs them.
+
+    Each one's entry point leaves footman's scan of the installed
+    distributions, so every reader of the extensions finds no
+    distribution declaring it. The function returned puts them back as
+    a sync that installs them would: the next read of the installed
+    extensions finds them, and what is read from their declarations is
+    read again.
+    """
+    scanned = installed_entry_points()
+    shown = [
+        tuple(
+            entry
+            for entry in scanned
+            if entry.group != _extensions.GROUP or entry.name not in extensions
+        )
+    ]
+    monkeypatch.setattr(_entries, "_scan", lambda: shown[0])
+    monkeypatch.setattr(_entries, "_SCAN", None)
+    read = (
+        (_contract_keys, "declarations"),
+        (_phases, "declared_phases"),
+        (_queries, "declared_queries"),
+    )
+    for module, name in read:
+        monkeypatch.setattr(
+            module, name, functools.cache(getattr(module, name).__wrapped__)
+        )
+
+    def install() -> None:
+        shown[0] = scanned
+        monkeypatch.setattr(_entries, "_SCAN", None)
+        for module, name in read:
+            getattr(module, name).cache_clear()
+
+    return install
 
 
 def fake_steps(tmp_path: Path, name: str, source: str) -> None:

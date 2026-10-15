@@ -383,8 +383,7 @@ def test_the_all_members_policy_renders_underscore_members(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        base='[extension]\nlevels = ["workspace"]\n'
-        '[queries."docs.members"]\nvalue = "all"\n',
+        base='[extension]\n[queries."docs.members"]\nvalue = "all"\n',
     )
     root = _workspace(tmp_path, extensions='["docs", "mkdocstrings", "acme.base"]')
     assert _problems(root, "See [acme.thing._impl._spin][].") == []

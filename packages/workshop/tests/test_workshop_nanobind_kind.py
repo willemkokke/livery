@@ -168,10 +168,11 @@ def test_a_package_listing_nanobind_holds_python_cpp_and_conan(
     package (conan, for the provider that resolves them), and nanobind
     builds its wheels. The tools the build runs are nanobind's.
     """
-    from livery.workshop._extensions import composed_set, declaration
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import declaration, installed_declaration
     from livery.workshop._steps import judges_extensions, steps_by_name, tools_for
 
-    held = composed_set(["nanobind"])
+    held = closure(["nanobind"], installed_declaration)
     assert held == ("nanobind", "python", "cpp", "conan")
     # A step naming python judges the package: its tool joins the profile.
     assert {"fake"} <= {tool for tool, _ in tools_for(held)}

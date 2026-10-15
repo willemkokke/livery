@@ -52,8 +52,9 @@ def extensions() -> None:
 
     The lists are the whole of discovery: what shapes this repository
     is exactly what it prints, and the instance's own files always
-    win last. The package-level extensions come first, each with the
-    packages whose sets hold it, then ``[workspace] extensions``.
+    win last. The extensions a package's set holds come first, each
+    with the packages whose sets hold it, then ``[workspace]
+    extensions``.
     """
     from livery.workshop._extensions import (
         describe_extensions,

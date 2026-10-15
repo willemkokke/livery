@@ -73,7 +73,7 @@ def test_the_roster_is_discovery_with_each_members_set_and_python_extras(
         'name = "acme-native"\nextensions = ["cmake", "conan"]\n',
         "conanfile.py",
     )
-    # Each member names the package-level extensions it holds, in
+    # Each member names the extensions it holds, in
     # composition order: what it lists and what they require.
     assert roster(tmp_path) == [
         {

@@ -52,8 +52,8 @@ def _member(root: Path, contract: str) -> Path:
     return member
 
 
-#: A package-level extension's declaration, its categories to follow.
-PACKAGE_LEVEL = '[extension]\nlevels = ["package"]\n'
+#: An extension's declaration, its categories to follow.
+PACKAGE_LEVEL = "[extension]\n"
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def test_a_declared_categories_value_off_the_shape_refuses(
     fake_package_extensions(
         tmp_path,
         monkeypatch,
-        lua='[extension]\nlevels = ["package"]\n\n[categories]\nsource = "lua/**"\n',
+        lua='[extension]\n\n[categories]\nsource = "lua/**"\n',
     )
     with pytest.raises(DeclarationError, match="categories"):
         installed_declaration("acme.lua")
@@ -244,10 +244,7 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
     fake_package_extensions(
         tmp_path,
         monkeypatch,
-        lua=(
-            '[extension]\nlevels = ["package"]\n\n[categories]\n'
-            'source = ["lua/**"]\ntest = ["spec/**"]\n'
-        ),
+        lua=('[extension]\n\n[categories]\nsource = ["lua/**"]\ntest = ["spec/**"]\n'),
     )
     package = replace(_package(), extensions=("acme.lua",))
     found = category_of(package, "lua/init.lua")

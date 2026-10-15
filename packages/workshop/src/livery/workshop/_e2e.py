@@ -599,7 +599,7 @@ class LoopMember:
     template: str
 
     def listed(self) -> tuple[str, ...]:
-        """The package-level extensions the member's contract lists, from its template.
+        """The extensions the member's contract lists, from its template.
 
         The installed template's ``extensions`` in their canonical form,
         which a birth writes into the contract, so the loop and the
@@ -613,10 +613,11 @@ class LoopMember:
         return canonical(declared.extensions, installed_declaration)
 
     def holds(self) -> tuple[str, ...]:
-        """The installed package-level extensions the member's set holds."""
-        from livery.workshop._extensions import composed_set
+        """The extensions the member's set holds: its list and what it requires."""
+        from livery.workshop._composition import closure
+        from livery.workshop._extensions import installed_declaration
 
-        return composed_set(self.listed())
+        return closure(self.listed(), installed_declaration)
 
 
 #: The loop's members. The nanobind member forces the wheels path on

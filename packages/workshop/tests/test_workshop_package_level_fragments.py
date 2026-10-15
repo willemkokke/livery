@@ -1,4 +1,4 @@
-"""A package-level extension's fragments: refusals first, then what the sync writes."""
+"""An extension's fragments: refusals first, then what the sync writes."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from livery.workshop._declaration import DeclarationError
 from livery.workshop._shipped_files import deliver, outputs
 from workshop_extension_fakes import fake_extensions, fake_steps
 
-#: A package-level extension's identity, the start of every fake here.
-PACKAGE = '[extension]\nlevels = ["package"]\n'
+#: An extension's identity, the start of every fake here.
+PACKAGE = "[extension]\n"
 
 #: A fragment written by the fake's render.
 FRAGMENT = '\n[fragments."members.txt"]\nrender = "{package}._steps:render"\n'
@@ -21,8 +21,8 @@ FRAGMENT = '\n[fragments."members.txt"]\nrender = "{package}._steps:render"\n'
 #: What a stale declaration is told: the fragments spelling.
 SPELLING = (
     'is [fragments."{path}"]: a file the extension\'s code writes names its'
-    " render there, module:function called with the workspace root, and a"
-    " package-level extension's fragment lives while a package lists it"
+    " render there, module:function called with the workspace root, and the"
+    " fragment lives while the workspace's lists hold the extension"
 )
 
 #: The render: one line per package whose set holds the extension, in

@@ -375,9 +375,9 @@ def _walk(subject: Package | Path, spec: QuerySpec, lookup: Lookup) -> tuple[str
             f"{spec.name} is a question about the workspace, which {spec.extension}"
             " declares at the workspace level; ask it with the workspace root"
         )
-    from livery.workshop._composition import OrderCycle, order, package_set
+    from livery.workshop._composition import OrderCycle, closure, order
 
-    members = package_set(subject.extensions, lookup)
+    members = closure(subject.extensions, lookup)
     try:
         return order(members, lookup)
     except OrderCycle:

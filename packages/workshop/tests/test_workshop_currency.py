@@ -90,9 +90,20 @@ def test_a_sync_mounts_every_listed_extension_before_it_renders_or_locks(
         lambda start: (("ruff", "livery-extensions-ruff"), ("mypy", "acme-mypy")),
     )
     # The refusals first. A --locked sync installs nothing outside the
-    # lock: refused before anything renders or locks.
-    with pytest.raises(Failed, match="installs nothing outside the lock"):
+    # lock: refused before anything renders or locks, naming the list that
+    # brings each extension.
+    monkeypatch.setattr(
+        "livery.workshop._extensions.where_listed",
+        lambda start: {"mypy": "listed in the `extensions` of packages/app"},
+    )
+    with pytest.raises(Failed) as refused:
         require_mounted(tmp_path, ("--locked",), install=False)
+    assert str(refused.value) == (
+        "no installed distribution declares mypy (listed in the `extensions` of"
+        " packages/app), and a sync with --locked installs nothing outside the"
+        " lock: install the distribution that ships each, or remove the entry."
+        " Nothing was rendered or locked"
+    )
     assert ran == [("sync", "--locked")]
     assert handed == []
     # Installed, and still no distribution declares it.

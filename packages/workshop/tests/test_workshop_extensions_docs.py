@@ -236,14 +236,13 @@ def _language_words() -> set[str]:
     """The words of a language the docs extension never names outside prose.
 
     The language the API reference renders and the tools that read it,
-    and the name of every installed extension a package lists.
+    and the name of every installed extension that composes something in
+    a package.
     """
-    from livery.workshop._extensions import installed_extensions, levels_of
+    from livery.workshop._extensions import composes_per_package, installed_extensions
 
     words = {"python", "griffe", "mkdocstrings"}
-    words.update(
-        name for name in installed_extensions() if "package" in levels_of(name)
-    )
+    words.update(name for name in installed_extensions() if composes_per_package(name))
     return words
 
 

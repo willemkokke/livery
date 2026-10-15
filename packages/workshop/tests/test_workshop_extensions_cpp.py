@@ -211,7 +211,6 @@ def test_the_wheel_ships_cmake_cpp_and_conan_as_package_level_extensions() -> No
         assert found[name] == f"livery.extensions.{name}"
         declared = declaration(name)
         assert declared is not None
-        assert declared.levels == ("package",)
     cmake = declaration("cmake")
     conan = declaration("conan")
     assert cmake is not None

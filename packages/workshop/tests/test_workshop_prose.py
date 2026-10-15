@@ -355,7 +355,7 @@ def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_rea
     agent = render_gate(root, AGENT)
     assert "acme-native" not in agent and "format" not in agent
     assert "- layering.graph: judges the workspace; rewrites under --fix" in agent
-    assert "the members hold the package-level extensions none." in agent
+    assert "the members hold the extensions none." in agent
     _member(root, "cpp", "cmake", "conan")
     agent = render_gate(root, AGENT)
     assert "- lint.acme-native: judges cpp packages" in agent
@@ -363,15 +363,12 @@ def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_rea
         "- format.fake: judges python or conan packages; rewrites under --fix" in agent
     )
     assert "typecheck" not in agent
-    assert "the members hold the package-level extensions cmake, conan, cpp." in agent
+    assert "the members hold the extensions cmake, conan, cpp." in agent
     _member(root, "py", "python")
     agent = render_gate(root, AGENT)
     for tool in ("fake",):
         assert f"- typecheck.{tool}: judges python packages" in agent
-    assert (
-        "the members hold the package-level extensions cmake, conan, cpp, python."
-        in agent
-    )
+    assert "the members hold the extensions cmake, conan, cpp, python." in agent
     human = render_gate(root, HUMAN)
     assert human != agent
     assert "| lint.acme-native | none | cpp | no |" in human
@@ -417,7 +414,7 @@ def test_the_compositions_and_tools_fragments_render_what_is_present(
 ) -> None:
     root = _workspace(tmp_path)
     assert render_compositions(root, AGENT) == ""
-    # A package holding no package-level extension, one that lists none,
+    # A package holding no extension, one that lists none,
     # is listed under none.
     _member(root, "odd")
     assert "- none (packages/odd): holds none; gate phases none\n" in (

@@ -278,8 +278,7 @@ def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
     """The rules that answer for *package*, the nearest first.
 
     The workspace's own unit takes its table alone. Every other package
-    takes the tables of the package-level extensions it holds, over the
-    base's.
+    takes the tables of the extensions its set holds, over the base's.
     """
     from livery.workshop._packages import is_workspace_unit
 

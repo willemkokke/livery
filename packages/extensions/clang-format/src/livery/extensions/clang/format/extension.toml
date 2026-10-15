@@ -5,8 +5,6 @@
 
 [extension]
 api-version = 1
-# Listed in the workspace's list alone: one style for every member.
-levels = ["workspace"]
 
 # The packages that carry C or C++.
 [phases.format.clang-format]

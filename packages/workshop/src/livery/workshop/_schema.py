@@ -169,9 +169,7 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
 
     *listed* holds the names the contract's lists name the extensions by,
     the base among them; None takes every installed owner as listed. A
-    key of an owner they leave out says which list would take it: the
-    root's for an extension a workspace lists, a package's for one only
-    a package lists.
+    key of an owner they leave out says which lists would take it.
     The owners in [livery.workshop._contract_keys.ALWAYS][], the base
     and the tool store, count as listed in every workspace. The
     ``extension`` contract is the base's and the tool store's alone,
@@ -192,9 +190,7 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
             if listed is None or owned.owner in ALWAYS or owned.owner in listed:
                 keys.append((owned.declared, "", ""))
             else:
-                keys.append(
-                    (owned.declared, owned.owner, _unlisted_by(owned.owner, contract))
-                )
+                keys.append((owned.declared, owned.owner, _unlisted_by(contract)))
     return {
         "$schema": DRAFT,
         "$comment": (
@@ -207,16 +203,15 @@ def compose(contract: ContractKind, listed: frozenset[str] | None) -> dict[str, 
     }
 
 
-def _unlisted_by(owner: str, contract: ContractKind) -> str:
-    """Which list leaves *owner* out, as a refusal of its key in *contract* says it."""
-    from livery.workshop._extensions import PACKAGE, WORKSPACE, levels_of
+def _unlisted_by(contract: ContractKind) -> str:
+    """Which lists leave an owner out, as a refusal of its key in *contract* says it.
 
-    levels = levels_of(owner)
-    if PACKAGE not in levels or WORKSPACE in levels:
-        return "[workspace] extensions does not list"
+    A package's contract takes the keys of what the root's list or the
+    package's own list holds; the root's, those of what any list holds.
+    """
     if contract == "package":
-        return "this package's `extensions` does not list"
-    return "no package's `extensions` lists"
+        return "neither [workspace] extensions nor this package's `extensions` lists"
+    return "neither [workspace] extensions nor a package's `extensions` lists"
 
 
 _COMPOSED: dict[tuple[ContractKind, frozenset[str] | None], tuple[object, Any]] = {}
@@ -281,10 +276,10 @@ def schema_files(root: Path) -> dict[str, bytes]:
     """Each contract's composed schema for *root*, by its path under the root."""
     from livery.workshop._contract import _root_tables
     from livery.workshop._contract_keys import listed_extensions
-    from livery.workshop._extensions import package_extensions
+    from livery.workshop._extensions import installed_set
 
     listed = listed_extensions(_root_tables(root / "workshop.toml")) | set(
-        package_extensions(root)
+        installed_set(root)
     )
     return {
         f"{DIRECTORY}/{name}": (

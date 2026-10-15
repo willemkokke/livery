@@ -375,7 +375,7 @@ doc = "the extras the package's entry in the root's dev group installs"
 
 [contract.package.extensions]
 types = ["strs"]
-doc = "the package-level extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"
+doc = "the extensions the package is composed of, by name: its minimal list, with no extension another listed one requires"
 
 [contract.package.name]
 types = ["str"]
@@ -552,20 +552,11 @@ doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this o
 
 [contract.extension.extension]
 types = ["table"]
-doc = "the extension's identity: its workshop API version, its levels, its plugin, the extensions it requires, and what it waits for while dormant"
+doc = "the extension's identity: its workshop API version, its plugin, the extensions it requires, and what it waits for while dormant"
 
 [contract.extension.extension.api-version]
 types = ["int"]
 doc = "the workshop API version the extension is written for, which the mount refuses unless it is this workshop's; 1 when absent"
-
-[contract.extension.extension.levels]
-types = ["list"]
-doc = "the levels the extension may be listed at; the workspace alone when absent"
-
-[contract.extension.extension."levels[]"]
-types = ["str"]
-doc = "a level: workspace for the root's [workspace] extensions, package for a package's own"
-values = ["workspace", "package"]
 
 [contract.extension.extension.plugin]
 types = ["str"]
@@ -589,7 +580,7 @@ doc = "a target extension, by its listed name, to what this one adds while both 
 
 [contract.extension.fragments]
 types = ["table"]
-doc = "the files the extension's code writes, by their path from the root; a path ending in / is a directory whose files the render names; a package-level extension's are written while a package lists it"
+doc = "the files the extension's code writes, by their path from the root; a path ending in / is a directory whose files the render names; written while the root's list or a package's set holds the extension"
 
 [contract.extension.fragments."*"]
 types = ["table"]
@@ -687,7 +678,7 @@ doc = "the variable's value; a placeholder in it is answered as in the words"
 
 [contract.extension.phases."*"."*".extensions]
 types = ["strs"]
-doc = "the package-level extensions whose packages the step judges: each package whose set holds one; every package when absent"
+doc = "the extensions whose packages the step judges: each package whose set holds one; every package when absent"
 
 [contract.extension.phases."*"."*".fix]
 types = ["str", "strs"]
@@ -707,7 +698,7 @@ doc = "a file, by its name, to its text for a project file, or a table of its te
 
 [contract.extension.phases."*"."*".fragments."*".extensions]
 types = ["strs"]
-doc = "the package-level extensions whose packages carry the file: each package whose set holds one"
+doc = "the extensions whose packages carry the file: each package whose set holds one"
 
 [contract.extension.phases."*"."*".fragments."*".text]
 types = ["str"]
@@ -817,7 +808,7 @@ doc = "the tools the step runs, as the tool profile names them, each required wh
 
 [contract.extension.categories]
 types = ["table"]
-doc = "the categories a package-level extension gives its packages' paths, which a package's own [categories] overrides"
+doc = "the categories the extension gives the paths of each package whose set holds it, which a package's own [categories] overrides"
 
 [contract.extension.categories."*"]
 types = ["strs"]
@@ -881,7 +872,7 @@ doc = "the template whose files the birth writes first, this one's file winning 
 
 [contract.extension.templates."*".extensions]
 types = ["strs"]
-doc = "the package-level extensions a package born from the template lists, written into its contract in their canonical form; required, [] for none"
+doc = "the extensions a package born from the template lists, written into its contract in their canonical form; required, [] for none"
 
 
 # The base's phases, in the grammar of [contract.extension.phases."*"]:

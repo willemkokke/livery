@@ -35,8 +35,8 @@ class Fragment:
             or a per-package file name.
         text: The fragment's jinja text, rendered with the file's own
             render data.
-        extensions: For a per-package file, the package-level extensions
-            whose packages render it; empty for a project file.
+        extensions: For a per-package file, the extensions whose
+            packages render it; empty for a project file.
     """
 
     file: str

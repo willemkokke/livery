@@ -4,7 +4,7 @@ The installed templates birth a member: python's library and command
 line, nanobind's module (a python package whose extension module is
 C++), conan's C++ library and executable, and the base's workshop
 extension. Each test states one thing the workshop does with such a
-member: the files its birth writes, the package-level extensions
+member: the files its birth writes, the extensions
 it holds, the files a sync composes for a workspace of one python, one
 nanobind and one C++ member, the tools a workspace requires, the members
 each step judges, where a requirement on a sibling lands, what the
@@ -155,7 +155,7 @@ def _files(directory: Path) -> dict[str, str]:
 
 # The births.
 
-#: The package-level extensions each template's member holds, in
+#: The extensions each template's member holds, in
 #: composition order: its list and what the list requires. nanobind
 #: requires python, cpp and conan, so it comes after all three.
 HELD = {
@@ -170,7 +170,7 @@ HELD = {
 
 def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
     from livery.workshop._composition import extension_set, order
-    from livery.workshop._extensions import installed_declaration, package_extensions
+    from livery.workshop._extensions import installed_declaration, installed_set
 
     root = _workspace(tmp_path / "acme")
     members = _born(root, *TREES)
@@ -180,7 +180,7 @@ def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
     }
     assert held == HELD
     # The mount takes the union of the members' sets, in composition order.
-    assert package_extensions(root) == ("cmake", "cpp", "conan", "python", "nanobind")
+    assert installed_set(root) == ("cmake", "cpp", "conan", "python", "nanobind")
 
 
 #: The lines of each template's contract that say what its member is, by
@@ -234,7 +234,7 @@ def _three_seeds(root: Path) -> tuple[dict[str, Package], tuple[str, ...]]:
 
 
 #: What a process started in the three seeds' workspace mounts, in order:
-#: the package-level extensions the members hold, then the list.
+#: the extensions the members hold, then the list.
 MOUNTED = (
     "cmake",
     "cpp",

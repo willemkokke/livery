@@ -63,7 +63,8 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
     listed: tuple[str, ...],
     name: str,
 ) -> None:
-    from livery.workshop._extensions import composed_set
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._shipped_files import settle_package
 
     if not _supplied():
@@ -79,7 +80,7 @@ def test_a_member_born_from_the_native_seeds_is_in_style(
             "project_name": "acme",
         },
     )
-    settle_package(destination, composed_set(listed))
+    settle_package(destination, closure(listed, installed_declaration))
     assert (destination / ".clang-format").is_file()
     package = Package(
         directory=destination,
@@ -124,7 +125,8 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
 ) -> None:
     from livery.extensions.cmake import _build as cmake_build
     from livery.workshop import COMPILE_COMMANDS, answer
-    from livery.workshop._extensions import composed_set
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._shipped_files import settle_package
 
     destination = tmp_path / "packages" / "native"
@@ -138,7 +140,7 @@ def test_a_tidy_finding_in_a_seeded_member_turns_the_gate_red(
             "project_name": "acme",
         },
     )
-    settle_package(destination, composed_set(("cmake", "conan")))
+    settle_package(destination, closure(("cmake", "conan"), installed_declaration))
     package = Package(
         directory=destination,
         path="packages/native",

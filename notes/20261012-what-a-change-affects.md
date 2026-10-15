@@ -52,7 +52,8 @@ Each is a consumer of the one engine with its own influence rule.
   categories with suffixes and the rule codes a tool skips there,
   judged per package against the catalogue
   (`livery.workshop._steps.catalogue`); the categories come from the
-  package-level extensions' `[categories]` and a package's own.
+  `[categories]` of the extensions in a package's set and the
+  package's own.
   `inputs`: root-relative patterns with `reads`, `widens`, `ignores`,
   `on-removal`, `per-file` and a `widen` function
   (`livery.workshop._influence.Inputs`, answered by `select`), for
@@ -141,9 +142,9 @@ Each is a consumer of the one engine with its own influence rule.
 10. **Fallbacks before happy paths.** The closure check and the auditor
     each get a test forcing their failure before their happy path
     exists.
-11. **A package-level extension supplies its file graph**, as an answer
-    to a query. Python's is the import rule. A package whose extensions
-    answer none stays at package grain.
+11. **An extension in a package's set supplies its file graph**, as an
+    answer to a query. Python's is the import rule. A package whose
+    extensions answer none stays at package grain.
 12. **No logic in YAML.** The nightly's full run, the closure check
     and the auditor are verbs the emitted shell calls.
 13. **A selector a person cannot read is not trusted.** Every selected
@@ -160,10 +161,10 @@ what a change to them does. The choice is open 1:
 
 - (a) **Patterns everywhere.** `reads` holds root-relative patterns,
   with the influence keys beside it; a category becomes a named set of
-  patterns a package-level extension declares, written by name. Does
-  not cover: a step that judges each package's files would spell every
-  package's prefix, or a pattern grammar for "in each package" is
-  added; the rule codes a tool skips per category move into the tool's
+  patterns an extension declares, written by name. Does not cover: a
+  step that judges each package's files would spell every package's
+  prefix, or a pattern grammar for "in each package" is added; the
+  rule codes a tool skips per category move into the tool's
   configuration fragment.
 - (b) **Categories everywhere.** A workspace step's or a job's patterns
   become categories of the workspace's own unit, declared in the root
@@ -201,7 +202,7 @@ only its influence rule:
 | the development build | A and what depends on it within the closure being built; a package's inputs include the output fingerprints of the members it depends on |
 | a test file (phase 7) | the test files whose closure meets the change |
 
-A package-level extension declares its build inputs by category; a file
+An extension declares a package's build inputs by category; a file
 no extension claims and that is not documentation counts as an input,
 so the engine errs toward rebuilding, and the tool's own incremental
 build stays as the second net. The gate's build steps and `fm run`

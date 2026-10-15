@@ -5,8 +5,6 @@
 
 [extension]
 api-version = 1
-# Listed in a package's extensions.
-levels = ["package"]
 
 # The tools the gate build runs: cmake configures and builds with the
 # Ninja generator, so the lock pins both while a package's set holds

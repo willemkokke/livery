@@ -102,7 +102,7 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
     *cwd* decides the package a target that names none means. The
     development build runs first ([livery.workshop._run.develop][]).
     """
-    from livery.workshop._composition import package_set
+    from livery.workshop._composition import closure
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._packages import discover_packages
     from livery.workshop._phases import PhaseContext, PhaseError, phase_steps, run_phase
@@ -133,7 +133,7 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
     develop(root, package, packages)
     # The run steps of an extension answering executables start them,
     # so of those the owner's run alone; every other extension's run.
-    members = package_set(package.extensions, installed_declaration)
+    members = closure(package.extensions, installed_declaration)
     steps = tuple(
         record
         for record in phase_steps("run", members, installed_declaration)

@@ -4,7 +4,7 @@ The root `workshop.toml`'s `[workspace]` table names the project, its
 description, its namespace, its authors and its copyright year; each
 package's `workshop.toml` names the package, its kind, its description
 and the extras its dev-group entry installs, and discovery gives the
-package-level extensions it holds. The renders read these facts under
+extensions its set holds. The renders read these facts under
 the names the templates spell (`project_name`, `package_name`, the
 `packages` roster), so a template reads the same data whatever stores
 it.
@@ -72,7 +72,7 @@ def identity(root: Path) -> dict[str, Any]:
 def roster(root: Path) -> list[dict[str, Any]]:
     """Each member as the project file lists it, in path order.
 
-    Each carries `extensions`, the package-level extensions it holds in
+    Each carries `extensions`, the extensions its set holds, in
     composition order. A member holding the runtime's language carries
     `dev`, the dev-group entry with its `dev-extras`; any other carries
     none and stays out of the uv workspace.

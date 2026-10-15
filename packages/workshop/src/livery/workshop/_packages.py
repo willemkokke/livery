@@ -22,7 +22,6 @@ from itertools import takewhile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from livery.footman import Failed
 from livery.workshop._contract import load_contract
 
 
@@ -74,9 +73,9 @@ class Package:
             artifact to its registry. ``[release] publish = false``
             keeps an internal tool versioned, tagged and built by the
             train and never uploaded; the default is true.
-        extensions: The package-level extensions the package lists, in
-            its contract's order: its canonical list, which the
-            extensions it requires complete into its set.
+        extensions: The extensions the package lists, in its contract's
+            order: its canonical list, which the extensions it requires
+            complete into its set.
     """
 
     directory: Path
@@ -341,7 +340,7 @@ def is_workspace_unit(package: Package) -> bool:
     return not package.path.startswith(f"{PACKAGES_DIR}/")
 
 
-#: The package-level extension of the language the workshop runs on.
+#: The extension of the language the workshop runs on.
 #: The workspace's own ``tasks.py`` and tests run on that runtime
 #: whatever its members are, so the steps that judge a package holding
 #: this extension judge them too. A member holding it is a distribution
@@ -457,11 +456,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     directory holding only what a removed package left behind is
     named as such, with the ``fm sync`` that removes it. A package
     that lists no extension holds none, and needs no project file.
-
-    A contract that writes ``kind`` refuses, and the refusal names
-    every member's contract that writes it, each with the list to write
-    in its place ([livery.workshop._contract.removed_kinds][]); nothing
-    rewrites them.
     """
     problems = []
     packages = []
@@ -473,11 +467,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         if not contract_file.is_file():
             problems.append(_no_contract(root, directory))
             continue
-        try:
-            contract = load_contract(contract_file)
-        except Failed:
-            _refuse_written_kinds(root, contract_file)
-            raise
+        contract = load_contract(contract_file)
         depends = tuple(
             Edge(
                 path=str(edge.get("path", "")),
@@ -536,30 +526,6 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             "packages missing a file they need:\n  " + "\n  ".join(problems)
         )
     return tuple(packages)
-
-
-def _refuse_written_kinds(root: Path, contract: Path) -> None:
-    """Refuse naming every member's contract that writes ``kind``, when *contract* does.
-
-    Asked after *contract*'s own load refused, so a workspace whose
-    contracts write no ``kind`` reads none of them twice.
-    """
-    from livery.footman import fail
-    from livery.workshop._contract import written_kinds
-
-    written = written_kinds(
-        directory / "workshop.toml" for directory in package_directories(root)
-    )
-    if contract not in written:
-        return
-    lines = [
-        f"{path.relative_to(root).as_posix()}: {line}"
-        for path, line in sorted(written.items())
-    ]
-    fail(
-        "these package contracts write kind, which nothing rewrites; edit each"
-        " as its line says:\n  " + "\n  ".join(lines)
-    )
 
 
 def verify_workspace(root: Path) -> tuple[Package, ...]:

@@ -297,8 +297,7 @@ def test_a_declared_provider_is_imported_when_the_train_first_asks_it(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        notes='[extension]\nlevels = ["workspace"]\n'
-        '[queries]\nrelease-notes = "{package}._steps:notes"\n',
+        notes='[extension]\n[queries]\nrelease-notes = "{package}._steps:notes"\n',
     )
     fake_steps(
         tmp_path,

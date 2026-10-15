@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import _extensions, _phases
-from livery.workshop._composition import package_set
+from livery.workshop._composition import closure
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext, PhaseError, phase_steps, run_phase
@@ -19,8 +19,8 @@ from workshop_extension_fakes import (
     root_contract,
 )
 
-#: A package-level extension's identity, the start of every fake here.
-PACKAGE = '[extension]\nlevels = ["package"]\n'
+#: An extension's identity, the start of every fake here.
+PACKAGE = "[extension]\n"
 
 #: A step that says when it runs.
 SAYS = """\
@@ -81,7 +81,7 @@ def _run(
     *inputs* are the keys the engine gives *phase*.
     """
     lookup = _extensions.installed_declaration
-    steps = phase_steps(phase, package_set(package.extensions, lookup), lookup)
+    steps = phase_steps(phase, closure(package.extensions, lookup), lookup)
     given = {} if inputs is None else {phase: inputs}
     return run_phase(_engine(root, package, phase), steps, inputs=given)
 
@@ -343,11 +343,6 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
             " names in after, and does its own cleanup on failure",
         ),
         (
-            '[phases.build.odd]\nmain = "{package}._steps:main"\n',
-            "phases.build adds steps to a package's phase, and this extension's"
-            " levels are workspace; add 'package' to levels, or drop the table",
-        ),
-        (
             PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
             'provides = { x = "str" }\nreads = ["x"]\n',
             "phases.build.odd.reads names x, which its provides names too; a step"
@@ -377,7 +372,6 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
         "key-of-a-step",
         "pre",
         "post",
-        "workspace-level",
         "reads-its-own",
         "no-function",
         "scope",
@@ -957,7 +951,7 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
     ):
         declared_phases()
     # A package-level phase declared with no step declares alone, and a
-    # step into it from a workspace-level extension refuses as any does.
+    # step into it is read as any extension's is.
     fake_extensions(
         tmp_path, monkeypatch, site='[phases.notes]\nlevel = "package"\ngated = false\n'
     )
@@ -972,8 +966,9 @@ def test_an_extension_declares_a_phase_with_its_engine_keys_level_placement_and_
         site='[phases.notes]\nlevel = "package"\n'
         '[phases.notes.write]\nmain = "{package}._steps:noop"\n',
     )
-    with pytest.raises(DeclarationError, match="adds steps to a package's phase"):
-        _extensions.declaration("acme.site")
+    found = _extensions.declaration("acme.site")
+    assert found is not None
+    assert [record.name for record in found.phases["notes"]] == ["notes.write"]
     # Then the declaration: its keys, level, placement and verb, read from
     # the file and known to every reader.
     fake_extensions(tmp_path, monkeypatch, site=DECLARES_BOOK)

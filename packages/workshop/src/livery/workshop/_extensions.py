@@ -1,13 +1,15 @@
 """The extension walk: the lists in the contracts, every channel.
 
-The root ``workshop.toml`` names the workspace's extensions in
-precedence order, the workshop first and the instance implicitly last,
-and each package's ``workshop.toml`` names the package-level extensions
-it is composed of. Mounting reads those lists: the base, then the
-package-level extensions in composition order over every package's
-set, then the workspace list in its order. So a package installed by
-accident never changes a repository: discovery is the lists and
-nothing else.
+Every extension is one kind, and two lists name them: the root
+``workshop.toml``'s ``[workspace] extensions``, in precedence order,
+the workshop first and the instance implicitly last, and each
+package's ``workshop.toml``, the extensions it is composed of. A list's
+set is the list and every extension it requires. The installed set is
+the root's set and every package's set: a sync installs it, and
+mounting reads it, the base first, then the packages' sets in
+composition order, then the root's list in its order. So a package
+installed by accident never changes a repository: discovery is the
+lists and nothing else.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import cwd, prog
-from livery.workshop._composition import OrderCycle, order_or_sorted, package_set
+from livery.workshop._composition import OrderCycle, closure, order_or_sorted
 from livery.workshop._declaration import (
     API_VERSION,
     FILE,
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
     from livery.toolroom.store import Spec
     from livery.workshop._packages import Package
     from livery.workshop._points import JobContribution
+    from livery.workshop._steps import StepRecord
 
 #: The base. Never listed and never mounted by name: importing its
 #: plugin module is the base arriving.
@@ -44,10 +47,6 @@ SELF = "livery.workshop"
 #: The entry point group an extension declares itself in: its name
 #: maps to the package that ships its declaration file.
 GROUP = "workshop.extensions"
-
-#: The levels an extension may be listed at.
-WORKSPACE = "workspace"
-PACKAGE = "package"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
@@ -149,12 +148,6 @@ def _readable(extension: str) -> Declaration | None:
     if entry is None or declaration_file(entry.value.partition(":")[0]) is None:
         return None
     return declaration(extension)
-
-
-def levels_of(extension: str) -> tuple[str, ...]:
-    """The levels *extension* may be listed at; the workspace when it says none."""
-    found = declaration(extension)
-    return found.levels if found is not None else ()
 
 
 def ships_elsewhere(target: str, distribution: str) -> bool:
@@ -296,51 +289,157 @@ def installed_declaration(name: str) -> Declaration | None:
     return _readable(name)
 
 
-def package_extensions(start: Path | None = None) -> tuple[str, ...]:
-    """The package-level extensions every package holds, in composition order.
+def composes_per_package(extension: str) -> bool:
+    """Whether *extension* composes something in a package whose set holds it.
 
-    Each package's set is its own list and the package-level extensions
-    the list requires, so a package that lists none holds none. This is
-    the union of what the packages hold, the installed package-level
-    extensions among it, ordered as
-    [livery.workshop._composition.order][] orders it. A declared order
-    with no start falls back to alphabetical here, so a sync still
-    runs, and ``layering.graph`` names the cycle. Empty outside a
-    workspace.
+    The proof reads the installed declarations alone. *extension*
+    composes when it, or an extension it requires transitively,
+    declares at its top level or in a ``[for.<target>]`` table a step
+    in a phase whose level is ``package``, an answer to a query whose
+    level is ``package``, or ``[categories]``; or when a step of any
+    installed extension, or a step's per-package fragment, names it in
+    ``extensions``. Workspace-level steps and answers, contract keys,
+    tools, shipped files, CI jobs, verbs, templates and ``requires``
+    itself compose nothing in a package. An extension whose code alone
+    reads a package's set is not seen: the declarations define what
+    composes. An installed declaration that cannot be read names
+    nothing.
+    """
+    from livery.workshop._phases import PACKAGE_LEVEL, declared_phases
+    from livery.workshop._queries import declared_queries
+
+    phases = declared_phases()
+    queries = declared_queries()
+    named = _named_by_steps()
+    for name in closure((extension,), installed_declaration):
+        if name in named:
+            return True
+        found = installed_declaration(name)
+        if found is None:
+            continue
+        # The read refused a step into a phase, and an answer to a query,
+        # that no installed declaration declares, so each is known here.
+        if any(
+            phases[record.phase].level == PACKAGE_LEVEL
+            for record in _declared_steps(found)
+        ):
+            return True
+        answered = [*found.queries]
+        for held in found.target_queries.values():
+            answered += held
+        if any(queries[query].level == PACKAGE_LEVEL for query in answered):
+            return True
+        if found.categories or any(
+            table.get("categories") for table in found.target_tables.values()
+        ):
+            return True
+    return False
+
+
+def _declared_steps(found: Declaration) -> list[StepRecord]:
+    """Every step *found* declares: its top-level tables' and its ``[for]`` tables'."""
+    records = [record for held in found.phases.values() for record in held]
+    for additions in found.targets.values():
+        records += additions.steps
+    return records
+
+
+def _named_by_steps() -> frozenset[str]:
+    """The extensions a step of an installed extension names in ``extensions``.
+
+    A step's own list and each of its per-package fragments' lists. An
+    installed declaration that cannot be read names nothing.
+    """
+    found: set[str] = set()
+    for name in installed_extensions():
+        try:
+            declared = _readable(name)
+        except DeclarationError:
+            continue
+        if declared is None:
+            continue
+        for record in _declared_steps(declared):
+            found.update(record.extensions)
+            for fragment in record.fragments:
+                found.update(fragment.extensions)
+    return frozenset(found)
+
+
+def _packages_hold(root: Path) -> tuple[str, ...]:
+    """Every extension a package under *root* holds, in composition order.
+
+    The union of the packages' sets, each its list and what the list
+    requires; a declared order with no start falls back to alphabetical.
+    """
+    held: list[str] = []
+    for _contract, names in _package_lists(root):
+        held += [listing(name).name for name in names]
+    return order_or_sorted(closure(held, installed_declaration), installed_declaration)
+
+
+def installed_set(start: Path | None = None) -> tuple[str, ...]:
+    """The extensions the workspace installs and mounts, in mount order.
+
+    The root's set and every package's set, each a list and every
+    extension it requires, whatever that extension declares. The
+    packages' sets come first, in composition order
+    ([livery.workshop._composition.order][]), then ``[workspace]
+    extensions`` in its order, each entry after what it requires that
+    has no place yet; an extension both name takes its first place. A
+    name no installed distribution declares stays in the set: the mount
+    names it, and ``fm sync`` installs it. A declared order with no
+    start falls back to alphabetical here, so a sync still runs, and
+    ``layering.graph`` names the cycle. Empty outside a workspace.
     """
     root = workspace_root(start)
     if root is None:
         return ()
-    held: list[str] = []
-    for _contract, names in _package_lists(root):
-        held += [listing(name).name for name in names]
-    return order_or_sorted(
-        package_set(held, installed_declaration), installed_declaration
-    )
+    found = dict.fromkeys(_packages_hold(root))
+    for name in workspace_names(root):
+        wanted = closure((name,), installed_declaration)
+        for needed in order_or_sorted(wanted, installed_declaration):
+            found.setdefault(needed)
+    return tuple(found)
 
 
-def composed_set(listed: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    """The installed package-level extensions a package's list *listed* stands for.
+def where_listed(start: Path | None = None) -> dict[str, str]:
+    """Each extension of the installed set to the list that brings it, as notes say it.
 
-    The list and the package-level extensions it requires, as
-    [livery.workshop._composition.package_set][] reads them from the
-    installed declarations.
+    ``listed in [workspace] extensions``, ``listed in the `extensions`
+    of packages/<name>`` naming each package that lists it, or, for an
+    extension no list names, ``required by <name>`` naming the first
+    listed extension whose set holds it. Empty outside a workspace.
     """
-    return package_set([listing(entry).name for entry in listed], installed_declaration)
+    root = workspace_root(start)
+    if root is None:
+        return {}
+    listed = list(workspace_names(root))
+    found = dict.fromkeys(listed, "listed in [workspace] extensions")
+    packages: dict[str, dict[str, None]] = {}
+    for contract, names in _package_lists(root):
+        where = contract.parent.relative_to(root).as_posix()
+        for entry in names:
+            name = listing(entry).name
+            packages.setdefault(name, {})[where] = None
+            listed.append(name)
+    for name, places in packages.items():
+        spoken = _spoken(list(places))
+        found.setdefault(name, f"listed in the `extensions` of {spoken}")
+    for name in listed:
+        for needed in closure((name,), installed_declaration):
+            found.setdefault(needed, f"required by {name}")
+    return found
 
 
 def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
-    """Every listed extension as ``(name, distribution)``, in mount order.
+    """Every extension of the installed set as ``(name, distribution)``, in mount order.
 
-    The package-level extensions every package's set holds come first,
-    in composition order ([livery.workshop._extensions.package_extensions][]),
-    then ``[workspace] extensions`` in its order; an extension listed at
-    both levels takes its first place. Empty outside a workspace.
+    The set [livery.workshop._extensions.installed_set][] composes, each
+    with the distribution that ships it
+    ([livery.workshop._extensions.distribution_of][]). Empty outside a
+    workspace.
     """
-    entries = {name: distribution_of(name) for name in package_extensions(start)}
-    for name, dist in workspace_entries(start):
-        entries.setdefault(name, dist)
-    return tuple(entries.items())
+    return tuple((name, distribution_of(name)) for name in installed_set(start))
 
 
 def _bracketed(spelled: str) -> str:
@@ -407,13 +506,14 @@ def extension_provider(extension: str, packages: tuple[Package, ...]) -> str:
 
 
 def extension_names(start: Path | None = None) -> tuple[str, ...]:
-    """The extensions the workspace's contracts list, in mount order.
+    """The extensions the workspace installs and mounts, in mount order.
 
-    The package-level extensions every package's set holds, then
-    ``[workspace] extensions``; ``workspace_names`` reads the workspace
-    list alone.
+    The root's set and every package's set
+    ([livery.workshop._extensions.installed_set][]): the extensions every
+    package's set holds, then ``[workspace] extensions`` and what it
+    requires. ``workspace_names`` reads the workspace list alone.
     """
-    return tuple(name for name, _ in extension_entries(start))
+    return installed_set(start)
 
 
 def extension_content(extension: str) -> Path | None:
@@ -524,18 +624,19 @@ def mount_git_plugin() -> str:
 
 
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
-    """Mount every listed extension's plugin, in mount order; the names mounted.
+    """Mount the plugin of every extension of the installed set, in mount order.
 
-    The package-level extensions every package's set holds mount first,
-    in composition order, then ``[workspace] extensions`` in its order,
-    so a workspace extension finds a package-level one it names already
-    registered. Refuses an extension declared for another workshop API
-    version, and one whose declaration file says something this workshop
-    cannot take.
+    Returns the names mounted. The extensions every package's set holds
+    mount first, in composition order, then ``[workspace] extensions``
+    in its order ([livery.workshop._extensions.installed_set][]), so an
+    entry of the root's list finds an extension a package holds already
+    registered. Any extension mounts from either list. Refuses an
+    extension declared for another workshop API version, and one whose
+    declaration file says something this workshop cannot take.
     A contract without ``[workspace] extensions``, an extension no
-    installed distribution declares, one whose installed package ships
-    no declaration file, and one listed at a level it does not declare
-    are named on stderr and skipped, never refused:
+    installed distribution declares, and one whose installed package
+    ships no declaration file are named on stderr, the first of these
+    with the list that brings it, and skipped, never refused:
     the mount runs on every command, ``fm sync`` among them, which is
     what installs a missing declaration, so a refusal here would stop
     the command that repairs it. An entry with brackets is named the
@@ -579,9 +680,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     present = [SELF]
     grafted: set[tuple[str, str]] = set()
     _graft_contributions(present, declared, active, grafted, enabled, asleep)
-    packaged = package_extensions(start)
+    named: dict[str, str] | None = None
     for extension, dist in extension_entries(start):
-        level = PACKAGE if extension in packaged else WORKSPACE
         if extension in builtin:
             # The App mounted it as its own builtin: its plugin is never
             # mounted here a second time, and what its declaration adds
@@ -616,23 +716,17 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
         found = declaration(extension)
         if found is None:
             undeclared.append(extension)
+            if named is None:
+                named = where_listed(start)
             _note(
-                f"extension {extension!r} is listed in [workspace] extensions, and no"
-                f" installed distribution declares it in {GROUP}; install the"
-                f" distribution that ships it ({dist} by its name), or remove the"
-                f" entry; `{prog()} sync` installs one this workspace builds"
+                f"extension {extension!r} is"
+                f" {named.get(extension, 'listed')}, and no installed"
+                f" distribution declares it in {GROUP}; install the distribution"
+                f" that ships it ({dist} by its name), or remove the entry;"
+                f" `{prog()} sync` installs one this workspace builds"
             )
             continue
         check_api_version(extension, found)
-        # A package's set holds package-level extensions alone, so only a
-        # workspace entry can name the wrong level here.
-        if level not in found.levels:
-            _note(
-                f"extension {extension!r} is listed in [workspace] extensions, and it"
-                f" declares the levels {', '.join(found.levels) or 'none'};"
-                " list it in each package's `extensions` instead"
-            )
-            continue
         check_phase_declarers(extension, found, present, contributes.get(extension, ()))
         if (
             extension not in asleep
@@ -1076,10 +1170,10 @@ def _spoken(names: list[str]) -> str:
 def describe_extensions(start: Path | None = None) -> list[str]:
     """The lines ``fm extensions`` prints: each extension with what it declares.
 
-    The base, then each extension in mount order: the package-level
-    ones with the packages whose sets hold them, then the workspace
-    list; under each, whether it is dormant and what would wake it, and
-    the steps it declares off, each with whether it is on.
+    The base, then each extension in mount order: the ones a package's
+    set holds with those packages, then the workspace list; under each,
+    whether it is dormant and what would wake it, and the steps it
+    declares off, each with whether it is on.
     """
     names = extension_names(start)
     who = requirers(start)
@@ -1151,7 +1245,7 @@ def enabled_problems(root: Path) -> list[str]:
 
 
 def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
-    """Each package-level extension to the packages whose sets hold it, by path."""
+    """Each extension a package's set holds to the packages holding it, by path."""
     root = workspace_root(start)
     if root is None:
         return {}
@@ -1159,26 +1253,21 @@ def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
     for contract, listed in _package_lists(root):
         where = contract.parent.relative_to(root).as_posix()
         names = [listing(entry).name for entry in listed]
-        for name in package_set(names, installed_declaration):
+        for name in closure(names, installed_declaration):
             found.setdefault(name, []).append(where)
     return {name: tuple(where) for name, where in found.items()}
-
-
-def _package_only(name: str) -> bool:
-    """Whether *name* is installed and may be listed by a package alone."""
-    levels = levels_of(name)
-    return PACKAGE in levels and WORKSPACE not in levels
 
 
 def closure_problems(start: Path | None = None) -> list[str]:
     """Why the contracts' lists are not closed under the extensions' declarations.
 
     Empty when every extension a workspace entry requires is listed
-    before it, or is a package-level one some package's set holds;
-    when every extension is listed at a level it declares; when every
-    step the root contract turns on is one a listed extension declares
-    off ([livery.workshop._extensions.enabled_problems][]); and when
-    every package's list is a valid composition in its canonical form
+    before it, or is one some package's set holds; when every listed
+    extension is installed and every package's entry is a name alone
+    ([livery.workshop._extensions.entry_problems][]); when every step
+    the root contract turns on is one a listed extension declares off
+    ([livery.workshop._extensions.enabled_problems][]); and when every
+    package's list is a valid composition in its canonical form
     ([livery.workshop._extensions.composition_problems][]). A missing
     workspace entry names the fix; one listed after its dependent names
     the move, which is a person's edit.
@@ -1186,7 +1275,7 @@ def closure_problems(start: Path | None = None) -> list[str]:
     root = workspace_root(start)
     names = workspace_names(start)
     order_at = {name: index for index, name in enumerate(names)}
-    packaged = set(package_extensions(start))
+    packaged = set(_packages_hold(root)) if root is not None else set[str]()
     problems: list[str] = []
     for extension in names:
         found = _readable(extension)
@@ -1199,13 +1288,6 @@ def closure_problems(start: Path | None = None) -> list[str]:
                     )
             elif needed in packaged:
                 continue
-            elif _package_only(needed):
-                problems.append(
-                    f"[workspace] extensions lists {extension}, which requires"
-                    f" {needed}, a package-level extension no package lists; list"
-                    f" {needed} in the `extensions` of each package {extension}"
-                    " serves"
-                )
             else:
                 problems.append(
                     f"[workspace] extensions lists {extension}, which depends on"
@@ -1230,7 +1312,7 @@ def closure_problems(start: Path | None = None) -> list[str]:
     if root is not None:
         if why := missing_list(root):
             problems.append(why)
-        problems += level_problems(root)
+        problems += entry_problems(root)
         problems += listing_problems(root)
         problems += enabled_problems(root)
         problems += composition_problems(root)
@@ -1238,14 +1320,15 @@ def closure_problems(start: Path | None = None) -> list[str]:
 
 
 def _composable(listed: tuple[str, ...]) -> bool:
-    """Whether every entry of a package's list is an installed package-level name.
+    """Whether every entry of a package's list is a name something installed declares.
 
     A package whose list holds anything else is
-    [livery.workshop._extensions.level_problems][]'s to name, and its
+    [livery.workshop._extensions.entry_problems][]'s to name, and its
     composition is judged once that is fixed.
     """
     return all(
-        listing(entry).name == entry and PACKAGE in levels_of(entry) for entry in listed
+        listing(entry).name == entry and installed_declaration(entry) is not None
+        for entry in listed
     )
 
 
@@ -1257,27 +1340,27 @@ def _spelled(names: tuple[str, ...] | list[str]) -> str:
 def composition_problems(root: Path) -> list[str]:
     """Why each package's list is not a valid composition in its canonical form.
 
-    Judged for each package whose entries are installed package-level
-    extensions: every extension its set requires is installed and
-    listed at its level, each lifecycle phase can run as the set's
-    extensions declare it ([livery.workshop._phases.phase_problems][]),
-    the set's declared order has a start, and the list is the canonical
-    one, which the gate's ``--fix`` writes
-    ([livery.workshop._composition.canonical][]). A cycle of
-    requirements shows in every package whose set holds one of its
-    members, since a set is closed under requires.
+    Judged for each package whose entries are names installed
+    distributions declare: every extension its set requires is
+    installed, each lifecycle phase can run as the set's extensions
+    declare it ([livery.workshop._phases.phase_problems][]), the set's
+    declared order has a start, and the list is the canonical one,
+    which the gate's ``--fix`` writes
+    ([livery.workshop._composition.canonical][]). A requirement joins
+    the set whatever it declares, so no other list needs to name it. A
+    cycle of requirements shows in every package whose set holds one of
+    its members, since a set is closed under requires.
     """
     from livery.workshop._composition import canonical
     from livery.workshop._phases import lifecycle_phases, phase_problems, phase_steps
 
-    workspace = set(workspace_names(root))
     problems: list[str] = []
     for contract, listed in _package_lists(root):
         if not _composable(listed):
             continue
         where = contract.parent.relative_to(root).as_posix()
         names = list(listed)
-        members = package_set(names, installed_declaration)
+        members = closure(names, installed_declaration)
         for name in members:
             found = installed_declaration(name)
             for needed in found.requires if found is not None else ():
@@ -1285,11 +1368,6 @@ def composition_problems(root: Path) -> list[str]:
                     problems.append(
                         f"{where}: {name} requires {needed}, which no installed"
                         f" distribution declares in {GROUP}; install it"
-                    )
-                elif PACKAGE not in levels_of(needed) and needed not in workspace:
-                    problems.append(
-                        f"{where}: {name} requires {needed}, which [workspace]"
-                        " extensions does not list; the gate's --fix adds it"
                     )
         for phase in lifecycle_phases():
             steps = phase_steps(phase, members, installed_declaration)
@@ -1331,7 +1409,7 @@ def listing_problems(root: Path) -> list[str]:
     off is turned on at the step's address, ``[phases.<phase>.<step>]
     enabled = true``, and the refusal names that spelling. An extension
     no installed distribution declares is
-    [livery.workshop._extensions.level_problems][]'s to name.
+    [livery.workshop._extensions.entry_problems][]'s to name.
     """
     from livery.toolroom.store import Spec, SpecError
 
@@ -1393,24 +1471,18 @@ def _package_lists(root: Path) -> list[tuple[Path, tuple[str, ...]]]:
     return found
 
 
-def level_problems(root: Path) -> list[str]:
-    """Each listed extension nothing installed declares, or listed at a wrong level.
+def entry_problems(root: Path) -> list[str]:
+    """Each listed name nothing installed declares, and each package entry with options.
 
-    A package's entry is the extension's name alone: a package-level
-    extension takes no options.
+    Every extension is one kind, which either list names. A package's
+    entry is the extension's name alone, with no options.
     """
     problems: list[str] = []
     for name in workspace_names(root):
-        levels = levels_of(name)
-        if not levels:
+        if declaration(name) is None:
             problems.append(
                 f"[workspace] extensions lists {name}, which no installed"
                 f" distribution declares in {GROUP}"
-            )
-        elif WORKSPACE not in levels:
-            problems.append(
-                f"[workspace] extensions lists {name}, which is listed in a"
-                " package's `extensions` alone; move it there"
             )
     for contract, listed in _package_lists(root):
         where = contract.parent.relative_to(root).as_posix()
@@ -1418,20 +1490,13 @@ def level_problems(root: Path) -> list[str]:
             if listing(name).name != name:
                 problems.append(
                     f"{where}: `extensions` lists {name!r}; a package's entry is the"
-                    " extension's name alone, and a package-level extension takes"
-                    " no options"
+                    " extension's name alone, and takes no options"
                 )
                 continue
-            levels = levels_of(name)
-            if not levels:
+            if declaration(name) is None:
                 problems.append(
                     f"{where}: `extensions` lists {name}, which no installed"
                     f" distribution declares in {GROUP}"
-                )
-            elif PACKAGE not in levels:
-                problems.append(
-                    f"{where}: `extensions` lists {name}, which is listed in"
-                    " [workspace] extensions alone; move it there"
                 )
     return problems
 
@@ -1446,17 +1511,16 @@ def requirers(start: Path | None = None) -> dict[str, tuple[str, ...]]:
 
 
 def write_extensions(root: Path) -> list[str]:
-    """Close the lists under the declarations, and write each package's canonically.
+    """Close the root's list under the declarations; write each package's canonically.
 
     Returns the lines written, one per change.
 
     A workspace extension's missing requirement lands before its first
     dependent, with a comment naming who requires it, so the list stays
-    the whole truth a reader sees. A dependency listed out of order is
-    not moved: that is a person's edit, and the judge that follows
-    names it. A package-level extension's requirement listed at the
-    workspace alone joins the end of ``[workspace] extensions``. Each
-    package's list becomes its canonical one
+    the whole truth a reader sees; one a package's set holds already is
+    left out, as the judge leaves it. A dependency listed out of order
+    is not moved: that is a person's edit, and the judge that follows
+    names it. Each package's list becomes its canonical one
     ([livery.workshop._composition.canonical][]), which drops an
     extension another listed one requires. A package whose list the
     judge refuses for another reason, or whose order has no start, is
@@ -1471,10 +1535,11 @@ def write_extensions(root: Path) -> list[str]:
     text = contract.read_text(encoding="utf-8")
     written: list[str] = []
     names = list(workspace_names(root))
+    packaged = set(_packages_hold(root))
     for extension in list(names):
         found = _readable(extension)
         for needed in found.requires if found is not None else ():
-            if needed in names or _package_only(needed):
+            if needed in names or needed in packaged:
                 continue
             text, done = _insert_extension(text, needed, before=extension)
             if not done:
@@ -1488,19 +1553,6 @@ def write_extensions(root: Path) -> list[str]:
         if not _composable(listed):
             continue
         where = package_contract.parent.relative_to(root).as_posix()
-        for extension in package_set(listed, installed_declaration):
-            found = installed_declaration(extension)
-            for needed in found.requires if found is not None else ():
-                if needed in names or installed_declaration(needed) is None:
-                    continue
-                if PACKAGE in levels_of(needed):
-                    continue
-                text = _append_to_list(text, needed)
-                names.append(needed)
-                written.append(
-                    f"  layering: [workspace] extensions gains {needed},"
-                    f" which {extension} in {where} requires"
-                )
         try:
             wanted = canonical(listed, installed_declaration)
         except OrderCycle:
@@ -1657,27 +1709,6 @@ def _insert_extension(text: str, needed: str, *, before: str) -> tuple[str, bool
     return text[: match.start()] + "extensions = [" + ", ".join(items) + "]" + text[
         match.end() :
     ], True
-
-
-def _append_to_list(text: str, name: str) -> str:
-    """*text* with *name* last in its ``extensions`` list, added when absent."""
-    found = _INLINE.search(text)
-    if found is None:
-        # A top-level key: before the first table, or it joins that table.
-        line = f'extensions = ["{name}"]\n'
-        table = re.search(r"^\[", text, re.M)
-        if table is None:
-            return text.rstrip("\n") + "\n" + line
-        return text[: table.start()] + line + "\n" + text[table.start() :]
-    items = _items(found.group(2))
-    items.append(f'"{name}"')
-    return (
-        text[: found.start()]
-        + "extensions = ["
-        + ", ".join(items)
-        + "]"
-        + text[found.end() :]
-    )
 
 
 def available_extensions(

@@ -57,7 +57,7 @@ def test_python_s_build_refuses_a_platform_wheel(
     assert _backend.build(package, tmp_path) == directory / "dist"
 
 
-def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
+def test_the_wheel_ships_python_as_an_extension() -> None:
     from livery.workshop._extensions import declaration
 
     found = {
@@ -67,7 +67,6 @@ def test_the_wheel_ships_python_as_a_package_level_extension() -> None:
     assert found["python"] == "livery.extensions.python"
     declared = declaration("python")
     assert declared is not None
-    assert declared.levels == ("package",)
 
 
 def test_the_extension_answers_each_python_package_here_as_its_code_does() -> None:

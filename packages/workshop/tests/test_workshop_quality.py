@@ -591,21 +591,6 @@ def test_the_judges_read_the_tree_the_rewriters_left(
     assert trees == []
 
 
-def test_fix_rewrites_no_contract_that_writes_kind(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
-) -> None:
-    ran, _ = _whole_gate(monkeypatch, tmp_path)
-    # The member's contract writes kind beside a list the layering fix
-    # would rewrite as canonical: the gate refuses before any step runs.
-    contract = tmp_path / "packages" / "one" / "workshop.toml"
-    written = 'kind = "python"\nname = "acme-one"\nextensions = ["python", "python"]\n'
-    contract.write_text(written)
-    with pytest.raises(BaseException, match='kind = "python" is not a key'):
-        _quality._run_check(full=True, fix=True, base="")
-    assert ran == []
-    assert contract.read_text() == written
-
-
 def test_one_refusing_member_is_the_gate_s_verdict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:

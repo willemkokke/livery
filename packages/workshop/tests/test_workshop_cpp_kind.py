@@ -119,10 +119,11 @@ def _render_cpp(tmp_path: Path) -> Package:
     )
     # The native configs come from the step records, as they do at a
     # birth: the template ships none.
-    from livery.workshop._extensions import composed_set
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._shipped_files import settle_package
 
-    settle_package(destination, composed_set(("cmake", "conan")))
+    settle_package(destination, closure(("cmake", "conan"), installed_declaration))
     return _package(destination, "acme-native", "cmake", "conan")
 
 

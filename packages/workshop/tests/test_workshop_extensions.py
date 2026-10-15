@@ -54,6 +54,39 @@ def test_an_uninstalled_extension_is_named_and_skipped(
     ]
 
 
+def test_a_package_listing_an_uninstalled_extension_brings_its_distribution_into_the_dev_group(  # noqa: E501
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import distribution_of, unmounted
+    from workshop_composed import IDENTITY, composed_groups
+    from workshop_extension_fakes import package_contract, withheld
+
+    install = withheld(monkeypatch, "cmake")
+    (tmp_path / "workshop.toml").write_text(
+        "[workspace]\n" + IDENTITY + "extensions = []\n"
+    )
+    package_contract(tmp_path, "geometry", '["cmake"]')
+    # Not installed: the mount names it with the package's list, the sync
+    # is told to install it, and its distribution, by its name, joins the
+    # dev group the lock reads.
+    with registry.capture():
+        mount_extensions(tmp_path)
+    assert (
+        "extension 'cmake' is listed in the `extensions` of packages/geometry,"
+        " and no installed distribution declares it"
+    ) in capsys.readouterr().err
+    assert unmounted(tmp_path) == ("cmake",)
+    assert "livery-extensions-cmake" in composed_groups(tmp_path)["dev"]
+    # Installed, as the sync installs it: the mount finds it, and the dev
+    # group names the distribution that declares it.
+    install()
+    with registry.capture():
+        mount_extensions(tmp_path)
+    assert unmounted(tmp_path) == ()
+    assert distribution_of("cmake") in composed_groups(tmp_path)["dev"]
+
+
 def test_a_branded_builtin_extension_is_the_apps_to_mount(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -81,7 +114,7 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    # The package-level extensions the packages list mount first.
+    # The extensions the packages' sets hold mount first.
     assert extension_names(ROOT) == (
         "python",
         "changelog",
