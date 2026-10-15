@@ -382,7 +382,7 @@ def _run_ctest(
             cwd=package.directory, env=env, nofail=True, recorded=False
         )(*arguments)
     except OSError:
-        from livery.workshop._tools import undeployed
+        from livery.workshop import undeployed
 
         undeployed("ctest")
     if names and "No tests were found" in ran.stdout + ran.stderr:
@@ -702,7 +702,7 @@ def _ctest_program() -> str:
     """
     found = shutil.which("ctest")
     if not found:
-        from livery.workshop._tools import undeployed
+        from livery.workshop import undeployed
 
         undeployed("ctest")
     return found
@@ -821,7 +821,7 @@ def _test_objects(package: Package) -> list[str]:
             "--show-only=json-v1", "--test-dir", str(build_dir)
         )
     except OSError:
-        from livery.workshop._tools import undeployed
+        from livery.workshop import undeployed
 
         undeployed("ctest")
     objects: list[str] = []

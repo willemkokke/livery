@@ -1888,13 +1888,25 @@ def drift(root: Path) -> dict[str, str]:
 
 
 def undeployed(name: str) -> NoReturn:
-    """Refuse: *name* is a tool of the store this machine has not deployed.
+    """Refuse the task: *name* is a tool of the store and is not on ``PATH``.
 
-    A toolroom handle spawns its tool by name, which the entered
-    environment puts on PATH. A machine that never deployed
-    the tool raises ``OSError`` from the spawn instead, and a
-    traceback names nothing a person can do, so each call turns one
-    into this sentence.
+    Call it where a step spawns a tool of the store and the spawn
+    raises ``OSError``, or where ``shutil.which`` finds nothing for a
+    tool the step spawns by its path. A toolroom handle spawns its tool
+    by name from ``PATH``, and the store's tools are on ``PATH`` only
+    after the machine has deployed them and the shell has entered the
+    environment. A traceback from the spawn names nothing a person can
+    act on. This refusal names the tool and the next action: run
+    ``fm sync``, then the ``env.emit`` line it prints, then run the task
+    again.
+
+    It never returns.
+
+    Args:
+        name: The tool's name, as its handle spawns it.
+
+    Raises:
+        Failed: always, naming *name* and the sync that deploys it.
     """
     fail(
         f"{name} is not on PATH: it is a tool of the store, so enter the"

@@ -40,7 +40,9 @@ writes the compilation database a linter reads,
 [livery.workshop.COMPILE_COMMANDS][]. The workspace's own tests, the
 ``tests`` directory at its root, are a unit of their own,
 [livery.workshop.workspace_suite][], which a test step runs beside
-the packages it judges.
+the packages it judges. A step whose tool of the store is not on
+``PATH`` refuses with [livery.workshop.undeployed][]: the refusal
+names the tool and the sync that deploys it.
 
 An extension reads the workspace through the names the engine reads
 it by: a contract's judged keys, [livery.workshop.read_contract][];
@@ -141,6 +143,7 @@ if TYPE_CHECKING:
     from livery.workshop._steps import selected_files as selected_files
     from livery.workshop._steps import step_option as step_option
     from livery.workshop._tokens import forge_token as forge_token
+    from livery.workshop._tools import undeployed as undeployed
 
 __version__ = "0.10.0"
 
@@ -195,6 +198,7 @@ __all__ = [
     "testing",
     "this_forge",
     "this_repository",
+    "undeployed",
     "verify_workspace",
     "workspace_root",
     "workspace_suite",
@@ -250,6 +254,7 @@ _EXPORTS: dict[str, str] = {
     "scoped_paths": "livery.workshop._steps",
     "selected_files": "livery.workshop._steps",
     "step_option": "livery.workshop._steps",
+    "undeployed": "livery.workshop._tools",
     "verify_workspace": "livery.workshop._packages",
     "workspace_root": "livery.workshop._extensions",
     "workspace_suite": "livery.workshop._packages",

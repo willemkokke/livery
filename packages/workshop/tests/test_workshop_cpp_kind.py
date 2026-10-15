@@ -15,6 +15,7 @@ import pytest
 
 from livery.extensions.cmake import _build as _cmake
 from livery.extensions.conan import _package as _conan
+from livery.footman import prog
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
@@ -85,6 +86,15 @@ def _package(directory: Path, name: str, *extensions: str) -> Package:
         depends=(),
         extensions=extensions,
     )
+
+
+def _undeployed(tool: str) -> str:
+    """The workshop's refusal for *tool*, a tool of the store not on PATH."""
+    from livery.workshop import undeployed
+
+    with pytest.raises(_FAILURES) as taught:
+        undeployed(tool)
+    return str(taught.value)
 
 
 def _listing_coverage(root: Path) -> None:
@@ -168,7 +178,9 @@ def test_build_refuses_without_conan(
     """A handle spawns by name, so an undeployed tool is a sentence.
 
     The spawn raises OSError instead of answering with a failing
-    result, and a traceback names nothing a person can act on.
+    result, and a traceback names nothing a person can act on. The
+    sentence is the workshop's refusal for a tool of the store not on
+    PATH: it names the tool and the next action.
     """
     empty = tmp_path / "empty-path"
     empty.mkdir()
@@ -177,8 +189,12 @@ def test_build_refuses_without_conan(
         tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
     )
     package.directory.mkdir(parents=True)
-    with pytest.raises(_FAILURES, match="conan is not on PATH"):
+    with pytest.raises(_FAILURES) as caught:
         _conan.build(package, tmp_path)
+    refusal = str(caught.value)
+    assert refusal == _undeployed("conan")
+    assert refusal.startswith("conan is not on PATH: it is a tool of the store")
+    assert f"(`{prog()} sync`, then the printed env.emit line) and re-run" in refusal
 
 
 class _Said:
@@ -339,8 +355,9 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
         tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
     )
     package.directory.mkdir(parents=True)
-    with pytest.raises(_FAILURES, match="ctest is not on PATH"):
+    with pytest.raises(_FAILURES) as caught:
         _cmake.test(package, tmp_path, selection=("tests/test_native.cpp",))
+    assert str(caught.value) == _undeployed("ctest")
 
 
 def _native_lines(root: Path) -> dict[str, dict[str, dict[int, int]]]:

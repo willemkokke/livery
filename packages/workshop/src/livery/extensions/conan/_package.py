@@ -275,7 +275,7 @@ def _conan(package_dir: Path, *args: str, env: dict[str, str] | None = None) -> 
             recorded=False,
         )(*args)
     except OSError:
-        from livery.workshop._tools import undeployed
+        from livery.workshop import undeployed
 
         undeployed("conan")
 
