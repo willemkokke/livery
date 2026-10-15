@@ -998,7 +998,13 @@ def _git(root: Path, *args: str) -> tools.Result:
 
 
 def _words(result: tools.Result) -> str:
-    return (result.stderr or result.stdout).strip()[:200] or "no output"
+    """Git's own words for a failed call, whole.
+
+    A remote's refusal often names its reason past the first lines: a
+    push protection names the secret it found, its path, and the link
+    that allows it at the end of its message.
+    """
+    return (result.stderr or result.stdout).strip() or "no output"
 
 
 def _ref_exists(store: StateStore, ref: str) -> tuple[bool | None, str]:

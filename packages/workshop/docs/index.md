@@ -1543,7 +1543,11 @@ every leg that runs a suite runs it. The gate job unions the legs'
 parts with the parts of every skipped suite, carried from the records,
 before it judges, so the union is the same global union a full run produces,
 and writes that union back onto the branch's record; a suite no
-record can supply is red by name, never a smaller union. A branch's
+record can supply is red by name, never a smaller union. So is a
+check leg the run runs that left no parts on its per-run ref: its
+write was refused or it died before it, its own log says which, and
+the legs that did write never stand in for the lines only its
+platform reaches. A branch's
 record outlives the branch by a day, because main's run for the
 squash that merged it carries the suites its legs skipped from that
 record, minutes after the merge deleted the branch. A row a write
