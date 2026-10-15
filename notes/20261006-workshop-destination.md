@@ -3342,6 +3342,23 @@ neither needs nor rules out).
   and loses 539, and the declarations lose 39.
   Until N2, the root list's order still decides what it did before.
 
+- 2026-10-15, Willem, on GitHub's push protection (#1683): a check
+  leg's store push holds its coverage parts, and their sets of context
+  indexes were base64; in megabytes of base64 a provider's token shape
+  appears by chance (a Tencent SecretId, `AKID` and 32 letters and
+  digits), and push protection refused the leg's push on about half of
+  a pull request's full legs, which the union then judged without.
+  Ruled: the sets hold no letters. The line format's version 3 writes
+  each set as the first index and then each gap, in decimal, comma
+  separated; no provider pattern matches digits and commas. A part of
+  version 2 is named and left out, with no reader kept, and main's first
+  run after it measures every unit afresh. Measured on a full macOS
+  leg of this repository (17,392 sets, 850,029 indexes): the leg file
+  9.50 MB raw and 2.31 MB at gzip level 6 before, 10.10 MB and 2.25 MB
+  after; one leg's sets decode in 98 ms against 79 ms. The union now
+  refuses a leg the run runs that left no parts, and a refused store
+  push carries git's whole message (on #1676's branch).
+
 ## Open
 
 Each with its options, what each option does not cover, and a

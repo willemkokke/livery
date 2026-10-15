@@ -58,8 +58,9 @@ Measured on `origin/main` at `96702420c`, 2026-10-13.
   `Entry` with statements, counts, excluded lines, multi-line spans,
   branches by target or by index, functions and classes as `Region`,
   and the contexts that reached each line. Native lines enter it as a
-  lines-only measurer. It has no column anywhere. Since 12e's P4 the
-  format is version 2 with counted ranges, and the cmake extension
+  lines-only measurer. It has no column anywhere. The format is
+  version 3: 12e's P4 brought counted ranges in version 2, and version
+  3 writes each set of context indexes as digits and commas. The cmake extension
   reads llvm-cov's JSON export and gcov's JSON format: phase 1 below
   is done (decision record).
 - **The toolchain engine is planned, not built.** The extensions plan
