@@ -358,7 +358,7 @@ doc = "the lowest released version of the member the package takes, which its ma
 
 [contract.package."depends[]".kind]
 types = ["str"]
-doc = "what the edge is for, build or runtime, each matched against the package's manifest; build when absent"
+doc = "what the edge is for: build or runtime, each matched against the package's requirements; test, matched against its test requirements where its set answers them; tool, which no manifest names; build when absent"
 values = ["build", "runtime", "test", "tool"]
 
 [contract.package."depends[]".path]
@@ -1062,6 +1062,22 @@ combine = "livery.workshop._queries:merged"
 # a sibling of its own ecosystem alone, answering None for any other; a
 # sibling no writer takes refuses, naming the sibling's set.
 [queries.requirement-writers]
+combine = "union"
+
+# What a package's native manifests require for its tests alone, each
+# distribution's name to its constraint. A package whose set answers
+# it has a home for its test edges, and layering.graph judges each
+# test edge against it; a name two answers constrain differently
+# refuses.
+[queries.test-requirements]
+combine = "livery.workshop._queries:merged"
+
+# The writers of a test requirement on a sibling into a package's
+# native manifests, called as the requirement writers are. The fix of
+# layering.graph calls every writer of the package's set for a test
+# edge whose line is missing or names another floor, and each takes a
+# sibling of its own ecosystem alone, answering None for any other.
+[queries.test-requirement-writers]
 combine = "union"
 
 # The distributions a package releases, each as its ecosystem and name.

@@ -26,6 +26,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 _END_TABLES = "# -- workshop: end tables --"
 
+#: What conan's cpp-library template needs, which the root lists before
+#: the C++ member is created. cmake ships as a distribution of its own,
+#: so the checkout's index serves it to the sync that installs it.
+NATIVE = ("cmake", "conan")
+
 
 def _run(cmd: list[str], cwd: Path, env: dict[str, str]) -> str:
     done = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
@@ -36,16 +41,16 @@ def _run(cmd: list[str], cwd: Path, env: dict[str, str]) -> str:
     return done.stdout + done.stderr
 
 
-def _point_at_this_checkout(project: Path) -> None:
+def _point_at_this_checkout(project: Path, listed: tuple[str, ...]) -> None:
     """Add path sources for our distributions to the newborn's own region.
 
-    The same members the checkout index builds
-    ([livery.workshop._e2e.dev_members][]), as editable paths.
+    The same members the checkout index builds for the extensions
+    *listed* ([livery.workshop._e2e.dev_members][]), as editable paths.
     """
     from livery.workshop._e2e import dev_members
     from livery.workshop._packages import discover_packages
 
-    ours = set(dev_members(ROOT))
+    ours = set(dev_members(ROOT, listed))
     pyproject = project / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     assert _END_TABLES in text, "the composed project file carries no tables region"
@@ -66,6 +71,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
             " syncs a scratch workspace over the network"
         )
     from livery.workshop._e2e import checkout_index
+    from livery.workshop._extensions import SELF
+    from livery.workshop._new_project import birth_extensions
 
     env = {key: value for key, value in environment().items() if key != "VIRTUAL_ENV"}
     # Its own conan home: a sync registers the native member as an
@@ -80,11 +87,10 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     (bridge / "tasks.py").write_text(
         'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
-    born = {
-        **env,
-        "FOOTMAN_CONFIG_DIR": str(bridge),
-        "UV_INDEX": checkout_index(ROOT, tmp_path / "checkout-index"),
-    }
+    # The index serves what the birth lists and what the root lists later.
+    listed = (*birth_extensions([SELF]), *NATIVE)
+    index = checkout_index(ROOT, tmp_path / "checkout-index", listed)
+    born = {**env, "FOOTMAN_CONFIG_DIR": str(bridge), "UV_INDEX": index}
     _run(
         [
             sys.executable,
@@ -103,7 +109,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     for seed in ("README.md", "LICENSE", "docs/index.md"):
         assert (project / seed).is_file(), seed
     assert not (project / "tests").exists()
-    _point_at_this_checkout(project)
+    _point_at_this_checkout(project, listed)
     _run(["uv", "lock"], project, env)
     _run(["uv", "sync"], project, env)
     scripts = "Scripts" if sys.platform == "win32" else "bin"
@@ -130,8 +136,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     # Listed, as the refusal says, and installed by the sync.
     from livery.workshop._extensions import list_in_root
 
-    list_in_root(project, ["cmake", "conan"])
-    _run([fm, "sync"], project, env)
+    list_in_root(project, NATIVE)
+    _run([fm, "sync"], project, {**env, "UV_INDEX": index})
     _run([fm, "new.package", "geometry", "cpp-library"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.

@@ -26,6 +26,11 @@ dependencies = [
     "livery-workshop>=0.10.0",
 ]
 
+[project.optional-dependencies]
+# The members this package's tests need beyond its dependencies, one
+# for each test edge of its workshop.toml, at the edge's floor.
+test = ["livery-footman>=0.59.0", "livery-extensions-cmake>=0.0.0"]
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

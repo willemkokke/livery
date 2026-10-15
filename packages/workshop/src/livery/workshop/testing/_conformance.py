@@ -1163,6 +1163,8 @@ def _walk_order(subject: Subject) -> list[Violation]:
 
 
 def _gate_lines(subject: Subject) -> list[Violation]:
+    from livery.workshop._extensions import extension_package
+
     calls, out, _packages = _probe_walk(subject, fix=False, named=True)
     lines = out.splitlines()
     violations: list[Violation] = []
@@ -1170,9 +1172,12 @@ def _gate_lines(subject: Subject) -> list[Violation]:
         if record.name not in steps_by_name():
             continue
         where = f"step {record.name}"
+        # A step names the extension by the name a contract lists, which
+        # the installed entry point maps to the subject's package.
         if (
             subject.extension != BASE_EXTENSION
             and record.extension != subject.extension
+            and extension_package(record.extension) != subject.extension
         ):
             violations.append(
                 Violation(

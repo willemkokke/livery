@@ -39,6 +39,7 @@ from livery.workshop import _lifecycle
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import apply_project, render_member
 from workshop_goldens import FIXTURES, match
+from workshop_installed import skip_unless_installed
 from workshop_members import mounted_now
 
 _T = TypeVar("_T")
@@ -104,22 +105,9 @@ def _as_a_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_site_files, "_FILES", {})
 
 
-def _skip_unless_installed(listed: tuple[str, ...]) -> None:
-    """Skip the test while an extension *listed* names is not installed.
-
-    The tool extensions are distributions of their own: a run of the
-    workshop's wheel alone, as a release leg makes, has none of them.
-    """
-    from livery.workshop._extensions import installed_declaration
-
-    missing = [name for name in listed if installed_declaration(name) is None]
-    if missing:
-        pytest.skip(f"not installed here: {', '.join(missing)}")
-
-
 def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:
     """A workspace named acme at *root* that lists *listed* and has no member."""
-    _skip_unless_installed(listed)
+    skip_unless_installed(*listed)
     root.mkdir(parents=True)
     spelled = ", ".join(f'"{name}"' for name in listed)
     (root / "workshop.toml").write_text(CONTRACT.format(listed=spelled), "utf-8")
@@ -138,10 +126,12 @@ def _born(root: Path, *templates: str) -> dict[str, Package]:
 
     The root lists what each template needs first, as a person does
     before the creation: a creation installs nothing. The members
-    discovered, each by its template.
+    discovered, each by its template. The test skips while an extension
+    a member holds is not installed.
     """
     from livery.workshop._seeds import chain_needs, template_chain
 
+    skip_unless_installed(*(name for template in templates for name in HELD[template]))
     _lists_also(
         root,
         *(needed for name in templates for needed in chain_needs(template_chain(name))),
@@ -684,6 +674,7 @@ LANDED = {
 def test_the_sibling_requirement_lands_in_its_ecosystem_s_manifest(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     root = _workspace(tmp_path / "acme")
     _lists_also(root, "cmake", "nanobind")
     for name, template in (

@@ -571,31 +571,6 @@ def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
     assert not ignored(".coveragerc")
 
 
-def test_a_native_package_s_part_lands_where_every_workspace_ignores_it(
-    tmp_path: Path,
-) -> None:
-    # The cmake extension's test leaves its part under .workshop/ while
-    # it measures for coverage, a directory the base ignores, so cmake
-    # ships no ignore line of its own, listed or not.
-    from livery.extensions.cmake._readings import PARTS
-    from livery.workshop._shipped_files import outputs
-
-    assert PARTS.startswith(".workshop/")
-    workspace = tmp_path / "native"
-    member = workspace / "packages" / "lib"
-    member.mkdir(parents=True)
-    (member / "workshop.toml").write_text(
-        'extensions = ["cmake", "conan"]\nname = "acme-lib"\n'
-    )
-    for listed in ("[]", '["coverage"]'):
-        (workspace / "workshop.toml").write_text(
-            f"[workspace]\nextensions = {listed}\n"
-        )
-        (ignored,) = [o for o in outputs(workspace) if o.path == ".gitignore"]
-        assert ".workshop/" in ignored.body.decode().splitlines()
-        assert not [owner for owner in ignored.owners if owner.startswith("cmake:")]
-
-
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
     # Every change appends to a plan note's decision record, so two
     # changes in flight collide at the same tail; the rendered

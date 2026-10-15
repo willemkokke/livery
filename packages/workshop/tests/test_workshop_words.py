@@ -14,6 +14,7 @@ from livery.workshop import Package, PhaseContext, _steps
 from livery.workshop._declaration import Reference
 from livery.workshop._steps import WHOLE, StepRecord, register_step
 from livery.workshop._words import Command, Words, explained
+from workshop_installed import skip_unless_installed
 
 
 @pytest.fixture(autouse=True)
@@ -329,6 +330,7 @@ def test_a_template_without_paths_runs_whole(
 def test_a_package_step_calls_from_the_package_with_its_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     tool = _Tool()
     monkeypatch.setattr(tools, "acme", tool, raising=False)
     # cmake answers where its gate build writes the database.

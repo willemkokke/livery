@@ -164,8 +164,8 @@ def _nearest(answers: Mapping[str, Any], lookup: Lookup) -> Any:
 def merged(answers: Mapping[str, Any], lookup: Lookup) -> Mapping[str, str]:
     """Every name any answer holds, to its one value; a name valued twice refuses.
 
-    The rule of the ``requirements`` and ``job-built-members`` queries,
-    which the base's contract file names.
+    The rule of the ``requirements``, ``test-requirements`` and
+    ``job-built-members`` queries, which the base's contract file names.
     """
     del lookup
     found: dict[str, str] = {}
@@ -257,6 +257,18 @@ REQUIREMENTS: Query[Mapping[str, str]] = Query("requirements")
 #: The writers of a requirement on a sibling into the package's native
 #: manifests, each for a sibling of its own ecosystem; every one is called.
 REQUIREMENT_WRITERS: Query[tuple[RequirementWriter, ...]] = Query("requirement-writers")
+
+#: What the package's native manifests require for its tests alone, each
+#: distribution's name to its constraint. A package whose set answers it
+#: has a home for its test edges.
+TEST_REQUIREMENTS: Query[Mapping[str, str]] = Query("test-requirements")
+
+#: The writers of a test requirement on a sibling into the package's
+#: native manifests, each for a sibling of its own ecosystem; every one is
+#: called.
+TEST_REQUIREMENT_WRITERS: Query[tuple[RequirementWriter, ...]] = Query(
+    "test-requirement-writers"
+)
 
 #: The distributions the package releases, each as its ecosystem and its
 #: name.

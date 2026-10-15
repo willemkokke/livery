@@ -28,6 +28,7 @@ from livery.workshop._extensions import distribution_of
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import render_member
 from workshop_extension_fakes import fake_extensions, withheld
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -255,6 +256,7 @@ def test_a_creation_runs_no_lock_or_sync_before_it_renders(
     from workshop_composed import compose_into
     from workshop_members import wired_here
 
+    skip_unless_installed("cmake")
     root = compose_into(_workspace(tmp_path / "acme", "python"))
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
@@ -784,6 +786,7 @@ _MISSING_TOOLS = tuple(tool for tool in _TOOLCHAIN if shutil.which(tool) is None
 def test_cpp_executable_births_an_executable_that_builds_and_runs(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     root = _workspace(tmp_path / "acme", "cmake", "conan")
     render_member(root, "tool", "cpp-executable")
     tool = root / "packages" / "tool"

@@ -965,7 +965,8 @@ names first, the same way.
 | Name | First release |
 | --- | --- |
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
-| `livery-extensions-python`, `-cmake`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | 11b |
+| `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
+| `livery-extensions-python`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
 | `livery-extensions-mkdocstrings` | phase 11's step 8, when the extensions leave the workshop wheel |
 | `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
 | `livery-lodge` | 15 |
@@ -1298,7 +1299,7 @@ The parts, each mergeable alone, in this order:
 - N3 (built, #1679): the workspace's own tests hold the root list's set, and the
   stock list of `fm new.project` names python.
 - N4 (built, #1681): templates follow the installed set.
-- Then step 8's P1b, cmake's move (#1667), rebased.
+- Then step 8's P1b, cmake's move (built, #1667), rebased.
 - N5 (built, #1689): a package's list composes. A package that lists an extension
   that composes nothing in a package refuses.
 - Then #1672, reduced.
@@ -1318,8 +1319,10 @@ extension's distribution, is built after N1 and before P1b merges.
    have a public one; then cmake, mkdocstrings, docs, coverage,
    nanobind, conan, cpp and python, in that order. The birth with
    `--extension` (the plan's F2) is withdrawn by the one-kind ruling,
-   because a creation never installs, and P1b, cmake's move, waits for
-   N4.
+   because a creation never installs. P1a (built, #1667) makes
+   `undeployed` public; P1b (built, #1667) moves cmake to
+   `packages/extensions/cmake`, distribution `livery-extensions-cmake`
+   0.0.0, with its tests and fixture, after the one-kind work.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1666,6 +1669,9 @@ neither needs nor rules out).
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake) | fixture extensions in the workshop's suite |
+| `livery-extensions-cmake`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `undeployed` | the release wave raising the floor within its set (step 8's R1) |
+| cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
@@ -3448,6 +3454,24 @@ neither needs nor rules out).
   clause replaces `contract-keys-documented` and holds the description,
   every verb, key, template and option to its doc line. For this
   repository the fragment is 148 lines.
+
+- 2026-10-15, step 8's P1b (#1667), built: the cmake extension leaves
+  the workshop wheel for `packages/extensions/cmake`, distribution
+  `livery-extensions-cmake` 0.0.0, with its tests and the
+  `native-measured/` fixture; the workshop wheel ships no cmake file
+  and no cmake entry point. A workshop test that mounts a moved
+  extension as data skips where it is not installed, naming its
+  distribution (Willem's F1). A test edge now has a home: the base
+  declares the package queries `test-requirements` (merged) and
+  `test-requirement-writers` (union), python answers both with
+  `[project.optional-dependencies] test`, and `layering.graph` names a
+  missing or misfloored line and its fix writes it; tool edges, and
+  test edges in a set without a home, stay unjudged. The tool
+  extensions' test extras naming cmake are rendered, no longer written
+  by hand. Found while proving it: `fm sync` installs a newly listed
+  extension with `uv pip install`, which ignores the workspace's
+  `[tool.uv.sources]`, so a path- or git-sourced extension resolves
+  from the index instead (#1695).
 
 ## Open
 

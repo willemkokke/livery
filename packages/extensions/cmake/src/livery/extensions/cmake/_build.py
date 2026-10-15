@@ -3,9 +3,8 @@
 The build lands in the package's ``build/gate`` directory, configured
 with the Ninja generator and a compilation database for the tools that
 read one. The tests run through ctest. While coverage is listed, this
-extension's ``[for.coverage]`` table applies
-([livery.extensions.cmake._build.measures][]): the build is
-instrumented and each run is measured by the compiler family CMake
+extension's ``[for.coverage]`` table applies (`measures`): the build
+is instrumented and each run is measured by the compiler family CMake
 detected, gcov for gcc, llvm-cov for clang, Microsoft's engine for
 MSVC, whose output `_readings` turns into the package's part; while
 it is not, the build is not instrumented and ctest runs alone. On
@@ -264,10 +263,10 @@ def configure(package: Package, arguments: tuple[str, ...] = ()) -> None:
     CMake configures against the host's toolchain with the Ninja
     generator, in the environment ``toolchain_env`` enters, and
     exports the compile commands clang-tidy reads. A measured build
-    ([livery.extensions.cmake._build.measures][]) includes
-    ``coverage.cmake``, and an unmeasured one removes the include from
-    the cache. A dependency the project's ``CMakeLists.txt`` cannot find
-    fails the configure with cmake's own message.
+    (`measures`) includes ``coverage.cmake``, and an unmeasured one
+    removes the include from the cache. A dependency the project's
+    ``CMakeLists.txt`` cannot find fails the configure with cmake's own
+    message.
     """
     build_dir = package.directory / GATE_BUILD_DIR
     include = (
@@ -322,9 +321,8 @@ def test(
     A selected test file maps to the ctest named after its stem
     (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
     template registers tests; a selection no ctest answers to is a
-    refusal naming the rule. A measured run
-    ([livery.extensions.cmake._build.measures][]) is measured by the
-    family of the compiler CMake configured the gate build with: gcov
+    refusal naming the rule. A measured run (`measures`) is measured by
+    the family of the compiler CMake configured the gate build with: gcov
     and llvm-cov read the counters a green run left, and Microsoft's
     engine collects around the run itself. The lines reached land as
     the package's part in the line format at the workspace *root*

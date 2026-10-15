@@ -6,7 +6,9 @@ description = "Python distributions: each package's version stamped, its wheel a
 api-version = 1
 
 # The questions about a package this extension answers. Its requirement
-# writer writes into the pyproject for a sibling that holds python; the
+# writers write into the pyproject for a sibling that holds python: a
+# build or runtime requirement into its dependencies, and a test
+# requirement into its test extra, which is its test requirements; the
 # package releases its python distribution, and the release train probes
 # the python index the registry ladder resolves for it. Each script the
 # pyproject names under [project.scripts] is an executable fm run starts.
@@ -15,6 +17,8 @@ current-version = "livery.extensions.python._answers:current_version"
 version-files = "livery.extensions.python._answers:version_files"
 requirements = "livery.extensions.python._answers:requirements"
 requirement-writers = "livery.extensions.python._answers:requirement_writers"
+test-requirements = "livery.extensions.python._answers:test_requirements"
+test-requirement-writers = "livery.extensions.python._answers:test_requirement_writers"
 module-roots = "livery.extensions.python._answers:module_roots"
 public-modules = "livery.extensions.python._answers:public_modules"
 references = "livery.extensions.python._answers:references"

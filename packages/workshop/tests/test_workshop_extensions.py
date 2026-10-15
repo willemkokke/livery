@@ -61,7 +61,9 @@ def test_a_package_listing_an_uninstalled_extension_brings_its_distribution_into
     from livery.workshop._extensions import distribution_of, unmounted
     from workshop_composed import IDENTITY, composed_groups
     from workshop_extension_fakes import package_contract, withheld
+    from workshop_installed import skip_unless_installed
 
+    skip_unless_installed("cmake")
     install = withheld(monkeypatch, "cmake")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n" + IDENTITY + "extensions = []\n"
@@ -85,6 +87,23 @@ def test_a_package_listing_an_uninstalled_extension_brings_its_distribution_into
         mount_extensions(tmp_path)
     assert unmounted(tmp_path) == ()
     assert distribution_of("cmake") in composed_groups(tmp_path)["dev"]
+
+
+def test_a_test_needing_an_extension_not_installed_skips_naming_its_distribution() -> (
+    None
+):
+    from workshop_installed import skip_unless_installed
+
+    # A short name nothing installs is taken at the family's
+    # distribution, and an import path at its own.
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        skip_unless_installed("python", "no-such-extension", "acme.missing")
+    assert str(skipped.value) == (
+        "not installed here: no-such-extension"
+        " (livery-extensions-no-such-extension), acme.missing (acme-missing)"
+    )
+    # Every extension installed: the test runs on.
+    skip_unless_installed("python")
 
 
 def test_a_branded_builtin_extension_is_the_apps_to_mount(

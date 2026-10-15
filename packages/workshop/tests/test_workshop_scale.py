@@ -11,6 +11,7 @@ import pytest
 from livery.footman import Failed
 from livery.workshop import _scale
 from livery.workshop._metrics import _metrics  # pyright: ignore[reportPrivateUsage]
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -133,6 +134,8 @@ def test_generate_renders_each_member_then_the_project_once(
 ) -> None:
     from livery.workshop import _templates
 
+    # cpp-library lists cmake, which the root's canonical list orders.
+    skip_unless_installed("cmake")
     rendered: list[tuple[str, str]] = []
     applied: list[Path] = []
 

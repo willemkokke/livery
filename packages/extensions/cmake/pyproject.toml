@@ -1,0 +1,50 @@
+# Seeded from the workshop-extension template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-cmake"
+version = "0.0.0"
+description = "CMake as an extension of the livery workshop: a package's gate build, configured and compiled with Ninja, its tests run through ctest, and its native suites measured for coverage."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "livery-footman>=0.60.0",
+    # Every git call goes through livery.git: the blob id of a measured
+    # file and the name of a package's part.
+    "livery-git>=0.2.0",
+    # The store's cmake, ctest and measurers, each through its toolroom
+    # handle, so the version is the one the checkout's lock pins.
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.10.0",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The name a package lists in its extensions, and the package whose
+# extension.toml the workshop mounts it from. Nothing else: the
+# extension adds no verb of its own, and nothing activates by being
+# installed.
+[project.entry-points."workshop.extensions"]
+cmake = "livery.extensions.cmake"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.extensions.cmake,
+# which has no __init__.py, and there is no livery/__init__.py anywhere
+# in this repository. The flag lets uv ship a package with no
+# __init__.py.
+module-name = "livery.extensions.cmake"
+namespace = true

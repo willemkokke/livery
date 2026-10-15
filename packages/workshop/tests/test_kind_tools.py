@@ -30,6 +30,7 @@ from workshop_hosts import (  # noqa: F401
     lock_for_this_host,
     no_graph_resolution,
 )
+from workshop_installed import skip_unless_installed
 
 
 def _idle(ctx: PhaseContext) -> None:
@@ -358,6 +359,7 @@ NATIVE_SITES = {
 def test_each_native_tool_names_the_extension_that_requires_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.workshop._extensions import installed_declaration
 
     root = _workspace(tmp_path, monkeypatch)
@@ -951,6 +953,7 @@ def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
 def test_a_native_member_requires_the_msvc_measurer_only_while_coverage_is_listed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     root = _workspace(tmp_path, monkeypatch)
     native = root / "packages" / "native"
     native.mkdir()

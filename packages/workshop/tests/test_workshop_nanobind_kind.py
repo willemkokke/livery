@@ -16,6 +16,7 @@ from livery.extensions.python import _backend as _python
 from livery.workshop._identity import project_facts
 from livery.workshop._packages import Package
 from workshop_composed import seed_into
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -346,6 +347,7 @@ def test_the_wheel_is_platform_tagged_and_imports(
 def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.extensions.conan import _package as _conan
 
     # An extension consumes conan and its recipe names no reference: no
@@ -368,6 +370,7 @@ def test_the_conan_workspace_names_each_conan_member_by_its_path_alone(
 def test_the_build_container_finds_a_workspace_file_at_its_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.extensions.conan import _package as _conan
 
     (tmp_path / "packages").mkdir()

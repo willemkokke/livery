@@ -25,6 +25,7 @@ from livery.workshop._prose import (
 )
 from livery.workshop._steps import StepRecord, register_step
 from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 WORKSHOP_CONTENT = Path(livery.workshop.__file__).resolve().parent / "content"
@@ -266,6 +267,7 @@ def test_guidance_is_one_readers_set_of_every_fragment_in_play(
 def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_reader(
     tmp_path: Path, restored, python_steps: object
 ) -> None:
+    skip_unless_installed("cmake")
     root = _workspace(tmp_path)
     register_step(
         StepRecord(

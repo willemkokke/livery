@@ -14,6 +14,7 @@ members = [
     "livery-extensions-clang-format",
     "livery-extensions-clang-tidy",
     "livery-extensions-claude",
+    "livery-extensions-cmake",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",
@@ -805,6 +806,7 @@ dev = [
     { name = "livery-extensions-clang-format" },
     { name = "livery-extensions-clang-tidy" },
     { name = "livery-extensions-claude" },
+    { name = "livery-extensions-cmake" },
     { name = "livery-extensions-mypy" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-pytest" },
@@ -839,6 +841,7 @@ dev = [
     { name = "livery-extensions-clang-format", editable = "packages/extensions/clang-format" },
     { name = "livery-extensions-clang-tidy", editable = "packages/extensions/clang-tidy" },
     { name = "livery-extensions-claude", editable = "packages/extensions/claude" },
+    { name = "livery-extensions-cmake", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-pytest", editable = "packages/extensions/pytest" },
@@ -872,11 +875,20 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-extensions-cmake" },
+    { name = "livery-footman" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-changelog"
@@ -889,13 +901,20 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-extensions-cmake" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-clang-format"
@@ -907,12 +926,19 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-extensions-cmake" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-clang-tidy"
@@ -924,12 +950,19 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-extensions-cmake" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-claude"
@@ -943,6 +976,25 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+
+[[package]]
+name = "livery-extensions-cmake"
+version = "0.0.0"
+source = { editable = "packages/extensions/cmake" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-git" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-git", editable = "packages/git" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
 
@@ -972,11 +1024,18 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-pytest"
@@ -990,13 +1049,21 @@ dependencies = [
 coverage = [
     { name = "coverage" },
 ]
+test = [
+    { name = "livery-extensions-cmake" },
+    { name = "livery-footman" },
+    { name = "livery-git" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'coverage'", specifier = ">=7.13" },
+    { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
+    { name = "livery-git", marker = "extra == 'test'", editable = "packages/git" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
-provides-extras = ["coverage"]
+provides-extras = ["coverage", "test"]
 
 [[package]]
 name = "livery-extensions-ruff"
@@ -1007,11 +1074,18 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-ty"
@@ -1022,11 +1096,18 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-footman"

@@ -298,16 +298,36 @@ def declared_requirements(package: Package) -> dict[str, str]:
     return dict(answer(package, REQUIREMENTS))
 
 
-def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
+def declared_test_requirements(package: Package) -> dict[str, str] | None:
+    """What *package*'s manifests require for its tests, each name to its constraint.
+
+    None for a package whose set answers no ``test-requirements``: the
+    package has no home for its test edges, and ``layering.graph``
+    judges none of them.
+    """
+    from livery.workshop._queries import TEST_REQUIREMENTS, answer, answers
+
+    if not answers(package, TEST_REQUIREMENTS):
+        return None
+    return dict(answer(package, TEST_REQUIREMENTS))
+
+
+def declare_requirement(
+    package: Package, dependency: Package, floor: str, *, kind: str = "runtime"
+) -> list[str]:
     """Write *dependency* at *floor* into *package*'s manifests; the files changed.
 
-    The package's set answers the ``requirement-writers`` query with its
-    writers, and every one is called. Each takes a sibling of its own
-    ecosystem alone, so the requirement lands in the manifest of the
-    dependency's ecosystem: python's ``pyproject.toml`` for a sibling
-    that holds python, conan's recipe for a sibling that is a conan
-    package. The files are relative to the package; empty when the
-    manifests name the dependency already.
+    *kind* is the edge's: a build or runtime requirement is written by
+    the writers the package's set answers ``requirement-writers`` with,
+    and a test requirement by those it answers
+    ``test-requirement-writers`` with. Every writer is called. Each
+    takes a sibling of its own ecosystem alone, so the requirement
+    lands in the manifest of the dependency's ecosystem: python's
+    ``pyproject.toml`` for a sibling that holds python, conan's recipe
+    for a sibling that is a conan package. The files are relative to
+    the package; empty when the manifests name the dependency already,
+    and for a test requirement in a set with no writer of one, which
+    has no home for it.
 
     Raises:
         Failed: when no writer of the set takes *dependency*, naming
@@ -315,19 +335,29 @@ def declare_requirement(package: Package, dependency: Package, floor: str) -> li
     """
     from livery.footman import fail
     from livery.workshop._composition import extension_set
-    from livery.workshop._queries import REQUIREMENT_WRITERS, answer
+    from livery.workshop._queries import (
+        REQUIREMENT_WRITERS,
+        TEST_REQUIREMENT_WRITERS,
+        answer,
+    )
 
+    writers = answer(
+        package, TEST_REQUIREMENT_WRITERS if kind == "test" else REQUIREMENT_WRITERS
+    )
+    if kind == "test" and not writers:
+        return []
     taken = [
         written
-        for writer in answer(package, REQUIREMENT_WRITERS)
+        for writer in writers
         if (written := writer(package, dependency, floor)) is not None
     ]
     if not taken:
         own = ", ".join(extension_set(package)) or "no extension"
         theirs = ", ".join(extension_set(dependency)) or "no extension"
+        what = "test requirement" if kind == "test" else "requirement"
         fail(
             f"{package.path} holds {own}, and no writer of its set takes a"
-            f" requirement on {dependency.path}, which holds {theirs}: a writer"
+            f" {what} on {dependency.path}, which holds {theirs}: a writer"
             " takes a sibling of its own ecosystem alone. List an extension"
             f" whose manifest takes {dependency.path}, or drop the dependency"
         )

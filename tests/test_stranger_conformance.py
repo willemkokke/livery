@@ -62,10 +62,18 @@ _CONTRACT = (
 #: sources declare them, so uv sees one URL for each. They go in the
 #: composed project file's region, which a sync keeps.
 _LOCAL_SOURCES = "".join(
-    f"[tool.uv.sources.livery-{name}]\n"
-    f'path = "{(ROOT / "packages" / name).as_posix()}"\n'
+    f"[tool.uv.sources.{distribution}]\n"
+    f'path = "{(ROOT / "packages" / member).as_posix()}"\n'
     "editable = true\n"
-    for name in ("workshop", "forge", "toolroom", "footman")
+    for distribution, member in (
+        ("livery-workshop", "workshop"),
+        ("livery-forge", "forge"),
+        ("livery-toolroom", "toolroom"),
+        ("livery-footman", "footman"),
+        # The drive's root lists cmake, which ships as a distribution of
+        # its own.
+        ("livery-extensions-cmake", "extensions/cmake"),
+    )
 )
 
 _END_TABLES = "# -- workshop: end tables --"
@@ -298,8 +306,17 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
             "extensions = []", 'extensions = ["cmake", "nanobind"]', 1
         )
     )
+    # cmake ships as a distribution of its own, which the sync installs
+    # from an index, so this checkout's index serves it.
+    from livery.workshop._e2e import checkout_index
+
+    index = checkout_index(ROOT, tmp_path / "checkout-index", ("cmake", "nanobind"))
     synced = subprocess.run(
-        ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
+        ["uv", "run", "fm", "sync"],
+        cwd=root,
+        env={**env, "UV_INDEX": index},
+        capture_output=True,
+        text=True,
     )
     assert synced.returncode == 0, f"{synced.stdout}\n{synced.stderr}"
     # Listed before any member of their kind exists, as a person lists

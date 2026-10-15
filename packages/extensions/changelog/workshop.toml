@@ -37,3 +37,8 @@ floor = 100
 [docs]
 # Inside the workshop's entry of the site's Packages tree.
 name = "workshop.extensions.changelog"
+
+[[depends]]
+path = "packages/extensions/cmake"
+kind = "test"
+floor = "0.0.0"

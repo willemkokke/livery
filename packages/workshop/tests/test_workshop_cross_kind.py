@@ -14,6 +14,7 @@ from livery.workshop._graph import (
     order_topologically,
 )
 from livery.workshop._packages import Package, verify_workspace
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -77,6 +78,7 @@ def test_disagreeing_floors_refuse_naming_both(tmp_path: Path) -> None:
 def test_a_missing_conan_requirement_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="", floor="0.1.0")
     with pytest.raises(ValueError) as caught:

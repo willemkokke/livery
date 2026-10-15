@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
 
 from livery.workshop import discover_packages, verify_workspace
 from livery.workshop._packages import RULES, Package, write_edges
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -542,6 +544,7 @@ def _tree(root: Path) -> dict[str, str]:
 def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("cmake")
     from livery.footman import Failed
     from livery.workshop import _lifecycle
     from livery.workshop._packages import declare_edge
@@ -646,7 +649,7 @@ def test_a_reference_the_graph_reaches_is_written_at_the_inherited_floor(
     assert write_edges(tmp_path) == []
 
 
-def test_a_test_reference_writes_the_test_edge_and_no_requirement(
+def test_a_test_reference_writes_the_test_edge_and_its_test_requirement(
     tmp_path: Path,
 ) -> None:
     _forge_stub(tmp_path)
@@ -670,11 +673,291 @@ def test_a_test_reference_writes_the_test_edge_and_no_requirement(
     written = write_edges(tmp_path)
     assert written == [
         "  layering: packages/high declares the test edge on packages/low at"
-        " floor 1.2.0 (workshop.toml)"
+        " floor 1.2.0 (workshop.toml, pyproject.toml)"
     ]
+    # The requirement lands in the test extra, not the dependencies.
     pyproject = (tmp_path / "packages" / "high" / "pyproject.toml").read_text()
-    assert "livery-low" not in pyproject
+    assert tomllib.loads(pyproject)["project"] == {
+        "name": "livery-high",
+        "dependencies": ["livery-mid>=0.1.0"],
+        "optional-dependencies": {"test": ["livery-low>=1.2.0"]},
+    }
     verify_workspace(tmp_path)
+
+
+# A test edge: its requirement is a line of the package's test
+# requirements, the test extra for python.
+
+
+def test_a_test_edge_whose_requirement_is_missing_is_named_and_the_fix_writes_it(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._packages import write_test_requirements
+
+    _forge_stub(tmp_path)
+    _package(tmp_path, "tool", contract_extra=_edge("packages/forge", "test", "0.1.0"))
+    with pytest.raises(ValueError) as refused:
+        verify_workspace(tmp_path)
+    assert (
+        "packages/tool: the test edge on packages/forge is not declared in the"
+        " package's test requirements (livery-forge missing; packages/forge holds"
+        " python); the gate's --fix writes it"
+    ) in str(refused.value)
+    assert write_test_requirements(tmp_path) == [
+        "  layering: packages/tool requires livery-forge at floor 0.1.0 for its"
+        " tests (pyproject.toml)"
+    ]
+    pyproject = (tmp_path / "packages" / "tool" / "pyproject.toml").read_text()
+    assert tomllib.loads(pyproject)["project"]["optional-dependencies"] == {
+        "test": ["livery-forge>=0.1.0"]
+    }
+    verify_workspace(tmp_path)
+    assert write_test_requirements(tmp_path) == []
+
+
+def test_a_test_requirement_at_another_floor_is_named_and_the_fix_writes_the_floor(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._packages import write_test_requirements
+
+    _forge_stub(tmp_path)
+    _package(tmp_path, "tool", contract_extra=_edge("packages/forge", "test", "0.2.0"))
+    pyproject = tmp_path / "packages" / "tool" / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text() + "\n[project.optional-dependencies]\n"
+        'test = ["livery-forge>=0.1.0", "pyyaml"]\n'
+    )
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "packages/tool: the test edge on packages/forge floors at 0.2.0, and the"
+            " declared test requirement says livery-forge>=0.1.0; the gate's --fix"
+            " writes the floor"
+        ),
+    ):
+        verify_workspace(tmp_path)
+    assert len(write_test_requirements(tmp_path)) == 1
+    assert '\ntest = ["livery-forge>=0.2.0", "pyyaml"]\n' in pyproject.read_text()
+    verify_workspace(tmp_path)
+
+
+def test_a_test_edge_with_no_home_and_a_tool_edge_are_not_judged(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._packages import write_test_requirements
+
+    _forge_stub(tmp_path)
+    # A set that answers no test requirements has no home for a test
+    # edge, and a tool edge has none anywhere.
+    bare = tmp_path / "packages" / "bare"
+    bare.mkdir(parents=True)
+    (bare / "workshop.toml").write_text(
+        'extensions = []\nname = "livery-bare"\n'
+        + _edge("packages/forge", "test", "0.1.0")
+    )
+    _package(tmp_path, "tool", contract_extra=_edge("packages/forge", "tool", "0.1.0"))
+    verify_workspace(tmp_path)
+    assert write_test_requirements(tmp_path) == []
+    assert not (bare / "pyproject.toml").exists()
+    assert (
+        "optional-dependencies"
+        not in (tmp_path / "packages" / "tool" / "pyproject.toml").read_text()
+    )
+
+
+def test_a_test_edge_no_writer_takes_refuses_naming_both_sets(tmp_path: Path) -> None:
+    skip_unless_installed("cmake")
+    from livery.footman import Failed
+    from livery.workshop import _lifecycle
+
+    echo, lib, _native = _three_ecosystems(tmp_path)
+    before = _tree(tmp_path)
+    with pytest.raises(Failed) as refused:
+        _lifecycle.declare_requirement(echo, lib, "0.1.0", kind="test")
+    assert str(refused.value).startswith(
+        "packages/echo holds python, and no writer of its set takes a test"
+        " requirement on packages/lib, which holds cmake, conan, cpp:"
+    )
+    assert _tree(tmp_path) == before
+
+
+def test_the_graph_fix_writes_the_test_requirements_then_locks_then_judges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _extensions, _packages
+    from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import step_for
+
+    order: list[str] = []
+
+    def extensions(root: Path) -> list[str]:
+        order.append(f"extensions at {root.name}")
+        return []
+
+    def requirements(root: Path) -> list[str]:
+        order.append(f"test requirements at {root.name}")
+        return [
+            "  layering: packages/tool requires livery-forge at floor 1 for its"
+            " tests (pyproject.toml)"
+        ]
+
+    def judged(root: Path) -> tuple[Package, ...]:
+        order.append(f"judge at {root.name}")
+        return ()
+
+    def locked(*args: str, root: Path) -> None:
+        order.append(f"uv {' '.join(args)} at {root.name}")
+
+    monkeypatch.setattr(_extensions, "write_extensions", extensions)
+    monkeypatch.setattr(_packages, "write_test_requirements", requirements)
+    monkeypatch.setattr(_packages, "verify_graph", judged)
+    monkeypatch.setattr("livery.workshop._uv.run_uv", locked)
+    record = step_for("layering.graph")
+    assert record.fix is not None
+    record.fix(PhaseContext(root=tmp_path, packages=(), fix=True))
+    name = tmp_path.name
+    assert order == [
+        f"extensions at {name}",
+        f"test requirements at {name}",
+        f"uv lock at {name}",
+        f"judge at {name}",
+    ]
+
+
+def _python_member(root: Path, name: str, pyproject: str, *listed: str) -> Package:
+    """The package ``livery-<name>`` holding *listed*, its manifest *pyproject*."""
+    directory = root / "packages" / name
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "pyproject.toml").write_text(pyproject)
+    return Package(
+        directory=directory,
+        path=f"packages/{name}",
+        name=f"livery-{name}",
+        depends=(),
+        extensions=listed,
+    )
+
+
+#: The comment a test extra the writer opens starts with.
+OPENED = (
+    "# The members this package's tests need beyond its dependencies, one\n"
+    "# for each test edge of its workshop.toml, at the edge's floor.\n"
+)
+
+
+def test_the_python_test_requirement_refuses_without_project_and_skips_a_stranger(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.python import _backend as _python
+
+    low = _python_member(tmp_path, "low", '[project]\nname = "livery-low"\n', "python")
+    native = _python_member(tmp_path, "native", "", "cmake")
+    orphan = _python_member(tmp_path, "orphan", "[tool.uv]\npackage = false\n")
+    with pytest.raises(_FAILURES, match="no \\[project\\] table"):
+        _python.declare_test_requirement(orphan, low, "1.2.0")
+    # A sibling that holds no python is another writer's.
+    assert _python.declare_test_requirement(low, native, "1.2.0") is None
+    assert (low.directory / "pyproject.toml").read_text() == (
+        '[project]\nname = "livery-low"\n'
+    )
+    # An extra in a form the edit does not take refuses; nothing is written.
+    odd = (
+        '[project]\nname = "livery-odd"\n\n[project.optional-dependencies]\n'
+        'test = ["pyyaml",\n    "livery-low"]\n'
+    )
+    taken = _python_member(tmp_path, "odd", odd, "python")
+    with pytest.raises(
+        _FAILURES,
+        match=re.escape(
+            "spells its test extra in a form this edit does not take; write"
+            ' "livery-low>=1.2.0" into it by hand'
+        ),
+    ):
+        _python.declare_test_requirement(taken, low, "1.2.0")
+    assert (taken.directory / "pyproject.toml").read_text() == odd
+
+
+def test_the_python_test_requirement_opens_the_extra_joins_it_and_writes_the_floor(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.python import _backend as _python
+
+    low = _python_member(tmp_path, "low", '[project]\nname = "livery-low"\n', "python")
+    urls = '\n[project.urls]\nRepository = "https://example.test"\n'
+    # No extra at all: the table opens after [project], before the next.
+    bare = _python_member(
+        tmp_path, "bare", f'[project]\nname = "livery-bare"\n{urls}', "python"
+    )
+    assert _python.declare_test_requirement(bare, low, "1.2.0") == ["pyproject.toml"]
+    assert (bare.directory / "pyproject.toml").read_text() == (
+        '[project]\nname = "livery-bare"\n\n[project.optional-dependencies]\n'
+        f'{OPENED}test = ["livery-low>=1.2.0"]\n{urls}'
+    )
+    # Carried already: nothing to write.
+    assert _python.declare_test_requirement(bare, low, "1.2.0") == []
+    # A table without the extra: it gains the extra at its end.
+    other = _python_member(
+        tmp_path,
+        "other",
+        '[project]\nname = "livery-other"\n\n[project.optional-dependencies]\n'
+        f'# Why.\ncli = ["click"]\n{urls}',
+        "python",
+    )
+    _python.declare_test_requirement(other, low, "1.2.0")
+    assert (other.directory / "pyproject.toml").read_text() == (
+        '[project]\nname = "livery-other"\n\n[project.optional-dependencies]\n'
+        f'# Why.\ncli = ["click"]\n{OPENED}test = ["livery-low>=1.2.0"]\n{urls}'
+    )
+    # A line at another floor is replaced where it stands, and a new one
+    # joins the end while the extra fits on its line.
+    inline = _python_member(
+        tmp_path,
+        "inline",
+        '[project]\nname = "livery-inline"\n\n[project.optional-dependencies]\n'
+        'test = ["livery-low>=1.0.0", "pyyaml"]  # kept\n',
+        "python",
+    )
+    _python.declare_test_requirement(inline, low, "1.2.0")
+    deep = _python_member(tmp_path, "deep", '[project]\nname = "x"\n', "python")
+    _python.declare_test_requirement(inline, deep, "10.20.30")
+    assert (
+        (inline.directory / "pyproject.toml")
+        .read_text()
+        .endswith(
+            'test = ["livery-low>=1.2.0", "pyyaml", "livery-deep>=10.20.30"]  # kept\n'
+        )
+    )
+    # Past 88 columns the extra spreads to a line each, comments kept.
+    longer = _python_member(
+        tmp_path,
+        "another-sibling-with-a-long-name",
+        '[project]\nname = "y"\n',
+        "python",
+    )
+    _python.declare_test_requirement(inline, longer, "1.0.0")
+    spread = (
+        "test = [  # kept\n"
+        '    "livery-low>=1.2.0",\n'
+        '    "pyyaml",\n'
+        '    "livery-deep>=10.20.30",\n'
+        '    "livery-another-sibling-with-a-long-name>=1.0.0",\n'
+        "]\n"
+    )
+    assert (inline.directory / "pyproject.toml").read_text().endswith(spread)
+    # A spread extra: a line at another floor is replaced, its comments kept.
+    _python.declare_test_requirement(inline, low, "2.0.0")
+    assert (
+        (inline.directory / "pyproject.toml")
+        .read_text()
+        .endswith(spread.replace("livery-low>=1.2.0", "livery-low>=2.0.0"))
+    )
+    # No floor: the name alone.
+    plain = _python_member(
+        tmp_path, "plain", '[project]\nname = "livery-plain"\n', "python"
+    )
+    _python.declare_test_requirement(plain, low, "")
+    assert 'test = ["livery-low"]' in (plain.directory / "pyproject.toml").read_text()
+    assert _python.declare_test_requirement(plain, low, "") == []
 
 
 def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_project(

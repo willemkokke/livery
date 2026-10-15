@@ -16,7 +16,7 @@ distribution of that language, and discovery requires its
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from itertools import takewhile
 from pathlib import Path, PurePosixPath
@@ -662,6 +662,7 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
         # python's the pyproject's dependencies, conan's the recipe's
         # references, combined.
         native = _lifecycle.declared_requirements(package)
+        tested = _lifecycle.declared_test_requirements(package)
         declared = {edge.path: edge for edge in package.depends}
         for edge in package.depends:
             if edge.path not in by_path:
@@ -670,8 +671,12 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
                     " which is not a package here"
                 )
                 continue
+            if edge.kind == "test":
+                if tested is not None:
+                    problems.extend(_test_problems(package, edge, by_path, tested))
+                continue
             if edge.kind not in ("build", "runtime"):
-                continue  # test and tool edges have no native home yet
+                continue  # a tool edge has no native home
             dep = by_path[edge.path]
             constraint = native.get(dep.name)
             if constraint is None:
@@ -914,19 +919,20 @@ def declare_edge(
 ) -> list[str]:
     """Declare *package*'s *kind* edge on *dependency* at *floor*; the files written.
 
-    For a build or runtime edge, the writers of the package's set first
-    write the native requirement at the same floor
+    For a build, runtime or test edge, the writers of the package's set
+    first write the native requirement at the same floor
     (``_lifecycle.declare_requirement``), so ``layering.graph`` finds
     the two in agreement; then the ``[[depends]]`` edge joins the
     package's contract. A sibling no writer takes refuses before the
-    contract changes. The files are relative to the package, the
-    contract first.
+    contract changes. A test edge in a set with no writer of a test
+    requirement, and a tool edge, write no requirement. The files are
+    relative to the package, the contract first.
     """
     from livery.workshop import _lifecycle
 
     required = (
-        _lifecycle.declare_requirement(package, dependency, floor)
-        if kind in ("build", "runtime")
+        _lifecycle.declare_requirement(package, dependency, floor, kind=kind)
+        if kind != "tool"
         else []
     )
     contract = package.directory / "workshop.toml"
@@ -958,6 +964,74 @@ def write_edges(root: Path) -> list[str]:
             f"  layering: {package.path} declares the {kind} edge on"
             f" {dependency.path} at floor {floor} ({', '.join(files)})"
         )
+    return written
+
+
+def _test_problems(
+    package: Package,
+    edge: Edge,
+    by_path: Mapping[str, Package],
+    tested: Mapping[str, str],
+) -> list[str]:
+    """How *package*'s test *edge* disagrees with its test requirements *tested*."""
+    from livery.workshop._composition import extension_set
+
+    dependency = by_path[edge.path]
+    constraint = tested.get(dependency.name)
+    if constraint is None:
+        held = ", ".join(extension_set(dependency)) or "no extension"
+        return [
+            f"{package.path}: the test edge on {edge.path} is not declared in the"
+            f" package's test requirements ({dependency.name} missing;"
+            f" {edge.path} holds {held}); the gate's --fix writes it"
+        ]
+    if edge.floor and f">={edge.floor}" not in constraint:
+        return [
+            f"{package.path}: the test edge on {edge.path} floors at {edge.floor},"
+            " and the declared test requirement says"
+            f" {dependency.name}{constraint}; the gate's --fix writes the floor"
+        ]
+    return []
+
+
+def write_test_requirements(root: Path) -> list[str]:
+    """Write each test requirement a package's manifests lack; the lines written.
+
+    The fix of ``layering.graph`` for the test edges it judges: in each
+    package whose set answers ``test-requirements``, a test edge whose
+    requirement is missing, or carries another floor, is written at the
+    edge's floor by the writers of the set
+    (``_lifecycle.declare_requirement``). Idempotent: a second call
+    writes nothing.
+
+    Raises:
+        Failed: when no writer of a package's set takes a test edge's
+            sibling, naming both sets.
+    """
+    from livery.workshop import _lifecycle
+
+    packages = discover_packages(root)
+    by_path = {package.path: package for package in packages}
+    written: list[str] = []
+    for package in packages:
+        tested = _lifecycle.declared_test_requirements(package)
+        if tested is None:
+            continue
+        for edge in package.depends:
+            if edge.kind != "test" or edge.path not in by_path:
+                continue
+            if not _test_problems(package, edge, by_path, tested):
+                continue
+            dependency = by_path[edge.path]
+            files = _lifecycle.declare_requirement(
+                package, dependency, edge.floor, kind="test"
+            )
+            if files:
+                written.append(
+                    f"  layering: {package.path} requires {dependency.name}"
+                    f" at floor {edge.floor or 'none'} for its tests"
+                    f" ({', '.join(files)})"
+                )
     return written
 
 
