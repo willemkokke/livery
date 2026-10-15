@@ -11,7 +11,8 @@ The workspace contract (`workshop.toml` at the root) lists the
 workspace's extensions in `[workspace] extensions`, and each
 package's contract lists the extensions the package is composed of
 in its own `extensions`; a package that lists none holds none. Every
-extension is one kind: either list takes any of them. A list's set is
+extension is one kind: the root's list takes any of them, and a
+package's list one that composes something in a package. A list's set is
 the list and every extension it requires, and the installed set is
 the root's set and every package's set. The workspace's own `tests/`
 directory holds the root's set, so a root lists the language its own
@@ -771,7 +772,10 @@ CI job's entries name is one the extension defines, read from its
 sources; every category a step's claims name is one the workshop
 knows, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
-every contract key an extension declares carries a doc; a step's
+every contract key an extension declares carries a doc; every
+extension a template lists composes something in a package, unless
+another it lists requires it, and the set of the template's list holds
+every extension the template's chain needs (`template-composes`); a step's
 fragments render with the kit's probe answers, the
 composed `pyproject.toml` still parses, and a per-package file matches
 its render until a person edits it, when the drift gate names it; and
@@ -800,6 +804,21 @@ ship, cmake, conan, cpp, nanobind and python compose, and the others
 do not. For an installed extension no list names, `fm doctor` names
 a package's `extensions` beside `[workspace] extensions` when it
 composes.
+
+A package's list takes only an extension that composes something in
+a package, itself or through an extension it requires. `layering.graph`
+names any other entry, says what the extension does instead, such as
+"its steps judge every package that holds python or conan", and points
+to `[workspace] extensions`. Its `--fix` moves the entry to the root's
+list with its comment lines and writes both lists in their canonical
+form. An entry another entry of the list requires is left out of the
+canonical list instead, and is not moved. A template's list follows the
+same rule: `fm new.package` refuses a template that lists such an
+extension, or extends one that does, before it writes anything. Because the proof reads
+declarations alone, an extension whose only effect on a package lives
+in its code, such as a workspace answer that varies with which
+packages list it, is refused in a package's list and is listed in
+`[workspace] extensions` instead.
 
 The documentation site is an extension inside the workshop wheel,
 `livery.extensions.docs`, listed in `[workspace] extensions` as a

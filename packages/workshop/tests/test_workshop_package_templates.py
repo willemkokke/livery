@@ -401,6 +401,43 @@ def test_a_template_without_its_files_refuses_naming_the_directory(
     ) in str(caught.value)
 
 
+def test_a_template_listing_an_extension_that_composes_nothing_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path / "acme", "acme.lint", "acme.lua")
+    # acme.lint's step names acme.lua, so acme.lua composes something in a
+    # package and acme.lint does not.
+    _declaring(
+        tmp_path,
+        monkeypatch,
+        lua=(
+            '[templates.lua-module]\ndoc = "a lua module"\n'
+            'extensions = ["acme.lint", "acme.lua"]\n\n'
+            '[templates.lua-app]\ndoc = "a lua app"\nextensions = ["acme.lua"]\n'
+            'extends = "lua-module"\n'
+        ),
+        lint=(
+            '[phases.lint.acme-lint]\nmain = "{package}._steps:noop"\n'
+            'extensions = ["acme.lua"]\n'
+        ),
+    )
+    before = _files(root)
+    refusal = (
+        "the template lua-module lists acme.lint, which composes nothing in a"
+        " package: its steps judge every package that holds acme.lua; a"
+        " package's list refuses it, so acme.lua, which declares the template,"
+        " drops it from the template's extensions"
+    )
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module")
+    assert str(caught.value) == refusal
+    # Through the template it extends too, whose files a birth writes.
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-app")
+    assert str(caught.value) == refusal
+    assert _files(root) == before
+
+
 @pytest.mark.parametrize(
     ("table", "refusal"),
     [

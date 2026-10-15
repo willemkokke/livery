@@ -17,8 +17,10 @@ it. A workspace offers the base's templates and those of the extensions
 its installed set holds. A birth needs every extension the template's
 chain names in the installed set and installed, and it refuses
 otherwise, naming what to list or that ``fm sync`` installs it: a
-creation installs nothing. A template is read at a birth alone: nothing
-records which one a package came from.
+creation installs nothing. Each template of the chain lists only
+extensions that compose something in a package, as a package's list
+does, or the birth refuses naming the entry. A template is read at a
+birth alone: nothing records which one a package came from.
 
 `create` writes a ``.jinja`` file rendered with minijinja, its suffix
 dropped, and any other file byte for byte; path names render too
@@ -356,13 +358,21 @@ def _sync(extensions: Sequence[str]) -> str:
 def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
     """The canonical list of the born template, the last of *chain*, once judged.
 
+    Each template of the chain lists only extensions that compose
+    something in a package, itself or through what it requires: a
+    package's list refuses any other, so a birth from such a template
+    refuses instead of writing a list the gate refuses. An entry
+    another entry requires is left out of the list, and not judged.
+
     Raises:
         Failed: for a template of the chain whose directory of files is
-            missing, and for a list whose requirements order no start.
+            missing, for a list whose requirements order no start, and
+            for a template of the chain listing an extension that
+            composes nothing in a package, naming what it does instead.
     """
-    from livery.workshop._composition import OrderCycle, canonical
+    from livery.workshop._composition import OrderCycle, canonical, closure, implied
     from livery.workshop._declaration import DeclarationError
-    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._extensions import installed_declaration, why_inert
 
     for template in chain:
         files = template_files(template)
@@ -373,9 +383,23 @@ def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
             )
     born = chain[-1]
     try:
-        return canonical(born.extensions, installed_declaration)
+        listed = canonical(born.extensions, installed_declaration)
     except (DeclarationError, OrderCycle) as error:
         fail(f"the template {born.name}: {error}")
+    # The birth's judges read every declaration the chain names already.
+    for template in chain:
+        members = closure(template.extensions, installed_declaration)
+        required = implied(members, installed_declaration)
+        for name in dict.fromkeys(template.extensions):
+            why = "" if name in required else why_inert(name)
+            if why:
+                fail(
+                    f"the template {template.name} lists {name}, which composes"
+                    f" nothing in a package: {why}; a package's list refuses it,"
+                    f" so {template.extension}, which declares the template, drops"
+                    " it from the template's extensions"
+                )
+    return listed
 
 
 def _shipped(order: Sequence[str], tree: str) -> list[Fragment]:
@@ -513,9 +537,10 @@ def create_package(
 
     Raises:
         Failed: for a template the workspace cannot take
-            (`birth_chain`), a template whose files are missing, and a
-            born template whose list's requirements order no start; each
-            refusal names what to change.
+            (`birth_chain`), a template whose files are missing, a born
+            template whose list's requirements order no start, and a
+            template of the chain listing an extension that composes
+            nothing in a package; each refusal names what to change.
     """
     from livery.workshop._contract import spelled_list
 

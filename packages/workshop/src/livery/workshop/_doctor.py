@@ -163,7 +163,8 @@ def host(**facts: Any) -> list[Finding]:
 def unlisted(module: str, dist: str, *, per_package: bool) -> str:
     """The doctor's line for an installed extension the workspace lists nowhere.
 
-    Either list takes any extension. The line names `[workspace]
+    The root's list takes any extension, and a package's list one that
+    composes something in a package. The line names `[workspace]
     extensions`, and a package's `extensions` too when *per_package*
     says the extension composes something in a package that holds it
     ([livery.workshop._extensions.composes_per_package][]).

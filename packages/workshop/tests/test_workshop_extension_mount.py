@@ -418,7 +418,12 @@ def test_any_extension_mounts_from_either_list(
     steps = _steps.steps_by_name()
     assert steps["lint.site"].extension == "acme.site"
     assert steps["build.native"].extension == "acme.native"
-    assert _extensions.closure_problems(tmp_path) == []
+    # The gate names the package's entry: it mounts, and adds nothing there.
+    assert _extensions.closure_problems(tmp_path) == [
+        "packages/core: `extensions` lists acme.site, which composes nothing in a"
+        " package: its steps judge the workspace as a whole; list it in"
+        " [workspace] extensions, where the gate's --fix moves it"
+    ]
 
 
 # The entries of the list: the refusals first, then what a step declared

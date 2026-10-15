@@ -34,6 +34,11 @@ from workshop_extension_fakes import (
 PACKAGE = "[extension]\n"
 
 
+def _composing(name: str, identity: str = PACKAGE) -> str:
+    """A fake that composes something in a package: it declares categories."""
+    return identity + f'\n[categories]\nsource = ["{name}/**"]\n'
+
+
 def _declared(name: str, *, requires: tuple[str, ...] = ()) -> Declaration:
     return Declaration(name, name, Path(name) / "extension.toml", requires=requires)
 
@@ -74,10 +79,12 @@ def test_a_requirement_joins_the_package_set_whatever_it_declares(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        native=PACKAGE + 'requires = ["acme.site", "acme.absent"]\n',
+        native=_composing(
+            "native", PACKAGE + 'requires = ["acme.site", "acme.absent"]\n'
+        ),
         site=site,
         runner='[extension]\nrequires = ["acme.python"]\n',
-        python=PACKAGE,
+        python=_composing("python"),
     )
     root_contract(tmp_path, '["acme.runner"]')
     package_contract(tmp_path, "core", '["acme.native"]')
@@ -309,10 +316,10 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
     fake_extensions(
         tmp_path,
         monkeypatch,
-        python=PACKAGE,
+        python=_composing("python"),
         nanobind=PACKAGE + 'requires = ["acme.python"]\n',
-        cpp=PACKAGE,
-        zig=PACKAGE,
+        cpp=_composing("cpp"),
+        zig=_composing("zig"),
     )
     root_contract(tmp_path, "[]")
     core = package_contract(tmp_path, "core", '["acme.python", "acme.nanobind"]')
@@ -535,3 +542,142 @@ def test_the_proof_composes_exactly_cmake_conan_cpp_nanobind_python() -> None:
         if _extensions.composes_per_package(name)
     ]
     assert composing == ["cmake", "conan", "cpp", "nanobind", "python"]
+
+
+# A package's list composes: an entry that composes nothing refuses, and
+# the fix moves it to the root's list.
+
+#: A step the fakes below run.
+NOOP = '"{package}._steps:noop"'
+
+#: The end of the refusal of an entry that composes nothing in a package.
+MOVE_IT = "; list it in [workspace] extensions, where the gate's --fix moves it"
+
+
+def test_a_package_listing_an_extension_that_composes_nothing_refuses_saying_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        # The checker's step names python and conan, so each of those
+        # composes something in a package, and the checker does not.
+        checker=(
+            f"[phases.lint.checker]\nmain = {NOOP}\n"
+            'extensions = ["acme.python", "acme.conan"]\n'
+        ),
+        python=PACKAGE,
+        conan=PACKAGE,
+        site=f"[phases.lint.site]\nmain = {NOOP}\n",
+        quiet=PACKAGE,
+    )
+    root_contract(tmp_path, "[]")
+    package_contract(
+        tmp_path, "core", '["acme.checker", "acme.python", "acme.quiet", "acme.site"]'
+    )
+    # Each names what the extension does instead: what its steps judge,
+    # or that it declares no step.
+    assert _extensions.closure_problems(tmp_path) == [
+        "packages/core: `extensions` lists acme.checker, which composes nothing in"
+        " a package: its steps judge every package that holds acme.python or"
+        " acme.conan" + MOVE_IT,
+        "packages/core: `extensions` lists acme.quiet, which composes nothing in a"
+        " package: it declares no step" + MOVE_IT,
+        "packages/core: `extensions` lists acme.site, which composes nothing in a"
+        " package: its steps judge the workspace as a whole" + MOVE_IT,
+    ]
+    # A name nothing installed declares has no step to name.
+    assert _extensions.why_inert("acme.ghost") == "it declares no step"
+    # The root's list takes any of them.
+    root_contract(tmp_path, '["acme.checker", "acme.quiet", "acme.site"]')
+    package_contract(tmp_path, "core", '["acme.python"]')
+    assert _extensions.closure_problems(tmp_path) == []
+
+
+def test_the_fix_moves_an_entry_that_composes_nothing_to_the_root_list_with_its_comments(  # noqa: E501
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        native=f"[phases.build.native]\nmain = {NOOP}\n",
+        site=f"[phases.lint.site]\nmain = {NOOP}\n",
+        zulu=PACKAGE,
+    )
+    root = tmp_path / "workshop.toml"
+    core = package_contract(tmp_path, "core", "[]")
+    listed = (
+        'extensions = [\n    "acme.native",\n    # the site\'s lint\n'
+        '    "acme.site",  # moves\n]\n'
+    )
+    core.write_text(listed)
+    app = package_contract(tmp_path, "app", '["acme.zulu"]')
+    refusals = [
+        "packages/app: `extensions` lists acme.zulu, which composes nothing in a"
+        " package: it declares no step" + MOVE_IT,
+        "packages/core: `extensions` lists acme.site, which composes nothing in a"
+        " package: its steps judge the workspace as a whole" + MOVE_IT,
+    ]
+    # The fallback first: a root array the writer does not read takes no
+    # entry, so nothing moves and the judge still names each.
+    root.write_text('[workspace]\nextensions = ["""acme.zulu"""]\n')
+    assert _extensions.closure_problems(tmp_path) == refusals
+    assert _extensions.write_extensions(tmp_path) == []
+    assert core.read_text() == listed
+    assert app.read_text() == 'extensions = ["acme.zulu"]\n'
+    # A root array it reads takes each entry it does not hold yet, with
+    # the entry's comments, and is written as its canonical list.
+    root.write_text(
+        '[workspace]\nextensions = [\n    # the last\n    "acme.zulu",\n]\n'
+    )
+    assert _extensions.write_extensions(tmp_path) == [
+        '  layering: [workspace] extensions is ["acme.site", "acme.zulu"], its'
+        " canonical list",
+        "  layering: packages/app `extensions` is [], and [workspace] extensions"
+        " lists acme.zulu, which composes nothing in a package",
+        '  layering: packages/core `extensions` is ["acme.native"], and [workspace]'
+        " extensions lists acme.site, which composes nothing in a package",
+    ]
+    assert root.read_text() == (
+        "[workspace]\nextensions = [\n    # the site's lint\n"
+        '    "acme.site",  # moves\n    # the last\n    "acme.zulu",\n]\n'
+    )
+    assert core.read_text() == 'extensions = [\n    "acme.native",\n]\n'
+    assert app.read_text() == "extensions = []\n"
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.write_extensions(tmp_path) == []
+
+
+def test_an_entry_whose_requirements_compose_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_package_extensions(
+        tmp_path,
+        monkeypatch,
+        native=f"[phases.build.native]\nmain = {NOOP}\n",
+        site=f"[phases.lint.site]\nmain = {NOOP}\n",
+        # A binding's own step judges the workspace, and it requires an
+        # extension that composes something in a package.
+        binding=(
+            PACKAGE + 'requires = ["acme.native", "acme.site"]\n'
+            f"\n[phases.lint.binding]\nmain = {NOOP}\n"
+        ),
+    )
+    root_contract(tmp_path, "[]")
+    core = package_contract(tmp_path, "core", '["acme.binding"]')
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.write_extensions(tmp_path) == []
+    assert core.read_text() == 'extensions = ["acme.binding"]\n'
+    # An entry another entry requires leaves the canonical list instead of
+    # moving: the package's set holds it through the requirement.
+    app = package_contract(tmp_path, "app", '["acme.binding", "acme.site"]')
+    assert _extensions.closure_problems(tmp_path) == [
+        'packages/app: `extensions` is ["acme.binding", "acme.site"], and its'
+        ' canonical list is ["acme.binding"]; acme.site is required by another'
+        " listed extension; the gate's --fix rewrites it"
+    ]
+    assert _extensions.write_extensions(tmp_path) == [
+        '  layering: packages/app `extensions` is ["acme.binding"], its canonical list'
+    ]
+    assert app.read_text() == 'extensions = ["acme.binding"]\n'
+    assert (tmp_path / "workshop.toml").read_text() == "[workspace]\nextensions = []\n"

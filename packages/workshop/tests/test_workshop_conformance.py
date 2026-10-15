@@ -401,6 +401,102 @@ def test_a_contract_key_without_a_doc_breaks_the_clause(
     assert _names(Subject("acme_kit_keys"), clause) == []
 
 
+def test_a_template_the_kit_cannot_judge_breaks_the_clause_saying_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    lua = (
+        '[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n'
+        'extends = "lua-base"\n\n'
+        '[templates.lua-rock]\ndoc = "a lua rock"\nextensions = ["acme.broken"]\n'
+    )
+    fake_extensions(
+        tmp_path, monkeypatch, lua=lua, broken="[extension]\nbogus = true\n"
+    )
+    clause = "template-composes"
+    broken = tmp_path / "site" / "acme" / "broken" / "extension.toml"
+    # A chain that does not resolve, and a list naming an extension whose
+    # declaration refuses: each names the refusal.
+    app, rock = _names(Subject("acme.lua"), clause)
+    assert app.startswith(
+        "template-composes: template lua-app: the template lua-app extends"
+        " lua-base, which no installed extension declares; the installed"
+        " templates are:\n"
+    )
+    assert rock.startswith(f"template-composes: template lua-rock: {broken}:\n")
+    # Two extensions declaring one template leave no template to judge.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        lua=lua,
+        rocks='[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n',
+    )
+    assert _names(Subject("acme.lua"), clause) == [
+        "template-composes: extension acme.lua: the template lua-app is declared by"
+        " both acme.lua and acme.rocks; one extension declares a template, so one"
+        " of them renames it"
+    ]
+
+
+def test_the_kit_refuses_a_template_whose_list_composes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    templates = (
+        '[templates.lua-module]\ndoc = "a lua module"\n'
+        'extensions = ["acme.lua", "acme.site"]\n\n'
+        '[templates.lua-app]\ndoc = "a lua app"\nextensions = ["acme.site"]\n'
+        'extends = "lua-module"\n\n'
+        '[templates.lua-rock]\ndoc = "a lua rock"\nextensions = ["acme.ghost"]\n'
+        'extends = "lua-module"\n'
+    )
+    # acme.lua's build step composes something in a package; acme.site's
+    # lint step does not, and nothing installed declares acme.ghost.
+    lua = '[phases.build.lua]\nmain = "{package}._steps:noop"\n\n'
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        lua=lua + templates,
+        site='[phases.lint.site]\nmain = "{package}._steps:noop"\n',
+    )
+    clause = "template-composes"
+    inert = (
+        "lists acme.site, which composes nothing in a package: its steps judge the"
+        " workspace as a whole; fm new.package refuses the template"
+    )
+
+    def outside(name: str) -> str:
+        return (
+            f"its chain needs {name}, which the set of its extensions does not"
+            " hold; a package born from it holds that set alone, so no step that"
+            f" names {name} judges it"
+        )
+
+    # lua-module's list holds what its chain needs; the templates
+    # extending it list less than lua-module does.
+    assert _names(Subject("acme.lua"), clause) == [
+        f"template-composes: template lua-app: {inert}",
+        f"template-composes: template lua-app: {outside('acme.lua')}",
+        f"template-composes: template lua-module: {inert}",
+        "template-composes: template lua-rock: lists acme.ghost, which no installed"
+        " distribution declares in workshop.extensions, so nothing shows that it"
+        " composes something in a package",
+        f"template-composes: template lua-rock: {outside('acme.lua')}",
+        f"template-composes: template lua-rock: {outside('acme.site')}",
+    ]
+    # A list of what composes, whose set holds what its chain needs.
+    declaration = tmp_path / "site" / "acme" / "lua" / "extension.toml"
+    declaration.write_text(
+        lua
+        + '[templates.lua-module]\ndoc = "a lua module"\nextensions = ["acme.lua"]\n'
+        + '\n[templates.lua-app]\ndoc = "a lua app"\nextensions = ["acme.lua"]\n'
+        + 'extends = "lua-module"\n'
+    )
+    assert _names(Subject("acme.lua"), clause) == []
+
+
 def test_every_installed_extension_passes_the_declaration_clauses() -> None:
     from livery.footman import installed_entry_points
 
@@ -425,6 +521,39 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
         for package in packages
         for violation in judge(Subject(package))
         if violation.clause in clauses
+    ]
+    assert found == []
+
+
+def test_every_template_here_composes() -> None:
+    from livery.footman import installed_entry_points
+    from livery.workshop._extensions import extension_package
+    from livery.workshop._seeds import available_templates
+    from livery.workshop._steps import BASE_EXTENSION
+
+    subjects = sorted(
+        {
+            BASE_EXTENSION,
+            *(
+                entry.value.partition(":")[0]
+                for entry in installed_entry_points("workshop.extensions")
+            ),
+        }
+    )
+    templates = available_templates()
+    assert set(templates) >= {
+        "cpp-executable",
+        "cpp-library",
+        "nanobind-module",
+        "python-cli",
+        "python-library",
+        "workshop-extension",
+    }
+    # Each template's declarer is a subject, so the clause judges every one.
+    assert {extension_package(t.extension) for t in templates.values()} <= set(subjects)
+    (clause,) = [item for item in CLAUSES if item.name == "template-composes"]
+    found = [
+        str(item) for subject in subjects for item in clause.judge(Subject(subject))
     ]
     assert found == []
 
@@ -743,6 +872,7 @@ def test_the_clauses_are_named_once_and_state_their_rule() -> None:
         "plugin-is-an-entry-point",
         "requirements-in-metadata",
         "contract-keys-documented",
+        "template-composes",
         "fragment-drift",
         "withdrawn-file",
         "walk-order",
