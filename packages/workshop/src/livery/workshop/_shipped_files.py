@@ -12,11 +12,13 @@ extension, delivered while its `[for.<target>]` table applies
 [livery.workshop._fragment_engine.apply][]; the gate's ``drift.check``
 judges them with [livery.workshop._fragment_engine.drift][].
 
-A later extension takes the place of an earlier one's shipped file by
-declaring it in its `extension.toml`: `[replaces] "<owner>:<name>" =
-"<reason>"`, where its own file of the same name is the replacement, or
-`[deletes]` with the same shape to remove it. The same declarations
-govern seeds ([livery.workshop._seeds.create][]).
+An extension takes the place of a shipped file of the base or of an
+extension it requires by declaring it in its `extension.toml`:
+`[replaces] "<owner>:<name>" = "<reason>"`, where its own file of the
+same name is the replacement, or `[deletes]` with the same shape to
+remove it. Each applies after what it requires, so the replacement
+follows no list's order. The same declarations govern seeds
+([livery.workshop._seeds.create][]).
 
 An extension also writes files from its own code: each
 `[fragments."<target>"]` table in its `extension.toml` names a render
@@ -78,8 +80,8 @@ def delivery_order(root: Path) -> list[str]:
     """The owners whose files a sync delivers to *root*, in the order they apply.
 
     The stack ([livery.workshop._extensions.stack_names][]): the base,
-    then every extension of the installed set in mount order, which
-    holds every extension a package's set holds.
+    then every extension of the installed set in composition order,
+    which holds every extension a package's set holds.
     """
     return list(stack_names(root))
 
@@ -142,14 +144,19 @@ def declared(
 
     A replacement marks the declaring extension's own fragment of the
     lower one's name; a deletion adds a fragment that only deletes. The
-    engine's resolution then checks both: the lower fragment exists and
-    comes from an earlier extension. Seed declarations (names under
-    `seeds/`) apply with *seeds* set, every other one without.
+    lower fragment is the base's or that of an extension the declaring
+    one requires, transitively, so it applies first in *order*, which is
+    composition order. The engine's resolution then checks that the
+    lower fragment exists. Seed declarations (names under `seeds/`)
+    apply with *seeds* set, every other one without.
 
     Raises:
         Failed: for a replacement whose extension ships no file of that
-            name.
+            name, and for a replacement or a deletion of a file of an
+            extension the declaring one does not require.
     """
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._seeds import SEEDS
 
     by_ref = {fragment.ref: index for index, fragment in enumerate(fragments)}
@@ -158,6 +165,17 @@ def declared(
         found = None if extension == SELF else declaration(extension)
         if found is None:
             continue
+        reached = {SELF, *closure(found.requires, installed_declaration)}
+        for verb, held in (("replaces", found.replaces), ("deletes", found.deletes)):
+            for ref in held:
+                owner = ref.partition(":")[0]
+                named = ref.partition(":")[2].startswith(f"{SEEDS}/") == seeds
+                if named and owner not in reached:
+                    fail(
+                        f"{extension} {verb} {ref} in its extension.toml, and does"
+                        f" not require {owner}; add {owner} to its [extension]"
+                        " requires"
+                    )
         for ref, reason in found.deletes.items():
             if ref.partition(":")[2].startswith(f"{SEEDS}/") == seeds:
                 result.append(

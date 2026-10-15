@@ -8,19 +8,21 @@ below arrives through that dependency.
 ## The extension model
 
 The workspace contract (`workshop.toml` at the root) lists the
-workspace's extensions in `[workspace] extensions`, in precedence
-order, and each package's contract lists the extensions the package
-is composed of in its own `extensions`; a package that lists none
-holds none. Every extension is one kind: either list takes any of
-them. A list's set is the list and every extension it requires, and
-the installed set is the root's set and every package's set. Those
-lists are the whole of discovery: a package installed by accident
-never changes a repository. The root's list is required; a contract
-without it refuses at mount and prints the line to add. The base,
+workspace's extensions in `[workspace] extensions`, and each
+package's contract lists the extensions the package is composed of
+in its own `extensions`; a package that lists none holds none. Every
+extension is one kind: either list takes any of them. A list's set is
+the list and every extension it requires, and the installed set is
+the root's set and every package's set. No list's order means
+anything: the installed set mounts in composition order, each
+extension after the ones it requires and ties alphabetical, and each
+list is written as its canonical list. Those lists are the whole of
+discovery: a package installed by accident never changes a
+repository. The root's list is required; a contract without it
+refuses at mount and prints the line to add. The base,
 `livery.workshop`, is never listed: importing its plugin registers
-its task surface and then mounts the installed set, the extensions
-the packages' sets hold first and then the root's list in its order.
-The instance always wins last: its own files (`CLAUDE.project.md`,
+its task surface and then mounts the installed set. The instance
+always wins last: its own files (`CLAUDE.project.md`,
 anything below the plugin line in `tasks.py`) are seeded once and
 never rewritten.
 
@@ -67,12 +69,11 @@ spelling. Every key is optional:
 - `[extension] api-version`, the extension API it was written for,
   refused at mount when it is not this workshop's;
 - `[extension] plugin`, the footman plugin carrying its verbs, mounted
-  in list order;
+  in composition order;
 - `[extension] requires`, the extensions it cannot work without,
-  which join every set that holds it: a package's set takes them in,
-  whatever they declare; in the root's list, each one is listed before
-  it unless a package's set holds it, and the `--fix` of
-  `layering.graph` writes a missing entry;
+  which join every set that holds it, whatever they declare, and come
+  before it in composition order; a list's canonical form leaves them
+  out;
 - `[extension] dormant-until`, what another extension does for this one
   by declaring a `[for.<this>]` table, as a verb: coverage says
   `measures`. Until a listed extension contributes such a table, this
@@ -96,8 +97,9 @@ spelling. Every key is optional:
   the steps it runs after; and the context keys it `provides`, each
   with its type, and `reads`. The step runs once per package whose set
   holds the extension, so it names no `scope` and no `extensions`. Its
-  `deletes` names the steps of other extensions that never run for
-  such a package, each `"<owner>:<phase>.<step>"` to the reason;
+  `deletes` names the steps of the base or of an extension it requires
+  that never run for such a package, each `"<owner>:<phase>.<step>"`
+  to the reason;
 - `[queries.<name>]`, a query the extension declares, in the grammar
   the base declares its own in: `combine`, how the answers make one,
   `union`, `nearest`, `agreed` or a `"module:function"`; `level`,
@@ -142,9 +144,9 @@ spelling. Every key is optional:
   applies, as its `content/root/` and `content/package/` files always
   are; a directory there for a target the file declares no table for
   refuses, naming both;
-- `[replaces]` and `[deletes]`, an earlier extension's shipped file,
-  `"<owner>:<name>"`, that its own file of that name replaces or that it
-  deletes, to the reason;
+- `[replaces]` and `[deletes]`, a shipped file of the base or of an
+  extension it requires, `"<owner>:<name>"`, that its own file of that
+  name replaces or that it deletes, to the reason;
 - `[templates.<name>]`, a template `fm new.package` creates a package
   from: `doc`, one line saying what a package born from it is;
   `extensions`, the extensions such a package lists; and
@@ -229,14 +231,19 @@ declared off.
 
 A footman plugin that declares no extension is never offered as one.
 The mount registers a `[for.<target>]` table once both its owner and its
-target are listed, so a house with opinions on several languages
-contributes to each only where the language is listed. The `--fix`
-of `layering.graph` writes the resolved targets into the entry once,
-`{ name = "acme.house", for = ["python"] }`; from then on `for` is
-the truth: a name deleted from it stays deleted, which is a project's
-opt-out from that target's opinions, and a name the list does not
-carry refuses. A name the extension declares no contribution for
-mounts nothing, and `layering.graph` names the entry.
+target are mounted, so a house with opinions on several languages
+contributes to each only where the language is listed. Cooperation is
+the default: an extension contributes to every target of the installed
+set it declares a table for. A root entry opts the workspace out with
+`for`, the targets it contributes to,
+`{ name = "acme.house", for = ["python"] }`: a target it leaves out
+gets none of the house's opinions, and a name no list holds refuses.
+A `for` naming exactly the default targets says nothing the name does
+not, and the `--fix` of `layering.graph` writes the name alone. A
+package opts out of one step at the step's address in its own
+contract, `[phases.<phase>.<step>] enabled = false`. A name the
+extension declares no contribution for mounts nothing, and
+`layering.graph` names the entry.
 `fm extensions` prints the base, then each extension in mount order,
 who requires it, the packages whose sets hold it, its tools, its
 targets, whether it is dormant and what would wake it, and
@@ -255,15 +262,32 @@ alphabetically. `layering.graph` names a list in any other form,
 and its `--fix` rewrites it. A package's entry is the extension's name
 alone, with no options.
 
-The mount takes the installed set: the extensions every package's set
-holds first, in composition order, then `[workspace] extensions` in
-its order, each entry after what it requires, and composition follows
-the same order. Any extension mounts from either list. So an
-extension's content, tools and distribution belong to the workspace
-while any list holds it: one that only a package lists joins the dev
-group, and `fm sync` installs it. While no installed distribution
-declares it, the mount names it with the list that brings it, and a
-sync that cannot install it refuses the same way. A set is named by
+The root's list is written the same way: its canonical list holds no
+extension another listed one requires, unless the entry carries a
+`for`, since an opt-out has no other place to be written, and comes
+in composition order. `layering.graph` names a root list in any other
+form, and its `--fix` rewrites it, keeping each entry's comment lines.
+
+The mount takes the installed set in composition order, and every
+order the workshop reads follows it: the order steps register in, and
+so the order the gate's rewriters run in under `--fix`, each also
+after the steps it names in `after`; the order a workspace-level query
+is answered in; the order shipped files compose in; and the order of
+the guidance. Neither list's order changes any of them. A step of an
+extension goes into a phase the base, the extension itself or an
+extension it requires declares, and a step of its `[for.<target>]`
+table also into one the target declares; any other refuses at mount,
+naming the declarer and both ways to write the step. A step's
+`replaces` and `deletes`, and an extension's `[replaces]` and
+`[deletes]`, name what the base or an extension it requires
+declares, and a `[for.<target>]` step's also what the target
+declares; the mount refuses any other. Any extension mounts from
+either list. So an extension's content, tools and distribution belong
+to the workspace while any list holds it: one that only a package
+lists joins the dev group, and `fm sync` installs it. While no
+installed distribution declares it, the mount names it with the list
+that brings it, and a sync that cannot install it refuses the same
+way. A set is named by
 its canonical list joined with `+`, such as `cmake+cpp`.
 
 The base declares its phases in the `[phases]` section of its
@@ -393,9 +417,8 @@ in its own; a handle, `Query("docs.members")`, names it and types its
 answer. A package-level query is asked with a package,
 `answer(package, query)`, and each extension of the package's set that
 answers is asked in composition order; a workspace-level one is asked
-with the workspace root, `answer(root, query)`, and the extensions the
-workspace mounts answer in mount order: those its packages' sets
-hold, then its list. The answers combine by the query's
+with the workspace root, `answer(root, query)`, and the installed set
+answers in composition order. The answers combine by the query's
 rule, and with nobody answering the query's declared default stands,
 or the rule's answer over nothing. The base declares:
 
@@ -542,7 +565,7 @@ requirement naming `step <name>` as its site, so unregistering a
 step removes its tool. What the base template leaves to the listed
 extensions, they answer through workspace-level queries: the `dev`
 dependency group's tool lines, the `docs` dependency group's lines and
-pytest's `addopts` are the union of the answers in list order, and a
+pytest's `addopts` are the union of the answers in composition order, and a
 rendered template reads any workspace-level query by its name,
 `queries['python.dev-group']`. The docs extension answers
 `python.docs-group` with zensical, the site's builder, and the
@@ -552,15 +575,18 @@ declares three more queries. The site's config, `docs.config`: an
 extension that adds tables to it answers with the function that
 writes them for the packages a config covers, every package for the
 site and one for a package's preview; the docs extension joins each
-answer's tables after its own, in list order, a table two answers write
-refuses naming both, and the joined config must parse. The site's
-private-members policy, `docs.members`: `public` keeps the API
-reference's default filter, `all` documents every member, the nearest
-answer wins, and any other value refuses naming both. The theme block,
+answer's tables after its own, in composition order, a table two
+answers write refuses naming both, and the joined config must parse.
+The site's private-members policy, `docs.members`: `public` keeps the
+API reference's default filter, `all` documents every member, the
+nearest answer wins, and any other value refuses naming both. The
+theme block,
 `docs.theme`: a table of the block's values (`language`, `font.text`,
 `font.code`, `features`, `palette`) a theme extension answers in part,
-merged key by key in list order over the base's block, an unknown key
-refusing.
+each key over the base's block from the nearest answer setting it, the
+one no other answer setting it requires; two answers setting one key
+while neither requires the other refuse, naming both, and so does an
+unknown key.
 
 The docs extension also declares two phases of its own, both at the
 workspace level, outside the gate and with no verb; their steps run
@@ -812,8 +838,10 @@ the repository's own settings go in its region at the end. It declares
 `typecomplete.basedpyright` off, and a root contract with
 `[phases.typecomplete.basedpyright] enabled = true` registers it too; it
 verifies that each package's public API is type-complete.
-`fm new.project` lists `changelog`, `docs`, `ruff`, `basedpyright`,
-`pytest` and `coverage`.
+`fm new.project` lists `basedpyright`, `changelog`, `coverage`,
+`mkdocstrings`, `pytest` and `ruff`, which takes the site's `docs` in
+through `mkdocstrings`; `--extensions` names another list, and the
+birth writes either as its canonical list.
 
 mypy is an extension of its own as well, `livery-extensions-mypy`,
 listed as `mypy`. Listed, it registers `typecheck.mypy`, which checks

@@ -16,12 +16,13 @@ How the fragments of one target combine depends on the target's type:
 - a JSON file merges their objects key by key;
 - any other file has one owner.
 
-The extensions apply in the order the workspace lists them, the base
-first and the repository's own fragments last. An upper extension that
-takes over or removes another's fragment declares it, with a reason,
-through `replaces` or `deletes`; a second owner of a one-owner file
-without that declaration refuses, and so does a declaration naming a
-fragment no listed extension ships.
+The fragments apply in the order the caller gives: for a sync, the base
+first, then the extensions in composition order, each after the ones it
+requires, and the repository's own fragments last. An extension that
+takes over or removes a fragment that applies before its own declares
+it, with a reason, through `replaces` or `deletes`; a second owner of a
+one-owner file without that declaration refuses, and so does a
+declaration naming a fragment no listed extension ships.
 
 A target is a path at the root, or `package/<path>` for that path in
 every package whose extensions include the owner.
@@ -66,8 +67,7 @@ class Fragment:
     template, except on a fragment that only `deletes`.
 
     Attributes:
-        owner: The extension that ships it, as the workspace's order
-            names it.
+        owner: The extension that ships it, by its listed name.
         name: The fragment's name, unique within its owner.
         target: The path it renders into, relative to the root, or
             `package/<path>` for every package of the owner.
@@ -182,7 +182,7 @@ def _resolve(fragments: Sequence[Fragment], order: Sequence[str]) -> list[Fragme
             if rank[lower.owner] >= rank[fragment.owner]:
                 fail(
                     f"fragment {fragment.ref} {verb} {ref}, which applies after"
-                    f" it; only a later extension {verb} an earlier one's fragment"
+                    f" it; a fragment {verb} one that applies before it"
                 )
             gone.add(ref)
     return [

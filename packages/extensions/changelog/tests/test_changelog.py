@@ -116,7 +116,7 @@ def test_unlisted_it_writes_no_cliff_toml_and_answers_no_notes(
         # the gate then keeps.
         _workspace(root, '["changelog"]')
         with footman_registry.capture():
-            assert mount_extensions(root) == ("python", "changelog")
+            assert mount_extensions(root) == ("changelog", "python")
         assert release_notes(root) is _cliff.NOTES
         assert "packages/thing/cliff.toml: missing; `fm sync` writes it" in (
             shipped_drift(root)

@@ -1,6 +1,6 @@
 """The API reference: the mkdocstrings extension's pages, tables and listing.
 
-The refusals and fallbacks first: listed without docs, the old paths
+The refusals and fallbacks first: listed with docs, the old paths
 key, a package that declines, a package of another language, a
 workspace that does not list it and what that workspace installs, and
 the workshop wheel's runtime requirements. Then the pages, the
@@ -44,7 +44,7 @@ _FAILURES = (SystemExit, Failed)
 
 
 def _workspace(
-    tmp_path: Path, *, listed: str = '["docs", "mkdocstrings"]', docs_table: str = ""
+    tmp_path: Path, *, listed: str = '["mkdocstrings"]', docs_table: str = ""
 ) -> Path:
     """A workspace listing *listed*, with the python members core and bare.
 
@@ -129,30 +129,29 @@ def _api_labels(config: str, name: str) -> list[str]:
 # The refusals first.
 
 
-def test_mkdocstrings_listed_without_docs_refuses_and_its_fix_lists_docs(
-    tmp_path: Path,
-) -> None:
+def test_mkdocstrings_alone_installs_docs(tmp_path: Path) -> None:
     from livery.workshop import _extensions
 
-    root = _workspace(tmp_path, listed='["mkdocstrings"]')
+    # Listed beside it, docs is out of the canonical list: mkdocstrings
+    # requires it, and the fix leaves it out.
+    root = _workspace(tmp_path, listed='["docs", "mkdocstrings"]')
     assert _extensions.closure_problems(root) == [
-        "[workspace] extensions lists mkdocstrings, which depends on docs, and"
-        " does not list it; the gate's --fix adds it before mkdocstrings"
+        '[workspace] extensions is ["docs", "mkdocstrings"], and its canonical'
+        ' list is ["mkdocstrings"]; docs is required by another listed'
+        " extension; the gate's --fix rewrites it"
     ]
-    # The root's set holds docs, which mkdocstrings requires: the mount
-    # takes it first, and the step joins the docs phase it declares.
-    _mount(root)
-    assert steps_by_name()["docs.mkdocstrings"].extension == "mkdocstrings"
     assert _extensions.write_extensions(root) == [
-        "  layering: [workspace] extensions gains docs before mkdocstrings, which"
-        " requires it"
+        '  layering: [workspace] extensions is ["mkdocstrings"], its canonical list'
     ]
-    assert (
-        'extensions = ["docs", "mkdocstrings"]' in (root / "workshop.toml").read_text()
-    )
+    assert 'extensions = ["mkdocstrings"]' in (root / "workshop.toml").read_text()
+    # Listed alone, its set takes docs in: the workspace installs and
+    # mounts it first, and the step joins the docs phase it declares.
     assert _extensions.closure_problems(root) == []
+    assert _extensions.root_set(root) == ("docs", "mkdocstrings")
+    assert ("docs", "livery-workshop") in _extensions.extension_entries(root)
     _mount(root)
     assert steps_by_name()["docs.mkdocstrings"].extension == "mkdocstrings"
+    assert steps_by_name()["lint.doclinks"].extension == "docs"
 
 
 def test_python_paths_in_the_docs_table_refuses_naming_the_step_option(

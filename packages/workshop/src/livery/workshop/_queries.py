@@ -18,11 +18,11 @@ It answers under ``[for.<target>.queries]`` the same way, and that
 answer is asked only while the target is listed and the extension's
 listing contributes to it, the rule
 [livery.workshop.contributions_for][] reads a target's tables by.
-[livery.workshop.answer][] asks a package's set in composition order,
-or the listed extensions in list order, and combines the answers by
-the query's rule. A handle, [livery.workshop.Query][], names a query
-and types its answer; the base's handles are the constants here, and
-an extension names its own with ``Query("docs.members")``.
+[livery.workshop.answer][] asks a package's set, or the installed set,
+in composition order, and combines the answers by the query's rule. A
+handle, [livery.workshop.Query][], names a query and types its answer;
+the base's handles are the constants here, and an extension names its
+own with ``Query("docs.members")``.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ class QuerySpec:
         level: ``package`` for a question about one package, asked with
             the package and answered by its set in composition order;
             ``workspace`` for one about the workspace, asked with its
-            root and answered by the listed extensions in list order.
+            root and answered by the installed set in composition order.
         default: The answer while no extension answers; None takes the
             rule's answer over no answers, an empty union, no nearest,
             no agreement, a function's answer over nothing.
@@ -354,8 +354,8 @@ def query_spec(name: str) -> QuerySpec:
 def _walk(subject: Package | Path, spec: QuerySpec, lookup: Lookup) -> tuple[str, ...]:
     """The extensions asked *spec* about *subject*, in the order they answer.
 
-    A package's set in composition order, or the listed extensions in
-    list order; a set whose declared order has no start is asked
+    A package's set, or the installed set, in composition order; a set
+    whose declared order has no start is asked
     alphabetically, and ``layering.graph`` names the cycle.
 
     Raises:
@@ -521,8 +521,8 @@ def answer(
 
     *subject* is the package for a package-level query, answered by its
     set in composition order, and the workspace root, or a directory in
-    the workspace, for a workspace-level one, answered by the listed
-    extensions in list order. With no extension answering, the query's
+    the workspace, for a workspace-level one, answered by the installed
+    set in composition order. With no extension answering, the query's
     declared default, or its rule's answer over nothing.
 
     Raises:

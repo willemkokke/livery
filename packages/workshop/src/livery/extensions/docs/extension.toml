@@ -176,8 +176,8 @@ deploy = "livery.extensions.docs._contract:publish_seam"
 # The site's config beyond the docs extension's own tables, a query a
 # listed extension answers with the function that writes its tables for
 # one config, given the packages the config covers: each answer's tables
-# after the docs extension's, in list order. A table two answers write
-# refuses naming both, and the joined config must parse.
+# after the docs extension's, in composition order. A table two answers
+# write refuses naming both, and the joined config must parse.
 [queries."docs.config"]
 level = "workspace"
 combine = "livery.extensions.docs._config:writers"
@@ -192,8 +192,8 @@ default = "public"
 values = ["public", "all"]
 
 # The site's theme, a query a theme extension answers with a table of
-# the keys it changes: each answer's keys over the stock theme, in list
-# order.
+# the keys it changes: each key over the stock theme from the nearest
+# answer setting it, the one no other answer setting it requires.
 [queries."docs.theme"]
 level = "workspace"
 combine = "livery.extensions.docs._theme:merge_theme"

@@ -9,46 +9,47 @@ description = "The livery ecosystem monorepo (virtual root)."
 namespace = "livery"
 authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
 copyright-year = "2026"
-# The extensions, in precedence order, each by the name its
-# distribution declares in the workshop.extensions entry point group.
-# Discovery is this list and nothing else: an extension not named here
-# is not mounted, however it got installed. The base is never listed,
-# and a plugin (forge's dev verbs, the bench's tools verbs) mounts
-# because this project depends on it directly.
+# The extensions, each by the name its distribution declares in the
+# workshop.extensions entry point group, written as the canonical list:
+# no extension another listed one requires, each after the ones it
+# requires, ties alphabetical, which `fm check --fix` writes. Discovery
+# is the lists and nothing else: an extension no list holds is not
+# mounted, however it got installed. The base is never listed, and a
+# plugin (forge's dev verbs, the bench's tools verbs) mounts because
+# this project depends on it directly.
 extensions = [
-    # Each package's CHANGELOG.md, written by git-cliff at release.
-    "changelog",
-    # CLAUDE.md, the agent's guidance, .claude/ and the hook verbs.
-    "claude",
-    # The site's assembly and verbs, shipped in the workshop wheel.
-    "docs",
-    # The site's python API reference, its handler's tables in the
-    # site's config, and the docstring checks; shipped in the workshop
-    # wheel.
-    "mkdocstrings",
-    # The python formatter and linter, configured by the root ruff.toml.
-    "ruff",
     # The type checker, configured by the root pyrightconfig.json; its
     # type-completeness step is turned on under [phases] below.
     "basedpyright",
+    # Each package's CHANGELOG.md, written by git-cliff at release.
+    "changelog",
+    # The C and C++ formatter, in each native package's .clang-format.
+    "clang-format",
+    # The C and C++ linter, in each native package's .clang-tidy.
+    "clang-tidy",
+    # CLAUDE.md, the agent's guidance, .claude/ and the hook verbs.
+    "claude",
+    # The site's coverage pages, drawn from the measured data; shipped
+    # in the workshop wheel.
+    "coverage",
+    # The site's python API reference, its handler's tables in the
+    # site's config, and the docstring checks; shipped in the workshop
+    # wheel. It requires docs, the site's assembly and verbs, which
+    # ride in the same wheel.
+    "mkdocstrings",
     # The type checker on every platform, configured by the root mypy.ini.
     "mypy",
-    # The type checker over every platform at once, configured by the
-    # root ty.toml.
-    "ty",
     # The type checker over every platform at once, configured by the
     # root pyrefly.toml.
     "pyrefly",
     # The test runner and its coverage meter, configured by the root
     # pytest.toml and .coveragerc.
-    { name = "pytest", for = ["coverage"] },
-    # The site's coverage pages, drawn from the measured data; shipped
-    # in the workshop wheel.
-    { name = "coverage", for = ["docs"] },
-    # The C and C++ formatter, in each native package's .clang-format.
-    "clang-format",
-    # The C and C++ linter, in each native package's .clang-tidy.
-    "clang-tidy",
+    "pytest",
+    # The python formatter and linter, configured by the root ruff.toml.
+    "ruff",
+    # The type checker over every platform at once, configured by the
+    # root ty.toml.
+    "ty",
 ]
 
 # The steps the listed extensions declare off, turned on here at each

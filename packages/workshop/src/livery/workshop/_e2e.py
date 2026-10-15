@@ -1225,7 +1225,8 @@ def _birth(
     this is the recovery procedure too. *index*, when given, is
     searched before any other index the environment names
     ([livery.workshop._e2e._dev_index][]); *stack*, when given, is the
-    extensions the workspace lists instead of the stock list. The verb
+    extensions the workspace lists instead of the stock list, which the
+    birth takes through ``--extensions``. The verb
     runs from *driver*, the checkout running the pass, whose own project
     mounts the workshop being edited, so a bare runner needs nothing
     self-added and the birth runs this checkout's code; the folder is
@@ -1255,7 +1256,7 @@ def _birth(
             f"--owner={E2E_OWNER}",
             f"--url={_lane(kind).alias}",
             "--description=The workshop's local CI loop. Scratch; recreated freely.",
-            *([f"--stack={','.join(stack)}"] if stack else []),
+            *([f"--extensions={','.join(stack)}"] if stack else []),
             *resume,
         ],
         cwd=driver if driver is not None else home,
@@ -1918,11 +1919,10 @@ def steps_declared_off(name: str) -> tuple[str, ...]:
 
 
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """The stack a pass births to test extension *name*, and the members it lands.
+    """The list a pass births to test extension *name*, and the members it lands.
 
-    The stack is what *name* requires, each before what needs it, then
-    *name* itself, and nothing else; the steps it declares off are
-    turned on in the newborn's contract
+    The list is *name* alone: its set takes in what it requires. The
+    steps it declares off are turned on in the newborn's contract
     ([livery.workshop._e2e.steps_declared_off][]), so each of its steps
     registers. The members are the loop's whose sets hold an extension
     *name*'s steps name, by name (`landed_members`), so each step has
@@ -1930,8 +1930,7 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
-            the installed ones; when *name* registers no step; when its
-            requirements form a cycle.
+            the installed ones; when *name* registers no step.
     """
     from livery.workshop._extensions import declaration, installed_extensions
 
@@ -1948,21 +1947,8 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             f"extension {name!r} registers no step: a pass would have"
             " nothing of its own to run"
         )
-    stack: list[str] = []
-
-    def visit(extension: str, path: tuple[str, ...]) -> None:
-        if extension in stack:
-            return
-        if extension in path:
-            fail(f"extensions require each other: {' -> '.join((*path, extension))}")
-        declared = declaration(extension)
-        for needed in declared.requires if declared is not None else ():
-            visit(needed, (*path, extension))
-        stack.append(extension)
-
-    visit(name, ())
     named = {extension for record in steps for extension in record.extensions}
-    return tuple(stack), landed_members(named)
+    return (name,), landed_members(named)
 
 
 def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
@@ -3162,8 +3148,9 @@ def _born(pass_: Pass) -> None:
         # pointed at this pass's forge before the start-over below asks
         # it for commits it has not seen.
         _authenticate_remote(root, lane_token, forge)
-    if _listed_extensions(root) not in ((), _stack_of(pass_)):
-        # A workspace born for another stack is not this pass's: an
+    listed = _listed_extensions(root)
+    if listed and listed != _set_of(_stack_of(pass_)):
+        # A workspace born for another list is not this pass's: an
         # extension pass and a plain one take turns in one environment.
         for line in start_over(lane, lane_token, root, url=pass_.url, kind=forge):
             print(line)
@@ -3219,6 +3206,14 @@ def _stack_of(pass_: Pass) -> tuple[str, ...]:
     return pass_.stack or tuple(birth_extensions([SELF]))
 
 
+def _set_of(names: tuple[str, ...]) -> frozenset[str]:
+    """*names* and every extension they require: the set a list of them names."""
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
+
+    return frozenset(closure(names, installed_declaration))
+
+
 #: The extension that builds the site, which a plain pass's birth leaves out.
 SITE = "docs"
 
@@ -3230,7 +3225,7 @@ def loop_stack() -> tuple[str, ...]:
     declaration requires it, directly or through another: the docs
     extension puts a docs job on every run of the loop's project, for a
     site nothing in a pass reads, and an extension that requires it
-    cannot be listed without it. The pass proves the gate, the release
+    brings it into the root's set. The pass proves the gate, the release
     train and the points, and ``fm ci.e2e --extension=docs`` proves the
     docs extension on its own. A stock entry no installed distribution
     declares requires nothing and stays.
@@ -3256,13 +3251,17 @@ def loop_stack() -> tuple[str, ...]:
     )
 
 
-def _listed_extensions(root: Path) -> tuple[str, ...]:
-    """The extensions *root*'s contract lists, by name; empty with no contract."""
-    from livery.workshop._extensions import workspace_names
+def _listed_extensions(root: Path) -> frozenset[str]:
+    """The root's set of *root*'s contract: its list and what that requires.
+
+    Empty with no contract. The set, not the list, so an extension
+    another one requires counts whether the list writes it or not.
+    """
+    from livery.workshop._extensions import root_set
 
     if not (root / "workshop.toml").is_file():
-        return ()
-    return workspace_names(root)
+        return frozenset()
+    return frozenset(root_set(root))
 
 
 def _at(pass_: Pass) -> Path:

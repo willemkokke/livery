@@ -13,10 +13,10 @@
   // -- workshop: region settings, yours to edit; the render keeps it --
   // -- workshop: end settings --
   // What the registered steps and the listed extensions contribute.
+  "python.languageServer": "None",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
-  "python.languageServer": "None",
   "terminal.integrated.profiles.osx": {
     "livery": {
       "path": "zsh",

@@ -708,10 +708,10 @@ def test_a_set_whose_order_has_no_start_is_asked_alphabetically(
 
 
 # The workspace level: a query a workspace extension declares, answered
-# by the listed extensions in list order.
+# by the installed set in composition order.
 
 
-def test_a_query_a_workspace_extension_declares_is_answered_in_list_order(
+def test_a_query_a_workspace_extension_declares_is_answered_in_composition_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
@@ -724,13 +724,19 @@ def test_a_query_a_workspace_extension_declares_is_answered_in_list_order(
     assert _queries.declared_queries()["acme.style"] == QuerySpec(
         "acme.style", "union", "workspace", None, None, "acme.site"
     )
-    root_contract(tmp_path, '["acme.site", "acme.b", "acme.a"]')
-    found: dict[str, object] = dict(answers(tmp_path, STYLE))
-    assert found == {
-        "acme.b": ["shared", "b-first"],
-        "acme.a": ["a-first", "shared"],
-    }
-    assert answer(tmp_path, STYLE) == ("shared", "b-first", "a-first")
+    # The list's order is no answer's order: the answers come in
+    # composition order whichever way the list is written.
+    for listed in (
+        '["acme.site", "acme.b", "acme.a"]',
+        '["acme.a", "acme.b", "acme.site"]',
+    ):
+        root_contract(tmp_path, listed)
+        found: dict[str, object] = dict(answers(tmp_path, STYLE))
+        assert list(found.items()) == [
+            ("acme.a", ["a-first", "shared"]),
+            ("acme.b", ["shared", "b-first"]),
+        ]
+        assert answer(tmp_path, STYLE) == ("a-first", "shared", "b-first")
     # An extension taken off the list takes its answer with it, and a
     # template reads the same answer by the query's name.
     root_contract(tmp_path, '["acme.site", "acme.a"]')
@@ -769,7 +775,7 @@ def test_the_nearest_answer_wins_and_the_default_stands_while_nobody_answers(
     with pytest.raises(QueryError) as raised:
         answer(tmp_path, DEPTH)
     assert str(raised.value) == (
-        "acme.depth: acme.top and acme.base both answer, and neither requires the"
+        "acme.depth: acme.base and acme.top both answer, and neither requires the"
         " other; one of them answers, or one requires the other"
     )
 

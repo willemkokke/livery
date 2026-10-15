@@ -95,14 +95,14 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
         assert "clang_format" not in {t for t, _ in tools_for(("cpp",))}
         deliver(root)
         assert not (root / "packages" / "native" / ".clang-format").exists()
-        # Listed, the mount registers the step under the listed name, the
-        # tool joins the profile of the packages holding cpp, and the sync
-        # writes each such package's style.
+        # Listed, the mount registers the step under the listed name, in
+        # composition order, the tool joins the profile of the packages
+        # holding cpp, and the sync writes each such package's style.
         (root / "workshop.toml").write_text(
             CONTRACT + 'extensions = ["clang-format"]\n'
         )
         with footman_registry.capture():
-            assert mount_extensions(root) == ("cmake", "cpp", "conan", "clang-format")
+            assert mount_extensions(root) == ("clang-format", "cmake", "cpp", "conan")
         assert steps_by_name()["format.clang-format"].extension == "clang-format"
         assert "clang_format" in {t for t, _ in tools_for(("python", "cpp"))}
         deliver(root)

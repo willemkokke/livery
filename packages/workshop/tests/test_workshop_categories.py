@@ -414,14 +414,14 @@ def test_explain_names_the_schema_a_contract_is_judged_by(
     assert schema("notes/musings.md") == []
     assert schema("packages/x/pyproject.toml") == []
     # The member lists python, so python's keys are judged beside the
-    # listed extension's.
+    # listed extension's, the installed set in composition order.
     assert schema("workshop.toml") == [
         "    schema: .workshop/schema/workshop.json"
-        " (livery.workshop, livery.toolroom.store, python, docs)"
+        " (livery.workshop, livery.toolroom.store, docs, python)"
     ]
     assert schema("packages/x/workshop.toml") == [
         "    schema: .workshop/schema/package.json"
-        " (livery.workshop, livery.toolroom.store, python, docs)"
+        " (livery.workshop, livery.toolroom.store, docs, python)"
     ]
     # An extension's file holds the base's and the store's keys alone, whatever
     # the root lists.

@@ -327,11 +327,13 @@ def test_the_docs_steps_write_apart(
     alone = workspace("alone")
     _mount(alone)
     steps = [record for record in steps_by_name().values() if record.phase == "docs"]
+    # In composition order: the docs extension's own, then coverage's
+    # table for it, grafted once docs mounts, then mkdocstrings'.
     assert [record.name for record in steps] == [
         "docs.task-reference",
         "docs.generators",
-        "docs.mkdocstrings",
         "docs.coverage",
+        "docs.mkdocstrings",
     ]
     members = discover_packages(alone)
     written: dict[str, set[str]] = {}

@@ -55,7 +55,7 @@ def test_an_incompatible_api_version_refuses_naming_both(
         _extensions.mount_extensions(tmp_path)
 
 
-def test_a_missing_dependency_and_a_misordered_one_are_named(
+def test_a_root_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
@@ -63,25 +63,131 @@ def test_a_missing_dependency_and_a_misordered_one_are_named(
         monkeypatch,
         brand='[extension]\nrequires = ["acme.base"]\n',
         base="",
+        zeta="",
     )
-    root_contract(tmp_path, '["acme.brand"]')
-    (problem,) = _extensions.closure_problems(tmp_path)
-    assert problem == (
-        "[workspace] extensions lists acme.brand, which depends on acme.base, and"
-        " does not list it; the gate's --fix adds it before acme.brand"
-    )
-    root_contract(tmp_path, '["acme.brand", "acme.base"]')
-    (problem,) = _extensions.closure_problems(tmp_path)
-    assert problem == (
-        "[workspace] extensions lists acme.base after acme.brand, which depends on"
-        " it; move acme.base before acme.brand"
-    )
-    # The layering lint carries the closure: a workspace with the
-    # contract at its root refuses through it.
+    contract = tmp_path / "workshop.toml"
+    suffix = "; the gate's --fix rewrites it"
+    # The refusals first: an implied entry, an order that is not
+    # composition order, an extension listed twice, and a table entry
+    # whose `for` is its default.
+    for listed, canonical, why in (
+        (
+            '["acme.brand", "acme.base"]',
+            '["acme.brand"]',
+            "acme.base is required by another listed extension",
+        ),
+        (
+            '["acme.zeta", "acme.brand"]',
+            '["acme.brand", "acme.zeta"]',
+            "its order is composition order: each extension after what it"
+            " requires, ties alphabetical",
+        ),
+        (
+            '["acme.brand", "acme.brand"]',
+            '["acme.brand"]',
+            "it lists an extension twice",
+        ),
+        (
+            '[{ name = "acme.brand" }]',
+            '["acme.brand"]',
+            "the entry for acme.brand names its default targets, which the name"
+            " alone says",
+        ),
+    ):
+        root_contract(tmp_path, listed)
+        (problem,) = _extensions.closure_problems(tmp_path)
+        assert problem == (
+            f"[workspace] extensions is {listed}, and its canonical list is"
+            f" {canonical}; {why}{suffix}"
+        )
+    # The layering lint carries the judge: a workspace with the contract
+    # at its root refuses through it.
     from livery.workshop._packages import verify_workspace
 
-    with pytest.raises(ValueError, match=re.escape("move acme.base before acme.brand")):
+    with pytest.raises(ValueError, match=re.escape("which the name alone says")):
         verify_workspace(tmp_path)
+    # The fix writes the canonical list, each entry with its comments;
+    # an entry left out takes its comments with it.
+    contract.write_text(
+        "[workspace]\n"
+        "# The list.\n"
+        "extensions = [  # the opening comment stays\n"
+        "    # The last one.\n"
+        '    "acme.zeta",  # its own line\n'
+        "    # The requirement, implied.\n"
+        '    "acme.base",\n'
+        "\n"
+        "    # The brand.\n"
+        '    { name = "acme.brand" },\n'
+        "    # The closing comment stays.\n"
+        "]\n"
+        "\n[forge]\nkind = 'github'\n"
+    )
+    assert _extensions.write_extensions(tmp_path) == [
+        '  layering: [workspace] extensions is ["acme.brand", "acme.zeta"], its'
+        " canonical list"
+    ]
+    assert contract.read_text() == (
+        "[workspace]\n"
+        "# The list.\n"
+        "extensions = [  # the opening comment stays\n"
+        "\n"
+        "    # The brand.\n"
+        '    "acme.brand",\n'
+        "    # The last one.\n"
+        '    "acme.zeta",  # its own line\n'
+        "    # The closing comment stays.\n"
+        "]\n"
+        "\n[forge]\nkind = 'github'\n"
+    )
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.write_extensions(tmp_path) == []  # idempotent
+    # One line stays one line.
+    root_contract(tmp_path, '["acme.zeta", "acme.base", "acme.brand"]')
+    _extensions.write_extensions(tmp_path)
+    assert contract.read_text() == (
+        '[workspace]\nextensions = ["acme.brand", "acme.zeta"]\n'
+    )
+
+
+def test_an_array_the_writer_does_not_read_is_named_until_a_person_writes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, zeta="", alpha="")
+    contract = tmp_path / "workshop.toml"
+    # A multi-line string is TOML the writer leaves alone, and so is a
+    # list written as a dotted key outside its table, and one whose key
+    # a string before it spells as well, which the writer reads first.
+    for text in (
+        '[workspace]\nextensions = [\n    """acme.zeta""",\n    "acme.alpha",\n]\n',
+        'workspace.extensions = ["acme.zeta", "acme.alpha"]\n',
+        '[workspace]\ndescription = """\nextensions = ["acme.alpha"]\n"""\n'
+        'extensions = ["acme.zeta", "acme.alpha"]\n',
+    ):
+        contract.write_text(text)
+        (problem,) = _extensions.closure_problems(tmp_path)
+        assert "its canonical list is" in problem
+        assert _extensions.write_extensions(tmp_path) == []
+        assert contract.read_text() == text
+    # A table entry that is more than a name and a `for` of names is the
+    # contract judge's to name: the list is not judged canonical until
+    # it goes.
+    for listed in (
+        '[{ name = "acme.zeta", version = "1" }, "acme.alpha"]',
+        '[{ name = "acme.zeta", for = "acme.alpha" }, "acme.alpha"]',
+    ):
+        root_contract(tmp_path, listed)
+        assert _extensions.root_list_problems(tmp_path) == []
+        assert _extensions.write_extensions(tmp_path) == []
+    # A literal string is an entry like any other.
+    contract.write_text("[workspace]\nextensions = ['acme.zeta', 'acme.alpha']\n")
+    assert _extensions.write_extensions(tmp_path) == [
+        '  layering: [workspace] extensions is ["acme.alpha", "acme.zeta"], its'
+        " canonical list"
+    ]
+    assert contract.read_text() == (
+        "[workspace]\nextensions = ['acme.alpha', 'acme.zeta']\n"
+    )
 
 
 def test_a_root_without_a_contract_writes_nothing(tmp_path: Path) -> None:
@@ -94,7 +200,7 @@ def test_a_root_without_a_contract_writes_nothing(tmp_path: Path) -> None:
 # Then what an extension declares, written and named.
 
 
-def test_the_fix_adds_the_missing_extension_before_its_dependent(
+def test_a_requirement_the_root_list_leaves_out_joins_the_root_s_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
@@ -103,56 +209,12 @@ def test_the_fix_adds_the_missing_extension_before_its_dependent(
         brand='[extension]\nrequires = ["acme.base"]\n',
         base="",
     )
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.brand",\n]\n'
-    )
-    assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions gains acme.base before acme.brand, which"
-        " requires it"
-    ]
-    text = (tmp_path / "workshop.toml").read_text()
-    assert '    "acme.base",  # required by acme.brand\n    "acme.brand",\n' in text
-    assert _extensions.closure_problems(tmp_path) == []
-    assert _extensions.write_extensions(tmp_path) == []  # idempotent
-    assert _extensions.requirers(tmp_path)["acme.base"] == ("acme.brand",)
-    # The inline list form takes the entry the same way.
     root_contract(tmp_path, '["acme.brand"]')
-    _extensions.write_extensions(tmp_path)
-    assert (
-        'extensions = ["acme.base", "acme.brand"]'
-        in (tmp_path / "workshop.toml").read_text()
-    )
-
-
-def test_the_fix_places_a_requirement_before_its_dependents_entry_of_any_shape(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path, monkeypatch, brand='[extension]\nrequires = ["acme.base"]\n', base=""
-    )
-    contract = tmp_path / "workshop.toml"
-    added = [
-        "  layering: [workspace] extensions gains acme.base before acme.brand,"
-        " which requires it"
-    ]
-    contract.write_text(
-        '[workspace]\nextensions = [\n    { name = "acme.brand", for = [] },\n]\n'
-    )
-    assert _extensions.write_extensions(tmp_path) == added
-    assert contract.read_text() == (
-        '[workspace]\nextensions = [\n    "acme.base",  # required by acme.brand\n'
-        '    { name = "acme.brand", for = [] },\n]\n'
-    )
-    contract.write_text('[workspace]\nextensions = [{ name = "acme.brand" }]\n')
-    assert _extensions.write_extensions(tmp_path) == added
-    assert contract.read_text() == (
-        '[workspace]\nextensions = ["acme.base", { name = "acme.brand" }]\n'
-    )
-    # A spelling the writer cannot read is a person's edit; the judge
-    # names it until then.
-    contract.write_text('[workspace]\nextensions=[{ name = "acme.brand" }]\n')
+    assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.write_extensions(tmp_path) == []
-    assert "acme.base" not in contract.read_text()
+    assert _extensions.root_set(tmp_path) == ("acme.base", "acme.brand")
+    assert _extensions.extension_names(tmp_path) == ("acme.base", "acme.brand")
+    assert _extensions.requirers(tmp_path)["acme.base"] == ("acme.brand",)
 
 
 def test_a_declaration_without_an_api_version_is_taken_at_the_current_version() -> None:
@@ -302,7 +364,7 @@ def test_any_extension_mounts_from_either_list(
     from livery.footman import _registry as registry
 
     with registry.capture():
-        assert _extensions.mount_extensions(tmp_path) == ("acme.site", "acme.native")
+        assert _extensions.mount_extensions(tmp_path) == ("acme.native", "acme.site")
     steps = _steps.steps_by_name()
     assert steps["lint.site"].extension == "acme.site"
     assert steps["build.native"].extension == "acme.native"
@@ -468,7 +530,7 @@ def test_an_extension_its_app_mounts_as_builtin_registers_its_declaration(
     assert "did not mount its plugin" not in capsys.readouterr().err
 
 
-def test_the_list_writers_find_an_entry_by_its_name_whatever_its_spelling(
+def test_a_root_list_is_judged_canonical_once_each_entry_is_a_name_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(
@@ -477,21 +539,18 @@ def test_the_list_writers_find_an_entry_by_its_name_whatever_its_spelling(
         tool='[extension]\nrequires = ["acme.base"]\n' + _DECLARED_OFF,
         base="",
     )
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.tool[deep]",\n]\n'
+    # An entry spelled beyond its name is named first, and the list is
+    # neither judged canonical nor rewritten until a person fixes it.
+    root_contract(tmp_path, '["acme.tool[deep]", "acme.base"]')
+    (problem,) = _extensions.closure_problems(tmp_path)
+    assert problem.startswith("[workspace] extensions lists 'acme.tool[deep]';")
+    assert _extensions.write_extensions(tmp_path) == []
+    root_contract(tmp_path, '["acme.tool", "acme.base"]')
+    (problem,) = _extensions.closure_problems(tmp_path)
+    assert problem.endswith(
+        "acme.base is required by another listed extension; the gate's --fix"
+        " rewrites it"
     )
-    assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions gains acme.base before acme.tool,"
-        " which requires it"
-    ]
-    written = (tmp_path / "workshop.toml").read_text()
-    assert '    "acme.base",  # required by acme.tool\n    "acme.tool[deep]",\n' in (
-        written
-    )
-    root_contract(tmp_path, '["acme.tool[deep]"]')
-    _extensions.write_extensions(tmp_path)
-    written = (tmp_path / "workshop.toml").read_text()
-    assert 'extensions = ["acme.base", "acme.tool[deep]"]' in written
 
 
 # The tool declaration and the contributions by target: refusals and
@@ -644,8 +703,8 @@ def test_a_for_naming_a_target_the_extension_declares_nothing_for_mounts_and_is_
     _house(tmp_path, monkeypatch)
     fake_extensions(tmp_path, monkeypatch, cpp="")
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.python",\n'
-        '    "acme.cpp",\n    { name = "acme.house", for = ["acme.cpp"] },\n]\n'
+        '[workspace]\nextensions = [\n    "acme.cpp",\n'
+        '    { name = "acme.house", for = ["acme.cpp"] },\n    "acme.python",\n]\n'
     )
     _mount(tmp_path)
     assert not _grafted()
@@ -716,45 +775,180 @@ gated = false
 verb = false
 """
 
-#: Steps into that phase: one while its declarer is listed, and one while
-#: a third extension, which declares nothing, is.
+#: A step into that phase from a table for its declarer.
 _DRAWER = """\
 [for."acme.book".phases.book.draw]
-main = "{package}._steps:noop"
-
-[for."acme.shelf".phases.book.shelve]
 main = "{package}._steps:noop"
 """
 
 
-def test_a_for_table_s_step_into_an_unlisted_target_s_phase_is_silent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_step_into_a_phase_neither_required_nor_contributed_to_refuses_naming_both_spellings(  # noqa: E501
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
-    fake_extensions(tmp_path, monkeypatch, book=_BOOK, drawer=_DRAWER, shelf="")
-    # Listed without its targets, no table applies: the mount refuses none
-    # of their steps, says nothing of them and registers none.
+    top = '[phases.book.index]\nmain = "{package}._steps:noop"\n'
+    other = '[for."acme.shelf".phases.book.shelve]\nmain = "{package}._steps:noop"\n'
+    fake_extensions(
+        tmp_path, monkeypatch, book=_BOOK, index=top, shelver=other, shelf=""
+    )
+    # A step of the top-level tables, and a step of a table for another
+    # target, refuse whatever the list holds and whatever its order.
+    for name, listed in (
+        ("index", '["acme.index"]'),
+        ("index", '["acme.book", "acme.index"]'),
+        ("index", '["acme.index", "acme.book"]'),
+        ("shelver", '["acme.book", "acme.shelf", "acme.shelver"]'),
+        ("shelver", '["acme.shelver"]'),
+    ):
+        root_contract(tmp_path, listed)
+        with pytest.raises(
+            _FAILURES,
+            match=re.escape(
+                f"extension 'acme.{name}' adds steps to the book phase, which"
+                " acme.book declares, and does not require acme.book; add"
+                " acme.book to its [extension] requires, or move the steps into"
+                " [for.acme.book]"
+            ),
+        ):
+            _mount(tmp_path)
+    # Requiring the declarer, the list names the extension alone: its set
+    # takes the declarer in, which mounts first.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        book=_BOOK,
+        index='[extension]\nrequires = ["acme.book"]\n' + top,
+    )
+    root_contract(tmp_path, '["acme.index"]')
+    _mount(tmp_path)
+    assert _steps.steps_by_name()["book.index"].extension == "acme.index"
+
+
+def test_a_for_table_s_step_goes_into_its_target_s_phase_whatever_the_list_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restored_steps: None,
+) -> None:
+    fake_extensions(tmp_path, monkeypatch, book=_BOOK, drawer=_DRAWER)
+    # Listed without its target, the table applies to nothing: the mount
+    # says nothing of its step and registers none.
     root_contract(tmp_path, '["acme.drawer"]')
     _mount(tmp_path)
-    assert not {"book.draw", "book.shelve"} & set(_steps.steps_by_name())
+    assert "book.draw" not in _steps.steps_by_name()
     assert capsys.readouterr().err == ""
-    # A table applies while its target is listed, and refuses a step into
-    # a phase whose declarer the workspace does not list.
-    root_contract(tmp_path, '["acme.shelf", "acme.drawer"]')
-    with pytest.raises(
-        _FAILURES,
-        match=r"extension 'acme\.drawer' adds steps to the book phase, which"
-        r" acme\.book declares and the workspace does not list",
-    ):
-        _mount(tmp_path)
-    # Listed with the declarer, its step registers whichever of the two
-    # the list names first.
+    # Listed with its target, its step registers whichever of the two the
+    # list names first.
     for listed in ('["acme.book", "acme.drawer"]', '["acme.drawer", "acme.book"]'):
         if "book.draw" in _steps.steps_by_name():
             _steps.unregister_step("book.draw")
         root_contract(tmp_path, listed)
         _mount(tmp_path)
         assert _steps.steps_by_name()["book.draw"].extension == "acme.drawer"
-        assert "book.shelve" not in _steps.steps_by_name()
+
+
+#: An owner's step, and a second extension's step at the same address
+#: replacing it; ``{requires}`` stands for the second's identity table.
+_OWNER = '[phases.lint.acme]\nmain = "{package}._steps:noop"\n'
+_TAKER = """\
+{requires}
+[phases.lint.acme]
+main = "{package}._steps:noop"
+
+[phases.lint.acme.replaces]
+"acme.owner:lint.acme" = "it reads faster"
+"""
+
+
+def test_a_replacement_of_an_unrequired_extensions_step_or_file_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    from livery.workshop._shipped_files import shipped
+
+    # The refusals first. A step replacing a step of an extension it does
+    # not require refuses at mount, whatever the list's order.
+    fake_extensions(
+        tmp_path, monkeypatch, owner=_OWNER, taker=_TAKER.replace("{requires}", "")
+    )
+    for listed in ('["acme.owner", "acme.taker"]', '["acme.taker", "acme.owner"]'):
+        root_contract(tmp_path, listed)
+        with pytest.raises(
+            _FAILURES,
+            match=re.escape(
+                "extension 'acme.taker': lint.acme replaces acme.owner:lint.acme,"
+                " and acme.taker does not require acme.owner; add acme.owner to"
+                " its [extension] requires, or move the step into"
+                " [for.acme.owner]"
+            ),
+        ):
+            _mount(tmp_path)
+    # So does a package step deleting one.
+    deleter = (
+        '[phases.build.taker]\nmain = "{package}._steps:noop"\n\n'
+        '[phases.build.taker.deletes]\n"acme.owner:build.owner" = "it builds twice"\n'
+    )
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        owner='[phases.build.owner]\nmain = "{package}._steps:noop"\n',
+        taker=deleter,
+    )
+    root_contract(tmp_path, '["acme.owner", "acme.taker"]')
+    with pytest.raises(
+        _FAILURES, match=re.escape("build.taker deletes acme.owner:build.owner, and")
+    ):
+        _mount(tmp_path)
+    # And a shipped file replaced, or deleted, without its owner required.
+    requires = '[extension]\nrequires = ["acme.owner"]\n'
+    for table in (
+        '[replaces]\n"acme.owner:x.txt" = "ours"\n',
+        '[deletes]\n"acme.owner:x.txt" = "none"\n',
+    ):
+        fake_extensions(tmp_path, monkeypatch, owner="", taker=table)
+        for name in ("owner", "taker"):
+            shipped_file = (
+                tmp_path / "site" / "acme" / name / "content" / "root" / "x.txt"
+            )
+            shipped_file.parent.mkdir(parents=True, exist_ok=True)
+            shipped_file.write_text(f"{name}\n")
+        root_contract(tmp_path, '["acme.owner", "acme.taker"]')
+        verb = table.partition("]")[0].lstrip("[")
+        with pytest.raises(
+            _FAILURES,
+            match=re.escape(
+                f"acme.taker {verb} acme.owner:x.txt in its extension.toml, and does"
+                " not require acme.owner; add acme.owner to its [extension] requires"
+            ),
+        ):
+            shipped(tmp_path)
+        # Requiring the owner, the taker's declaration stands.
+        fake_extensions(tmp_path, monkeypatch, owner="", taker=requires + table)
+        fragments, _order = shipped(tmp_path)
+        assert any(
+            fragment.owner == "acme.taker"
+            and "acme.owner:x.txt" in (fragment.replaces, fragment.deletes)
+            for fragment in fragments
+        )
+    # Requiring the owner, the step takes the address from a list naming
+    # the taker alone; a table for the owner does without requires.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        owner=_OWNER,
+        taker=_TAKER.replace("{requires}", requires),
+    )
+    root_contract(tmp_path, '["acme.taker"]')
+    _mount(tmp_path)
+    assert _steps.steps_by_name()["lint.acme"].extension == "acme.taker"
+    _steps.unregister_step("lint.acme")
+    grafted = (
+        '[for."acme.owner".phases.lint.acme]\nmain = "{package}._steps:noop"\n\n'
+        '[for."acme.owner".phases.lint.acme.replaces]\n'
+        '"acme.owner:lint.acme" = "it reads faster"\n'
+    )
+    fake_extensions(tmp_path, monkeypatch, owner=_OWNER, taker=grafted)
+    root_contract(tmp_path, '["acme.taker", "acme.owner"]')
+    _mount(tmp_path)
+    assert _steps.steps_by_name()["lint.acme"].extension == "acme.taker"
 
 
 #: An extension that judges what another measures for it: dormant until
@@ -875,75 +1069,130 @@ def test_a_contribution_whose_reference_does_not_resolve_refuses_naming_its_key(
         _mount(tmp_path)
 
 
-def test_the_fix_records_for_once_and_a_deleted_name_stays_deleted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_root_entry_s_for_opts_out_and_one_naming_its_default_is_written_as_its_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     _house(tmp_path, monkeypatch)
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.python",\n'
-        '    "acme.house",  # the opinions\n]\n'
-    )
-    assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions records acme.house for acme.python"
-    ]
-    text = (tmp_path / "workshop.toml").read_text()
-    assert (
-        '    { name = "acme.house", for = ["acme.python"] },  # the opinions\n' in text
-    )
-    assert _extensions.write_extensions(tmp_path) == []  # written once
-    # From then on the list is the truth: a deleted name stays deleted.
-    (tmp_path / "workshop.toml").write_text(
-        text.replace('for = ["acme.python"]', "for = []")
-    )
-    assert _extensions.write_extensions(tmp_path) == []
-    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
-    assert _extensions.closure_problems(tmp_path) == []
-    # A name the list does not carry, or the extension does not declare, refuses.
-    (tmp_path / "workshop.toml").write_text(
-        text.replace('for = ["acme.python"]', 'for = ["acme.cpp"]')
-    )
+    fake_extensions(tmp_path, monkeypatch, cpp="")
+    # The refusals first: a target no list holds, and one the house
+    # declares nothing for.
+    root_contract(tmp_path, '[{ name = "acme.house", for = ["acme.cpp"] }]')
     (problem,) = _extensions.closure_problems(tmp_path)
     assert problem == (
         "[workspace] extensions: the entry for acme.house names acme.cpp in `for`,"
         " and does not list it; list it, or remove it from `for`"
     )
-    root_contract(tmp_path, '["acme.python", "acme.house"]')
-    # The inline form takes the entry the same way, and a table entry
-    # without `for` gains the key.
-    _extensions.write_extensions(tmp_path)
-    assert (
-        'extensions = ["acme.python", { name = "acme.house",'
-        ' for = ["acme.python"] }]' in (tmp_path / "workshop.toml").read_text()
+    # Cooperation is the default: listed by name, the house contributes
+    # to every target it declares a table for.
+    root_contract(tmp_path, '["acme.house", "acme.python"]')
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
+    _mount(tmp_path)
+    assert _grafted()
+    _steps.unregister_step("lint.house")
+    # A `for` leaving the target out is the workspace's opt-out: the fix
+    # keeps it, and nothing grafts.
+    root_contract(tmp_path, '[{ name = "acme.house", for = [] }, "acme.python"]')
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.write_extensions(tmp_path) == []
+    assert _extensions.resolved_targets(tmp_path)["acme.house"] == ()
+    _mount(tmp_path)
+    assert not _grafted()
+    # A `for` naming exactly the default says no more than the name, and
+    # the fix writes the name in its place, its comment kept.
+    contract = tmp_path / "workshop.toml"
+    contract.write_text(
+        "[workspace]\nextensions = [\n"
+        '    { name = "acme.house", for = ["acme.python"] },  # the opinions\n'
+        '    "acme.python",\n]\n'
     )
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.python",\n'
-        '    { name = "acme.house" },\n]\n'
-    )
-    _extensions.write_extensions(tmp_path)
-    assert (
-        '    { name = "acme.house", for = ["acme.python"] },\n'
-        in (tmp_path / "workshop.toml").read_text()
-    )
-
-
-def test_the_fix_writes_for_on_the_entry_s_own_line(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The comment on the line after the entry is the next entry's, and
-    # stays on its own line.
-    _house(tmp_path, monkeypatch)
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = [\n    "acme.python",\n    "acme.house",\n'
-        '    # The next entry.\n    "acme.next",\n]\n'
+    (problem,) = _extensions.closure_problems(tmp_path)
+    assert problem == (
+        '[workspace] extensions is [{ name = "acme.house", for = ["acme.python"] },'
+        ' "acme.python"], and its canonical list is ["acme.house", "acme.python"];'
+        " the entry for acme.house names its default targets, which the name"
+        " alone says; the gate's --fix rewrites it"
     )
     assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions records acme.house for acme.python"
+        '  layering: [workspace] extensions is ["acme.house", "acme.python"], its'
+        " canonical list"
     ]
-    assert (tmp_path / "workshop.toml").read_text() == (
-        '[workspace]\nextensions = [\n    "acme.python",\n'
-        '    { name = "acme.house", for = ["acme.python"] },\n'
-        '    # The next entry.\n    "acme.next",\n]\n'
+    assert contract.read_text() == (
+        "[workspace]\nextensions = [\n"
+        '    "acme.house",  # the opinions\n'
+        '    "acme.python",\n]\n'
     )
+
+
+def test_an_implied_root_entry_carrying_for_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    _house(tmp_path, monkeypatch)
+    fake_extensions(
+        tmp_path, monkeypatch, brand='[extension]\nrequires = ["acme.house"]\n'
+    )
+    # Its `for` is the default: the entry says nothing its requirer's
+    # does not, so the list leaves it out.
+    root_contract(
+        tmp_path,
+        '[{ name = "acme.house", for = ["acme.python"] }, "acme.brand", "acme.python"]',
+    )
+    (problem,) = _extensions.closure_problems(tmp_path)
+    assert problem.endswith(
+        'its canonical list is ["acme.brand", "acme.python"]; acme.house is'
+        " required by another listed extension; the gate's --fix rewrites it"
+    )
+    # An opt-out has no other place to be written: the implied entry
+    # carrying it stays, and the house contributes nothing.
+    listed = '[{ name = "acme.house", for = [] }, "acme.brand", "acme.python"]'
+    root_contract(tmp_path, listed)
+    assert _extensions.closure_problems(tmp_path) == []
+    assert _extensions.write_extensions(tmp_path) == []
+    _mount(tmp_path)
+    assert not _grafted()
+
+
+def test_rewriters_run_in_composition_order_and_after(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
+) -> None:
+    def fixer(phase: str, step: str, after: str = "") -> str:
+        return (
+            f"[phases.{phase}.{step}]\n"
+            'main = "{package}._steps:noop"\n'
+            'fix = "{package}._steps:noop"\n'
+            + (f'after = ["{after}"]\n' if after else "")
+        )
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        alpha=fixer("format", "alpha"),
+        beta=fixer("lint", "beta", after="format.gamma"),
+        gamma=fixer("format", "gamma"),
+    )
+    fixing = PhaseContext(root=tmp_path, packages=(), fix=True)
+    names = ("format.alpha", "lint.beta", "format.gamma")
+    for listed in (
+        '["acme.gamma", "acme.beta", "acme.alpha"]',
+        '["acme.alpha", "acme.beta", "acme.gamma"]',
+    ):
+        for name in names:
+            if name in _steps.steps_by_name():
+                _steps.unregister_step(name)
+        root_contract(tmp_path, listed)
+        _mount(tmp_path)
+        # Registered in composition order, whatever the list's.
+        assert [name for name in _steps.steps_by_name() if name in names] == [
+            "format.alpha",
+            "lint.beta",
+            "format.gamma",
+        ]
+        # Run under --fix in that order, each after the steps it names.
+        assert [name for name in _steps.rewriters(fixing) if name in names] == [
+            "format.alpha",
+            "format.gamma",
+            "lint.beta",
+        ]
 
 
 def test_a_root_without_a_contract_lists_no_extensions_and_declares_nothing(

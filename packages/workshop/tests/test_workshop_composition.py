@@ -81,26 +81,21 @@ def test_a_requirement_joins_the_package_set_whatever_it_declares(
     )
     root_contract(tmp_path, '["acme.runner"]')
     package_contract(tmp_path, "core", '["acme.native"]')
-    # The refusals first: a requirement nothing installed declares, and a
-    # root entry's requirement no list holds, which the fix lists.
+    # The refusal first: a requirement nothing installed declares.
     assert _extensions.closure_problems(tmp_path) == [
-        "[workspace] extensions lists acme.runner, which depends on acme.python,"
-        " and does not list it; the gate's --fix adds it before acme.runner",
         "packages/core: acme.native requires acme.absent, which no installed"
         " distribution declares in workshop.extensions; install it",
     ]
     # A package's set holds acme.site, which composes nothing in a package,
-    # whatever it declares: no other list names it, and no fix adds it.
-    assert _extensions.write_extensions(tmp_path) == [
-        "  layering: [workspace] extensions gains acme.python before"
-        " acme.runner, which requires it"
-    ]
+    # whatever it declares, and the root's set holds acme.python, which
+    # acme.runner requires: no list names either, and no fix adds one.
+    assert _extensions.write_extensions(tmp_path) == []
     assert _extensions.installed_set(tmp_path) == (
         "acme.absent",
-        "acme.site",
-        "acme.native",
         "acme.python",
         "acme.runner",
+        "acme.site",
+        "acme.native",
     )
     # A root entry's requirement a package's set holds needs no entry.
     root_contract(tmp_path, '["acme.runner"]')
@@ -341,47 +336,71 @@ def test_a_list_out_of_its_canonical_form_is_named_and_the_fix_writes_it(
     assert tool.read_text() == 'extensions = ["acme.cpp", "acme.zig"]\n'
     assert _extensions.closure_problems(tmp_path) == []
     assert _extensions.write_extensions(tmp_path) == []
-    # A list twice over says so; a list the fix cannot find inline stays
-    # named until a person writes it.
-    tool.write_text('extensions=["acme.cpp", "acme.cpp"]\n')
-    assert _extensions.closure_problems(tmp_path) == [
+    # A list twice over says so, and the fix writes each extension once;
+    # an array the fix does not read stays named until a person writes it.
+    twice = [
         'packages/tool: `extensions` is ["acme.cpp", "acme.cpp"], and its canonical'
         ' list is ["acme.cpp"]; it lists an extension twice; the gate\'s --fix'
         " rewrites it",
     ]
+    tool.write_text('extensions=["acme.cpp", "acme.cpp"]\n')
+    assert _extensions.closure_problems(tmp_path) == twice
+    assert _extensions.write_extensions(tmp_path) == [
+        '  layering: packages/tool `extensions` is ["acme.cpp"], its canonical list'
+    ]
+    assert tool.read_text() == 'extensions=["acme.cpp"]\n'
+    tool.write_text('extensions = ["""acme.cpp""", "acme.cpp"]\n')
+    assert _extensions.closure_problems(tmp_path) == twice
     assert _extensions.write_extensions(tmp_path) == []
 
 
-def test_the_extensions_the_packages_hold_mount_first_in_composition_order(
+def test_the_mount_and_answers_follow_composition_order_whatever_the_list_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
+    from livery.footman import _registry as registry
+    from livery.workshop import Query, answer
+
     def checked(tool: str, identity: str = "") -> str:
         return f'{identity}\n[phases.lint.{tool}]\nmain = "{{package}}._steps:noop"\n'
+
+    def styled(name: str) -> str:
+        return checked(name) + f'\n[queries."acme.style"]\nvalue = ["{name}"]\n'
 
     fake_extensions(
         tmp_path,
         monkeypatch,
         native=checked("native", PACKAGE + 'requires = ["acme.base"]'),
         base=checked("base", PACKAGE),
-        site=checked("site"),
+        site=PACKAGE + '[queries."acme.style"]\nlevel = "workspace"\n',
+        alpha=styled("alpha"),
+        zulu=styled("zulu"),
     )
-    root_contract(tmp_path, '["acme.site"]')
     package_contract(tmp_path, "core", '["acme.native"]')
     package_contract(tmp_path, "app", '["acme.base"]')
-    assert _extensions.workspace_names(tmp_path) == ("acme.site",)
-    assert _extensions.extension_names(tmp_path) == (
-        "acme.base",
-        "acme.native",
-        "acme.site",
-    )
-    assert _extensions.stack_names(tmp_path)[0] == _extensions.SELF
-    from livery.footman import _registry as registry
-
-    with registry.capture():
-        mounted = _extensions.mount_extensions(tmp_path)
-    assert mounted == ("acme.base", "acme.native", "acme.site")
-    assert _steps.steps_by_name()["lint.native"].extension == "acme.native"
-    assert _extensions.describe_extensions(tmp_path)[1:5] == [
+    every = ("acme.alpha", "acme.base", "acme.native", "acme.site", "acme.zulu")
+    for listed in (
+        '["acme.zulu", "acme.site", "acme.alpha"]',
+        '["acme.alpha", "acme.site", "acme.zulu"]',
+    ):
+        root_contract(tmp_path, listed)
+        assert _extensions.extension_names(tmp_path) == every
+        assert _extensions.stack_names(tmp_path) == (_extensions.SELF, *every)
+        for name in ("lint.alpha", "lint.base", "lint.native", "lint.zulu"):
+            if name in _steps.steps_by_name():
+                _steps.unregister_step(name)
+        with registry.capture():
+            mounted = _extensions.mount_extensions(tmp_path)
+        # The site declares the query alone: it registers and answers nothing.
+        assert mounted == tuple(name for name in every if name != "acme.site")
+        assert [name for name in _steps.steps_by_name() if name.startswith("lint.")][
+            -4:
+        ] == ["lint.alpha", "lint.base", "lint.native", "lint.zulu"]
+        assert answer(tmp_path, Query[tuple[str, ...]]("acme.style")) == (
+            "alpha",
+            "zulu",
+        )
+    assert _extensions.describe_extensions(tmp_path)[1:6] == [
+        "  acme.alpha",
         "  acme.base (required by acme.native)",
         "    packages: packages/app, packages/core",
         "  acme.native",

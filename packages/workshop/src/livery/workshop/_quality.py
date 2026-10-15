@@ -101,7 +101,7 @@ def walk(
     machine's narrowed step alike, and runs the registry's steps
     through the one walk ([livery.workshop._phases.run_phase][]). What
     was narrowed and by whom is printed first. Under ``--fix`` every
-    fixer that applies runs, one at a time in registration order,
+    fixer that applies runs, one at a time in the rewriters' order,
     before any judge reads the tree, and a step that rewrote is not
     judged again in the run; then *between* runs, where a machine's
     run measures the tree the judges read; then every judge runs in

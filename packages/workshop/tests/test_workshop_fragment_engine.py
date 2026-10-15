@@ -84,7 +84,7 @@ def test_a_replace_of_a_missing_fragment_refuses(tmp_path: Path) -> None:
     upward = Fragment(
         "livery.workshop", "x", "site.css", "a\n", deletes="docs:css", reason="no"
     )
-    with pytest.raises(Failed, match=r"only a later extension deletes an earlier"):
+    with pytest.raises(Failed, match=r"a fragment deletes one that applies before it"):
         _plan(tmp_path, upward, Fragment("docs", "css", "other.css", "b\n"))
     with pytest.raises(Failed, match=r"rust is not a listed extension"):
         _plan(tmp_path, Fragment("rust", "x", "a.txt", "a\n"))

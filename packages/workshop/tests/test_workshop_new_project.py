@@ -197,10 +197,32 @@ def test_the_folder_names_the_project_unless_a_name_is_given(
     assert 'name = "odd-dir"' in (here / "workshop.toml").read_text()
 
 
-def test_a_birth_lists_the_stack_it_is_given(tmp_path: Path) -> None:
-    _birth(local=True, stack="ruff, basedpyright[typecomplete]")
+def test_a_birth_writes_canonical_extensions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import fake_extensions
+
+    # The refusal first: a set whose declared order has no start cannot
+    # be written, and the birth makes no folder.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        first='[extension]\nrequires = ["acme.second"]\n',
+        second='[extension]\nrequires = ["acme.first"]\n',
+    )
+    with pytest.raises(_FAILURES) as caught:
+        _birth(local=True, extensions="acme.first")
+    assert str(caught.value) == (
+        "the extensions cannot be listed: the extensions' declared order has no"
+        " start: acme.first before acme.second before acme.first; remove one"
+        " requires among them"
+    )
+    assert not (tmp_path / "acme-tools").exists()
+    # The list given is written as its canonical list: an extension
+    # another one requires is left out, in composition order.
+    _birth(local=True, extensions="ruff, mkdocstrings, docs, basedpyright")
     contract = (tmp_path / "acme-tools" / "workshop.toml").read_text()
-    assert 'extensions = ["ruff", "basedpyright[typecomplete]"]' in contract
+    assert 'extensions = ["basedpyright", "mkdocstrings", "ruff"]' in contract
 
 
 def test_birth_end_to_end_and_the_second_run_resumes(
@@ -208,7 +230,11 @@ def test_birth_end_to_end_and_the_second_run_resumes(
 ) -> None:
     _birth()
     root = tmp_path / "acme-tools"
-    assert (root / "workshop.toml").is_file()
+    # Without --extensions, the stock list, as its canonical list.
+    assert (
+        'extensions = ["basedpyright", "changelog", "coverage", "mkdocstrings",'
+        ' "pytest", "ruff"]'
+    ) in (root / "workshop.toml").read_text()
     assert (root / "pyproject.toml").is_file()
     assert (root / "README.md").is_file() and (root / "LICENSE").is_file()
     assert (root / "docs" / "index.md").is_file()  # the docs seed, at birth
@@ -337,10 +363,11 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
     assert (fragment / "rules.brand.md").is_file()
     contract = (root / "workshop.toml").read_text()
-    # The base is never listed; the site's extension rides in its wheel.
+    # The base is never listed, and the home joins the stock list, all
+    # written as their canonical list.
     assert (
-        'extensions = ["changelog", "docs", "mkdocstrings", "ruff", "basedpyright",'
-        ' "pytest", "coverage", "acme_tools.brand"]' in contract
+        'extensions = ["acme_tools.brand", "basedpyright", "changelog", "coverage",'
+        ' "mkdocstrings", "pytest", "ruff"]' in contract
     )
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
@@ -350,7 +377,7 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     # own spelling (acme_tools.brand is acme_tools-brand).
     assert '"acme_tools-brand' in (root / "pyproject.toml").read_text()
     out = capsys.readouterr().out
-    assert "self-hosted, last in the stack" in out
+    assert "extensions: acme_tools.brand self-hosted" in out
     # The resume walks past the scaffold.
     _birth(local=True, owner="", extension="brand", resume=True)
     out = capsys.readouterr().out
@@ -444,28 +471,33 @@ def test_a_resume_inside_the_project_finishes_it_there(
     assert "setup PR: opened" in capsys.readouterr().out
 
 
-def test_a_birth_lists_the_site_first_and_a_brand_after_it() -> None:
+def test_a_birth_lists_the_stock_list_and_a_brand_s_own_canonically() -> None:
     from livery.workshop._new_project import birth_extensions
 
     # The fallback first: an App with no builtins of its own is stock,
-    # and lists the changelog's extension, the site's, its API
-    # reference's, the python formatter's, the type checker's, the test
-    # runner's and coverage's.
+    # and lists the type checker's extension, the changelog's,
+    # coverage's, the site's API reference, which requires the site's,
+    # the test runner's and the python formatter's.
     stock = [
-        "changelog",
-        "docs",
-        "mkdocstrings",
-        "ruff",
         "basedpyright",
-        "pytest",
+        "changelog",
         "coverage",
+        "mkdocstrings",
+        "pytest",
+        "ruff",
     ]
     assert birth_extensions(()) == stock
     assert birth_extensions(("footman.profile", "livery.workshop")) == stock
-    # A brand's extension follows the stock ones, so it wins.
+    # A brand's extension joins them in composition order: where it is
+    # listed decides nothing.
     assert birth_extensions(("dummy.brandx", "livery.workshop")) == [
-        *stock,
+        "basedpyright",
+        "changelog",
+        "coverage",
         "dummy.brandx",
+        "mkdocstrings",
+        "pytest",
+        "ruff",
     ]
     # An App that does not carry the base lists its own alone.
     assert birth_extensions(("acme.only",)) == ["acme.only"]

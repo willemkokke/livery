@@ -8,10 +8,10 @@ and walks past it, so re-running is the recovery procedure and a
 kill between any two steps costs nothing. ``--local`` is everything
 that stays on the machine and nothing that leaves it.
 
-The task is ``expose="global_only"``: it lives above any repository,
-so the workspace it makes never needed one. The default extension stack
-is the base extension; a branded App's stack arrives with the extension
-axis.
+The task lives above any repository, so the workspace it makes never
+needed one. The workspace's extensions are the stock list
+(``birth_extensions``) unless ``--extensions`` names them, and the
+birth writes them as their canonical list.
 """
 
 from __future__ import annotations
@@ -184,31 +184,51 @@ def _push_target(clone_url: str, token: str) -> str:
     return "origin"
 
 
+#: The extensions a stock App's birth lists, as their canonical list:
+#: the type checker's, the changelog's, coverage's, the site's API
+#: reference, which requires the site's, the test runner's and the
+#: python formatter's. An agent's files are a choice the project makes,
+#: so no agent's extension is among them.
+STOCK = ("basedpyright", "changelog", "coverage", "mkdocstrings", "pytest", "ruff")
+
+
 def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
     """The extensions a birth lists, from the running App's builtin providers.
 
     Footman's own providers and the base are never listed. A stock App
-    (the base among its builtins) lists the changelog's extension, the
-    site's, the site's API reference, the python formatter's, the type
-    checker's, the test runner's and coverage's first, as ruled; the
-    list is in precedence order, so a brand's own extensions follow
-    them and win. An agent's files are a choice the project makes, so no
-    agent's extension is among them.
+    (the base among its builtins) lists the stock list (``STOCK``), and
+    a branded App its own extensions beside them, all as their
+    canonical list (``canonical_extensions``). A brand's extension
+    takes another's file or step by requiring it and declaring the
+    replacement, never by where it is listed.
     """
     kept = [entry for entry in builtin if not entry.startswith("footman.")]
     kept = kept or ["livery.workshop"]
-    stack = [entry for entry in kept if entry != "livery.workshop"]
+    listed = [entry for entry in kept if entry != "livery.workshop"]
     if "livery.workshop" in kept:
-        stack[:0] = [
-            "changelog",
-            "docs",
-            "mkdocstrings",
-            "ruff",
-            "basedpyright",
-            "pytest",
-            "coverage",
-        ]
-    return stack
+        listed[:0] = STOCK
+    return canonical_extensions(listed)
+
+
+def canonical_extensions(names: list[str] | tuple[str, ...]) -> list[str]:
+    """*names* as the canonical list a birth writes.
+
+    The minimal list of their set in composition order, as the installed
+    declarations compose it: an extension another one requires is left
+    out, and a name no installed distribution declares requires
+    nothing.
+
+    Raises:
+        Failed: when the set's declared order has no start, naming the
+            cycle.
+    """
+    from livery.workshop._composition import OrderCycle, canonical
+    from livery.workshop._extensions import installed_declaration
+
+    try:
+        return list(canonical(names, installed_declaration))
+    except OrderCycle as error:
+        fail(f"the extensions cannot be listed: {error}")
 
 
 @new_group.task(name="project", expose="always", interactive=True, cwd="asinvoked")
@@ -241,18 +261,21 @@ def new_project(
     local: Annotated[
         bool, doc("everything that stays on the machine, nothing that leaves it")
     ] = False,
-    stack: Annotated[
+    extensions: Annotated[
         str,
         doc(
-            "the extensions the workspace lists, comma-separated in precedence"
-            " order, each by name; the stock list by default"
+            "the extensions the workspace lists, comma-separated, each by name,"
+            " written as their canonical list; the stock list by default"
         ),
     ] = "",
     resume: Annotated[bool, hidden] = False,
 ) -> None:
-    """Create a workspace in an empty or new folder: W1 as one verb.
+    """Create a workspace in an empty or new folder, end to end, as one verb.
 
-    The birth seeds the contract and the project's files, locks and
+    The birth seeds the contract, whose ``[workspace] extensions`` is
+    the stock list or the one ``--extensions`` names, written as its
+    canonical list: no extension another one requires, in composition
+    order. It writes the project's files, locks and
     syncs its environment, then hands the rest to the runner that
     environment holds, run as ``new.project --resume`` inside the
     project. There the project's own extensions are mounted, so its
@@ -296,8 +319,6 @@ def new_project(
     name = name or root.name
     forge = forge or "github"
     _check_answers(name, forge=forge, owner=owner, url=url, local=local)
-    root.mkdir(parents=True, exist_ok=True)
-
     # The contract: a birth-time seed the render never touches. The
     # list is the running App's own builtin providers, minus footman's
     # and the base, which is never listed (contract 19): a branded App's
@@ -305,13 +326,15 @@ def new_project(
     # extension and coverage's, which ride in the workshop wheel.
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
-    # runtime accessor is footman#536's family).
+    # runtime accessor is footman#536's family). It is composed before
+    # the folder is made, so a list that cannot be written leaves none.
     from livery.footman import builtins
 
-    listed = [e.strip() for e in stack.split(",") if e.strip()]
-    stack_list = listed or birth_extensions(builtins())
+    named = [e.strip() for e in extensions.split(",") if e.strip()]
+    listed = canonical_extensions(named) if named else birth_extensions(builtins())
+    root.mkdir(parents=True, exist_ok=True)
     contract = root / "workshop.toml"
-    spelled = ", ".join(f'"{entry}"' for entry in stack_list)
+    spelled = ", ".join(f'"{entry}"' for entry in listed)
     year = str(datetime.datetime.now(tz=datetime.UTC).year)
     author_name = author or _git_config("user.name") or f"{name} authors"
     author_email = email or _git_config("user.email")
@@ -524,12 +547,13 @@ def _finish(
 
 
 def _add_extension(root: Path, extension: str) -> None:
-    """Scaffold *extension* and self-host it: contract 19's home shape.
+    """Scaffold *extension* and self-host it: the workspace becomes its home.
 
     The extension package is born from the ``workshop-extension``
-    template; the contract's stack gains its import path last, so the
-    home composes with its own overlay at HEAD from the first
-    commit. Idempotent: an already-listed extension walks past.
+    template, and the contract's list gains its import path, written
+    again as its canonical list, so the home composes with its own
+    extension at HEAD from the first commit. Idempotent: an
+    already-listed extension walks past.
     """
     from livery.workshop._sync import sync_workspace
     from livery.workshop._templates import render_member, wire_member
@@ -546,19 +570,21 @@ def _add_extension(root: Path, extension: str) -> None:
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")
     if f'"{import_path}"' not in text:
+        import tomllib
+
         match = re.search(r"^extensions = \[(.*)\]$", text, flags=re.M)
         if match is None:
             fail(
                 f"cannot self-host {import_path}: the contract has no"
-                " extensions line; add it by hand, last"
+                " extensions line; add it by hand"
             )
-        listed = [item for item in (match.group(1).strip(),) if item]
-        appended = (
-            f"extensions = [{', '.join([*listed, f'{chr(34)}{import_path}{chr(34)}'])}]"
-        )
-        text = text[: match.start()] + appended + text[match.end() :]
+        workspace = tomllib.loads(text).get("workspace", {})
+        named = [str(entry) for entry in workspace.get("extensions", [])]
+        listed = canonical_extensions([*named, import_path])
+        written = ", ".join(f'"{entry}"' for entry in listed)
+        text = text[: match.start()] + f"extensions = [{written}]" + text[match.end() :]
         contract.write_text(text, encoding="utf-8")
-        print(f"  extensions: {import_path} self-hosted, last in the stack")
+        print(f"  extensions: {import_path} self-hosted")
     # The stack changed: re-deliver content and re-render through the
     # composed source, so the home's files carry its own overlay.
     from livery.workshop._templates import apply_project as reapply

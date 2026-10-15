@@ -259,7 +259,7 @@ doc = "the URL template task names in --help, --list and --json rows link to, fo
 
 [contract.root.workspace.extensions]
 types = ["list"]
-doc = "the extensions the workspace mounts, in precedence order"
+doc = "the extensions the workspace mounts with what they require, each by name, written as the canonical list: no extension another listed one requires unless its entry carries for, in composition order"
 
 [contract.root.workspace."extensions[]"]
 types = ["str", "table"]
@@ -267,7 +267,7 @@ doc = "one extension: its name, or a table with its name and targets"
 
 [contract.root.workspace."extensions[]".for]
 types = ["strs"]
-doc = "the listed extensions this one contributes to; every listed one it declares a contribution for when absent"
+doc = "the extensions this one contributes to, which a workspace narrows to opt out of a target; every one of the installed set it declares a contribution for when absent"
 
 [contract.root.workspace."extensions[]".name]
 types = ["str"]
@@ -544,11 +544,11 @@ doc = "a key of that contract: a table with its types, and its values and doc wh
 
 [contract.extension.deletes]
 types = ["table"]
-doc = "the shipped files of earlier extensions this one deletes"
+doc = "the shipped files of the base and of the extensions this one requires that it deletes"
 
 [contract.extension.deletes."*"]
 types = ["str"]
-doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one deletes it"
+doc = "a shipped file of the base or of an extension this one requires, <owner>:<name>, to the reason this one deletes it"
 
 [contract.extension.extension]
 types = ["table"]
@@ -564,7 +564,7 @@ doc = "the footman plugin that carries the extension's verbs; when absent, the e
 
 [contract.extension.extension.requires]
 types = ["strs"]
-doc = "the extensions this one cannot work without, each listed before it; none when absent"
+doc = "the extensions this one cannot work without, which join every set that holds it and come before it in composition order; none when absent"
 
 [contract.extension.extension.dormant-until]
 types = ["str"]
@@ -658,7 +658,7 @@ doc = "the file suffixes the step reads in the category, each starting with a do
 
 [contract.extension.phases."*"."*".deletes]
 types = ["table"]
-doc = "the steps of other extensions that never run for a package whose set holds this one, each <owner>:<phase>.<step> of an installed step that runs once per package, to the reason; none when absent"
+doc = "the steps of the base or of an extension this one requires, in a [for.<target>] table also the target's, that never run for a package whose set holds this one, each <owner>:<phase>.<step> of an installed step that runs once per package, to the reason; none when absent"
 
 [contract.extension.phases."*"."*".deletes."*"]
 types = ["str"]
@@ -783,11 +783,11 @@ doc = "the context keys the step reads inside its phase, each one another step p
 
 [contract.extension.phases."*"."*".replaces]
 types = ["table"]
-doc = "the steps of earlier extensions this one replaces, each <owner>:<phase>.<step> to the reason; naming the step at this one's address lets a second extension take the address; none when absent"
+doc = "the steps of the base or of an extension this one requires that it replaces, in a [for.<target>] table also the target's, each <owner>:<phase>.<step> to the reason; naming the step at this one's address lets a second extension take the address; none when absent"
 
 [contract.extension.phases."*"."*".replaces."*"]
 types = ["str"]
-doc = "an earlier extension's step, <owner>:<phase>.<step>, to the reason this one replaces it"
+doc = "a step of the base or of an extension this one requires, <owner>:<phase>.<step>, to the reason this one replaces it"
 
 [contract.extension.phases."*"."*".safe-fix]
 types = ["str", "strs"]
@@ -829,7 +829,7 @@ doc = "how the query's answers make one: union for lists, nearest for the answer
 [contract.extension.queries."*".level]
 types = ["str"]
 values = ["package", "workspace"]
-doc = "whether the query is asked about one package, answered by its set, or about the workspace, answered by the listed extensions in list order; package when absent"
+doc = "whether the query is asked about one package, answered by its set, or about the workspace, answered by the installed set, each in composition order; package when absent"
 
 [contract.extension.queries."*".default]
 types = ["any"]
@@ -845,11 +845,11 @@ doc = "the extension's literal answer to the query"
 
 [contract.extension.replaces]
 types = ["table"]
-doc = "the shipped files of earlier extensions that this one's own files replace"
+doc = "the shipped files of the base and of the extensions this one requires that its own files replace"
 
 [contract.extension.replaces."*"]
 types = ["str"]
-doc = "an earlier extension's shipped file, <owner>:<name>, to the reason this one's file of that name replaces it"
+doc = "a shipped file of the base or of an extension this one requires, <owner>:<name>, to the reason this one's file of that name replaces it"
 
 [contract.extension.templates]
 types = ["table"]
@@ -1016,8 +1016,8 @@ executable = "str"
 # The base's queries, in the grammar an extension declares a query in
 # under the same table of its extension.toml. A package-level query is
 # asked with a package and answered by its set in composition order; a
-# workspace-level one with the workspace root and answered by the listed
-# extensions in list order.
+# workspace-level one with the workspace root and answered by the
+# installed set in composition order.
 
 # The modules that declare a package's public API, by import path.
 [queries.public-modules]

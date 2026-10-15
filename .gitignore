@@ -16,6 +16,9 @@ packages/**/src/**/_docs/
 # Finder writes .DS_Store into any directory it opens; a workflow verb
 # refuses a dirty tree, so the file is never a change.
 .DS_Store
+# The coverage pages drawn from the measured data; the parts and the
+# union live under .workshop/, which the base ignores.
+packages/**/htmlcov/
 # The docs site's build and its generated pages.
 site/
 zensical.toml
@@ -33,8 +36,5 @@ packages/**/_generated/
 # The data coverage.py's meter leaves where a test run is metered.
 .coverage
 .coverage.*
-# The coverage pages drawn from the measured data; the parts and the
-# union live under .workshop/, which the base ignores.
-packages/**/htmlcov/
 # -- workshop: region rules, yours to edit; the render keeps it --
 # -- workshop: end rules --

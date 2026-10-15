@@ -7,7 +7,8 @@ phases it declares and the steps it adds to a package's lifecycle
 phases and to the gate's phases, the queries it declares and the ones
 it answers, the tools it runs, its CI jobs, the contract keys it owns,
 what it adds to another extension while that one is listed, and the
-earlier extensions' shipped files it replaces or deletes. The file is
+shipped files of the base and of the extensions it requires that it
+replaces or deletes. The file is
 a contract, read as ``workshop.toml`` is: kebab-case keys, every key
 judged, every refusal naming the file. Every extension is one kind:
 the root's ``[workspace] extensions`` and a package's ``extensions``
@@ -50,7 +51,9 @@ extension does, this one is dormant
 
 A step table's ``deletes`` names the steps of other extensions that
 never run for a package whose set holds this one, each
-``<owner>:<phase>.<step>`` to the reason. A deletion naming no step an
+``<owner>:<phase>.<step>`` to the reason: the base's, or those of an
+extension this one requires, or, in a ``[for.<target>]`` table, the
+target's, which the mount judges. A deletion naming no step an
 installed extension or the base declares, one naming a step that runs
 once over the workspace, and one without a reason refuse here.
 
@@ -237,10 +240,11 @@ class Declaration:
         target_tables: Each ``[for.<target>]`` table as the file holds it.
         tables: The file's top-level tables but ``[extension]`` and
             ``[for]``, as the file holds them.
-        replaces: Each earlier extension's shipped file, ``<owner>:<name>``,
-            its own file of that name replaces, to the reason.
-        deletes: Each earlier extension's shipped file it deletes, to the
-            reason.
+        replaces: Each shipped file of the base or of an extension it
+            requires, ``<owner>:<name>``, its own file of that name
+            replaces, to the reason.
+        deletes: Each shipped file of the base or of an extension it
+            requires that it deletes, to the reason.
         fragments: The files its code writes, by target.
         target_fragments: The files each ``[for.<target>]`` table's code
             writes, by target; a target whose table writes none is left
