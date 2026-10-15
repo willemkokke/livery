@@ -136,7 +136,7 @@ def test_the_hook_syncs_the_workspace_its_task_runs_in(
     _in_a_run(monkeypatch)
     result = Runner().invoke("build", tasks=tasks, cwd=tasks.parent)
     assert result.exit_code == 0, result.stderr
-    assert calls == [(workspace, {"frozen": True, "offline": True})]
+    assert calls == [(workspace, {"frozen": True, "locked": False, "offline": True})]
     assert "built" in result.stdout
 
 
@@ -212,7 +212,7 @@ def test_the_hook_syncs_its_root_frozen_and_offline_on_stderr(
     monkeypatch.setattr(_sync, "sync_checkout", sync_checkout)
     _no_rerun(monkeypatch)
     assert _reconcile.apply(tmp_path, "check", {}) is True
-    assert calls == [(tmp_path, {"frozen": True, "offline": True})]
+    assert calls == [(tmp_path, {"frozen": True, "locked": False, "offline": True})]
     captured = capsys.readouterr()
     # A command whose stdout a shell evaluates stays clean.
     assert captured.out == ""

@@ -282,28 +282,22 @@ def apply(root: Path, task: str, env: MutableMapping[str, str]) -> bool:
     if os.environ.get(_SYNCING) or env.get(_SYNCING) or task == "sync":
         return False
     prog = footman.prog()
-    before = installed_distributions(root)
     # Set in the task's own environment, which the sync's children see
     # and no sibling does, and removed after them.
     env[_SYNCING] = "1"
     try:
-        from livery.workshop._sync import sync_checkout
+        from livery.workshop._sync import sync_and_compare
 
         with contextlib.redirect_stdout(sys.stderr):
-            worked = sync_checkout(root, frozen=True, offline=True)
+            synced = sync_and_compare(root, frozen=True, offline=True)
     except Exception as error:  # the hook never stops the command it precedes
         _say(f"{prog}: the sync did not complete ({error}); running on what is here")
         return False
     finally:
         env.pop(_SYNCING, None)
-    if not worked:
-        return False
-    after = installed_distributions(root)
-    if any(
-        before.get(name) != after.get(name) for name in before.keys() | after.keys()
-    ):
+    if synced.installs_changed:
         _reexec(root, SYNCED)
-    return True
+    return synced.ran
 
 
 def _reexec(root: Path, cause: str) -> None:

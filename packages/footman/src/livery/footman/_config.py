@@ -296,6 +296,23 @@ def cascade_mode(cli_path: str | None = None) -> str:
     return value
 
 
+def cascade_ceiling(cwd: Path, cli_path: str | None = None) -> Path:
+    """The highest directory the walk from *cwd* reaches, by the cascade mode.
+
+    `none` stops at *cwd* itself, `filesystem` at the root of its drive,
+    and `repo`, the default, at the repository root above it. Task files
+    and config are both read along this walk, so every reader takes its
+    ceiling from here. Raises `CascadeError` on an unknown mode, as
+    `cascade_mode` does.
+    """
+    mode = cascade_mode(cli_path)
+    if mode == "none":
+        return cwd
+    if mode == "filesystem":
+        return Path(cwd.anchor)
+    return _paths.find_repo_root(cwd)
+
+
 # One tail for every "this file is not UTF-8" refusal, so the two spellings
 # (a foreign BOM, a stray byte) teach the same fix.
 _UTF8_ONLY = "TOML must be UTF-8; re-save the file as UTF-8"

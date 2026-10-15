@@ -13,6 +13,10 @@ The completion hot path spawns this detached, two ways:
 Both rebuild exactly as a real run would and are strictly fire-and-forget: they
 print nothing and never raise.
 
+`refresh_completion` is the public way in for a running program: it starts the
+`refresh_cwd` child for a directory whose tasks that program just changed, for
+example by an install that brought new ones.
+
 A tasks file that carries its own PEP 723 dependencies is rebuilt from inside
 its script environment — but only when uv can reach one without the network,
 since a keystroke must never download anything. Otherwise the rebuild happens
@@ -60,6 +64,54 @@ def _project_reexec(cwd: Path, uv_wanted: bool, entry: str, *args: str) -> Path 
     return root
 
 
+def refresh_completion(directory: str | Path) -> None:
+    """Start the detached rebuild of *directory*'s completion manifest and return.
+
+    A program that has just changed which tasks *directory* offers calls this,
+    for example after it installed a distribution that brings new tasks.
+    Without it, the next <kbd>Tab</kbd> there answers from the manifest the last
+    run wrote, until another run there or until the manifest is older than
+    `completion.max-age`. The rebuild is the one a stale manifest starts after a
+    <kbd>Tab</kbd> press: the same detached child, run in *directory*, builds
+    the tree a run there serves, in this CLI's own cache.
+
+    Starts nothing when no person is there to press <kbd>Tab</kbd>, as in CI
+    or a run without a terminal: [livery.footman.attended][] answers, and it
+    knows `--no-input` and `--dry-run` too. Nobody completes there, and on
+    Windows a detached child can hold files of the environment open while a
+    later step replaces them. Starts nothing when the configuration that
+    applies in *directory* sets `completion.max-age` to `off`, which asks for
+    no background rebuilds, and nothing when that configuration cannot be
+    read. Prints nothing and never raises: when the child cannot start,
+    nothing starts, and the caller's own outcome stands.
+
+    Args:
+        directory: The directory whose manifest to rebuild. A manifest is keyed
+            by the directory a person presses <kbd>Tab</kbd> in.
+    """
+    with contextlib.suppress(Exception):
+        import os
+        from pathlib import Path
+
+        from livery.footman import _complete, _config, _context, _globals
+
+        if not _context.attended():
+            return
+        stand = Path(directory)
+        cfg = _config.load_config(stand, _config.cascade_ceiling(stand))
+        if _config.completion_max_age(cfg) is None:
+            return
+        # Called from a task body, this spawn is footman's own work on the
+        # body's behalf, so the Popen guard stands down for it. The guard
+        # would hand the child the task's environment. The snapshot, taken
+        # through the router before `internal()`, hands over the same, and
+        # the directory is passed explicitly too, so nothing changes with
+        # the guard gone.
+        env = dict(os.environ)
+        with _globals.internal():
+            _complete._spawn_refresh(spawn_in=str(stand), env=env)
+
+
 def refresh_cwd(*where: str) -> None:
     """Rebuild the current directory's completion manifest, swallowing errors.
 
@@ -95,13 +147,7 @@ def _rebuild() -> None:
     # The walk's reach is the run's: the user-level `cascade` key (and its
     # FOOTMAN_CASCADE override) bounds this child exactly as it bounds the
     # runner — otherwise TAB offers tasks the runner then refuses.
-    mode = _config.cascade_mode()
-    if mode == "none":
-        ceiling = cwd
-    elif mode == "filesystem":
-        ceiling = Path(cwd.anchor)
-    else:
-        ceiling = _paths.find_repo_root(cwd)
+    ceiling = _config.cascade_ceiling(cwd)
     cfg = _config.load_config(cwd, ceiling)
     filename = cfg.get("tasks")
     if not isinstance(filename, str):

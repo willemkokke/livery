@@ -281,6 +281,16 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
         ["installed_entry_points", "rescan_entry_points", "project_builtins"],
     ),
     (
+        "Shell completion",
+        "Completion answers from a manifest cached per directory. A program "
+        "that changes which tasks a directory offers, by installing a "
+        "distribution that brings new ones, calls `refresh_completion` to "
+        "start the rebuild of that directory's manifest, so the next "
+        "<kbd>Tab</kbd> there offers them. See "
+        "[Shell completion](../completion.md#keeping-the-cache-current).",
+        ["refresh_completion"],
+    ),
+    (
         "Libraries that run tools",
         "A library that runs tools, toolroom among them, asks `host()` for "
         "the run it is called in, and gets `None` outside one, so it keeps "

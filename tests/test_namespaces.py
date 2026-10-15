@@ -129,6 +129,7 @@ EXPORTS: dict[str, list[str]] = {
         "prompt",
         "real_stderr",
         "recording",
+        "refresh_completion",
         "requires",
         "requires_dep",
         "requires_env",

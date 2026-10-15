@@ -14,7 +14,7 @@ Idempotent: a second run changes nothing and says nothing.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import livery.footman as footman
 from livery import git
@@ -585,6 +585,17 @@ def sync(
     ([livery.workshop._sync.require_mounted][]): a sync never renders
     without one.
 
+    Shell completion answers from a manifest this command wrote as it
+    started, from what was installed then. A sync that changed the
+    distributions the environment installs, run by a person at a
+    terminal, starts the detached rebuild of that manifest for the
+    directory the command was typed in
+    ([livery.footman.refresh_completion][]), so the next Tab there
+    offers the tasks an installed extension brings. A sync that changed
+    nothing installed starts nothing, and so does one no person is
+    there for, in CI or under `--no-input`. A rebuild that cannot
+    start leaves the sync's outcome as it is.
+
     Returns:
         Whether the local steps ran. A frozen sync of a current
         checkout returns False.
@@ -592,7 +603,41 @@ def sync(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    return sync_checkout(root, frozen=frozen, locked=locked, offline=offline)
+    synced = sync_and_compare(root, frozen=frozen, locked=locked, offline=offline)
+    if synced.installs_changed:
+        footman.refresh_completion(footman.current().invoked_dir or root)
+    return synced.ran
+
+
+class Synced(NamedTuple):
+    """What one sync did, as `sync_and_compare` reports it."""
+
+    ran: bool
+    """Whether the local steps ran. A frozen sync of a current checkout runs none."""
+    installs_changed: bool
+    """Whether the installed distributions differ after the sync from before it."""
+
+
+def sync_and_compare(
+    root: Path, *, frozen: bool = False, locked: bool = False, offline: bool = False
+) -> Synced:
+    """Do the sync verb's work on *root*, comparing what is installed before and after.
+
+    `sync_checkout` does the work, and the options mean what they mean
+    there. The comparison reads every distribution's name and entry
+    points in the environment, so an editable member installed again
+    with new entry points counts as a change. A sync whose local steps
+    did not run changed nothing, and the environment is not read again.
+
+    Returns:
+        Whether the local steps ran, and whether they changed what the
+        environment installs.
+    """
+    from livery.workshop._reconcile import installed_distributions
+
+    before = installed_distributions(root)
+    ran = sync_checkout(root, frozen=frozen, locked=locked, offline=offline)
+    return Synced(ran, ran and installed_distributions(root) != before)
 
 
 def sync_checkout(

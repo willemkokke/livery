@@ -758,7 +758,11 @@ def _maybe_refresh(
     _spawn_refresh(override, spawn_in)
 
 
-def _spawn_refresh(override: str | None = None, spawn_in: str | None = None) -> None:
+def _spawn_refresh(
+    override: str | None = None,
+    spawn_in: str | None = None,
+    env: dict[str, str] | None = None,
+) -> None:
     # override set → rebuild that one -f file's (cwd, file) manifest; else the
     # cwd cascade. The path rides as an argv word (not baked into the -c script),
     # so a path with spaces or quotes needs no escaping.
@@ -787,14 +791,20 @@ def _spawn_refresh(override: str | None = None, spawn_in: str | None = None) -> 
         cmd = [sys.executable, "-P", "-c", script, *where]
     # The child keys its build by its own cwd, so a `-C <dir>` completion
     # stands it in that directory — the manifest it writes is the one the
-    # hot path just tried to read.
-    detach(cmd, cwd=spawn_in)
+    # hot path just tried to read. A TAB press passes no *env*: the child
+    # inherits the shell's.
+    detach(cmd, cwd=spawn_in, env=env)
 
 
-def detach(cmd: list[str], cwd: str | None = None) -> None:
+def detach(
+    cmd: list[str], cwd: str | None = None, env: dict[str, str] | None = None
+) -> None:
     """Spawn *cmd* fully detached, swallowing failure — the one copy of the
     background-child dance, shared with the collector's spawn in `_app` (a
     background child must never break the foreground that spawned it).
+
+    *env*, when given, is the child's whole environment. Without it the
+    child inherits this process's.
 
     Stdlib-only, like everything here, so both the hot path and the
     execution path may call it.
@@ -814,7 +824,13 @@ def detach(cmd: list[str], cwd: str | None = None) -> None:
                 subprocess, "CREATE_NEW_PROCESS_GROUP", 0
             )
             subprocess.Popen(
-                cmd, stdin=null, stdout=null, stderr=null, creationflags=flags, cwd=cwd
+                cmd,
+                stdin=null,
+                stdout=null,
+                stderr=null,
+                creationflags=flags,
+                cwd=cwd,
+                env=env,
             )
         else:
             subprocess.Popen(
@@ -824,6 +840,7 @@ def detach(cmd: list[str], cwd: str | None = None) -> None:
                 stderr=null,
                 start_new_session=True,
                 cwd=cwd,
+                env=env,
             )
     except OSError:
         return  # a detached child must never break what spawned it
