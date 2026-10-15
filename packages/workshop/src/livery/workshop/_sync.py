@@ -587,12 +587,14 @@ def sync(
 
     Shell completion answers from a manifest this command wrote as it
     started, from what was installed then. A sync that changed the
-    distributions the environment installs starts the detached rebuild
-    of that manifest for the directory the command was typed in
+    distributions the environment installs, run by a person at a
+    terminal, starts the detached rebuild of that manifest for the
+    directory the command was typed in
     ([livery.footman.refresh_completion][]), so the next Tab there
     offers the tasks an installed extension brings. A sync that changed
-    nothing installed starts nothing, and a rebuild that cannot start
-    leaves the sync's outcome as it is.
+    nothing installed starts nothing, and so does one no person is
+    there for, in CI or under `--no-input`. A rebuild that cannot
+    start leaves the sync's outcome as it is.
 
     Returns:
         Whether the local steps ran. A frozen sync of a current

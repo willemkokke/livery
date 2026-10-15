@@ -1,10 +1,12 @@
 """A running program starts the completion rebuild: the refusals first.
 
 `refresh_completion` starts the detached child a stale manifest starts
-behind a TAB press. It starts nothing where the configuration turns the
-background rebuild off or cannot be read, swallows a child that cannot
-start, and then, on the happy path, starts that one child in the
-directory it was given.
+behind a TAB press. It starts nothing when no person is there, nothing
+where the configuration turns the background rebuild off or cannot be
+read, swallows a child that cannot start, and then, on the happy path,
+starts that one child in the directory it was given. Every test past
+the first two says whether a person is there, since a test's stdin is
+no terminal.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from pathlib import Path
 import pytest
 
 import livery.footman as footman
-from livery.footman import _complete, _manifest, _notes, _paths, _refresh
+from livery.footman import _complete, _context, _manifest, _notes, _paths, _refresh
 from livery.footman._complete import complete_cli
 from livery.footman._executor import run_chain
 from livery.footman._registry import Group
@@ -39,6 +41,11 @@ def _started(monkeypatch: pytest.MonkeyPatch) -> list[str | None]:
     return started
 
 
+def _someone_there(monkeypatch: pytest.MonkeyPatch, there: bool = True) -> None:
+    """Answer whether a person is there, where the refresh asks it."""
+    monkeypatch.setattr(_context, "attended", lambda: there)
+
+
 def _project(where: Path, settings: str = "") -> Path:
     """A project directory at *where*, its own repository, with *settings*."""
     where.mkdir(parents=True, exist_ok=True)
@@ -53,9 +60,37 @@ def _project(where: Path, settings: str = "") -> Path:
     return where
 
 
+def test_no_person_there_starts_no_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # max-age is on (the default): the person's absence alone decides.
+    started = _started(monkeypatch)
+    _someone_there(monkeypatch, there=False)
+    footman.refresh_completion(_project(tmp_path))
+    assert started == []
+
+
+def test_no_input_and_dry_run_mean_no_person_at_a_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refresh asks footman's one answer, not the terminal: a run under
+    # --no-input or --dry-run starts nothing even with a terminal attached.
+    project = _project(tmp_path)
+    started = _started(monkeypatch)
+    monkeypatch.setattr(_context, "_stdin_is_tty", lambda: True)
+    for declared in (_context.Context(no_input=True), _context.Context(dry_run=True)):
+        with _context.use_context(declared):
+            footman.refresh_completion(project)
+    assert started == []
+    with _context.use_context(_context.Context()):
+        footman.refresh_completion(project)
+    assert started == [str(project)]
+
+
 def test_max_age_off_starts_no_rebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _someone_there(monkeypatch)
     started = _started(monkeypatch)
     footman.refresh_completion(_project(tmp_path, 'completion.max-age = "off"\n'))
     footman.refresh_completion(_project(tmp_path / "zero", "completion.max-age = 0\n"))
@@ -65,6 +100,7 @@ def test_max_age_off_starts_no_rebuild(
 def test_a_nearer_off_wins_over_the_user_level_setting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _someone_there(monkeypatch)
     # The configuration that applies in the directory decides, the way a
     # run there reads it: the user-level file first, the project over it.
     user = tmp_path / "user.toml"
@@ -84,6 +120,7 @@ def test_a_nearer_off_wins_over_the_user_level_setting(
 def test_a_configuration_that_cannot_be_read_starts_nothing_and_says_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _someone_there(monkeypatch)
     started = _started(monkeypatch)
     monkeypatch.setenv("FOOTMAN_CASCADE", "sideways")  # no such cascade mode
     footman.refresh_completion(_project(tmp_path))
@@ -94,6 +131,7 @@ def test_a_configuration_that_cannot_be_read_starts_nothing_and_says_nothing(
 def test_a_spawn_that_fails_is_swallowed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _someone_there(monkeypatch)
     project = _project(tmp_path)
 
     def no_fork(*args: object, **kwargs: object) -> None:
@@ -120,6 +158,7 @@ def test_a_task_that_starts_the_rebuild_earns_no_note(
     # The spawn is footman's own work on the task's behalf: it passes the
     # directory and the environment itself, so the Popen guard fills in
     # nothing and a workspace that turns notes into errors still passes.
+    _someone_there(monkeypatch)
     project = _project(tmp_path)
     spawned: list[dict[str, object]] = []
 
@@ -158,6 +197,7 @@ def test_a_task_that_starts_the_rebuild_earns_no_note(
 def test_the_rebuild_is_the_child_a_stale_manifest_starts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _someone_there(monkeypatch)
     project = _project(tmp_path)
     captured: list[tuple[list[str], dict[str, object]]] = []
     monkeypatch.setattr(
@@ -174,6 +214,7 @@ def test_the_rebuild_is_the_child_a_stale_manifest_starts(
 def test_the_next_tab_offers_what_the_rebuild_found(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _someone_there(monkeypatch)
     # The child runs inline here, standing where the spawn would stand it,
     # so the press after it is deterministic.
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))

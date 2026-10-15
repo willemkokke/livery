@@ -75,11 +75,15 @@ def refresh_completion(directory: str | Path) -> None:
     <kbd>Tab</kbd> press: the same detached child, run in *directory*, builds
     the tree a run there serves, in this CLI's own cache.
 
-    Starts nothing when the configuration that applies in *directory* sets
-    `completion.max-age` to `off`, which asks for no background rebuilds, and
-    nothing when that configuration cannot be read. Prints nothing and never
-    raises: when the child cannot start, nothing starts, and the caller's own
-    outcome stands.
+    Starts nothing when no person is there to press <kbd>Tab</kbd>, as in CI
+    or a run without a terminal: [livery.footman.attended][] answers, and it
+    knows `--no-input` and `--dry-run` too. Nobody completes there, and on
+    Windows a detached child can hold files of the environment open while a
+    later step replaces them. Starts nothing when the configuration that
+    applies in *directory* sets `completion.max-age` to `off`, which asks for
+    no background rebuilds, and nothing when that configuration cannot be
+    read. Prints nothing and never raises: when the child cannot start,
+    nothing starts, and the caller's own outcome stands.
 
     Args:
         directory: The directory whose manifest to rebuild. A manifest is keyed
@@ -89,8 +93,10 @@ def refresh_completion(directory: str | Path) -> None:
         import os
         from pathlib import Path
 
-        from livery.footman import _complete, _config, _globals
+        from livery.footman import _complete, _config, _context, _globals
 
+        if not _context.attended():
+            return
         stand = Path(directory)
         cfg = _config.load_config(stand, _config.cascade_ceiling(stand))
         if _config.completion_max_age(cfg) is None:

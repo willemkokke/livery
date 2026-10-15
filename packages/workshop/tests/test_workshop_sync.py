@@ -140,9 +140,11 @@ def test_a_plain_sync_of_a_current_checkout_still_renders_and_installs(
 
 # The completion rebuild: a sync that changed what the environment
 # installs starts footman's detached rebuild of the completion manifest.
-# The refusals first: a sync that changed nothing starts nothing, the
-# setting that turns background rebuilds off holds, and a rebuild that
-# cannot start leaves the sync's outcome alone. Then the one rebuild.
+# The refusals first: a sync that changed nothing starts nothing, a sync
+# no person is there for starts nothing, the setting that turns
+# background rebuilds off holds, and a rebuild that cannot start leaves
+# the sync's outcome alone. Then the one rebuild. A test's stdin is no
+# terminal, so a test that expects a child says a person is there.
 
 
 def _rebuilds(monkeypatch: pytest.MonkeyPatch) -> list[object]:
@@ -164,12 +166,25 @@ def _installing(monkeypatch: pytest.MonkeyPatch, root: Path, *dists: str) -> Non
     monkeypatch.setattr("livery.workshop._uv.run_uv", run_uv)
 
 
+def _someone_there(monkeypatch: pytest.MonkeyPatch, there: bool = True) -> None:
+    """Answer whether a person is there, where footman's refresh asks it."""
+    monkeypatch.setattr("livery.footman._context.attended", lambda: there)
+
+
 def _spawns(monkeypatch: pytest.MonkeyPatch) -> list[object]:
-    """Record every process start in place of starting it; the directories."""
+    """Record each detached child footman would start; the directories.
+
+    Recorded at footman's one spawn of a detached child, so every other
+    process a sync's steps start runs as it always does.
+    """
     started: list[object] = []
-    monkeypatch.setattr(
-        subprocess, "Popen", lambda cmd, **kwargs: started.append(kwargs.get("cwd"))
-    )
+
+    def detach(
+        cmd: list[str], cwd: str | None = None, env: dict[str, str] | None = None
+    ) -> None:
+        started.append(cwd)
+
+    monkeypatch.setattr("livery.footman._complete.detach", detach)
     return started
 
 
@@ -191,6 +206,23 @@ def test_a_sync_that_changed_nothing_installed_starts_no_rebuild(
     assert asked == []
 
 
+def test_a_sync_no_person_is_there_for_starts_no_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _sync
+    from workshop_receipts import synced
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    synced(root, "something-1.0.0")
+    _recorded_steps(monkeypatch)
+    _installing(monkeypatch, root, "acme_extension-1.0.0")
+    _someone_there(monkeypatch, there=False)
+    started = _spawns(monkeypatch)
+    assert _sync.sync() is True
+    assert started == []
+
+
 def test_max_age_off_holds_for_a_sync_that_installs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -204,6 +236,7 @@ def test_max_age_off_holds_for_a_sync_that_installs(
         project.write('\n[tool.footman]\ncompletion.max-age = "off"\n')
     _recorded_steps(monkeypatch)
     _installing(monkeypatch, root, "acme_extension-1.0.0")
+    _someone_there(monkeypatch)
     started = _spawns(monkeypatch)
     assert _sync.sync() is True
     assert started == []
@@ -220,6 +253,7 @@ def test_a_rebuild_that_cannot_start_never_fails_the_sync(
     synced(root, "something-1.0.0")
     _recorded_steps(monkeypatch)
     _installing(monkeypatch, root, "acme_extension-1.0.0")
+    _someone_there(monkeypatch)
     tried: list[object] = []
 
     def no_fork(cmd: list[str], **kwargs: object) -> None:
@@ -244,18 +278,20 @@ def test_a_sync_that_installs_an_extension_starts_one_rebuild_where_it_was_typed
     synced(root, "something-1.0.0")
     _recorded_steps(monkeypatch)
     _installing(monkeypatch, root, "acme_extension-1.0.0")
-    asked = _rebuilds(monkeypatch)
+    _someone_there(monkeypatch)
+    started = _spawns(monkeypatch)
     # Outside a run there is no typed-in directory: the workspace's root.
     assert _sync.sync() is True
-    assert asked == [root]
+    assert started == [str(root)]
     # Inside one, the directory the command was typed in, which keys the
     # manifest the next Tab there reads.
-    asked.clear()
+    started.clear()
     _installing(monkeypatch, root, "acme_other-1.0.0")
-    typed = root / "packages" / "core"
+    typed = root / "docs"
+    typed.mkdir()
     with footman.use_context(footman.Context(invoked_dir=str(typed))):
         assert _sync.sync() is True
-    assert asked == [str(typed)]
+    assert started == [str(typed)]
 
 
 def test_the_sync_phase_runs_after_the_tools_and_before_uv(
