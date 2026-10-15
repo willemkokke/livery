@@ -665,14 +665,14 @@ def _fake_declarations(
 ) -> None:
     """Install *declared* beside the real extensions, which the members' sets read.
 
-    The members' lists come from the real templates, read before the
-    fakes take the installed extensions' place.
+    The members' lists and needs come from the real templates, read
+    before the fakes take the installed extensions' place.
     """
     from livery.workshop import _extensions, _seeds
 
     real = _extensions.declaration
-    templates = _seeds.installed_templates()
-    monkeypatch.setattr(_seeds, "installed_templates", lambda: templates)
+    templates = _seeds.available_templates()
+    monkeypatch.setattr(_seeds, "available_templates", lambda: templates)
 
     def found(name: str) -> Declaration | None:
         return declared[name] if name in declared else real(name)
@@ -690,10 +690,13 @@ def test_an_extension_with_no_step_refuses(monkeypatch: pytest.MonkeyPatch) -> N
         _e2e.extension_under_test("quiet")
 
 
-def test_the_list_is_the_extension_under_test_alone(
+def test_the_list_is_the_extension_under_test_and_what_its_members_need(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Its set takes in what it requires, so the list names nothing else.
+    # Its set takes in what it requires, so the list names beside it only
+    # what the members' templates need, as their canonical list: a
+    # creation installs nothing, so the root lists them before the
+    # members are created. loop-cpp's cpp-library needs cmake and conan.
     _fake_declarations(
         monkeypatch,
         {
@@ -703,7 +706,7 @@ def test_the_list_is_the_extension_under_test_alone(
         },
     )
     listed, members = _e2e.extension_under_test("top")
-    assert listed == ("top",)
+    assert listed == ("cmake", "conan", "top")
     assert members == ("loop-cpp",)
     # An extension that runs the tests installed beside it rides along no
     # more: a gate that meters no suite runs no coverage leg, so the pass
@@ -718,7 +721,7 @@ def test_the_list_is_the_extension_under_test_alone(
         },
     )
     listed, members = _e2e.extension_under_test("top")
-    assert listed == ("top",)
+    assert listed == ("cmake", "conan", "top")
     assert members == ("loop-cpp",)
 
 
@@ -765,15 +768,17 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
         {"typed": _declared("python"), "both": _declared("python", "conan")},
     )
     stack, members = _e2e.extension_under_test("typed")
-    assert stack == ("typed",)
+    assert stack == ("python", "typed")
     # loop-native's set holds loop-echo's, so a step naming python lands
     # the smaller member alone.
     assert [member.name for member in _e2e.members_for(members)] == ["loop-echo"]
-    _stack, members = _e2e.extension_under_test("both")
+    stack, members = _e2e.extension_under_test("both")
     # loop-native's set holds conan beside cpp, as a consumer of its
     # packages, and loop-echo's does not, so a step naming conan lands
     # that member too.
     assert members == ("loop-echo", "loop-native", "loop-cpp")
+    # nanobind requires python and conan, so the list names it and cmake.
+    assert stack == ("both", "cmake", "nanobind")
     # The test extension is listed as any other: as the extension under
     # test, and never beside another, whose set takes it in where that
     # one requires it.
@@ -785,9 +790,9 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
             "typed": _declared("python"),
         },
     )
-    assert _e2e.extension_under_test("pytest")[0] == ("pytest",)
-    assert _e2e.extension_under_test("wrap")[0] == ("wrap",)
-    assert _e2e.extension_under_test("typed") == (("typed",), ("loop-echo",))
+    assert _e2e.extension_under_test("pytest")[0] == ("pytest", "python")
+    assert _e2e.extension_under_test("wrap")[0] == ("python", "wrap")
+    assert _e2e.extension_under_test("typed") == (("python", "typed"), ("loop-echo",))
     assert [member.name for member in _e2e.members_for(members)] == [
         "loop-echo",
         "loop-native",
@@ -801,8 +806,11 @@ def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) 
 
     from livery.workshop._templates import render_member
 
+    # The root lists what the members' templates need before they are
+    # created, as the loop's own stack does.
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nname = "acme"\nnamespace = "acme"\nextensions = []\n'
+        '[workspace]\nname = "acme"\nnamespace = "acme"\n'
+        'extensions = ["cmake", "nanobind"]\n'
         'authors = [{ name = "A", email = "a@example.com" }]\n'
         '\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
@@ -2105,15 +2113,17 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert "members loop-native, loop-cpp: landed through the loop's own gate" in out
 
 
-def test_the_plain_pass_lists_the_stock_list_without_the_site() -> None:
+def test_the_plain_pass_lists_the_stock_but_the_site_and_what_members_need() -> None:
     """The site is the docs extension and every stock entry that requires it.
 
     The pass proves the gate, the release train and the points, and
-    nothing in it reads a site. The stack is pinned too, since the
-    hosted rehearsal's plain pass births it.
+    nothing in it reads a site. A creation installs nothing, so the root
+    lists what the members' templates need before they are created. The
+    stack is pinned too, since the hosted rehearsal's plain pass births
+    it.
     """
     from livery.workshop._extensions import SELF, declaration
-    from livery.workshop._new_project import birth_extensions
+    from livery.workshop._new_project import birth_extensions, canonical_extensions
 
     stock = tuple(birth_extensions([SELF]))
 
@@ -2124,13 +2134,24 @@ def test_the_plain_pass_lists_the_stock_list_without_the_site() -> None:
 
     site = tuple(name for name in stock if builds_the_site(name))
     assert site == ("mkdocstrings",)
-    assert _e2e.loop_stack() == tuple(name for name in stock if name not in site)
+    needs = {member.name: member.needs() for member in _e2e.LOOP_MEMBERS}
+    assert needs == {
+        "loop-echo": ("python",),
+        "loop-native": ("python", "nanobind"),
+        "loop-cpp": ("cmake", "conan"),
+    }
+    kept = [name for name in stock if name not in site]
+    assert _e2e.loop_stack() == tuple(
+        canonical_extensions([*kept, *(n for held in needs.values() for n in held)])
+    )
+    # nanobind requires python and conan, so the list names neither.
     assert _e2e.loop_stack() == (
         "basedpyright",
         "changelog",
+        "cmake",
         "coverage",
         "pytest",
-        "python",
+        "nanobind",
         "ruff",
     )
 

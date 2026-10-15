@@ -289,6 +289,19 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
     # git-cliff attempt the author lookup instead of its offline arm.
     for variable in ("FORGE_TOKEN", "GITEA_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"):
         env.pop(variable, None)
+    # The root lists what the two templates need, and the sync installs
+    # it: a creation installs nothing. nanobind requires python, cpp and
+    # conan, and cmake builds the library.
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace(
+            "extensions = []", 'extensions = ["cmake", "nanobind"]', 1
+        )
+    )
+    synced = subprocess.run(
+        ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
+    )
+    assert synced.returncode == 0, f"{synced.stdout}\n{synced.stderr}"
     for name, template in (
         ("geometry", "cpp-library"),
         ("ext", "nanobind-module"),

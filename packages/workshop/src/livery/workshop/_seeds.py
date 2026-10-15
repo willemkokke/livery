@@ -13,9 +13,12 @@ extension's ``extension.toml``, or by the base's ``contract.toml``: its
 ``doc``, the ``extensions`` a package born from it lists, and
 ``extends``, the template whose files the birth writes first. Its files
 live under ``content/templates/<name>/`` beside the file that declares
-it. A package can be born from any installed template, whether the
-workspace lists its declarer or not, and a template is read at a birth
-alone: nothing records which one a package came from.
+it. A workspace offers the base's templates and those of the extensions
+its installed set holds. A birth needs every extension the template's
+chain names in the installed set and installed, and it refuses
+otherwise, naming what to list or that ``fm sync`` installs it: a
+creation installs nothing. A template is read at a birth alone: nothing
+records which one a package came from.
 
 `create` writes a ``.jinja`` file rendered with minijinja, its suffix
 dropped, and any other file byte for byte; path names render too
@@ -38,7 +41,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.footman import fail
+from livery.footman import fail, prog
 from livery.workshop._extensions import extension_content, stack_names
 from livery.workshop._fragment_engine import Fragment
 
@@ -100,12 +103,14 @@ def template_files(template: DeclaredTemplate) -> Path:
     return template.path.resolve().parent / "content" / TEMPLATES / template.name
 
 
-def installed_templates() -> dict[str, DeclaredTemplate]:
-    """Every installed template, by name: the base's and each installed extension's.
+def available_templates() -> dict[str, DeclaredTemplate]:
+    """Every template the base or an installed distribution declares, by name.
 
     Read from the declaration files alone, without judging the rest of
-    an extension's file or importing anything, and whether the
-    workspace lists the extension or not.
+    an extension's file or importing anything, and whatever the
+    workspace lists: a birth from a template the workspace does not
+    offer names the extension that declares it. `installed_templates`
+    is the ones a workspace offers.
 
     Raises:
         Failed: for a template two extensions declare, naming both, and
@@ -150,6 +155,27 @@ def installed_templates() -> dict[str, DeclaredTemplate]:
     return {name: held[0] for name, held in sorted(by_name.items())}
 
 
+def installed_templates(start: Path | None = None) -> dict[str, DeclaredTemplate]:
+    """The templates the workspace at or above *start* offers, by name.
+
+    The base's, and those of each extension the workspace's installed
+    set holds that an installed distribution declares. Outside a
+    workspace, the base's alone. Completion offers these, and a refusal
+    naming the installed templates names these.
+
+    Raises:
+        Failed: as `available_templates` does.
+    """
+    from livery.workshop._extensions import SELF, installed_set
+
+    held = {SELF, *installed_set(start)}
+    return {
+        name: template
+        for name, template in available_templates().items()
+        if template.extension in held
+    }
+
+
 def described(templates: Mapping[str, DeclaredTemplate]) -> str:
     """Each of *templates* on a line of its own, its name then its doc."""
     return "\n".join(
@@ -158,12 +184,17 @@ def described(templates: Mapping[str, DeclaredTemplate]) -> str:
 
 
 def template_chain(
-    name: str, templates: Mapping[str, DeclaredTemplate] | None = None
+    name: str,
+    templates: Mapping[str, DeclaredTemplate] | None = None,
+    *,
+    offered: Mapping[str, DeclaredTemplate] | None = None,
 ) -> tuple[DeclaredTemplate, ...]:
     """The templates a birth from *name* writes, in order: the one extended first.
 
     *name* is last, after the template it extends and that template's
-    own chain. *templates* is the installed ones, read when None.
+    own chain. The chain is read from *templates*, every available one
+    when None, and a refusal names *offered* as the installed
+    templates, *templates* when None.
 
     Raises:
         Failed: for a name no installed extension declares, an
@@ -171,11 +202,12 @@ def template_chain(
             back to a template of the chain; each refusal names the
             installed templates or the cycle.
     """
-    known = installed_templates() if templates is None else templates
+    known = available_templates() if templates is None else templates
+    listed = known if offered is None else offered
     if name not in known:
         fail(
             f"no installed template is named {name}; the installed templates"
-            f" are:\n{described(known)}"
+            f" are:\n{described(listed)}"
         )
     chain: list[DeclaredTemplate] = []
     current = name
@@ -193,11 +225,132 @@ def template_chain(
             fail(
                 f"the template {chain[-1].name} extends {current}, which no"
                 " installed extension declares; the installed templates are:"
-                f"\n{described(known)}"
+                f"\n{described(listed)}"
             )
         chain.append(template)
         current = template.extends
     return tuple(reversed(chain))
+
+
+def chain_needs(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
+    """The extensions a birth from *chain* needs, first met first.
+
+    Each template's ``extensions``, then the extension that declares
+    it, the base aside, from the template extended first to the one
+    born: a workspace offers a template while its installed set holds
+    the extension that declares it, and the template it extends with
+    it.
+    """
+    from livery.workshop._extensions import SELF
+
+    found: dict[str, None] = {}
+    for template in chain:
+        found.update(dict.fromkeys(template.extensions))
+        if template.extension != SELF:
+            found[template.extension] = None
+    return tuple(found)
+
+
+def birth_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
+    """The chain a birth from *name* writes in the workspace at *root*, once judged.
+
+    A birth needs every extension the chain names (`chain_needs`) in
+    the workspace's installed set, and each of them, with what it
+    requires, installed: a creation installs nothing, so a refusal
+    says what to list, and that ``fm sync`` installs it. This writes
+    nothing.
+
+    Raises:
+        Failed: in this order: for a template, or a template it
+            extends, that no installed extension declares while the
+            installed set holds an extension no installed distribution
+            declares yet, naming each and ``fm sync``; for a template
+            no installed extension declares, naming the installed
+            templates; for a chain that does not resolve; for an
+            extension the chain needs that the installed set does not
+            hold, naming each with its distribution, ``[workspace]
+            extensions`` and ``fm sync``; and for one it holds that no
+            installed distribution declares yet, naming each and ``fm
+            sync``.
+    """
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import (
+        installed_declaration,
+        installed_extensions,
+        installed_set,
+    )
+
+    available = available_templates()
+    held = installed_set(root)
+    offered = installed_templates(root)
+    present = set(installed_extensions())
+    unknown = _first_unknown(name, available)
+    waiting = [extension for extension in held if extension not in present]
+    if unknown and waiting:
+        what = (
+            f"no installed extension declares the template {name}"
+            if unknown == name
+            else f"the template {name} extends {unknown}, which no installed"
+            " extension declares"
+        )
+        fail(
+            f"{what}, and the workspace's lists hold {_with_distributions(waiting)},"
+            f" which no installed distribution declares yet: {_sync(waiting)}"
+        )
+    chain = template_chain(name, available, offered=offered)
+    needs = chain_needs(chain)
+    outside = [extension for extension in needs if extension not in held]
+    if outside:
+        them = "it" if len(outside) == 1 else "them"
+        fail(
+            f"the template {name} needs {_with_distributions(outside)}, which the"
+            f" workspace's lists do not hold: list {them} in [workspace] extensions"
+            f" and run `{prog()} sync`, then create the package again"
+        )
+    missing = [
+        extension
+        for extension in closure(needs, installed_declaration)
+        if extension not in present
+    ]
+    if missing:
+        fail(
+            f"the template {name} needs {_with_distributions(missing)}, which no"
+            f" installed distribution declares yet: {_sync(missing)}"
+        )
+    return chain
+
+
+def _first_unknown(name: str, known: Mapping[str, DeclaredTemplate]) -> str:
+    """The first template of *name*'s chain that *known* lacks; empty for none.
+
+    A chain that leads back to a template of it ends the walk, and
+    `template_chain` names the cycle.
+    """
+    seen: set[str] = set()
+    current = name
+    while current and current not in seen:
+        seen.add(current)
+        template = known.get(current)
+        if template is None:
+            return current
+        current = template.extends
+    return ""
+
+
+def _with_distributions(extensions: Sequence[str]) -> str:
+    """*extensions*, each with its distribution, as a sentence lists them."""
+    from livery.workshop._extensions import (
+        _spoken,  # pyright: ignore[reportPrivateUsage]
+        distribution_of,
+    )
+
+    return _spoken([f"{name} ({distribution_of(name)})" for name in extensions])
+
+
+def _sync(extensions: Sequence[str]) -> str:
+    """The end of a refusal while *extensions* are held and not installed yet."""
+    them = "it" if len(extensions) == 1 else "them"
+    return f"run `{prog()} sync`, which installs {them}, then create the package again"
 
 
 def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
@@ -205,13 +358,11 @@ def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
 
     Raises:
         Failed: for a template of the chain whose directory of files is
-            missing, and for a born template listing an extension no
-            installed distribution declares, or a list whose
-            requirements order no start.
+            missing, and for a list whose requirements order no start.
     """
     from livery.workshop._composition import OrderCycle, canonical
     from livery.workshop._declaration import DeclarationError
-    from livery.workshop._extensions import GROUP, installed_declaration
+    from livery.workshop._extensions import installed_declaration
 
     for template in chain:
         files = template_files(template)
@@ -222,13 +373,6 @@ def _judged(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
             )
     born = chain[-1]
     try:
-        for name in born.extensions:
-            if installed_declaration(name) is None:
-                fail(
-                    f"the template {born.name} lists {name}, which no installed"
-                    f" distribution declares in {GROUP}; install it, or birth the"
-                    " package from another template"
-                )
         return canonical(born.extensions, installed_declaration)
     except (DeclarationError, OrderCycle) as error:
         fail(f"the template {born.name}: {error}")
@@ -363,17 +507,19 @@ def create_package(
     (`template_chain`). The files read the born template's
     ``extensions``, in their canonical form, as ``package_extensions``,
     spelled as a contract spells the list: the contract writes it.
-    Nothing is written until every template of the chain is judged.
+    Nothing is written until every template of the chain is judged,
+    and nothing is installed: the workspace at *root* holds and has
+    installed every extension the chain needs (`birth_chain`).
 
     Raises:
-        Failed: for a template no installed extension declares, a chain
-            that does not resolve, a template whose files are missing,
-            and a born template listing an extension a package cannot
-            list; each refusal names what to change.
+        Failed: for a template the workspace cannot take
+            (`birth_chain`), a template whose files are missing, and a
+            born template whose list's requirements order no start; each
+            refusal names what to change.
     """
     from livery.workshop._contract import spelled_list
 
-    chain = template_chain(template)
+    chain = birth_chain(root, template)
     listed = _judged(chain)
     full = {**data, "package_extensions": spelled_list(listed)}
     return create(root, destination, PACKAGE_BASE, full, templates=chain)

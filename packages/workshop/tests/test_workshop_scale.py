@@ -148,10 +148,17 @@ def test_generate_renders_each_member_then_the_project_once(
     monkeypatch.setattr(
         _scale, "_commit", lambda root, subject: committed.append(subject)
     )
+    contract = tmp_path / "workshop.toml"
+    contract.write_text('[workspace]\nextensions = ["python"]\n')
     members = _scale.generate(tmp_path, {"python-library": 3, "cpp-library": 1})
     assert rendered == members and len(members) == 4
     assert applied == [tmp_path]
     assert committed == ["chore: 4 generated members"]
+    # The root lists what cpp-library needs before the members are
+    # created, as its canonical list: a creation installs nothing.
+    assert contract.read_text() == (
+        '[workspace]\nextensions = ["cmake", "conan", "python"]\n'
+    )
     # Each edge is in the contract and the manifest, at one floor.
     leaf = tmp_path / "packages" / "scale-p002"
     assert (

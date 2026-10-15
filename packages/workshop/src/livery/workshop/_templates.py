@@ -340,17 +340,21 @@ def drift_check(files: frozenset[str] | None = None) -> None:
 
 
 def template_names() -> list[str]:
-    """The installed templates' names, which completion offers."""
+    """The names of the templates the workspace offers, which completion offers.
+
+    The base's, and those of the extensions the workspace's installed
+    set holds.
+    """
     from livery.workshop._seeds import installed_templates
 
     return list(installed_templates())
 
 
-def _installed() -> str:
-    """The installed templates, each on a line with its doc, for a refusal."""
+def _installed(root: Path) -> str:
+    """The templates *root* offers, each on a line with its doc, for a refusal."""
     from livery.workshop._seeds import described, installed_templates
 
-    return described(installed_templates())
+    return described(installed_templates(root))
 
 
 @new.task(name="package")
@@ -370,14 +374,28 @@ def new_package(
     and of each template it extends, the one extended first, into
     ``packages/<name>``, with the distribution named
     ``<namespace>-<name>`` and the contract listing the template's
-    extensions. Without a template it refuses, naming each installed
-    one with its doc. Then the runner the workspace's environment holds
-    wires the member, run as ``new.package <name> --resume``: it writes
-    the project files again so every per-package list picks the member
-    up, and locks and syncs the environment and the tools. A process
-    mounts the extensions the packages hold when it starts, and the
-    project files and the tool lock read that mount, so a process
-    started after the member exists writes them. ``--resume`` wires a
+    extensions. The installed templates are the base's and those of
+    the extensions the workspace's installed set holds: the root list's
+    set and every package's. Without a template it refuses, naming
+    each installed one with its doc.
+
+    A creation installs nothing. A template needs its own
+    ``extensions``, those of each template it extends, and the
+    extension that declares each template of that chain, the base
+    aside. Before anything is written it refuses, in this order: a
+    template no installed extension declares while the workspace's
+    lists hold an extension that is not installed yet, naming each and
+    ``fm sync``; a template no installed extension declares, naming the
+    installed templates; a template that needs an extension the
+    workspace's lists do not hold, naming each with its distribution,
+    to list in ``[workspace] extensions`` before ``fm sync``; and a
+    template that needs an extension the lists hold and no installed
+    distribution declares yet, naming each and ``fm sync``.
+
+    Then the runner the workspace's environment holds wires the member,
+    run as ``new.package <name> --resume``: it writes the project files
+    again so every per-package list picks the member up, and locks and
+    syncs the environment and the tools. ``--resume`` wires a
     member that exists, which is also the recovery after a wiring that
     stopped part way. A member that does not hold python joins the
     roster without a dev-group entry: there is no distribution to
@@ -393,13 +411,13 @@ def new_package(
         fail(
             "--kind is not an option: a package is born from a template, the word"
             f" after its name; write `{prog} new.package {name} {wanted}`. The"
-            f" installed templates are:\n{_installed()}"
+            f" installed templates are:\n{_installed(root)}"
         )
     if not template:
         fail(
             f"name the template packages/{name} is born from:"
             f" `{prog} new.package {name} <template>`; the installed templates"
-            f" are:\n{_installed()}"
+            f" are:\n{_installed(root)}"
         )
     render_member(root, name, template)
     runner = runner_script(root / ".venv")
@@ -418,12 +436,8 @@ def wire_member(root: Path, name: str) -> None:
 
     Writes the composed and generated files again, so every
     per-package list picks the member up, then locks and syncs the
-    environment and the tools. The files and the tool lock read the
-    extensions this process mounted, and a process mounts what the
-    packages hold when it starts: run in a process started before the
-    member existed, the files it writes lack what the member brings
-    and differ from what the next command renders, so ``new.package``
-    runs it in a fresh runner.
+    environment and the tools. ``new.package`` runs it in the runner
+    the workspace's environment holds.
 
     Raises:
         Failed: when *name* breaks the package naming rule, or

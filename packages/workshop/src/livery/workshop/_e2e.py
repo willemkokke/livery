@@ -601,16 +601,29 @@ class LoopMember:
     def listed(self) -> tuple[str, ...]:
         """The extensions the member's contract lists, from its template.
 
-        The installed template's ``extensions`` in their canonical form,
-        which a birth writes into the contract, so the loop and the
-        birth name one list.
+        The template's ``extensions`` in their canonical form, which a
+        birth writes into the contract, so the loop and the birth name
+        one list. The template is read from every available one,
+        whatever the driving checkout's lists hold: the loop's
+        workspace, not the driver's, creates the member.
         """
         from livery.workshop._composition import canonical
         from livery.workshop._extensions import installed_declaration
-        from livery.workshop._seeds import installed_templates
+        from livery.workshop._seeds import available_templates
 
-        declared = installed_templates()[self.template]
+        declared = available_templates()[self.template]
         return canonical(declared.extensions, installed_declaration)
+
+    def needs(self) -> tuple[str, ...]:
+        """The extensions the loop's root lists before the member is created.
+
+        Those its template's chain needs: each template's
+        ``extensions`` and the extension declaring it, since a creation
+        installs nothing.
+        """
+        from livery.workshop._seeds import chain_needs, template_chain
+
+        return chain_needs(template_chain(self.template))
 
     def holds(self) -> tuple[str, ...]:
         """The extensions the member's set holds: its list and what it requires."""
@@ -1921,18 +1934,21 @@ def steps_declared_off(name: str) -> tuple[str, ...]:
 def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The list a pass births to test extension *name*, and the members it lands.
 
-    The list is *name* alone: its set takes in what it requires. The
-    steps it declares off are turned on in the newborn's contract
-    ([livery.workshop._e2e.steps_declared_off][]), so each of its steps
-    registers. The members are the loop's whose sets hold an extension
-    *name*'s steps name, by name (`landed_members`), so each step has
-    something of its own to judge.
+    The members are the loop's whose sets hold an extension *name*'s
+    steps name, by name (`landed_members`), so each step has something
+    of its own to judge. The list is *name* and what those members'
+    templates need (`LoopMember.needs`), as their canonical list: a
+    creation installs nothing, so the root lists them before the
+    members are created, and the set takes in what each requires. The
+    steps *name* declares off are turned on in the newborn's contract
+    (`steps_declared_off`), so each of its steps registers.
 
     Raises:
         Failed: when no installed distribution declares *name*, naming
             the installed ones; when *name* registers no step.
     """
     from livery.workshop._extensions import declaration, installed_extensions
+    from livery.workshop._new_project import canonical_extensions
 
     found = declaration(name)
     if found is None:
@@ -1948,7 +1964,9 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             " nothing of its own to run"
         )
     named = {extension for record in steps for extension in record.extensions}
-    return (name,), landed_members(named)
+    members = landed_members(named)
+    needs = [needed for member in members_for(members) for needed in member.needs()]
+    return tuple(canonical_extensions([name, *needs])), members
 
 
 def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
@@ -3219,19 +3237,22 @@ SITE = "docs"
 
 
 def loop_stack() -> tuple[str, ...]:
-    """The extensions a plain pass's birth lists: the stock list without the site.
+    """The extensions a plain pass's birth lists, as their canonical list.
 
-    The site is the docs extension and every stock entry whose
-    declaration requires it, directly or through another: the docs
-    extension puts a docs job on every run of the loop's project, for a
-    site nothing in a pass reads, and an extension that requires it
-    brings it into the root's set. The pass proves the gate, the release
-    train and the points, and ``fm ci.e2e --extension=docs`` proves the
-    docs extension on its own. A stock entry no installed distribution
-    declares requires nothing and stays.
+    The stock list without the site, and what the loop's members'
+    templates need (`LoopMember.needs`): a creation installs nothing,
+    so the root lists them before the members are created. The site is
+    the docs extension and every stock entry whose declaration requires
+    it, directly or through another: the docs extension puts a docs job
+    on every run of the loop's project, for a site nothing in a pass
+    reads, and an extension that requires it brings it into the root's
+    set. The pass proves the gate, the release train and the points,
+    and ``fm ci.e2e --extension=docs`` proves the docs extension on its
+    own. A stock entry no installed distribution declares requires
+    nothing and stays.
     """
     from livery.workshop._extensions import SELF, installed_declaration
-    from livery.workshop._new_project import birth_extensions
+    from livery.workshop._new_project import birth_extensions, canonical_extensions
 
     def builds_the_site(name: str, seen: frozenset[str]) -> bool:
         if name == SITE:
@@ -3244,11 +3265,13 @@ def loop_stack() -> tuple[str, ...]:
             if other not in seen
         )
 
-    return tuple(
+    stock = [
         entry
         for entry in birth_extensions([SELF])
         if not builds_the_site(entry, frozenset())
-    )
+    ]
+    needs = [needed for member in LOOP_MEMBERS for needed in member.needs()]
+    return tuple(canonical_extensions([*stock, *needs]))
 
 
 def _listed_extensions(root: Path) -> frozenset[str]:

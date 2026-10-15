@@ -1582,11 +1582,22 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered step of the test phase runs.
 
     Each by the rule a step judges a unit by (`judges_unit`): a member
-    by its set, and the workspace's own tests by the root's set.
+    by its set, and the workspace's own tests by the root's set. A step
+    of package scope runs over one member at a time and never over the
+    workspace's own tests, so a root whose set holds cmake leaves them
+    untested by its ctest step.
     """
+    from livery.workshop._packages import WORKSPACE_TESTS
+
     tests = [record for record in _STEPS.values() if record.phase == "test"]
     return tuple(
-        unit for unit in units if any(judges_unit(record, unit) for record in tests)
+        unit
+        for unit in units
+        if any(
+            judges_unit(record, unit)
+            and not (unit.path == WORKSPACE_TESTS and record.scope == PACKAGE)
+            for record in tests
+        )
     )
 
 
@@ -1595,9 +1606,10 @@ def tested_suite(root: Path) -> Package | None:
 
     The unit ([livery.workshop.workspace_suite][]) by the rule
     [livery.workshop.scoped_suite][] applies to one step, asked of
-    every step of the test phase: a step runs it while the root's set
-    holds an extension the step names. None when the workspace has no
-    ``tests`` directory, or when no test step judges the unit.
+    every step of the test phase (`tested`): a step of workspace scope
+    runs it while the root's set holds an extension the step names.
+    None when the workspace has no ``tests`` directory, or when no test
+    step judges the unit.
     """
     from livery.workshop._packages import workspace_suite
 

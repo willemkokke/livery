@@ -63,12 +63,20 @@ def seed_into(destination: Path, seeded: str, data: Mapping[str, Any]) -> Path:
     ``project`` is the workspace's seed tree. Any other name is a
     template (`python-library`, ...), whose birth writes the
     `package-base` seeds, then the files of its chain. The seeds come
-    from the base alone, through a scratch workspace listing no
-    extensions; *data* overrides `SEED_DEFAULTS`, and the derived names
-    follow the package's name.
+    from the base alone, through a scratch workspace listing what the
+    template needs and nothing else, since a birth installs nothing;
+    *data* overrides `SEED_DEFAULTS`, and the derived names follow the
+    package's name.
     """
     from livery.workshop._identity import default_description
-    from livery.workshop._seeds import PROJECT, create, create_package, derived
+    from livery.workshop._seeds import (
+        PROJECT,
+        chain_needs,
+        create,
+        create_package,
+        derived,
+        template_chain,
+    )
 
     full = {**SEED_DEFAULTS, **data}
     if "package_name" in full:
@@ -77,10 +85,13 @@ def seed_into(destination: Path, seeded: str, data: Mapping[str, Any]) -> Path:
             default_description(full["package_name"], full["project_name"]),
         )
         full.update(derived(full))
+    needs = () if seeded == PROJECT else chain_needs(template_chain(seeded))
+    listed = ", ".join(f'"{name}"' for name in needs)
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         (root / "workshop.toml").write_text(
-            "[workspace]\n" + IDENTITY + "extensions = []\n", encoding="utf-8"
+            "[workspace]\n" + IDENTITY + f"extensions = [{listed}]\n",
+            encoding="utf-8",
         )
         if seeded == PROJECT:
             create(root, destination, PROJECT, full)

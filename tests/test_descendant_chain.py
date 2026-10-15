@@ -46,6 +46,11 @@ NATIVE = ("clang-format", "clang-tidy")
 #: when it chooses its agent: the child adds it once it is born, and
 #: the brand's fragment and skill reach the child through it.
 AGENT = "claude"
+#: What the child's root lists before it creates its C++ library and its
+#: nanobind extension: what their templates need, cmake for the library
+#: and nanobind, which requires python, cpp and conan, for both. A
+#: creation installs nothing.
+TEMPLATED = ("cmake", "nanobind")
 
 
 #: The stock list and the brand's own extension, as their canonical list:
@@ -67,15 +72,22 @@ def _spelled(names: tuple[str, ...] | list[str]) -> str:
     return "extensions = [" + ", ".join(f'"{name}"' for name in names) + "]"
 
 
-def _list_also(contract: Path, *names: str) -> None:
-    """Add *names* to *contract*'s root list, written as its canonical list.
+def _canonical(names: tuple[str, ...] | list[str]) -> list[str]:
+    """*names* as their canonical list, as the declarations installed here compose it.
 
-    None of the extensions these lists name requires another listed one,
-    so the canonical list is the names in alphabetical order.
+    The brand's own extension is not installed here, so it requires
+    nothing, as in the child.
     """
+    from livery.workshop._new_project import canonical_extensions
+
+    return canonical_extensions(names)
+
+
+def _list_also(contract: Path, *names: str) -> None:
+    """Add *names* to *contract*'s root list, written as its canonical list."""
     text = contract.read_text()
     listed = tomllib.loads(text)["workspace"]["extensions"]
-    written = _spelled(sorted({*listed, *names}))
+    written = _spelled(_canonical([*listed, *names]))
     contract.write_text(
         re.sub(r"^extensions = \[.*\]$", written, text, count=1, flags=re.M)
     )
@@ -347,7 +359,7 @@ def _chain(
         from livery.workshop._e2e import checkout_index
         from livery.workshop._new_project import birth_extensions
 
-        checkout_index(ROOT, index, [*birth_extensions(()), *NATIVE, AGENT])
+        checkout_index(ROOT, index, [*birth_extensions(()), *TEMPLATED, *NATIVE, AGENT])
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir(exist_ok=True)
     # The tool store is a content-addressed cache every checkout on
@@ -540,10 +552,10 @@ def _chain(
     # The stack is the App's own (contract 19), and the workflows are
     # branded: the emitted gate calls the brand by name.
     child_contract = (child / "workshop.toml").read_text()
-    # The resumed pass finds the agent's and the native extensions the
-    # first one listed.
-    added = (AGENT, *NATIVE) if resumed else ()
-    assert _spelled(sorted({*BORN, *added})) in child_contract
+    # The resumed pass finds the agent's, the templates' and the native
+    # extensions the first one listed.
+    added = (AGENT, *TEMPLATED, *NATIVE) if resumed else ()
+    assert _spelled(_canonical([*BORN, *added])) in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's replacement reached the child's composed file.
@@ -625,6 +637,10 @@ def _chain(
         "CONAN_HOME": str(tmp_path / "conan-home"),
     }
     if not resumed:
+        # The child lists what the two templates need, and its sync
+        # installs it: a creation installs nothing.
+        _list_also(child / "workshop.toml", *TEMPLATED)
+        _run([str(brand_cli), "sync"], child, _hermetic(env, tool))
         for member_name, template in (
             ("geometry", "cpp-library"),
             ("ext", "nanobind-module"),

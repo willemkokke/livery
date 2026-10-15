@@ -197,6 +197,57 @@ def test_a_root_without_a_contract_writes_nothing(tmp_path: Path) -> None:
     assert not (tmp_path / "workshop.toml").exists()
 
 
+def test_a_root_list_the_writer_does_not_read_refuses_a_name_added_to_it(
+    tmp_path: Path,
+) -> None:
+    contract = tmp_path / "workshop.toml"
+    text = 'workspace.extensions = ["acme.zeta"]\n'
+    contract.write_text(text)
+    with pytest.raises(
+        _FAILURES, match=re.escape("no [workspace] extensions array to add to")
+    ):
+        _extensions.list_in_root(tmp_path, ["acme.alpha"])
+    assert contract.read_text() == text
+
+
+def test_names_added_to_the_root_list_join_it_written_as_its_canonical_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        brand='[extension]\nrequires = ["acme.base"]\n',
+        base="",
+        zeta="",
+    )
+    contract = tmp_path / "workshop.toml"
+    contract.write_text(
+        "[workspace]\n"
+        "extensions = [\n"
+        "    # The base, which the brand requires.\n"
+        '    "acme.base",\n'
+        "    # The last one.\n"
+        '    "acme.zeta",\n'
+        "]\n"
+    )
+    # A name the list holds stays as it is, a new one joins, and an entry
+    # the new one requires leaves the list with its comments.
+    assert _extensions.list_in_root(tmp_path, ["acme.zeta", "acme.brand"]) == [
+        '  layering: [workspace] extensions is ["acme.brand", "acme.zeta"], its'
+        " canonical list"
+    ]
+    assert contract.read_text() == (
+        "[workspace]\n"
+        "extensions = [\n"
+        '    "acme.brand",\n'
+        "    # The last one.\n"
+        '    "acme.zeta",\n'
+        "]\n"
+    )
+    # Nothing new, nothing written.
+    assert _extensions.list_in_root(tmp_path, ["acme.brand"]) == []
+
+
 # Then what an extension declares, written and named.
 
 
@@ -763,8 +814,13 @@ def test_a_workspace_listing_coverage_without_docs_mounts(tmp_path: Path) -> Non
     assert _extensions.resolved_targets(tmp_path)["coverage"] == ()
     from livery.footman import _registry as registry
 
+    # The stack names nanobind, so its set takes in python, cpp and conan,
+    # and the mount takes the whole set.
     with registry.capture():
-        assert _extensions.mount_extensions(tmp_path) == stack
+        assert _extensions.mount_extensions(tmp_path) == _extensions.installed_set(
+            tmp_path
+        )
+    assert set(stack) < set(_extensions.installed_set(tmp_path))
 
 
 #: A phase outside the gate, declared by an extension that adds no step to it.

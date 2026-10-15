@@ -154,8 +154,9 @@ spelling. Every key is optional:
   `extensions`, the extensions such a package lists; and
   `extends`, another template whose files the birth writes first. Its
   files live under `content/templates/<name>/` beside the
-  `extension.toml`. A template is read while it is installed, listed or
-  not, and at a birth alone.
+  `extension.toml`. A workspace offers a template while its installed
+  set holds the extension that declares it, and reads it at a birth
+  alone.
 
 A step whose verdict is its tool's exit code is the tool's words, and
 needs no code:
@@ -483,17 +484,19 @@ environment holds, which `fm sync` installs.
 
 `fm new.package <name> <template>` creates a package under
 `packages/<name>` from a template an installed extension declares, and
-wires it into the workspace. Completion offers the installed templates,
-and the verb without one refuses, naming each with its `doc`. The birth
-writes the `package-base` seeds every package starts from, the base's
-docs page and what the listed extensions add to it, then the files of
-each template the born one extends, the template extended first and the
-born one last; for a path two of them write, the later one wins. The
+wires it into the workspace. The installed templates are the base's and
+those of each extension the installed set holds that an installed
+distribution declares; completion offers them, and the verb without
+one refuses, naming each with its `doc`. The birth writes the
+`package-base` seeds every package starts from, the base's docs page
+and what the listed extensions add to it, then the files of each
+template the born one extends, the template extended first and the born
+one last; for a path two of them write, the later one wins. The
 package's contract lists the born template's `extensions` in their
 canonical form. Every written file is the workspace's own from then on,
 and nothing records the template: an extension that needs to know what
 a package is reads it from the package's own manifests, as python reads
-its scripts. The installed templates:
+its scripts. The templates the workshop's wheel declares:
 
 | Template | Declared by | Lists | Extends |
 |---|---|---|---|
@@ -504,11 +507,30 @@ its scripts. The installed templates:
 | `cpp-library` | conan | `["cmake", "conan"]` | |
 | `cpp-executable` | conan | `["cmake", "conan"]` | `cpp-library` |
 
-A template that lists an extension no installed distribution declares
-refuses the birth, naming it, and so does an `extends` that leads back
-to the template, or one that names a template nobody declares. Two
-extensions declaring one template refuse every birth, naming both. A
-package's contract that writes `template` refuses: the template is
+A creation installs nothing. A template needs its own `extensions`,
+those of each template it extends, and the extension that declares each
+template of that chain, the base aside. A birth refuses before it
+writes anything, in this order:
+
+1. A template no installed extension declares, while the workspace's
+   lists hold an extension no installed distribution declares yet,
+   refuses naming each such extension and `fm sync`, which installs it.
+2. A template no installed extension declares refuses, naming the
+   installed templates.
+3. A template whose `extends` leads back to it, or names a template
+   nobody declares, refuses naming the cycle or the installed
+   templates.
+4. A template that needs an extension the workspace's lists do not
+   hold refuses, naming each with its distribution: list it in
+   `[workspace] extensions` and run `fm sync`, then create the package.
+5. A template that needs an extension the lists hold and no installed
+   distribution declares yet refuses, naming each and `fm sync`.
+
+So a workspace whose root lists the stock list creates a
+`python-library` at once, and lists `cmake` and `conan` before it
+creates a `cpp-library`.
+Two extensions declaring one template refuse every birth, naming both.
+A package's contract that writes `template` refuses: the template is
 read at the birth alone.
 
 From any directory inside a workspace, a verb resolves the workspace

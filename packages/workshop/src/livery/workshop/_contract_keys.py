@@ -83,8 +83,8 @@ BASE_FILE = Path(__file__).with_name("contract.toml")
 #: The top-level tables of ``extension.toml`` that ``[for.<target>]``
 #: does not take again: the extension's identity, the targets table
 #: itself, and the contract keys it owns, which no target changes, and
-#: the templates it declares, which a birth reads whether a workspace
-#: lists the extension or not.
+#: the templates it declares, each of which names the extensions it
+#: needs in its own ``extensions``.
 _UNMIRRORED = ("extension", "for", "contract", "templates")
 
 
