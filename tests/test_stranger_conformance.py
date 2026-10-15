@@ -62,10 +62,18 @@ _CONTRACT = (
 #: sources declare them, so uv sees one URL for each. They go in the
 #: composed project file's region, which a sync keeps.
 _LOCAL_SOURCES = "".join(
-    f"[tool.uv.sources.livery-{name}]\n"
-    f'path = "{(ROOT / "packages" / name).as_posix()}"\n'
+    f"[tool.uv.sources.{distribution}]\n"
+    f'path = "{(ROOT / "packages" / member).as_posix()}"\n'
     "editable = true\n"
-    for name in ("workshop", "forge", "toolroom", "footman")
+    for distribution, member in (
+        ("livery-workshop", "workshop"),
+        ("livery-forge", "forge"),
+        ("livery-toolroom", "toolroom"),
+        ("livery-footman", "footman"),
+        # The drive's root lists cmake, which ships as a distribution of
+        # its own.
+        ("livery-extensions-cmake", "extensions/cmake"),
+    )
 )
 
 _END_TABLES = "# -- workshop: end tables --"

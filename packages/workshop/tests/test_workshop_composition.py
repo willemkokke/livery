@@ -29,6 +29,7 @@ from workshop_extension_fakes import (
     package_contract,
     root_contract,
 )
+from workshop_installed import skip_unless_installed
 
 #: An extension's identity, the start of most fakes here.
 PACKAGE = "[extension]\n"
@@ -536,6 +537,7 @@ def test_what_composes_a_package_is_read_from_the_declarations(
 
 
 def test_the_proof_composes_exactly_cmake_conan_cpp_nanobind_python() -> None:
+    skip_unless_installed("cmake")
     composing = [
         name
         for name in _extensions.installed_extensions()

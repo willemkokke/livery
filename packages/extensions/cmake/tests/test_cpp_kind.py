@@ -122,7 +122,9 @@ def _listing_coverage(root: Path) -> None:
     (root / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
 
 
-#: The workspace a birth's seeds are written from: its identity alone.
+#: The workspace a birth's seeds are written from: its identity, and the
+#: extensions conan's ``cpp-library`` template needs, which its root
+#: lists before the creation, since a creation installs nothing.
 _IDENTITY = """\
 [workspace]
 name = "acme"
@@ -130,7 +132,7 @@ description = "The acme monorepo (virtual root)."
 namespace = "acme"
 authors = [{ name = "Acme", email = "dev@acme.test" }]
 copyright-year = "2026"
-extensions = []
+extensions = ["cmake", "conan"]
 """
 
 #: What a birth's data carries beyond the package's own names.
@@ -151,7 +153,8 @@ _FACTS = {
 
 def _render_cpp(tmp_path: Path) -> Package:
     """A cpp-conan package, straight from conan's ``cpp-library`` template."""
-    from livery.workshop._extensions import composed_set
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
     from livery.workshop._seeds import create_package, derived
     from livery.workshop._shipped_files import settle_package
 
@@ -167,7 +170,7 @@ def _render_cpp(tmp_path: Path) -> Package:
         create_package(Path(scratch), destination, "cpp-library", data)
     # The native configs come from the step records, as they do at a
     # birth: the template ships none.
-    settle_package(destination, composed_set(("cmake", "conan")))
+    settle_package(destination, closure(("cmake", "conan"), installed_declaration))
     return _package(destination, "acme-native", "cmake", "conan")
 
 

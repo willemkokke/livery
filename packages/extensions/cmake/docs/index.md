@@ -6,8 +6,8 @@
 
 CMake as an extension of the workshop: the gate build of a CMake
 project, configured, compiled and tested through ctest, in whatever
-language the project builds. It is a package-level extension, so a
-package turns it on by listing it in its own contract:
+language the project builds. A package turns it on by listing it in
+its own contract:
 
 ```toml
 extensions = ["cmake", "conan"]

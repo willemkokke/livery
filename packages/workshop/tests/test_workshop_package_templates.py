@@ -256,6 +256,7 @@ def test_a_creation_runs_no_lock_or_sync_before_it_renders(
     from workshop_composed import compose_into
     from workshop_members import wired_here
 
+    skip_unless_installed("cmake")
     root = compose_into(_workspace(tmp_path / "acme", "python"))
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root

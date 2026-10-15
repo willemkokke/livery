@@ -43,7 +43,7 @@ def registered() -> Iterator[tuple[StepRecord, ...]]:
         restore(state)
 
 
-def test_its_own_distribution_ships_cmake_as_a_package_level_extension() -> None:
+def test_its_own_distribution_ships_cmake() -> None:
     from importlib.metadata import distribution
 
     from livery.workshop._extensions import declaration, shipping_distribution
@@ -58,7 +58,6 @@ def test_its_own_distribution_ships_cmake_as_a_package_level_extension() -> None
     assert shipped is not None and shipped.name == "livery-extensions-cmake"
     declared = declaration("cmake")
     assert declared is not None
-    assert declared.levels == ("package",)
     # cmake names no language: a package lists it alone and builds with
     # the compilers the host provides.
     assert declared.requires == ()

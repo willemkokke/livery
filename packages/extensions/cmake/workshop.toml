@@ -4,7 +4,7 @@
 # The package contract: everything the workshop knows about this
 # package it learns here. Declare dependencies on other workspace
 # members as [[depends]] edges with a kind and a floor.
-# The package-level extensions this package is composed of.
+# The extensions this package is composed of.
 extensions = ["python"]
 name = "livery-extensions-cmake"
 description = "CMake as an extension of the livery workshop: a package's gate build, configured and compiled with Ninja, its tests run through ctest, and its native suites measured for coverage."

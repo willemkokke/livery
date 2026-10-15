@@ -587,6 +587,8 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
 
 
 def test_every_template_here_composes() -> None:
+    # conan's C++ templates list cmake.
+    skip_unless_installed("cmake")
     from livery.footman import installed_entry_points
     from livery.workshop._extensions import extension_package
     from livery.workshop._seeds import available_templates
@@ -920,20 +922,18 @@ def _checks_package(*extensions: str) -> Package:
 
 
 def test_the_builtin_steps_pass_every_clause() -> None:
-    from livery.workshop._composition import package_level
-    from livery.workshop._extensions import installed_declaration, installed_extensions
+    from livery.workshop._extensions import composes_per_package, installed_extensions
 
     subject = builtin_subject()
     # A package that lists nothing, and one listing each installed
-    # package-level extension: those the workshop's wheel ships, and
-    # those of their own distributions installed here, such as cmake.
-    installed = {
-        (name,)
-        for name in installed_extensions()
-        if package_level(name, installed_declaration)
+    # extension that composes something in a package: those the
+    # workshop's wheel ships, and those of their own distributions
+    # installed here, such as cmake.
+    composing = {
+        (name,) for name in installed_extensions() if composes_per_package(name)
     }
-    assert installed >= {("conan",), ("cpp",), ("nanobind",), ("python",)}
-    assert set(subject.sets) == {(), *installed}
+    assert composing >= {("conan",), ("cpp",), ("nanobind",), ("python",)}
+    assert set(subject.sets) == {(), *composing}
     assert {record.name for record in subject.steps} == {
         "drift.check",
         "provenance.check",
