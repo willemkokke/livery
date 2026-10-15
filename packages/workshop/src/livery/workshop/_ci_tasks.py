@@ -400,11 +400,72 @@ def follow_run(
         pace.rest(repo)
 
 
+def _short_ref(ref: str) -> str:
+    """*ref* as a forge names a run's ref: ``refs/heads/main`` is ``main``."""
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if ref.startswith(prefix):
+            return ref[len(prefix) :]
+    return ref
+
+
+def remote_head(root: Path, ref: str) -> str:
+    """The commit branch *ref* names on origin; empty for a tag or a missing branch.
+
+    The commit a dispatched run checks out, read just before the
+    dispatch. A tag names one commit for good, so only a branch is
+    read. An unreachable origin refuses, naming git's words.
+    """
+    name = ref if ref.startswith("refs/") else f"refs/heads/{ref}"
+    if not name.startswith("refs/heads/"):
+        return ""
+    try:
+        return git.ls_remote(root, name).get(name, "")
+    except git.GitError as error:
+        fail(
+            f"cannot read {ref} on origin, the commit that tells the dispatched"
+            f" run from another: {error}"
+        )
+
+
+def _named(run: Run) -> str:
+    """One run as a refusal names it: id, ref, commit, page."""
+    return f"run {run.id} on {run.ref or '?'} at {run.head_sha[:10]} {run.url}"
+
+
+def own_runs(
+    runs: tuple[Run, ...],
+    *,
+    seen: set[int],
+    started: int | None,
+    ref: str,
+    head: str,
+) -> list[Run]:
+    """The runs among *runs* that may be the one a dispatch on *ref* started.
+
+    *started* is the id the forge's answer named, and settles it.
+    Without one, a run qualifies when it is a dispatched run, is not
+    in *seen* (the listing read just before the dispatch), checked
+    out *ref*, and, when *head* names a commit, checked out that
+    commit. A run of another ref never qualifies, however new.
+    """
+    if started is not None:
+        return [run for run in runs if run.id == started]
+    return [
+        run
+        for run in runs
+        if run.id not in seen
+        and run.event == "workflow_dispatch"
+        and _short_ref(run.ref) == _short_ref(ref)
+        and (not head or run.head_sha == head)
+    ]
+
+
 def dispatch_flow(
     repo: Repository,
     *,
     point: str,
     ref: str,
+    head: str = "",
     follow: bool = True,
     interval: float = 15,
     timeout: float = 1800,
@@ -418,10 +479,17 @@ def dispatch_flow(
     comma-separated, for a point that takes the input: a rehearsal
     names the loop alone. A name the point does not run, or *only* on
     a point without the input, refuses before anything is dispatched.
-    The dispatch is confirmed by the run that appears: one
-    the forge accepted but never listed within *register_timeout* is
-    reported with the verb that reads it later, exit 14. Without
-    *follow* the run is named and the exit is 18 while it moves.
+
+    The dispatch is confirmed by its own run: the one the forge's
+    answer names, or else the one dispatched run of *ref* that was
+    not listed before the dispatch and, when *head* is given, checked
+    out that commit, the one *ref* named just before. A run of another
+    ref is never followed. Two or more such runs refuse, naming each,
+    since the listing cannot tell which one this dispatch started.
+    None within *register_timeout* is reported with the verb that
+    reads the point later and the dispatched runs of other refs or
+    commits that did appear, exit 14. Without *follow* the run is
+    named and the exit is 18 while it moves.
     """
     import time
 
@@ -469,25 +537,42 @@ def dispatch_flow(
     workflow = workflow_of(point, root)
     seen = {run.id for run in point_runs(repo, point)}
     try:
-        repo.checks.dispatch(workflow, ref=ref, inputs=inputs or None)
+        started = repo.checks.dispatch(workflow, ref=ref, inputs=inputs or None)
     except Unsupported as exc:
         fail(f"this forge cannot dispatch a workflow: {exc}")
     except ForgeError as exc:
         fail(f"the forge refused the {point} dispatch on {ref}: {exc}")
     running = f", running {inputs[ONLY]} alone" if inputs.get(ONLY) else ""
-    print(f"  dispatched the {point} point on {ref} ({workflow}){running}")
+    at = f" at {head[:10]}" if head else ""
+    print(f"  dispatched the {point} point on {ref}{at} ({workflow}){running}")
     deadline = time.monotonic() + register_timeout
     while True:
-        new = [run for run in point_runs(repo, point) if run.id not in seen]
-        if new:
-            run = new[0]
+        runs = point_runs(repo, point)
+        own = own_runs(runs, seen=seen, started=started, ref=ref, head=head)
+        if len(own) > 1:
+            fail(
+                f"{len(own)} {point} runs started on {ref}{at} after this"
+                " dispatch, and the forge's answer named none of them, so it"
+                f" cannot tell which one is its own: {'; '.join(map(_named, own))}."
+                " Read them on the forge, or dispatch again once no other"
+                f" {point} dispatch on {ref} is starting"
+            )
+        if own:
+            run = own[0]
             break
         if time.monotonic() >= deadline:
             print(
-                f"  the dispatch was accepted but no {point} run appeared within"
-                f" {register_timeout:.0f}s; `{footman_prog()} ci.status"
-                f" --point={point}` reads one that appears later"
+                f"  the dispatch was accepted but no {point} run of {ref}{at}"
+                f" appeared within {register_timeout:.0f}s; `{footman_prog()}"
+                f" ci.status --point={point}` reads one that appears later"
             )
+            others = [
+                run
+                for run in runs
+                if run.id not in seen and run.event == "workflow_dispatch"
+            ]
+            if others:
+                print(f"  not its own: {'; '.join(map(_named, others))}")
             return EXIT_TIMEOUT
         time.sleep(interval)
     print(f"  {point}: run {run.id} {run.url}")
@@ -528,17 +613,21 @@ def ci_dispatch(
     tree it proved; the nightly's run waits for nobody, and this verb
     starts the same run now, so a failure only the nightly meets (a
     floor Python, a release's verification) is reproduced on demand.
-    Exits green 0, red 13 with the red jobs named, a run that never
-    registered or a wait that runs out 14, a forge unreachable for
-    five polls in a row 15, and, with ``--no-follow``, 18 while the
-    run moves. The merge point runs on a push alone, and the release
-    wave is the merge point's to dispatch.
+    The run followed is the dispatch's own: the one the forge names,
+    or the one dispatched run of *ref*, at the commit origin names for
+    it, that appeared after the dispatch. Two such runs refuse, naming
+    both. Exits green 0, red 13 with the red jobs named, a run that
+    never registered or a wait that runs out 14, a forge unreachable
+    for five polls in a row 15, and, with ``--no-follow``, 18 while
+    the run moves. The merge point runs on a push alone, and the
+    release wave is the merge point's to dispatch.
     """
-    repo, _root = _resolved()
+    repo, root = _resolved()
     code = dispatch_flow(
         repo,
         point=point,
         ref=ref,
+        head=remote_head(root, ref),
         follow=follow,
         interval=interval,
         timeout=timeout,

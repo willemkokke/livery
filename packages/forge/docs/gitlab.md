@@ -127,12 +127,12 @@ not commit statuses.
 | Method | GitLab | Semantics |
 | --- | --- | --- |
 | `status` | `GET /projects/:path/pipelines?sha=` | no pipelines is `none`; the skipped pipelines do not count as contexts (nothing ran); the newest remaining pipeline decides: `success` is `success`, `failed` and `canceled` are `failure`, every other state (`created`, `pending`, `running`, `canceling`, `manual`, and kin) is `pending` |
-| `runs` | `GET /projects/:path/pipelines?sha=&...` | one Run per pipeline, newest first, read only until a limit is met: `id` is the pipeline id, `workflow` is the pipeline's `name`, which only a dispatched pipeline carries, and `event` is the pipeline `source`. A workflow filter keeps the unnamed pipelines, since any workflow may own them |
+| `runs` | `GET /projects/:path/pipelines?sha=&...` | one Run per pipeline, newest first, read only until a limit is met: `id` is the pipeline id, `workflow` is the pipeline's `name`, which only a dispatched pipeline carries, `ref` is the pipeline's `ref`, and `event` is the pipeline `source`. A workflow filter keeps the unnamed pipelines, since any workflow may own them |
 | `jobs` | `GET /projects/:path/pipelines/:id/jobs` | job `id`, `name`, status and conclusion mapped as for pipelines |
 | `job_log` | `GET /projects/:path/jobs/:id/trace` | plain text |
 | `rerun` | `POST /projects/:path/pipelines/:id/retry` | retries failed and cancelled jobs, which is the `failed_only=True` contract; GitLab cannot re-run a whole pipeline under the same id, so `failed_only=False` also maps to retry and the docstring's "all of them" is best-effort here |
 | `cancel_run` | `POST /projects/:path/pipelines/:id/cancel` | GitLab answers 200 on an already finished pipeline, so the backend probes the pipeline first and raises the protocol's terminal-run `ForgeError` itself; a pipeline reads `canceling` (a live state) until its jobs acknowledge; `force=True` raises `Unsupported` naming `force_cancel` |
-| `dispatch` | `POST /projects/:path/pipeline` | `ref`, plus variables: the protocol's `workflow` travels as the `FORGE_WORKFLOW` variable and `inputs` as further variables, for the pipeline's own rules to route on |
+| `dispatch` | `POST /projects/:path/pipeline` | `ref`, plus variables: the protocol's `workflow` travels as the `FORGE_WORKFLOW` variable and `inputs` as further variables, for the pipeline's own rules to route on. GitLab answers with the pipeline it created, and the backend returns its `id` |
 
 ## Releases
 

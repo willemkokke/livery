@@ -1448,7 +1448,14 @@ the next reader needs.
 The nightly point runs the whole check with its own tests selected
 in, and never skips on the verified record or narrows.
 `fm ci.dispatch --point=nightly` starts the nightly now, on `main`
-unless `--ref` names another, and follows the run to its verdict;
+unless `--ref` names another, and follows the run to its verdict.
+The run it follows is its own: the one the forge's answer names
+(GitLab), or else the one dispatched run of that ref, at the commit
+origin names for it, that appeared after the dispatch. A run of
+another ref is never followed. When two such runs appear, as when two
+dispatches on one ref start together, it refuses and names both. When
+none appears within a minute, it says so, names the dispatched runs of
+other refs or commits that did, and exits 14.
 `fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
 the newest nightly run by workflow rather than by commit, so a
 failure only the nightly meets reaches a person through `fm`.

@@ -574,8 +574,174 @@ def test_ci_dispatch_reports_a_forge_refusal_and_a_run_that_never_registers(
     )
     assert code == EXIT_TIMEOUT
     out = capsys.readouterr().out
-    assert "no nightly run appeared within 0s" in out
+    assert "no nightly run of main appeared within 0s" in out
     assert "ci.status --point=nightly" in out
+    assert "not its own" not in out
+
+
+def _concurrent(
+    monkeypatch: pytest.MonkeyPatch,
+    repo: Repository,
+    *,
+    own: bool = True,
+    then: tuple[str, ...] = (),
+) -> None:
+    """Make the dispatch start its own run, then one more per ref in *then*.
+
+    Without *own* the dispatch's own run never registers. The runs of
+    *then* are created after this dispatch's, so they are the newest:
+    another dispatch landing at the same time, as when two worktrees
+    dispatch together.
+    """
+    original = repo.checks.dispatch
+
+    def dispatch(
+        workflow: str, *, ref: str, inputs: dict[str, str] | None = None
+    ) -> int | None:
+        started = original(workflow, ref=ref, inputs=inputs) if own else None
+        for other in then:
+            original(workflow, ref=other, inputs=inputs)
+        return started
+
+    monkeypatch.setattr(repo.checks, "dispatch", dispatch)
+
+
+def test_ci_dispatch_never_follows_a_newer_run_of_another_ref(
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, point_runs
+
+    fake, _root = rig
+    repo = _repo(fake)
+    main = fake.push(OWNER, NAME, "main")
+    fake.push(OWNER, NAME, "feat/other")
+    # This dispatch's run never registers, and another ref's run,
+    # created after it, does: exit 14, the other run named as not
+    # this dispatch's, never followed.
+    _concurrent(monkeypatch, repo, own=False, then=("feat/other",))
+    code = dispatch_flow(
+        repo, point="nightly", ref="main", head=main, interval=0, register_timeout=0
+    )
+    assert code == EXIT_TIMEOUT
+    out = capsys.readouterr().out
+    (other,) = point_runs(repo, "nightly")
+    assert f"no nightly run of main at {main[:10]} appeared within 0s" in out
+    assert f"not its own: run {other.id} on feat/other" in out
+    assert f"nightly: run {other.id}" not in out
+    # Both register, the other ref's last: this dispatch follows its own.
+    repo = _repo(fake)
+    _concurrent(monkeypatch, repo, then=("feat/other",))
+    code = dispatch_flow(repo, point="nightly", ref="main", head=main, follow=False)
+    assert code == EXIT_PENDING
+    newest, own, _ = point_runs(repo, "nightly")
+    assert newest.ref == "feat/other" and own.ref == "main"
+    assert f"nightly: run {own.id} " in capsys.readouterr().out
+
+
+def test_ci_dispatch_refuses_two_runs_of_its_ref_naming_both(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, point_runs
+
+    fake, _root = rig
+    repo = _repo(fake)
+    main = fake.push(OWNER, NAME, "main")
+    # Another dispatch on main at the same commit: the listing cannot
+    # tell the two apart, so the dispatch refuses and names both.
+    _concurrent(monkeypatch, repo, then=("main",))
+    with pytest.raises(_FAILURES) as caught:
+        dispatch_flow(repo, point="nightly", ref="main", head=main, follow=False)
+    message = str(caught.value)
+    second, first = point_runs(repo, "nightly")
+    assert f"2 nightly runs started on main at {main[:10]}" in message
+    assert f"run {first.id} on main at {main[:10]}" in message
+    assert f"run {second.id} on main at {main[:10]}" in message
+    assert "cannot tell which one is its own" in message
+
+
+def test_ci_dispatch_leaves_a_run_of_its_ref_at_another_commit(
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, point_runs
+
+    fake, _root = rig
+    repo: Repository = _repo(fake)
+    main = fake.push(OWNER, NAME, "main")
+    original = repo.checks.dispatch
+
+    def dispatch(
+        workflow: str, *, ref: str, inputs: dict[str, str] | None = None
+    ) -> int | None:
+        # This dispatch starts its run at main's head; a push lands, and
+        # another dispatch on main starts one at the new head.
+        started = original(workflow, ref=ref, inputs=inputs)
+        fake.push(OWNER, NAME, "main")
+        original(workflow, ref=ref, inputs=inputs)
+        return started
+
+    monkeypatch.setattr(repo.checks, "dispatch", dispatch)
+    code = dispatch_flow(repo, point="nightly", ref="main", head=main, follow=False)
+    assert code == EXIT_PENDING
+    newest, own = point_runs(repo, "nightly")
+    assert own.head_sha == main and newest.head_sha != main
+    out = capsys.readouterr().out
+    assert f"dispatched the nightly point on main at {main[:10]} (nightly.yml)" in out
+    assert f"nightly: run {own.id} " in out
+
+
+@pytest.mark.parametrize("names_run", [False, True], ids=["github-and-gitea", "gitlab"])
+def test_ci_dispatch_follows_its_own_run_on_each_forge_kind(
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    names_run: bool,
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
+
+    fake, _root = rig
+    # GitHub and Gitea answer a dispatch with no run; GitLab's answer
+    # names the pipeline it created.
+    fake.dispatch_names_run = names_run
+    repo = _repo(fake)
+    main = fake.push(OWNER, NAME, "main")
+    if names_run:
+        # The named run settles what the listing could not: another
+        # dispatch on main at the same commit is not followed.
+        _concurrent(monkeypatch, repo, then=("main",))
+    code = dispatch_flow(repo, point="nightly", ref="main", head=main, follow=False)
+    assert code == EXIT_PENDING
+    own = point_runs(repo, "nightly")[-1]
+    assert (own.ref, own.head_sha, own.event) == ("main", main, "workflow_dispatch")
+    assert f"nightly: run {own.id} " in capsys.readouterr().out
+    fake.settle(OWNER, NAME, main)
+    assert follow_run(repo, "nightly", own, interval=0, timeout=1) == 0
+    assert f"green: nightly run {own.id} success" in capsys.readouterr().out
+
+
+def test_remote_head_reads_a_branch_on_origin_and_refuses_an_unreachable_one(
+    rig: tuple[FakeForge, Path],
+) -> None:
+    from livery.workshop._ci_tasks import remote_head
+
+    _fake, root = rig
+    main = _git(root, "rev-parse", "origin/main").strip()
+    _git(root, "push", "origin", "main:refs/tags/v1")
+    # A branch reads as origin has it, by name or by full ref; a tag
+    # or a branch origin lacks reads as no commit.
+    assert remote_head(root, "main") == main
+    assert remote_head(root, "refs/heads/main") == main
+    assert remote_head(root, "refs/tags/v1") == ""
+    assert remote_head(root, "v1") == ""
+    assert remote_head(root, "nowhere") == ""
+    _git(root, "remote", "set-url", "origin", str(root / "gone.git"))
+    with pytest.raises(_FAILURES) as caught:
+        remote_head(root, "main")
+    assert "cannot read main on origin" in str(caught.value)
+    assert "gone.git" in str(caught.value)
 
 
 def test_ci_dispatch_starts_the_nightly_and_follows_it_to_its_verdict(

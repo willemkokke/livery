@@ -591,6 +591,7 @@ def _runs_jobs_log(driver: ForgeDriver) -> None:
     assert run.status == "completed"
     assert run.conclusion == "failure"
     assert run.created_at, "a run says when the forge accepted it"
+    assert run.ref == "one", f"a run names the branch it checked out: {run.ref!r}"
     jobs = repo.checks.jobs(run.id)
     assert jobs, "a run has jobs"
     assert jobs[0].conclusion == "failure"
@@ -668,14 +669,21 @@ def _cancel_run_force_declined(driver: ForgeDriver) -> None:
 
 
 def _dispatch(driver: ForgeDriver) -> None:
-    """Dispatch queues a run named after the workflow; a missing ref is refused."""
+    """Dispatch queues a run of the workflow on the ref; a missing ref is refused.
+
+    The run carries the ref it was dispatched on, and a forge whose
+    answer names the run names this one.
+    """
     repo = driver.fresh_repo()
-    repo.checks.dispatch("conf.yml", ref=_default_branch(driver, repo))
+    branch = _default_branch(driver, repo)
+    started = repo.checks.dispatch("conf.yml", ref=branch)
     run = driver.await_run(repo.owner, repo.name, event="workflow_dispatch")
     # The run names the workflow the dispatch asked for, so a caller
     # tells one dispatched workflow's runs from another's: a path on
     # GitHub, a file on Gitea, the pipeline's name on GitLab.
     assert run.workflow.rsplit("/", 1)[-1] == "conf.yml", run.workflow
+    assert run.ref == branch, run.ref
+    assert started is None or started == run.id, (started, run.id)
     try:
         repo.checks.dispatch("conf.yml", ref="no-such-ref")
     except ForgeError:

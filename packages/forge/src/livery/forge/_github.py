@@ -1112,6 +1112,7 @@ class _GithubChecks:
                         if status == "completed"
                         else ""
                     ),
+                    ref=str(entry.get("head_branch") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1193,7 +1194,10 @@ class _GithubChecks:
     def dispatch(
         self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
     ) -> None:
-        """Trigger the workflow file's ``workflow_dispatch`` on *ref*."""
+        """Trigger the workflow file's ``workflow_dispatch`` on *ref*.
+
+        GitHub answers 204 with no body, so the run is found by listing.
+        """
         self._client.request(
             f"{self._base}/actions/workflows/{quote(workflow)}/dispatches",
             method="POST",

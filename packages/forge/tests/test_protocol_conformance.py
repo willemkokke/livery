@@ -15,7 +15,9 @@ def _full() -> ForgeDriver:
 
 
 def _gitlab_shaped() -> ForgeDriver:
-    return FakeDriver(FakeForge(capabilities=("auto_merge", "ci_secrets")))
+    return FakeDriver(
+        FakeForge(capabilities=("auto_merge", "ci_secrets"), dispatch_names_run=True)
+    )
 
 
 def _github_shaped() -> ForgeDriver:

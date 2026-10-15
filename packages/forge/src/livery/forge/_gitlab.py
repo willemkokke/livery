@@ -1270,6 +1270,7 @@ class _GitlabChecks:
                     # The listing carries the creation only; the start
                     # and the end live on the pipeline's own page.
                     created_at=str(entry.get("created_at") or ""),
+                    ref=str(entry.get("ref") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1351,22 +1352,26 @@ class _GitlabChecks:
 
     def dispatch(
         self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
-    ) -> None:
-        """Trigger the project's pipeline on *ref*.
+    ) -> int:
+        """Trigger the project's pipeline on *ref*; return the pipeline's id.
 
         GitLab has one pipeline definition per project; *workflow*
         travels as the ``FORGE_WORKFLOW`` variable for the pipeline's
         own rules to route on, and *inputs* as further variables.
+        GitLab answers with the pipeline it created, so its id comes
+        back.
         """
         variables = [{"key": "FORGE_WORKFLOW", "value": workflow}]
         variables += [
             {"key": key, "value": value} for key, value in (inputs or {}).items()
         ]
-        self._client.request(
+        created = self._client.request(
             f"{self._base}/pipeline",
             method="POST",
             data={"ref": ref, "variables": variables},
         )
+        assert created is not None
+        return int(created["id"])
 
 
 class _GitlabSchedules:
