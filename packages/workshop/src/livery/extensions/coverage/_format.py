@@ -1,4 +1,4 @@
-"""The line format, version 2: what one measurer read of one unit, file by file.
+"""The line format, version 3: what one measurer read of one unit, file by file.
 
 A part holds what one measurer read for one unit on one machine: a
 package's suite, or the whole data a run left. Every measurer reduces
@@ -7,7 +7,7 @@ counts, llvm-cov's regions and a Cobertura report each become a part,
 and the coverage pages draw parts alone. A part is JSON:
 
 ```json
-{"format": 2, "unit": "packages/workshop",
+{"format": 3, "unit": "packages/workshop",
  "measurer": {"name": "coverage.py", "version": "7.16.2",
               "runtime": "CPython 3.14", "counts": "presence",
               "branches": "targets", "regions": ["function", "class"],
@@ -20,7 +20,7 @@ and the coverage pages draw parts alone. A part is JSON:
    "branches": [[12, 13, 0, 1, "line 12 didn't jump to line 13 ..."],
                 [12, 15, 1, 0, "line 12 didn't jump to line 15 ..."]],
    "regions": [["function", "Graph.walk", 41, "42-60"]],
-   "reached": {"sets": ["AAE="], "lines": [[9, 0]]}}}}
+   "reached": {"sets": ["0,0"], "lines": [[9, 0]]}}}}
 ```
 
 A file is named by its path from the workspace root with forward
@@ -60,8 +60,17 @@ string, ``1-12,15,17-40``. Per file:
   measurer without columns leaves ``ranges`` out.
 - ``reached``: the contexts that reached each line, only where the
   measurer recorded them. ``sets`` are sets of indexes into the part's
-  ``contexts``, each sorted, delta-coded as unsigned LEB128 and
-  base64-encoded; ``lines`` pairs a line with the index of its set.
+  ``contexts``, each as `pack_set` writes it: its first index, then
+  for each next index how many indexes it skips past the one before,
+  in decimal, comma-separated. ``0,0,297`` is the set of 0, 1 and 299,
+  and the empty string is the empty set; each set has that one
+  spelling. ``lines`` pairs a line with the index of its set.
+
+A set holds digits and commas alone, never a letter. A forge's push
+protection refuses a push whose text matches the shape of an access
+token, and every such shape holds letters. A part holds thousands of
+sets: written in an encoding with letters, such as base64, their text
+can match a token's shape by chance.
 
 A part names each context once, and its ``contexts`` are its
 numbering: a set holds a context by its place in the list. A record
@@ -85,7 +94,7 @@ what ran:
 ```json
 {"digest": "<the file's git blob id>", "facts": "<the facts' name>",
  "hits": "1-9,15,17-30", "taken": "1,3-5",
- "reached": {"sets": ["AAE="], "lines": [[9, 0]]}}
+ "reached": {"sets": ["0,0"], "lines": [[9, 0]]}}
 ```
 
 The facts hold ``statements``, ``excluded`` and ``spans`` as a part
@@ -113,8 +122,6 @@ its functions or classes.
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -123,7 +130,7 @@ from typing import Any, cast
 
 #: The version of the line format this module reads and writes. A part
 #: of another version is named and refused, never guessed at.
-FORMAT = 2
+FORMAT = 3
 
 #: A measurer that reads whether a line ran, and one that reads how
 #: many times.
@@ -585,46 +592,65 @@ def parse_ranges(text: str) -> Lines:
 
 
 def pack_set(indexes: Iterable[int]) -> str:
-    """A set of indexes as the format keeps it: sorted, delta-coded, LEB128, base64."""
-    packed = bytearray()
+    """A set of indexes as the format writes it: ``0,0,297`` for 0, 1 and 299.
+
+    It sorts the indexes and writes the first, then for each next one
+    how many indexes it skips past the one before, each number in
+    decimal, comma-separated. The empty set is the empty string. The
+    text holds digits and commas alone, and each set has this one
+    spelling.
+    """
     previous = -1
+    gaps: list[str] = []
     for value in sorted(set(indexes)):
-        delta = value - previous - 1
-        while True:
-            low = delta & 0x7F
-            delta >>= 7
-            packed.append(low | (0x80 if delta else 0))
-            if not delta:
-                break
+        gaps.append(str(value - previous - 1))
         previous = value
-    return base64.b64encode(bytes(packed)).decode("ascii")
+    return ",".join(gaps)
 
 
 def unpack_set(text: str) -> Lines:
-    """The indexes a packed set holds.
+    """The indexes in *text*, a set as `pack_set` writes it.
 
     Raises:
-        ValueError: when *text* is not base64, or its bytes end inside
-            a number.
+        ValueError: when *text* is not that spelling, naming it: a
+            number that is empty, holds anything but the digits 0 to 9,
+            or starts with a 0 and has more digits; or a negative
+            number, which takes the set to an index at or below the one
+            before it.
     """
-    try:
-        packed = base64.b64decode(text.encode("ascii"), validate=True)
-    except (binascii.Error, UnicodeEncodeError) as error:
-        raise ValueError(f"{text!r} is not base64 ({error})") from None
+    if not text:
+        return frozenset()
     found: set[int] = set()
     previous = -1
-    delta = shift = 0
-    for index, byte in enumerate(packed):
-        delta |= (byte & 0x7F) << shift
-        shift += 7
-        if byte & 0x80:
-            if index == len(packed) - 1:
-                raise ValueError(f"{text!r} ends inside a number")
-            continue
-        previous += delta + 1
+    for piece in text.split(","):
+        if not (piece.isdigit() and piece.isascii()) or (
+            piece[0] == "0" and len(piece) > 1
+        ):
+            raise ValueError(_misspelled(text, piece, previous))
+        previous += int(piece) + 1
         found.add(previous)
-        delta = shift = 0
     return frozenset(found)
+
+
+def _misspelled(text: str, piece: str, previous: int) -> str:
+    """Why *piece*, the number in *text* after index *previous*, is off the spelling."""
+    if piece[:1] == "-" and piece[1:].isdigit() and piece[1:].isascii():
+        step = previous + int(piece) + 1
+        if step <= previous:
+            moved = f"from index {previous} " if previous >= 0 else ""
+            return (
+                f"{text!r} steps {moved}to index {step}; each number counts the"
+                " indexes a set skips, 0 or more, so its indexes rise"
+            )
+    if piece.isdigit() and piece.isascii():
+        return (
+            f"{text!r} holds {piece!r}, a number that starts with a 0; each set"
+            " has one spelling"
+        )
+    return (
+        f"{text!r} holds {piece!r}, which is no whole number in decimal; a set is"
+        " digits and commas alone"
+    )
 
 
 def digest(content: bytes) -> str:

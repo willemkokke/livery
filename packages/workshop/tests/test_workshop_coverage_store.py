@@ -93,7 +93,7 @@ def _packages(work: Path) -> tuple[Package, Package]:
 def _part(path: str, lines: dict[str, str] | None = None) -> dict[str, Any]:
     """A unit's part in the line format: each file's statements, all of them run."""
     return {
-        "format": 2,
+        "format": 3,
         "unit": path,
         "measurer": {
             "name": "coverage.py",
@@ -378,7 +378,7 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
             {
                 "schema": coverage_record.SCHEMA,
                 "unit": "packages/top",
-                "parts": [{**_part("packages/top"), "format": 1}],
+                "parts": [{**_part("packages/top"), "format": 2}],
             }
         ),
     }
@@ -391,8 +391,8 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
         f"odd.json: schema 99, this reader speaks {coverage_record.SCHEMA}; skipped",
         f"packages-base.json: schema 1, this reader speaks {coverage_record.SCHEMA};"
         " skipped",
-        "packages-top.json: holds a part of format 1, and this workshop reads"
-        " format 2; skipped",
+        "packages-top.json: holds a part of format 2, and this workshop reads"
+        " format 3; skipped",
     ]
     assert sorted(held.stale(())) == [
         "bare.json",

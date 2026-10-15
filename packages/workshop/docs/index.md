@@ -1490,7 +1490,15 @@ a test that is gone keeps its number with no line naming it; one run's
 writes number a new test alike on every leg. Two rows of a suite a run
 apart, or of two legs, then keep a line's set of tests byte for byte
 wherever the same tests reached it, and git can store the second as a
-small difference from the first. Each
+small difference from the first. A row writes each line's set of tests
+as whole numbers in decimal, comma-separated: the first test's number,
+then for each next test how many numbers it skips. The sets hold
+digits and commas alone. A forge's push protection refuses a push
+whose text matches the shape of an access token, and every such shape
+holds letters, so the sets never match one; a leg's thousands of sets,
+written in an encoding with letters such as base64, can match one by
+chance. A row whose parts are of another version of the line format
+is skipped and named, and its suite is measured afresh. Each
 file's fixed facts, what its content and its measurer decide whatever
 ran (its statements, its branches, its functions, its ranges, and the
 sentence of each branch), are a file of their own beside the rows,

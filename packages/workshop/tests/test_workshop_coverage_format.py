@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import random
+import re
 from typing import Any
 
 import pytest
@@ -41,7 +43,7 @@ LINES_ONLY = Measurer("lines", counts=fmt.COUNTS)
 def _raw(**files: Any) -> dict[str, Any]:
     """A part of coverage.py's as JSON holds it, with *files*."""
     return {
-        "format": 2,
+        "format": 3,
         "unit": "packages/x",
         "measurer": {
             "name": "coverage.py",
@@ -65,13 +67,84 @@ def _entry(**keys: Any) -> dict[str, Any]:
 # --- refusals ----------------------------------------------------------------
 
 
+#: How a set's refusal ends when a number in it is not digits alone.
+NOT_DIGITS = "which is no whole number in decimal; a set is digits and commas alone"
+
+
+@pytest.mark.parametrize(
+    ("spelled", "problem"),
+    [
+        # The older version's spelling: LEB128 bytes in base64.
+        ("AACqAg==", f"'AACqAg==' holds 'AACqAg==', {NOT_DIGITS}"),
+        ("AAE=", f"'AAE=' holds 'AAE=', {NOT_DIGITS}"),
+        # A letter among the numbers.
+        ("0,1a,2", f"'0,1a,2' holds '1a', {NOT_DIGITS}"),
+        ("AKID", f"'AKID' holds 'AKID', {NOT_DIGITS}"),
+        # A negative number takes the set back down: 0, then 4, then 3.
+        (
+            "0,3,-2",
+            "'0,3,-2' steps from index 4 to index 3; each number counts the"
+            " indexes a set skips, 0 or more, so its indexes rise",
+        ),
+        (
+            "0,-1",
+            "'0,-1' steps from index 0 to index 0; each number counts the"
+            " indexes a set skips, 0 or more, so its indexes rise",
+        ),
+        (
+            "-3",
+            "'-3' steps to index -3; each number counts the indexes a set"
+            " skips, 0 or more, so its indexes rise",
+        ),
+        # An empty number, a sign, a space, and a digit outside ASCII.
+        ("0,,1", f"'0,,1' holds '', {NOT_DIGITS}"),
+        ("1,", f"'1,' holds '', {NOT_DIGITS}"),
+        (",", f"',' holds '', {NOT_DIGITS}"),
+        ("-0", f"'-0' holds '-0', {NOT_DIGITS}"),
+        ("+1", f"'+1' holds '+1', {NOT_DIGITS}"),
+        ("0, 1", f"'0, 1' holds ' 1', {NOT_DIGITS}"),
+        ("\u0661", f"'\u0661' holds '\u0661', {NOT_DIGITS}"),
+        # A set has one spelling: no number starts with a 0 and goes on.
+        (
+            "01",
+            "'01' holds '01', a number that starts with a 0; each set has one spelling",
+        ),
+        (
+            "0,00",
+            "'0,00' holds '00', a number that starts with a 0; each set has one"
+            " spelling",
+        ),
+    ],
+)
+def test_a_set_off_its_spelling_refuses_naming_the_field(
+    spelled: str, problem: str
+) -> None:
+    raw = _raw(**{"a.py": _entry(reached={"sets": ["0", spelled], "lines": []})})
+    message = f'the row: files["a.py"].reached.sets[1]: {problem}'
+    with pytest.raises(PartError) as refused:
+        fmt.decode(raw, source="the row")
+    assert str(refused.value) == message
+    # The stored form reads its sets as a part does, and refuses alike.
+    kept, facts = fmt.stored(fmt.decode(_raw(**{"a.py": _entry()}), source="p"))
+    kept["files"]["a.py"]["reached"] = raw["files"]["a.py"]["reached"]
+    with pytest.raises(PartError) as refused:
+        fmt.from_stored(kept, facts, source="the row")
+    assert str(refused.value) == message
+    # A numbering never moves a set it cannot read.
+    with pytest.raises(PartError) as refused:
+        fmt.renumbered(raw, ["", "t1"], source="the row")
+    assert str(refused.value) == message
+    with pytest.raises(ValueError, match="^" + re.escape(problem) + "$"):
+        fmt.unpack_set(spelled)
+
+
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
         ([], "the part: is [], and a table is wanted"),
         (
             {**_raw(), "extra": 1},
-            "the part: holds extra, which format 2 has no key for; its keys are"
+            "the part: holds extra, which format 3 has no key for; its keys are"
             " format, unit, measurer, contexts, files",
         ),
         ({**_raw(), "unit": ""}, "unit: is '', and text that is not empty is wanted"),
@@ -122,7 +195,7 @@ def _entry(**keys: Any) -> dict[str, Any]:
         ),
         (
             _raw(**{"a.py": _entry(counts=[[1, 2]])}),
-            'files["a.py"]: holds counts, which format 2 has no key for',
+            'files["a.py"]: holds counts, which format 3 has no key for',
         ),
         (
             _raw(**{"a.py": _entry(branches=[[2, None, 0, 1]])}),
@@ -183,23 +256,15 @@ def _entry(**keys: Any) -> dict[str, Any]:
             "regions[0][1]: is '', and text that is not empty is wanted",
         ),
         (
-            _raw(**{"a.py": _entry(reached={"sets": ["!!"], "lines": []})}),
-            "reached.sets[0]: '!!' is not base64",
-        ),
-        (
-            _raw(**{"a.py": _entry(reached={"sets": ["gA=="], "lines": []})}),
-            "reached.sets[0]: 'gA==' ends inside a number",
-        ),
-        (
-            _raw(**{"a.py": _entry(reached={"sets": ["BQ=="], "lines": []})}),
+            _raw(**{"a.py": _entry(reached={"sets": ["5"], "lines": []})}),
             "reached.sets[0]: names context 5, and the part names 2",
         ),
         (
-            _raw(**{"a.py": _entry(reached={"sets": ["AA=="], "lines": [[1]]})}),
+            _raw(**{"a.py": _entry(reached={"sets": ["0"], "lines": [[1]]})}),
             "reached.lines[0]: is no [line, set] pair",
         ),
         (
-            _raw(**{"a.py": _entry(reached={"sets": ["AA=="], "lines": [[1, 3]]})}),
+            _raw(**{"a.py": _entry(reached={"sets": ["0"], "lines": [[1, 3]]})}),
             "reached.lines[0][1]: is 3, and the part has 1 sets",
         ),
         (
@@ -208,7 +273,7 @@ def _entry(**keys: Any) -> dict[str, Any]:
         ),
         (
             _raw(**{"a.py": _entry(reached={"lines": [], "every": 1})}),
-            "reached: holds every, which format 2 has no key for",
+            "reached: holds every, which format 3 has no key for",
         ),
     ],
 )
@@ -270,16 +335,23 @@ def test_a_numbering_that_drops_a_known_context_refuses() -> None:
         fmt.renumbered(raw, ["", "t1", "t1"], source="the row")
 
 
-def test_a_part_of_format_version_1_refuses_and_names_its_version() -> None:
+def test_a_part_of_an_older_format_version_refuses_and_names_its_version() -> None:
+    # Format 2 wrote each set as base64: its parts are named and never read.
+    older = {
+        **_raw(**{"a.py": _entry(reached={"sets": ["AAE="], "lines": [[1, 0]]})}),
+        "format": 2,
+    }
     with pytest.raises(OtherVersion) as refused:
-        fmt.decode({**_raw(), "format": 1}, source="the probe's part")
-    assert refused.value.version == 1
+        fmt.decode(older, source="the probe's part")
+    assert refused.value.version == 2
     assert str(refused.value) == (
-        "the probe's part: a part of format 1; this workshop reads format 2"
+        "the probe's part: a part of format 2; this workshop reads format 3"
     )
-    # Its stored form too, and a part with no version at all.
+    # Its stored form too, a part of format 1, and a part with no version.
+    with pytest.raises(OtherVersion, match="a part of format 2; this workshop"):
+        fmt.from_stored(older, {}, source="the probe's part")
     with pytest.raises(OtherVersion, match="a part of format 1; this workshop"):
-        fmt.from_stored({**_raw(), "format": 1}, {}, source="the probe's part")
+        fmt.decode({**_raw(), "format": 1}, source="the probe's part")
     with pytest.raises(OtherVersion, match="a part of format None"):
         fmt.decode({"unit": "x"}, source="the probe's part")
 
@@ -369,16 +441,62 @@ def test_a_measurer_s_branches_match_how_it_names_them() -> None:
 # --- what a part holds ---------------------------------------------------
 
 
-def test_range_strings_and_packed_sets_hold_their_lines() -> None:
+@pytest.mark.parametrize(
+    ("held", "spelled"),
+    [
+        (set(), ""),
+        ({0}, "0"),
+        ({7}, "7"),
+        ({0, 1, 2}, "0,0,0"),
+        # Gaps: each number counts the indexes skipped since the last.
+        ({3, 9, 10}, "3,5,0"),
+        ({0, 1, 299}, "0,0,297"),
+        ({0, 127, 128, 20000}, "0,126,0,19871"),
+        # Large indexes take as many digits as they need.
+        ({1_000_000, 10**12}, "1000000,999998999999"),
+        ({2**64 + 1}, "18446744073709551617"),
+    ],
+)
+def test_a_set_reads_back_from_its_one_spelling(held: set[int], spelled: str) -> None:
+    assert fmt.pack_set(held) == spelled
+    assert fmt.unpack_set(spelled) == held
+
+
+def test_a_part_reads_back_each_line_s_set_the_empty_one_too() -> None:
+    reached = {1: frozenset[int](), 2: frozenset({0}), 3: frozenset({0, 2, 3})}
+    part = Part(
+        "packages/x",
+        COVERAGE_PY,
+        {"a.py": Entry("d" * 40, frozenset({1, 2, 3}), {1: 1}, reached=reached)},
+        ("", "t1", "t2", "t3"),
+    )
+    written = fmt.encode(part)
+    assert written["files"]["a.py"]["reached"] == {
+        "sets": ["", "0", "0,1,0"],
+        "lines": [[1, 0], [2, 1], [3, 2]],
+    }
+    assert fmt.decode(json.loads(json.dumps(written)), source="p") == part
+
+
+def test_a_large_random_set_is_digits_and_commas_alone_and_reads_back() -> None:
+    picker = random.Random(5)
+    # Dense runs among the first indexes, then sparse ones far out: every
+    # width of number the set's text can hold.
+    held = set(picker.sample(range(20_000), 15_000))
+    held |= set(picker.sample(range(20_000, 10**9), 15_000))
+    spelled = fmt.pack_set(held)
+    assert re.fullmatch(r"[0-9,]+", spelled)
+    assert fmt.unpack_set(spelled) == held
+    assert spelled.count(",") == len(held) - 1
+
+
+def test_range_strings_hold_their_lines_and_a_digest_is_the_git_blob_id() -> None:
     assert fmt.ranges([]) == ""
     assert fmt.ranges([5, 1, 2, 3, 3, 9]) == "1-3,5,9"
     assert fmt.parse_ranges("") == frozenset()
     assert fmt.parse_ranges("1-3,5,9") == {1, 2, 3, 5, 9}
     with pytest.raises(ValueError, match="'' is not a line or a range of lines"):
         fmt.parse_ranges("1,,2")
-    for held in (set(), {0}, {3, 4, 5}, {0, 127, 128, 20000}):
-        assert fmt.unpack_set(fmt.pack_set(held)) == held
-    assert fmt.pack_set({0, 1, 300}) == "AACqAg=="
     # The git blob id of the text, as `git hash-object` gives it, and the
     # one git stores for a CRLF checkout of it.
     assert fmt.digest(b"a = 1\r\n") == fmt.digest(b"a = 1\n")
@@ -474,7 +592,7 @@ def test_a_stored_part_naming_facts_it_lacks_refuses_naming_the_content() -> Non
         ({"taken": [[9, 1]]}, "taken: names place 9, and its fixed facts hold 2"),
         ({"range-counts": [[3, 1]]}, "range-counts: names place 3, and its fixed"),
         ({"calls": [[1]]}, r"calls\[0\]: is no \[place, number\] pair"),
-        ({"statements": "1"}, "holds statements, which format 2 has no key for"),
+        ({"statements": "1"}, "holds statements, which format 3 has no key for"),
     ):
         broken = {**kept, "files": {"packages/n/a.cpp": {**entry, **extra}}}
         with pytest.raises(PartError, match=message):
