@@ -210,7 +210,10 @@ development pages (the docs extension).
 The engine knows one kind of extension: an extension is what it
 registers. The root's `[workspace] extensions` says what the workspace
 wants, and a package's `extensions` says what the package is made of.
-Either list takes any extension. A list's set is the list and every
+The root list takes any extension; a package's list takes one that
+composes something in a package, judged from the declarations alone
+(an extension whose steps judge packages by what they hold, such as
+ruff, belongs in the root list). A list's set is the list and every
 extension it requires, transitively, and the installed set is the
 root list's set and every package's set. Three sorts exist from a
 reader's view. No key declares them, and the conformance kit's clauses
@@ -1297,7 +1300,7 @@ The parts, each mergeable alone, in this order:
   stock list of `fm new.project` names python.
 - N4 (built, #1681): templates follow the installed set.
 - Then step 8's P1b, cmake's move (#1667), rebased.
-- N5: a package's list composes. A package that lists an extension
+- N5 (built, #1689): a package's list composes. A package that lists an extension
   that composes nothing in a package refuses.
 - Then #1672, reduced.
 
@@ -3421,6 +3424,18 @@ neither needs nor rules out).
   naming a target the extension has no table for, or one not
   installed, is named. This supersedes the F8 wording of the one-kind
   entry above, which spoke of `for`. Built in #1687.
+
+- 2026-10-15, one kind's N5 (#1689), built: a package listing an
+  extension that composes nothing in a package is a gate problem that
+  says what the extension's steps judge instead, and the gate's fix
+  moves the entry, with its comments, to the root list; an entry that
+  another entry of the list requires is not judged. A template whose
+  chain lists such an entry refuses before anything is written. The
+  conformance kit gains `template-composes`: each template's entries
+  compose and each extension its chain names is within the set of its
+  list. The proof reads declarations alone, so an extension whose only
+  effect on a package lives in its code is refused in a package's list
+  (F5).
 
 ## Open
 
