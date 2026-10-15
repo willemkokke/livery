@@ -93,10 +93,18 @@ def _fake(
     # The scan itself, so a rescan, which an install asks for, finds them too.
     monkeypatch.setattr(_entries, "_scan", lambda: (*scanned, *fakes))
     monkeypatch.setattr(_entries, "_SCAN", None)
+    read_afresh(monkeypatch)
+
+
+def read_afresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read the installed extensions' contract keys, phases and queries per test.
+
+    Each is read once per process from the scan of the installed
+    distributions. A test that changes the scan reads them again, and
+    what it reads never reaches a later test.
+    """
     owners = _contract_keys.declarations.__wrapped__
     monkeypatch.setattr(_contract_keys, "declarations", functools.cache(owners))
-    # The declared phases and queries are read from the same scan, once
-    # per test.
     phases = _phases.declared_phases.__wrapped__
     monkeypatch.setattr(_phases, "declared_phases", functools.cache(phases))
     queries = _queries.declared_queries.__wrapped__

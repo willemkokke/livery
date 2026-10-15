@@ -796,6 +796,40 @@ def declared_now(names: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(name for name in names if name in declared)
 
 
+def install_places(names: Iterable[str]) -> dict[str, tuple[str, str, str]]:
+    """Where each extension of *names* is installed, as this process reads it.
+
+    Each place is three parts: the package the extension's entry point
+    names, the declaration file this process reads for it, and the
+    origin the installer recorded in the distribution's
+    ``direct_url.json``, which is empty for a distribution from an
+    index. The file is empty when the directory this process found the
+    package in no longer holds one, and every part is empty for an
+    extension no installed distribution declares.
+
+    Read before an install and again after it, a place that differs
+    names an extension this process cannot read where the environment
+    installs it now. The directory a package was found in is kept for
+    the process, and an editable install's path joins ``sys.path`` only
+    when a process starts. The origin tells an editable install's tree
+    that is still on disk from the tree the environment installs.
+    Imports nothing.
+    """
+    declared = _declared()
+    places: dict[str, tuple[str, str, str]] = {}
+    for name in names:
+        entry = declared.get(name)
+        if entry is None:
+            places[name] = ("", "", "")
+            continue
+        package = entry.value.partition(":")[0]
+        found = declaration_file(package)
+        dist = entry.dist
+        origin = dist.read_text("direct_url.json") if dist is not None else None
+        places[name] = (package, str(found or ""), origin or "")
+    return places
+
+
 def _note(text: str) -> None:
     """Name a problem the mount skips past, on stderr."""
     import sys

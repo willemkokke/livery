@@ -306,6 +306,46 @@ def continue_on_moved_code(
     return True
 
 
+def continue_on_moved_extensions(root: Path, moved: tuple[str, ...]) -> None:
+    """Hand the sync to a fresh process when its install moved a mounted extension.
+
+    *moved* names the extensions whose distribution the sync's ``uv
+    sync`` moved or removed; when it names none, nothing happens. This
+    process found each extension's directory as it mounted it, and
+    reads its declaration, its shipped files and its code from there.
+    An install that replaces an index's wheel with an editable member
+    at another path removes that directory, and the member's path joins
+    ``sys.path`` only when a process starts; an install from another
+    editable tree leaves the old one on disk, no longer installed. The
+    fresh process re-runs the command and mounts what the environment
+    installs now; an extension the install removed is then one the
+    mount finds missing, and the fresh process installs it or refuses,
+    naming it. This process does not read a moved extension again,
+    because it imported that extension's modules from the old place
+    already.
+
+    Raises:
+        Failed: when the fresh process cannot start, or the command
+            already re-ran once for a moved extension. Nothing was
+            delivered after the install then.
+    """
+    if not moved:
+        return
+    from livery.workshop import _reconcile
+
+    names = ", ".join(moved)
+    print(
+        f"  the install moved or removed {names}; the sync continues in a fresh"
+        " process, which mounts what is installed now"
+    )
+    _reconcile._reexec(root, _reconcile.RELOCATED)  # pyright: ignore[reportPrivateUsage]
+    fail(
+        f"the install moved or removed {names}, and this process cannot mount"
+        f" what is installed now: run `{footman.prog()} sync` again. Nothing was"
+        " delivered after the install"
+    )
+
+
 def require_mounted(
     root: Path, flags: tuple[str, ...] = (), *, install: bool = True
 ) -> None:
@@ -589,7 +629,11 @@ def sync(
     workspace lists that the command started without is mounted the
     same way before anything renders or locks
     ([livery.workshop._sync.require_mounted][]): a sync never renders
-    without one.
+    without one. A ``uv sync`` that moves or removes the distribution
+    of an extension the command mounted hands the rest of the sync over
+    the same way, before anything reads that extension again: this
+    process found it where the install no longer puts it. A handoff
+    that cannot start then refuses, and the next sync completes.
 
     Shell completion answers from a manifest this command wrote as it
     started, from what was installed then. A sync that changed the
@@ -740,7 +784,10 @@ def sync_checkout(
     sync_workspace_files(root, local_only=local_only)()
     sync_locked_tools(root, frozen=frozen or locked, offline=offline)()
     prepare_installs(root)()
-    uv_sync(root, _uv_flags(frozen=frozen, locked=locked, offline=offline))()
+    shifted = uv_sync(root, _uv_flags(frozen=frozen, locked=locked, offline=offline))()
+    # Before anything reads an extension again: one the install moved is
+    # no longer where this process found it.
+    continue_on_moved_extensions(root, shifted)
     deliver_files(root, local_only=local_only)()
     if not local_only:
         write_generated(root)()
@@ -936,16 +983,27 @@ def _prepare_installs(root: Path) -> None:
     sync_phase(discover_packages(root), root)
 
 
-def _uv_sync(root: Path, flags: tuple[str, ...]) -> None:
+def _uv_sync(root: Path, flags: tuple[str, ...]) -> tuple[str, ...]:
+    """Run ``uv sync``; the extensions of the installed set whose place it changed.
+
+    A place is where this process reads an extension and where the
+    environment installs it (`install_places` in the extensions module):
+    an extension whose place differs after the install is one the
+    install moved or removed.
+    """
     from livery.footman import rescan_entry_points
+    from livery.workshop._extensions import extension_names, install_places
     from livery.workshop._uv import run_uv
 
+    before = install_places(extension_names(root))
     run_uv("sync", *flags, root=root)
     # The install moves a member stamped to another version to a new
     # dist-info directory, and an entry point scanned before the move
     # names no distribution after it. Every reader that follows, the
     # deliver step first, reads the installed metadata as it now is.
     rescan_entry_points()
+    after = install_places(before)
+    return tuple(name for name, place in before.items() if after[name] != place)
 
 
 def _deliver_files(root: Path, *, local_only: bool) -> None:
