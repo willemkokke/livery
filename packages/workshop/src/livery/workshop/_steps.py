@@ -679,6 +679,18 @@ def judges_extensions(record: StepRecord, extensions: Iterable[str]) -> bool:
     return not record.extensions or bool(set(record.extensions) & set(extensions))
 
 
+def judges_unit(record: StepRecord, unit: Package) -> bool:
+    """Whether *record* judges *unit*, by the extensions the unit holds.
+
+    A member holds its set, and the workspace's own tests hold the
+    root's set (`extension_set`). A step that names no extension judges
+    every unit; one that names some judges a unit holding one of them.
+    """
+    from livery.workshop._composition import extension_set
+
+    return judges_extensions(record, extension_set(unit))
+
+
 def judged_by(
     record: StepRecord, packages: tuple[Package, ...], *, quiet: bool = False
 ) -> tuple[Package, ...]:
@@ -689,11 +701,9 @@ def judged_by(
     is visible in the output and never passes silently. *quiet* counts
     without printing.
     """
-    from livery.workshop._composition import extension_set
-
     kept: list[Package] = []
     for package in packages:
-        if judges_extensions(record, extension_set(package)):
+        if judges_unit(record, package):
             kept.append(package)
         elif not quiet:
             wanted = " or ".join(record.extensions)
@@ -1547,7 +1557,7 @@ def scoped_suite(ctx: PhaseContext, name: str) -> Package | None:
 
     record = step_for(name)
     unit = workspace_suite(ctx.root)
-    if unit is None or judged_by(record, (unit,), quiet=True):
+    if unit is None or judges_unit(record, unit):
         return unit
     wanted = " or ".join(record.extensions)
     which = "it" if len(record.extensions) == 1 else "one"
@@ -1571,13 +1581,28 @@ def step_option(name: str, package: Package, option: str) -> object:
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered step of the test phase runs.
 
-    Each by the extensions it holds: a member its set, and the
-    workspace's own tests the root's set.
+    Each by the rule a step judges a unit by (`judges_unit`): a member
+    by its set, and the workspace's own tests by the root's set.
     """
     tests = [record for record in _STEPS.values() if record.phase == "test"]
     return tuple(
-        unit for unit in units if any(_applies(record, unit) for record in tests)
+        unit for unit in units if any(judges_unit(record, unit) for record in tests)
     )
+
+
+def tested_suite(root: Path) -> Package | None:
+    """The workspace's own tests at *root*, when a registered test step runs them.
+
+    The unit ([livery.workshop.workspace_suite][]) by the rule
+    [livery.workshop.scoped_suite][] applies to one step, asked of
+    every step of the test phase: a step runs it while the root's set
+    holds an extension the step names. None when the workspace has no
+    ``tests`` directory, or when no test step judges the unit.
+    """
+    from livery.workshop._packages import workspace_suite
+
+    unit = workspace_suite(root)
+    return unit if unit is not None and tested((unit,)) else None
 
 
 def _register_builtin() -> None:

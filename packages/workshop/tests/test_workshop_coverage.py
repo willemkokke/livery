@@ -32,6 +32,7 @@ from workshop_coverage_meter import (
     stored_unit,
 )
 from workshop_measured import measure
+from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -341,6 +342,19 @@ class _FakePytest:
         return _Result(self.codes.get(args[0] if args else "", 0))
 
 
+def _own_tests(root: Path) -> None:
+    """The workspace's own tests at *root*, as a unit a test step runs.
+
+    The unit holds the root's set, so the root lists python, unless its
+    contract is already written, and the ``python_steps`` fixture
+    registers a test step naming python.
+    """
+    (root / "tests").mkdir()
+    contract = root / "workshop.toml"
+    if not contract.is_file():
+        contract.write_text('[workspace]\nextensions = ["python"]\n')
+
+
 def _suite(tmp_path: Path, name: str) -> Package:
     package = _package(tmp_path, name, "[coverage]\nfloor = 1\n")
     (package.directory / "tests").mkdir()
@@ -486,17 +500,17 @@ def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
     assert list(tmp_path.glob(".coverage.*"))
 
 
-def _measured_by_pytest(root: Path) -> None:
+def _measured_by_pytest(root: Path, *, python: bool = True) -> None:
     """List pytest and coverage at *root*: pytest's reduction reads coverage.py's data.
 
-    The root lists python too, since the workspace's own tests hold the
-    root's set. The reduction is the pytest extension's, a distribution
-    of its own: a run of this wheel alone has none, and the test skips.
+    The root lists python too unless *python* is false, since the
+    workspace's own tests hold the root's set. The reduction is the
+    pytest extension's, a distribution of its own: a run of this wheel
+    alone has none, and the test skips.
     """
     pytest.importorskip("livery.extensions.pytest")
-    (root / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["coverage", "pytest", "python"]\n'
-    )
+    listed = '"coverage", "pytest", "python"' if python else '"coverage", "pytest"'
+    (root / "workshop.toml").write_text(f"[workspace]\nextensions = [{listed}]\n")
 
 
 def test_the_preview_tolerates_a_run_that_measured_nothing(
@@ -659,7 +673,9 @@ def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
 # --- the leg: its refusals, then what it leaves -------------------------------
 
 
-def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
+def test_the_units_a_leg_ran_come_from_its_marker(
+    tmp_path: Path, python_steps: object
+) -> None:
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
     z = _package(tmp_path, "z")  # no suite of its own
@@ -674,7 +690,7 @@ def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
     for scope in ("verified", "nothing", "unknown"):
         marker = {"scope": scope, "packages": ["packages/x"], "leg": "a"}
         assert coverage_leg.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     ran = coverage_leg.suites_that_ran(narrowed, tmp_path, (x, y, z))
     assert [unit.path for unit in ran] == ["packages/y", "tests"]
     assert coverage_leg.units_of(tmp_path, (x, y, z))[-1].path == "tests"
@@ -786,14 +802,17 @@ def test_a_part_that_does_not_validate_refuses_naming_the_file_and_key(
 
 
 def test_a_workspace_with_no_packages_puts_its_scope_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     from livery.workshop._verified import FULL, write_marker
 
     # A project just born has no packages: its own tests ran unmetered
     # and reached no package source. That is not a dead meter: the
     # tests unit is put with no parts, so the union finds what ran.
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     _in_ci(monkeypatch, "check-a")
     put = _capture_leaves(monkeypatch)
     write_marker(tmp_path, FULL, leg="check-a")
@@ -852,8 +871,54 @@ def _contextual_part(
     data.write()
 
 
+def test_a_root_listing_no_python_measures_its_packages_and_misses_no_part_for_tests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+) -> None:
+    from livery.workshop._verified import FULL, write_marker
+
+    # The root lists pytest and coverage, not python. Its own tests hold
+    # the root's set, so no test step runs them, though they exist.
+    _measured_by_pytest(tmp_path, python=False)
+    x = _suite(tmp_path, "x")
+    (tmp_path / "tests").mkdir()
+    x_source = str(_source(tmp_path, "x"))
+    _contextual_part(
+        tmp_path,
+        "host.1.X",
+        {
+            "": {x_source: [1]},
+            "packages/x/tests/test_mod.py::test_one|run": {x_source: [2, 3]},
+        },
+    )
+    write_marker(tmp_path, FULL, leg="check-a")
+    put = _capture_leaves(monkeypatch)
+    _in_ci(monkeypatch, "check-a")
+    coverage_leg.gather_leg(tmp_path, (x,))
+    out = capsys.readouterr().out
+    # The leg measures the member's suite and puts its part alone.
+    units = _units(put[0])
+    assert sorted(units) == ["packages/x"]
+    assert ran(units["packages/x"]) == {"packages/x/src/livery/x/mod.py": {1, 2, 3}}
+    assert "coverage store: tests" not in out
+    # Neither the units the leg ran nor the units a record keys name the
+    # root's tests, so the union misses no part for them.
+    full = {"scope": "full", "packages": [], "leg": "check-a"}
+    assert coverage_leg.suites_that_ran(full, tmp_path, (x,)) == (x,)
+    assert coverage_leg.units_of(tmp_path, (x,)) == (x,)
+    _in_ci(monkeypatch, "gate")
+    _union(monkeypatch, [_leg("check-a", "full", units=units)])
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert "the union of 1 leg(s) and 0 reused suite(s)" in capsys.readouterr().out
+
+
 def test_a_leg_puts_each_suite_it_ran_within_its_closure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     from livery.workshop._verified import AFFECTED, FULL, write_marker
 
@@ -905,7 +970,7 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     # closure is everything.
     for left in tmp_path.glob(".coverage.*"):
         left.unlink()
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     put.clear()
     _contextual_part(
         tmp_path,
@@ -935,7 +1000,9 @@ def _units(kw: dict[str, object]) -> dict[str, coverage_record.Unit]:
 
 
 def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    python_steps: object,
 ) -> None:
     from livery.workshop._packages import Edge
     from livery.workshop._verified import FULL, write_marker
@@ -949,7 +1016,7 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
         depends=(Edge(path="packages/base", kind="build", floor="0"),),
         extensions=("python",),
     )
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     install_meter(tmp_path, monkeypatch)
     # The root lists python, and its own tests hold the root's set.
     (tmp_path / "workshop.toml").write_text(
@@ -1209,10 +1276,12 @@ def test_a_leg_without_its_file_its_label_or_a_known_scope_refuses_by_name(
 
 
 def test_a_leg_that_ran_a_suite_and_left_its_lines_out_refuses_naming_them(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    python_steps: object,
 ) -> None:
     x = _suite(tmp_path, "x")
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
     _union(monkeypatch, [_leg("check-a", "full")])
     with pytest.raises(
@@ -1426,11 +1495,14 @@ def test_a_suite_whose_row_moved_on_mid_run_is_unioned_from_the_kept_row(
 
 
 def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branchs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     x = _suite(tmp_path, "x")
     source = _name(tmp_path, "x")
-    (tmp_path / "tests").mkdir()  # the workspace's own tests, a unit too
+    _own_tests(tmp_path)  # the workspace's own tests, a unit too
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
@@ -1652,11 +1724,14 @@ def test_the_legs_a_pull_request_runs_without_parts_refuse_and_a_spared_one_carr
 
 
 def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     x = _suite(tmp_path, "x")
     source = _name(tmp_path, "x")
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
@@ -1767,7 +1842,10 @@ def test_a_narrowed_leg_reuses_the_suite_it_skipped(
 
 
 def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     from livery.git import Skipped
 
@@ -1775,7 +1853,7 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     y = _suite(tmp_path, "y")
     x_source = _name(tmp_path, "x")
     y_source = _name(tmp_path, "y")
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     leg = _leg(
@@ -1871,11 +1949,14 @@ def test_a_run_whose_branch_moved_on_judges_but_never_writes_the_record(
 
 
 def test_a_push_of_an_unnamed_tree_carries_from_main_alone_and_writes_nothing_new(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     x = _suite(tmp_path, "x")
     source = _name(tmp_path, "x")
-    (tmp_path / "tests").mkdir()
+    _own_tests(tmp_path)
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
     held = coverage_record.Record(

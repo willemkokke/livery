@@ -649,11 +649,16 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
 
 
 def test_a_workspace_tests_change_narrows_to_that_unit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
 ) -> None:
     from livery.workshop._packages import workspace_suite
 
-    root = _root(tmp_path, "affected-legs = true\n")
+    # The root lists python, so a test step naming python runs its own
+    # tests, which hold the root's set.
+    root = _root(tmp_path, "affected-legs = true\n", '["python"]')
     x, y = _member(root, "x"), _member(root, "y")
     (root / "tests").mkdir()
     unit = workspace_suite(root)

@@ -1545,10 +1545,11 @@ measured afresh. The gate narrows on what the change
 affects alone; after it, the coverage leg runs every suite neither
 its branch's record nor main's holds at the suite's current closure,
 measured for its lines, and says why. The workspace's own
-`tests/` directory is a unit too, keyed by every package's tree, and
-every leg that runs a suite runs it while the root's set holds
-python. The gate job unions the legs'
-parts with the parts of every skipped suite, carried from the records,
+`tests/` directory is a unit too, keyed by every package's tree, while
+the root's set holds python: every leg that runs a suite runs it then.
+A root whose set holds no python runs none of its own tests, so no leg
+leaves a part for them and the union expects none. The gate job unions
+the legs' parts with the parts of every skipped suite, carried from the records,
 before it judges, so the union is the same global union a full run produces,
 and writes that union back onto the branch's record; a suite no
 record can supply is red by name, never a smaller union. So is a
