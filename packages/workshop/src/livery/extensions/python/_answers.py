@@ -44,6 +44,17 @@ def requirement_writers(package: Package) -> tuple[RequirementWriter, ...]:
     return (_backend.declare_requirement,)
 
 
+def test_requirements(package: Package) -> Mapping[str, str]:
+    """The package's ``test`` extra, each name to its constraint."""
+    return _backend.declared_test_requirements(package)
+
+
+def test_requirement_writers(package: Package) -> tuple[RequirementWriter, ...]:
+    """The pyproject's writer of a test requirement on a sibling that holds python."""
+    del package
+    return (_backend.declare_test_requirement,)
+
+
 def module_roots(package: Package) -> tuple[str, ...]:
     """The import prefixes the package's code is referenced by."""
     return tuple(_backend.module_roots(package))

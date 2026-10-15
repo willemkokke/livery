@@ -846,6 +846,8 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "version-files",
         "requirements",
         "requirement-writers",
+        "test-requirements",
+        "test-requirement-writers",
         "distributions",
         "registry",
         "executables",
@@ -869,6 +871,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "job-built-members",
     ]
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"
+    assert str(found["test-requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["job-built-members"].combine) == "livery.workshop._queries:merged"
     assert str(found["executables"].combine) == "livery.workshop._queries:owned"
     assert found["registry"].combine == "agreed"

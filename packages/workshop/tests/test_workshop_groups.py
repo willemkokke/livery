@@ -25,7 +25,9 @@ from livery.workshop._seeds import derived
 _FAILURES = (BaseException,)
 
 
-def _package(root: Path, member: str, *, contract_extra: str = "") -> Path:
+def _package(
+    root: Path, member: str, *, contract_extra: str = "", project_extra: str = ""
+) -> Path:
     directory = root / "packages" / member
     directory.mkdir(parents=True)
     name = "livery-" + member.replace("/", "-")
@@ -33,7 +35,7 @@ def _package(root: Path, member: str, *, contract_extra: str = "") -> Path:
         f'extensions = ["python"]\nname = "{name}"\n{contract_extra}'
     )
     (directory / "pyproject.toml").write_text(
-        f'[project]\nname = "{name}"\ndependencies = []\n'
+        f'[project]\nname = "{name}"\ndependencies = []\n{project_extra}'
     )
     return directory
 
@@ -89,6 +91,10 @@ def test_an_edge_to_a_grouped_package_passes_the_layering_lint(
         contract_extra=(
             '[[depends]]\npath = "packages/extensions/ruff"\nkind = "test"\n'
             'floor = "0.1.0"\n'
+        ),
+        project_extra=(
+            "\n[project.optional-dependencies]\n"
+            'test = ["livery-extensions-ruff>=0.1.0"]\n'
         ),
     )
     assert [p.member for p in verify_workspace(tmp_path)] == [

@@ -454,6 +454,8 @@ or the rule's answer over nothing. The base declares:
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
 | `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
+| `test-requirements` | package | each distribution the tests require beyond the requirements, to its constraint; a package whose set answers it has a home for its test edges | the union; a name valued twice refuses |
+| `test-requirement-writers` | package | the functions that write a test requirement on a sibling into the manifests, called as the requirement writers are | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |
 | `registry` | package | the registry the package releases to, as a probe of the versions it serves | one value every answer that is not empty agrees on |
 | `compile-commands` | package | the build's compilation database | the answer of the extension no other answering one requires |
@@ -1039,7 +1041,8 @@ A step's fix runs inside the gate's rewrite, before the judges.
 
 The sibling references' fix writes each edge's requirement before the
 edge. The package's set answers `requirement-writers` with its
-writers, and every one is called. Each takes a sibling of its own
+writers, and `test-requirement-writers` with those of a test edge's
+requirement, and every one is called. Each takes a sibling of its own
 ecosystem alone: python writes into `pyproject.toml` for a sibling that
 holds python, and conan writes into `conanfile.py` for a conan package,
 a sibling that holds conan and whose recipe names a reference. Conan
@@ -1048,6 +1051,19 @@ requirement. A sibling no writer takes refuses, naming the sibling's
 set, and nothing is written. A requirement written into a member's
 `pyproject.toml` moves the uv lock, so the fix locks again, and the
 fix's judge reads the contracts as the fix left them.
+
+`layering.graph` judges each edge of a contract against the package's
+manifests. A build or runtime edge is a requirement, at the edge's
+floor, and a requirement on a sibling is an edge. A test edge is a
+test requirement, at the edge's floor, in a package whose set answers
+`test-requirements`; python answers it with the `test` extra of
+`[project.optional-dependencies]`, which the release's isolated leg
+installs the wheel with. The fix of `layering.graph` writes each test
+requirement that is missing or names another floor, through the
+writers the set answers `test-requirement-writers` with, and locks
+again when a member's `pyproject.toml` moved. A test edge in a set
+that answers no `test-requirements`, and a tool edge, have no home in
+a manifest, and nothing judges them there.
 
 Each extension may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into

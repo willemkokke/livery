@@ -15,10 +15,10 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Iterable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import livery.footman as footman
 import livery.toolroom.tools as tools
@@ -642,21 +642,53 @@ def declared_requirements(package: Package) -> dict[str, str]:
     """The package's declared dependencies, name to constraint text.
 
     Read from ``[project.dependencies]``; the layering lint compares
-    these against the contract's ``[[depends]]`` edges.
+    these against the contract's build and runtime edges.
     """
-    entries: dict[str, str] = {}
+    project = _project_table(package)
+    return _constraints(project.get("dependencies", []))
+
+
+#: The optional extra that holds what a package's tests require beyond
+#: its dependencies: one line for each test edge of its contract.
+TEST_EXTRA = "test"
+
+
+def declared_test_requirements(package: Package) -> dict[str, str]:
+    """The package's ``test`` extra, name to constraint text.
+
+    Read from ``[project.optional-dependencies] test``; the layering
+    lint compares these against the contract's test edges. Empty for a
+    package that declares no such extra.
+    """
+    extras = _project_table(package).get("optional-dependencies") or {}
+    return _constraints(extras.get(TEST_EXTRA) or [])
+
+
+def _project_table(package: Package) -> dict[str, Any]:
+    """The ``[project]`` table of *package*'s ``pyproject.toml``; empty without one."""
     pyproject = package.directory / "pyproject.toml"
     if not pyproject.is_file():
-        return entries
+        return {}
     data = tomllib.loads(pyproject.read_text("utf-8"))
-    for requirement in data.get("project", {}).get("dependencies", []):
+    return cast("dict[str, Any]", data.get("project", {}))
+
+
+def _constraints(requirements: Iterable[object]) -> dict[str, str]:
+    """Each requirement of *requirements* by its name, to its constraint text."""
+    entries: dict[str, str] = {}
+    for requirement in requirements:
         text = str(requirement)
-        name = text
-        for cut in "[>=<!~; ":
-            head, _, _ = name.partition(cut)
-            name = head
+        name = _named(text)
         entries[name] = text[len(name) :].split(";")[0].replace("]", "")
     return entries
+
+
+def _named(requirement: str) -> str:
+    """The distribution name *requirement* starts with, as it spells it."""
+    name = requirement
+    for cut in "[>=<!~; ":
+        name = name.partition(cut)[0]
+    return name
 
 
 def declare_requirement(
@@ -709,6 +741,148 @@ def declare_requirement(
         )
     pyproject.write_text(text, encoding="utf-8")
     return ["pyproject.toml"]
+
+
+#: A table header in a TOML file: where the table before it ends.
+_HEADER = re.compile(r"^\[", flags=re.M)
+
+#: The comment a test extra opens with when the writer adds it.
+_TEST_COMMENT = (
+    "# The members this package's tests need beyond its dependencies, one\n"
+    "# for each test edge of its workshop.toml, at the edge's floor.\n"
+)
+
+#: The column a one-line test extra fits in; a longer one spreads one
+#: requirement to a line.
+_WIDTH = 88
+
+
+def declare_test_requirement(
+    package: Package, dependency: Package, floor: str
+) -> list[str] | None:
+    """Write ``<dependency>>=<floor>`` into the ``test`` extra; the files changed.
+
+    The python extension's writer of a test requirement, its answer to
+    the ``test-requirement-writers`` query. It takes a sibling whose set
+    holds python, and returns None for any other sibling. The line
+    carries the edge's floor: one that names the sibling at another
+    constraint is replaced, and one that carries the floor already
+    means nothing to write. An empty *floor* writes the name alone. A
+    text edit that keeps the manifest's formatting and comments: the
+    line joins the extra, kept on one line while it fits in 88 columns
+    and one requirement to a line beyond; the extra opens, after a
+    comment saying what it holds, at the end of
+    ``[project.optional-dependencies]``; and that table opens after the
+    ``[project]`` table when the project declares none.
+
+    Raises:
+        Failed: when the manifest has no ``[project]`` table, and when
+            its test extra is spelled in a form the edit does not take,
+            naming the manifest.
+    """
+    from livery.workshop._composition import extension_set
+
+    if EXTENSION not in extension_set(dependency):
+        return None
+    held = declared_test_requirements(package).get(dependency.name)
+    if held is not None and (not floor or f">={floor}" in held):
+        return []
+    pyproject = package.directory / "pyproject.toml"
+    line = f"{dependency.name}>={floor}" if floor else dependency.name
+    text = _with_test_line(pyproject, dependency.name, line)
+    pyproject.write_text(text, encoding="utf-8")
+    return ["pyproject.toml"]
+
+
+def _with_test_line(pyproject: Path, name: str, line: str) -> str:
+    """*pyproject*'s text with *line* in its test extra, in place of each naming *name*.
+
+    Raises:
+        Failed: when the manifest has no ``[project]`` table, and when
+            its test extra is spelled in a form the edit does not take.
+    """
+    text = pyproject.read_text("utf-8")
+    table = re.search(r"^\[project\.optional-dependencies\]\n", text, flags=re.M)
+    if table is None:
+        project = re.search(r"^\[project\]\n", text, flags=re.M)
+        if project is None:
+            fail(f"{pyproject} has no [project] table to declare a test requirement in")
+        following = _HEADER.search(text, project.end())
+        opened = (
+            f"[project.optional-dependencies]\n{_TEST_COMMENT}"
+            f'{TEST_EXTRA} = ["{line}"]\n'
+        )
+        if following is None:
+            return text.rstrip("\n") + "\n\n" + opened
+        start = following.start()
+        return text[:start] + opened + "\n" + text[start:]
+    following = _HEADER.search(text, table.end())
+    end = following.start() if following else len(text)
+    body = text[table.end() : end]
+    edited = _with_line_in(body, name, line)
+    if edited is None:
+        fail(
+            f"{pyproject} spells its {TEST_EXTRA} extra in a form this edit does not"
+            f' take; write "{line}" into it by hand'
+        )
+    return text[: table.end()] + edited + text[end:]
+
+
+def _with_line_in(body: str, name: str, line: str) -> str | None:
+    """The body of ``[project.optional-dependencies]`` with *line* in its test extra.
+
+    The extra is one line, or one requirement to a line with the
+    bracket closing on a line of its own; None for any other spelling.
+    """
+    inline = re.search(rf"^{TEST_EXTRA} = \[([^\n]*)\]([^\n]*)\n", body, flags=re.M)
+    if inline is not None:
+        listed = cast("list[str]", tomllib.loads(f"x = [{inline.group(1)}]")["x"])
+        items = _placed(listed, name, line)
+        spelled = ", ".join(f'"{item}"' for item in items)
+        rendered = f"{TEST_EXTRA} = [{spelled}]{inline.group(2)}\n"
+        if len(rendered) > _WIDTH + 1:
+            each = "".join(f'    "{item}",\n' for item in items)
+            rendered = f"{TEST_EXTRA} = [{inline.group(2)}\n{each}]\n"
+        return body[: inline.start()] + rendered + body[inline.end() :]
+    spread = re.search(
+        rf"^{TEST_EXTRA} = \[[ \t]*(?:#[^\n]*)?\n(.*?)^\]", body, flags=re.M | re.S
+    )
+    if spread is not None:
+        lines = spread.group(1).splitlines(keepends=True)
+        naming = [
+            index
+            for index, held in enumerate(lines)
+            if (quoted := re.match(r'\s*"([^"]*)"', held)) is not None
+            and _named(quoted.group(1)) == name
+        ]
+        entry = f'    "{line}",\n'
+        for index in reversed(naming[1:]):
+            del lines[index]
+        if naming:
+            lines[naming[0]] = entry
+        else:
+            lines.append(entry)
+        return body[: spread.start(1)] + "".join(lines) + body[spread.end(1) :]
+    if re.search(rf"^{TEST_EXTRA}\s*=", body, flags=re.M):
+        return None
+    kept = body.rstrip("\n")
+    # The blank lines that end the table stay after the extra it gains.
+    tail = body[len(kept) + 1 :] if kept else body
+    lead = f"{kept}\n" if kept else ""
+    return f'{lead}{_TEST_COMMENT}{TEST_EXTRA} = ["{line}"]\n{tail}'
+
+
+def _placed(items: list[str], name: str, line: str) -> list[str]:
+    """*items* with *line* in place of the first naming *name*, or after the last."""
+    placed: list[str] = []
+    for item in items:
+        if _named(item) != name:
+            placed.append(item)
+        elif line not in placed:
+            placed.append(line)
+    if line not in placed:
+        placed.append(line)
+    return placed
 
 
 def module_docs_dir(package: Package) -> Path | None:

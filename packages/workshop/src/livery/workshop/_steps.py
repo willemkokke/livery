@@ -1637,12 +1637,26 @@ def _register_builtin() -> None:
 
         verify_graph(ctx.root)
 
+    def relocked(root: Path, written: list[str]) -> None:
+        """Print each line a fix *written*, and lock again when one moved a manifest."""
+        from livery.workshop._uv import run_uv
+
+        for line in written:
+            print(line)
+        if any("pyproject.toml" in line for line in written):
+            # Each line names the files written. A requirement written
+            # into a uv member's manifest moves the uv workspace's lock,
+            # so the fix locks again and leaves the tree consistent, as
+            # a person would after editing by hand.
+            run_uv("lock", root=root)
+
     def graph_fix(ctx: PhaseContext) -> None:
         from livery.workshop._extensions import write_extensions
-        from livery.workshop._packages import verify_graph
+        from livery.workshop._packages import verify_graph, write_test_requirements
 
         for line in write_extensions(ctx.root):
             print(line)
+        relocked(ctx.root, write_test_requirements(ctx.root))
         verify_graph(ctx.root)
 
     def rule_run(step: str) -> Callable[[PhaseContext], None]:
@@ -1662,17 +1676,9 @@ def _register_builtin() -> None:
         from dataclasses import replace
 
         from livery.workshop._packages import discover_packages, write_edges
-        from livery.workshop._uv import run_uv
 
         written = write_edges(ctx.root)
-        for line in written:
-            print(line)
-        if any("pyproject.toml" in line for line in written):
-            # Each line names the files written. A requirement written
-            # into a uv member's manifest moves the uv workspace's lock,
-            # so the fix locks again and leaves the tree consistent, as
-            # a person would after editing by hand.
-            run_uv("lock", root=ctx.root)
+        relocked(ctx.root, written)
         if written:
             # The run read the packages before the fix wrote their
             # contracts, and the judge reads them as the fix left them.

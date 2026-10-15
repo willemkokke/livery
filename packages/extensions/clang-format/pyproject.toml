@@ -28,10 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# What this package's own suite needs beyond its dependencies: the cmake
-# extension, a distribution of its own, which the suite's workspaces list
-# as data. The release's isolated leg installs the wheel with this
-# extra, so the suite finds cmake installed there too.
+# The members this package's tests need beyond its dependencies, one
+# for each test edge of its workshop.toml, at the edge's floor.
 test = ["livery-extensions-cmake>=0.0.0"]
 
 [project.urls]
