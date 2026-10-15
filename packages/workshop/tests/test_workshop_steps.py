@@ -325,7 +325,7 @@ def test_two_extensions_declaring_one_step_refuse_unless_one_replaces_or_deletes
     register_step(StepRecord("acme", "lint", _noop, extension="acme.one"))
     refusal = re.escape(
         "step lint.acme is declared by both acme.one and acme.two; two extensions"
-        " declare one step unless the later names acme.one:lint.acme in replaces"
+        " declare one step unless acme.two names acme.one:lint.acme in replaces"
         " or deletes, with a reason"
     )
     with pytest.raises(_FAILURES, match=refusal):

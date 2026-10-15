@@ -1564,7 +1564,7 @@ def test_a_leg_a_pull_request_does_not_run_passes_a_suite_no_record_has_ever_hel
     assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 
-def test_a_push_carries_no_absent_leg(
+def test_a_push_carries_no_absent_leg_and_a_leg_it_runs_must_leave_its_parts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     x = _suite(tmp_path, "x")
@@ -1577,11 +1577,76 @@ def test_a_push_carries_no_absent_leg(
         lambda root, run: (["check-a", "check-b"], ["check-a", "check-b"]),
     )
     fresh = _unit(tmp_path, "packages/x", {source: [1, 2, 3, 4]}, run="7")
+    # A push runs both legs. check-b's write never landed: the union
+    # refuses by name, and neither carries it nor judges check-a alone.
     _union(monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})])
+    with pytest.raises(
+        _FAILURES,
+        match=r"^leg check-b left no parts on run 7's refs: .* its own log says"
+        r" which; a missing put is a red leg, never a smaller union$",
+    ):
+        coverage_union.combine_union(tmp_path, (x,))
+    out = capsys.readouterr().out
+    assert "did not run on this pull request" not in out
+    assert "reused" not in out
+    assert "the union of" not in out
+    # Both legs left their parts: the union is theirs, nothing carried.
+    _union(
+        monkeypatch,
+        [
+            _leg("check-a", "full", units={"packages/x": fresh}),
+            _leg("check-b", "full", units={"packages/x": fresh}, label="check-b"),
+        ],
+    )
     assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "did not run on this pull request" not in out
-    assert "the union of 1 leg(s) and 0 reused suite(s)" in out
+    assert "the union of 2 leg(s) and 0 reused suite(s)" in out
+
+
+def test_the_legs_a_pull_request_runs_without_parts_refuse_and_a_spared_one_carries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Three legs a pull request runs and a fourth it spares: two of the
+    # three had their writes refused. The union names both, never the
+    # spared leg, whose suites the records carry.
+    from livery.extensions.coverage._parts import UNION
+
+    x = _suite(tmp_path, "x")
+    source = _name(tmp_path, "x")
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setattr(
+        coverage_union,
+        "expected_legs",
+        lambda root, run: (
+            ["check-a", "check-b", "check-c", "check-d"],
+            ["check-a", "check-b", "check-c"],
+        ),
+    )
+    held = coverage_record.Record(
+        {"packages/x": _unit(tmp_path, "packages/x", {source: [1, 2, 3, 4]})}
+    )
+    fresh = _unit(tmp_path, "packages/x", {source: [1, 2]}, run="7")
+    written = _union(
+        monkeypatch, [_leg("check-a", "full", units={"packages/x": fresh})], held=held
+    )
+    # A union an earlier job left behind.
+    (tmp_path / UNION).parent.mkdir(parents=True)
+    (tmp_path / UNION).write_text("{}")
+    with pytest.raises(
+        _FAILURES,
+        match=r"^legs check-b, check-c left no parts on run 7's refs: every leg"
+        r" the run runs puts its scope and its parts there \(coverage\.json\)",
+    ):
+        coverage_union.combine_union(tmp_path, (x,))
+    out = capsys.readouterr().out
+    assert "coverage: leg check-d did not run on this pull request" in out
+    # A refused union leaves no union file for the floors to judge, and
+    # writes no record.
+    assert not (tmp_path / UNION).exists()
+    assert written == []
 
 
 def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(

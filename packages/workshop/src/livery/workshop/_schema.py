@@ -255,8 +255,8 @@ def judged_by(root: Path, relative: Path) -> str:
     """The line naming the schema the file at *relative* is judged by; empty for none.
 
     The file under ``.workshop/schema/``, and the owners whose keys it
-    holds: the base and the tool store, then the extensions the root
-    lists, in list order. An ``extension.toml`` is judged by the base's
+    holds: the base and the tool store, then the installed set, in
+    composition order. An ``extension.toml`` is judged by the base's
     and the tool store's keys alone.
     """
     from livery.workshop._contract_keys import ALWAYS

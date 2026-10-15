@@ -690,23 +690,10 @@ def test_an_extension_with_no_step_refuses(monkeypatch: pytest.MonkeyPatch) -> N
         _e2e.extension_under_test("quiet")
 
 
-def test_extensions_that_require_each_other_refuse(
+def test_the_list_is_the_extension_under_test_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _fake_declarations(
-        monkeypatch,
-        {
-            "a": _declared("python", requires=("b",)),
-            "b": _declared("python", requires=("a",)),
-        },
-    )
-    with pytest.raises(_FAILURES, match="a -> b -> a"):
-        _e2e.extension_under_test("a")
-
-
-def test_the_stack_lists_what_an_extension_requires_before_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    # Its set takes in what it requires, so the list names nothing else.
     _fake_declarations(
         monkeypatch,
         {
@@ -715,8 +702,8 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "base": _declared("cmake"),
         },
     )
-    stack, members = _e2e.extension_under_test("top")
-    assert stack == ("base", "mid", "top")
+    listed, members = _e2e.extension_under_test("top")
+    assert listed == ("top",)
     assert members == ("loop-cpp",)
     # An extension that runs the tests installed beside it rides along no
     # more: a gate that meters no suite runs no coverage leg, so the pass
@@ -730,8 +717,8 @@ def test_the_stack_lists_what_an_extension_requires_before_it(
             "pytest": _declared("python", phase="test"),
         },
     )
-    stack, members = _e2e.extension_under_test("top")
-    assert stack == ("base", "mid", "top")
+    listed, members = _e2e.extension_under_test("top")
+    assert listed == ("top",)
     assert members == ("loop-cpp",)
 
 
@@ -787,9 +774,9 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
     # packages, and loop-echo's does not, so a step naming conan lands
     # that member too.
     assert members == ("loop-echo", "loop-native", "loop-cpp")
-    # The test extension is listed as any other: once, as the extension
-    # under test, or where a requirement puts it, and never beside an
-    # extension that does not require it.
+    # The test extension is listed as any other: as the extension under
+    # test, and never beside another, whose set takes it in where that
+    # one requires it.
     _fake_declarations(
         monkeypatch,
         {
@@ -799,7 +786,7 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
         },
     )
     assert _e2e.extension_under_test("pytest")[0] == ("pytest",)
-    assert _e2e.extension_under_test("wrap")[0] == ("pytest", "wrap")
+    assert _e2e.extension_under_test("wrap")[0] == ("wrap",)
     assert _e2e.extension_under_test("typed") == (("typed",), ("loop-echo",))
     assert [member.name for member in _e2e.members_for(members)] == [
         "loop-echo",
@@ -832,7 +819,7 @@ def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) 
     }
 
 
-def test_the_birth_lists_the_stack_of_the_pass(
+def test_the_birth_lists_the_extensions_of_the_pass(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from types import SimpleNamespace
@@ -846,9 +833,9 @@ def test_the_birth_lists_the_stack_of_the_pass(
     monkeypatch.setattr("livery.footman.run", _run)
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
     _e2e._birth("gitea", "http://localhost:1")
-    assert not any(arg.startswith("--stack") for arg in seen[-1])
+    assert not any(arg.startswith("--extensions") for arg in seen[-1])
     _e2e._birth("gitea", "http://localhost:1", stack=("base", "top"))
-    assert "--stack=base,top" in seen[-1]
+    assert "--extensions=base,top" in seen[-1]
 
 
 def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
@@ -862,14 +849,16 @@ def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
     assert getattr(_e2e.e2e, "livery_git_unsigned", False) is True
 
 
-def test_a_contract_s_list_is_read_by_name(tmp_path: Path) -> None:
-    assert _e2e._listed_extensions(tmp_path) == ()  # pyright: ignore[reportPrivateUsage]
+def test_a_contract_s_root_set_is_read_by_name(tmp_path: Path) -> None:
+    assert _e2e._listed_extensions(tmp_path) == frozenset()  # pyright: ignore[reportPrivateUsage]
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["docs", { name = "acme.house", for = [] },'
-        ' "basedpyright"]\n'
+        '[workspace]\nextensions = [{ name = "acme.house", for = [] },'
+        ' "basedpyright", "mkdocstrings"]\n'
     )
+    # The set, so the docs extension mkdocstrings requires counts though
+    # the list leaves it out.
     listed = _e2e._listed_extensions(tmp_path)  # pyright: ignore[reportPrivateUsage]
-    assert listed == ("docs", "acme.house", "basedpyright")
+    assert listed == {"acme.house", "basedpyright", "docs", "mkdocstrings"}
 
 
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:
@@ -1844,7 +1833,7 @@ def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks
     )
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (object(), "token-new"))
     monkeypatch.setattr(_e2e, "_loop_home", lambda kind: tmp_path)
-    monkeypatch.setattr(_e2e, "_listed_extensions", lambda root: ("docs",))
+    monkeypatch.setattr(_e2e, "_listed_extensions", lambda root: frozenset({"docs"}))
     monkeypatch.setattr(_e2e, "start_over", start_over)
     fresh = _e2e.Pass("gitea", "http://localhost:57713", fresh=True, stack=("ruff",))
     with pytest.raises(_Stop):
@@ -2134,14 +2123,14 @@ def test_the_plain_pass_lists_the_stock_list_without_the_site() -> None:
         return name == "docs" or any(builds_the_site(other) for other in needed)
 
     site = tuple(name for name in stock if builds_the_site(name))
-    assert "docs" in site
+    assert site == ("mkdocstrings",)
     assert _e2e.loop_stack() == tuple(name for name in stock if name not in site)
     assert _e2e.loop_stack() == (
-        "changelog",
-        "ruff",
         "basedpyright",
-        "pytest",
+        "changelog",
         "coverage",
+        "pytest",
+        "ruff",
     )
 
 

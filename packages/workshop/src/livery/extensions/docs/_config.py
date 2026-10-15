@@ -5,8 +5,8 @@ apart from the site's verbs, so the declaration can name the rule and
 importing this module registers nothing. A listed extension answers
 the query with the function that writes its tables for one config,
 given what the config covers (`Scope`); `joined` puts each answer's
-tables after the docs extension's own, in list order, and parses the
-result. The ``docs.members`` query's handle and its two answers live
+tables after the docs extension's own, in composition order, and
+parses the result. The ``docs.members`` query's handle and its two answers live
 here too, for the extension whose tables render the reference.
 """
 
@@ -56,9 +56,9 @@ class Scope:
 #: empty when the extension has nothing to say there.
 Writer = Callable[[Scope], str]
 
-#: The query asking the listed extensions for their tables in the site's
-#: config: each answers with a `Writer`, and the answers keep the list's
-#: order.
+#: The query asking the installed extensions for their tables in the
+#: site's config: each answers with a `Writer`, and the answers keep
+#: composition order.
 CONFIG: Query[tuple[tuple[str, Writer], ...]] = Query("docs.config")
 
 #: The query deciding whether private members are documented: ``public``
@@ -81,7 +81,9 @@ def members_policy(root: Path) -> str:
 def writers(
     answers: Mapping[str, Any], lookup: object
 ) -> tuple[tuple[str, Writer], ...]:
-    """``docs.config``'s rule: each answering extension with its writer, in list order.
+    """``docs.config``'s rule: each answering extension with its writer, in order.
+
+    The answers come in composition order.
 
     Raises:
         ValueError: when an answer is not a function, naming the
@@ -125,9 +127,9 @@ def written_tables(text: str) -> list[str]:
 def joined(own: str, scope: Scope) -> str:
     """*own*, the docs extension's config, with each answer's tables after it.
 
-    The listed extensions' answers to ``docs.config`` are asked about
-    *scope*'s root and each writes its tables for *scope*, in list
-    order; an answer that writes nothing adds nothing. Each answer's
+    The installed extensions' answers to ``docs.config`` are asked
+    about *scope*'s root and each writes its tables for *scope*, in
+    composition order; an answer that writes nothing adds nothing. Each answer's
     tables follow the text before them after one blank line, and the
     text is parsed once each answer joins it, so the answer that
     breaks it is the one named.

@@ -114,22 +114,24 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    # The extensions the packages' sets hold mount first.
+    # The installed set, in composition order: the root's set, docs
+    # through mkdocstrings among it, and python, which the packages' sets
+    # hold.
     assert extension_names(ROOT) == (
-        "python",
-        "changelog",
-        "claude",
-        "docs",
-        "mkdocstrings",
-        "ruff",
         "basedpyright",
-        "mypy",
-        "ty",
-        "pyrefly",
-        "pytest",
-        "coverage",
+        "changelog",
         "clang-format",
         "clang-tidy",
+        "claude",
+        "coverage",
+        "docs",
+        "mkdocstrings",
+        "mypy",
+        "pyrefly",
+        "pytest",
+        "python",
+        "ruff",
+        "ty",
     )
 
 
@@ -175,12 +177,10 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
         assert mount_extensions(tmp_path) == ("coverage",)
-    # As this repository lists them.
-    contract.write_text(
-        '[workspace]\nextensions = ["docs", { name = "coverage", for = ["docs"] }]\n'
-    )
+    # With docs beside it, in composition order, whatever the list's.
+    contract.write_text('[workspace]\nextensions = ["docs", "coverage"]\n')
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("docs", "coverage")
+        assert mount_extensions(tmp_path) == ("coverage", "docs")
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:
@@ -193,14 +193,15 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
         '  { name = "docs", for = [] },\n'
         "]\n"
     )
-    # The distribution is the one whose entry point declares the name.
+    # The distribution is the one whose entry point declares the name,
+    # in composition order.
     assert extension_entries(tmp_path) == (
-        ("livery.forge", "livery-forge"),
         ("docs", "livery-workshop"),
+        ("livery.forge", "livery-forge"),
     )
-    # The stack is the base, then the list.
+    # The stack is the base, then the installed set.
     assert stack_entries(tmp_path)[0] == ("livery.workshop", "livery-workshop")
-    assert extension_names(tmp_path) == ("livery.forge", "docs")
+    assert extension_names(tmp_path) == ("docs", "livery.forge")
 
 
 def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None:
@@ -220,8 +221,8 @@ def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None
     assert injections["extension_requirements"] == ["livery-workshop"]
     assert injections["extension_imports"] == [
         "livery.workshop",
-        "livery.forge",
         "docs",
+        "livery.forge",
     ]
 
 

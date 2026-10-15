@@ -418,7 +418,7 @@ def test_a_second_generator_s_tables_reach_the_config(
         'depth = 2\nstyle = "chisel"\nstrict = true\n',
     )
     root = _workspace(
-        tmp_path, docs_table='extensions = ["docs", "mkdocstrings", "acme.carve"]\n'
+        tmp_path, docs_table='extensions = ["acme.carve", "mkdocstrings"]\n'
     )
     _referenced(root)
     config = zensical_config(root)
@@ -430,11 +430,12 @@ def test_a_second_generator_s_tables_reach_the_config(
         "strict": True,
     }
     assert handlers["python"]["paths"] == ["packages/bare/src", "packages/core/src"]
-    # The answers join in list order, after the docs extension's own tables.
+    # The answers join in composition order, after the docs extension's
+    # own tables.
     assert (
         config.index("[project.markdown_extensions.pymdownx.snippets]")
-        < config.index("[project.plugins.mkdocstrings.handlers.python]")
         < config.index("[project.plugins.mkdocstrings.handlers.carve]")
+        < config.index("[project.plugins.mkdocstrings.handlers.python]")
     )
     # A preview hands the answers its one package, read from two levels down.
     preview = tomllib.loads(scoped_config(root, named_package(root, "core")))
@@ -1295,6 +1296,45 @@ def test_a_theme_answer_outside_the_vocabulary_refuses_naming_the_keys(
         r" the theme's keys$",
     ):
         theme_values(root)
+
+
+def test_two_theme_answers_setting_one_key_refuse_unless_one_requires_the_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.docs._site import theme_values
+    from livery.workshop._queries import QueryError
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        bold=_answering("docs.theme", '{ "font.text" = "Lato", "language" = "nl" }'),
+        calm=_answering("docs.theme", '{ "font.text" = "Inter Light" }'),
+    )
+    root = _workspace(
+        tmp_path, docs_table='extensions = ["acme.bold", "acme.calm", "docs"]\n'
+    )
+    with pytest.raises(
+        QueryError,
+        match=r"^docs\.theme: acme\.bold and acme\.calm both set font\.text, and"
+        r" neither requires the other; one of them sets it, or one requires the"
+        r" other$",
+    ):
+        theme_values(root)
+    # The one that requires the other wins the key, whatever the list's
+    # order, and a key only one sets is that one's.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        bold=_answering(
+            "docs.theme",
+            '{ "font.text" = "Lato", "language" = "nl" }',
+            requires="acme.calm",
+        ),
+    )
+    for listed in ('["acme.bold", "docs"]', '["docs", "acme.bold"]'):
+        _relist(root, listed)
+        values = theme_values(root)
+        assert values["font.text"] == "Lato" and values["language"] == "nl"
 
 
 def test_a_theme_answer_changes_the_fonts_and_keeps_the_rest(

@@ -295,6 +295,24 @@ def test_a_refused_update_and_a_refused_push_carry_gits_words(
     )
     why = git.put(store, REF, {"a": "{}"}, message="r")
     assert why == "push refused: fatal: no route to host"
+    # A refusal whose reason comes last arrives whole: what a push
+    # protection found, where, and the link that allows it.
+    refusal = "\n".join(
+        (
+            "remote: error: GH013: Repository rule violations found for refs/x.",
+            "remote: ",
+            "remote: - GITHUB PUSH PROTECTION",
+            "remote:     Resolve the following violations before pushing again",
+            "remote:     - Push cannot contain secrets",
+            "remote:       locations:",
+            "remote:         - commit: 0123456789abcdef",
+            "remote:           path: coverage.json:1",
+            "remote:     https://github.com/o/r/security/secret-scanning/unblock-secret/s",
+        )
+    )
+    monkeypatch.setattr(store_module, "_git", _failing(refusal + "\n", when="push"))
+    why = git.put(store, REF, {"a": "{}"}, message="r")
+    assert why == f"push refused: {refusal}"
 
 
 def test_commit_times_outside_a_snapshot_with_missing_objects_and_failed_brings(

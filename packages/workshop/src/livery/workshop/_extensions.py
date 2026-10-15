@@ -1,13 +1,14 @@
 """The extension walk: the lists in the contracts, every channel.
 
 Every extension is one kind, and two lists name them: the root
-``workshop.toml``'s ``[workspace] extensions``, in precedence order,
-the workshop first and the instance implicitly last, and each
-package's ``workshop.toml``, the extensions it is composed of. A list's
-set is the list and every extension it requires. The installed set is
-the root's set and every package's set: a sync installs it, and
-mounting reads it, the base first, then the packages' sets in
-composition order, then the root's list in its order. So a package
+``workshop.toml``'s ``[workspace] extensions`` and each package's
+``workshop.toml``, the extensions it is composed of. A list's set is
+the list and every extension it requires. The installed set is the
+root's set and every package's set: a sync installs it, and mounting
+reads it, the base first, then the installed set in composition
+order: each extension after the ones it requires, ties alphabetical.
+No list's order decides anything: each list is written in its
+canonical form, the minimal one in composition order. So a package
 installed by accident never changes a repository: discovery is the
 lists and nothing else.
 """
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -368,41 +370,40 @@ def _named_by_steps() -> frozenset[str]:
     return frozenset(found)
 
 
-def _packages_hold(root: Path) -> tuple[str, ...]:
-    """Every extension a package under *root* holds, in composition order.
+def root_set(start: Path | None = None) -> tuple[str, ...]:
+    """The root's set: ``[workspace] extensions`` and what it requires.
 
-    The union of the packages' sets, each its list and what the list
-    requires; a declared order with no start falls back to alphabetical.
+    In composition order, whatever the list's order and whether an
+    implied extension is written in it. A name no installed
+    distribution declares stays in the set and requires nothing. A
+    declared order with no start falls back to alphabetical, and
+    ``layering.graph`` names the cycle. Empty outside a workspace.
     """
-    held: list[str] = []
-    for _contract, names in _package_lists(root):
-        held += [listing(name).name for name in names]
-    return order_or_sorted(closure(held, installed_declaration), installed_declaration)
+    names = closure(workspace_names(start), installed_declaration)
+    return order_or_sorted(names, installed_declaration)
 
 
 def installed_set(start: Path | None = None) -> tuple[str, ...]:
-    """The extensions the workspace installs and mounts, in mount order.
+    """The extensions the workspace installs and mounts, in composition order.
 
     The root's set and every package's set, each a list and every
-    extension it requires, whatever that extension declares. The
-    packages' sets come first, in composition order
-    ([livery.workshop._composition.order][]), then ``[workspace]
-    extensions`` in its order, each entry after what it requires that
-    has no place yet; an extension both name takes its first place. A
-    name no installed distribution declares stays in the set: the mount
-    names it, and ``fm sync`` installs it. A declared order with no
-    start falls back to alphabetical here, so a sync still runs, and
-    ``layering.graph`` names the cycle. Empty outside a workspace.
+    extension it requires, whatever that extension declares, in
+    composition order ([livery.workshop._composition.order][]): each
+    extension after the ones it requires, ties alphabetical. Neither
+    list's order changes it. A name no installed distribution declares
+    stays in the set: the mount names it, and ``fm sync`` installs it.
+    A declared order with no start falls back to alphabetical here, so
+    a sync still runs, and ``layering.graph`` names the cycle. Empty
+    outside a workspace.
     """
     root = workspace_root(start)
     if root is None:
         return ()
-    found = dict.fromkeys(_packages_hold(root))
-    for name in workspace_names(root):
-        wanted = closure((name,), installed_declaration)
-        for needed in order_or_sorted(wanted, installed_declaration):
-            found.setdefault(needed)
-    return tuple(found)
+    listed = list(workspace_names(root))
+    for _contract, names in _package_lists(root):
+        listed += [listing(name).name for name in names]
+    found = closure(listed, installed_declaration)
+    return order_or_sorted(found, installed_declaration)
 
 
 def where_listed(start: Path | None = None) -> dict[str, str]:
@@ -511,10 +512,10 @@ def extension_provider(extension: str, packages: tuple[Package, ...]) -> str:
 def extension_names(start: Path | None = None) -> tuple[str, ...]:
     """The extensions the workspace installs and mounts, in mount order.
 
-    The root's set and every package's set
-    ([livery.workshop._extensions.installed_set][]): the extensions every
-    package's set holds, then ``[workspace] extensions`` and what it
-    requires. ``workspace_names`` reads the workspace list alone.
+    The root's set and every package's set, in composition order
+    ([livery.workshop._extensions.installed_set][]).
+    ``workspace_names`` reads the workspace list alone, and
+    ``root_set`` the root's set.
     """
     return installed_set(start)
 
@@ -550,7 +551,7 @@ def base_directory() -> Path:
 def shipped_content(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
     """Each extension of the workspace's stack with its ``content/`` directory.
 
-    The base first, then the listed extensions in list order, each with
+    The base first, then the installed set in mount order, each with
     the directory its shipped files live in; an extension that ships no
     content, or that no installed distribution declares, is left out.
     """
@@ -563,13 +564,15 @@ def shipped_content(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
 
 
 def extension_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
-    """Each listed extension's ``for`` list from its contract entry; None without one.
+    """Each root entry's ``for`` list; None for an entry without one.
 
     A table entry may carry ``for = [...]``, the targets the extension
-    contributes to, written once by the fix of ``layering.graph`` and a
-    person's to edit from then on: a name deleted from it stays
-    deleted, which is a project's opt-out from that target's
-    opinions.
+    contributes to. Without one it contributes to every target of the
+    installed set it declares a table for, the default; a ``for`` that
+    leaves a target out is the workspace's opt-out from that target's
+    opinions. A ``for`` naming exactly the default says nothing more
+    than the name alone, and the fix of ``layering.graph`` writes the
+    name alone in its place.
     """
     found: dict[str, tuple[str, ...] | None] = {}
     for entry in _listed(start):
@@ -638,13 +641,16 @@ def mount_git_plugin() -> str:
 def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     """Mount the plugin of every extension of the installed set, in mount order.
 
-    Returns the names mounted. The extensions every package's set holds
-    mount first, in composition order, then ``[workspace] extensions``
-    in its order ([livery.workshop._extensions.installed_set][]), so an
-    entry of the root's list finds an extension a package holds already
-    registered. Any extension mounts from either list. Refuses an
-    extension declared for another workshop API version, and one whose
-    declaration file says something this workshop cannot take.
+    Returns the names mounted. The installed set mounts in composition
+    order ([livery.workshop._extensions.installed_set][]), so an
+    extension finds every extension it requires already registered,
+    whatever either list's order. Any extension mounts from either
+    list. Refuses an extension declared for another workshop API
+    version, one whose declaration file says something this workshop
+    cannot take, a step into a phase of an extension it does not
+    require (``check_phase_declarers``), and a step that replaces or
+    deletes a step of an extension it does not require
+    (``check_replacements``).
     A contract without ``[workspace] extensions``, an extension no
     installed distribution declares, and one whose installed package
     ships no declaration file are named on stderr, the first of these
@@ -701,9 +707,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             found = _readable(extension)
             if found is not None:
                 check_api_version(extension, found)
-                check_phase_declarers(
-                    extension, found, present, contributes.get(extension, ())
-                )
+                check_phase_declarers(extension, found)
+                check_replacements(extension, found)
                 if (
                     extension not in asleep
                     and register_declared(extension, found.additions, enabled=enabled)
@@ -739,7 +744,8 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             )
             continue
         check_api_version(extension, found)
-        check_phase_declarers(extension, found, present, contributes.get(extension, ()))
+        check_phase_declarers(extension, found)
+        check_replacements(extension, found)
         if (
             extension not in asleep
             and register_declared(extension, found.additions, enabled=enabled)
@@ -869,51 +875,101 @@ def _note(text: str) -> None:
     print(f"  note: {text}", file=sys.stderr)
 
 
-def check_phase_declarers(
-    extension: str,
-    found: Declaration,
-    present: Iterable[str],
-    applies: Iterable[str] = (),
-) -> None:
-    """Refuse a step of *extension* into a phase whose declarer is not mounted.
+def _reached(extension: str, found: Declaration) -> frozenset[str]:
+    """The owners whose steps *extension*'s top-level tables may reach.
 
-    A phase is declared by the base, by *extension* itself, or by an
-    extension among *present*, the ones mounted before it; a step into
-    an installed but unlisted extension's phase names the declarer to
-    list. A ``[for.<target>]`` table's steps count only while the table
-    applies, for each target among *applies*, the targets `contributing`
-    names for *extension*; there the target counts as mounted too, since
-    the table's steps register once both are, whichever the list names
-    first. A table for a target the workspace does not list adds no
-    step, so it refuses nothing.
+    The base, *extension* itself and every extension it requires,
+    transitively: each is in every set that holds *extension*, and
+    mounts before it. A ``[for.<target>]`` table reaches its target as
+    well, since the table registers once both are mounted.
+    """
+    return frozenset({SELF, extension, *closure(found.requires, installed_declaration)})
+
+
+def check_phase_declarers(extension: str, found: Declaration) -> None:
+    """Refuse a step of *extension* into a phase of an extension it does not require.
+
+    A phase is declared by the base or by an extension. A step of
+    *extension*'s top-level tables goes into a phase the base,
+    *extension* itself or an extension it requires declares; a step of
+    a ``[for.<target>]`` table also into one *target* declares. Judged
+    from the declarations alone, every ``[for]`` table whether it
+    applies or not, so the verdict follows no list and no list's order.
 
     Raises:
-        Failed: naming the extension, the phase and its declarer.
+        Failed: naming the extension, the phase and its declarer, with
+            the two ways to write the step.
     """
     from livery.footman import fail
     from livery.workshop import _phases
 
-    mounted = frozenset({SELF, extension, *present})
+    reached = _reached(extension, found)
     added = {
-        (phase, mounted)
+        (phase, reached)
         for phase in (
             *(record.phase for record in found.additions.steps),
             *found.phases,
         )
     }
-    for target in applies:
-        additions = found.targets.get(target)
-        if additions is not None:
-            added |= {(record.phase, mounted | {target}) for record in additions.steps}
+    for target, additions in found.targets.items():
+        added |= {(record.phase, reached | {target}) for record in additions.steps}
     specs = _phases.declared_phases()
     for phase, allowed in sorted(added, key=lambda pair: (pair[0], sorted(pair[1]))):
         declarer = specs[phase].extension if phase in specs else SELF
         if declarer not in allowed:
             fail(
                 f"extension {extension!r} adds steps to the {phase} phase, which"
-                f" {declarer} declares and the workspace does not list; list"
-                f" {declarer} before {extension}, or drop the steps"
+                f" {declarer} declares, and does not require {declarer}; add"
+                f" {declarer} to its [extension] requires, or move the steps into"
+                f" [for.{declarer}]"
             )
+
+
+def check_replacements(extension: str, found: Declaration) -> None:
+    """Refuse a step of *extension* that replaces or deletes one it cannot reach.
+
+    A step names each step it replaces or deletes as
+    ``<owner>:<phase>.<step>``. In *extension*'s top-level tables the
+    owner is the base or an extension *extension* requires, so the
+    owner's step registers first in every set that holds both; in a
+    ``[for.<target>]`` table it may also be *target*. Judged from the
+    declarations alone, whatever the lists hold or their order.
+
+    Raises:
+        Failed: naming the step, the one it replaces or deletes, and the
+            two ways to write it.
+    """
+    from livery.footman import fail
+
+    reached = _reached(extension, found)
+    tables: list[tuple[frozenset[str], list[StepRecord]]] = [
+        (
+            reached,
+            [
+                *found.additions.steps,
+                *(record for held in found.phases.values() for record in held),
+            ],
+        )
+    ]
+    tables += [
+        (reached | {target}, list(additions.steps))
+        for target, additions in found.targets.items()
+    ]
+    for allowed, records in tables:
+        for record in records:
+            for verb, named in (
+                ("replaces", record.replaces),
+                ("deletes", record.deletes),
+            ):
+                for address, _reason in named:
+                    owner = address.partition(":")[0]
+                    if owner not in allowed:
+                        fail(
+                            f"extension {extension!r}: {record.name} {verb}"
+                            f" {address}, and {extension} does not require {owner};"
+                            f" add {owner} to its [extension] requires, or move the"
+                            f" step into [for.{owner}]"
+                        )
 
 
 def _graft_contributions(
@@ -1091,10 +1147,12 @@ def declared_targets(start: Path | None = None) -> dict[str, dict[str, Additions
 
 
 def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
-    """Each listed extension's active targets, in list order.
+    """Each extension of the installed set to its active targets, in composition order.
 
-    The entry's ``for`` list when it has one, since that is the truth
-    once written; otherwise every declared target that is listed.
+    The root entry's ``for`` list when it has one, which is how a
+    workspace opts out of a target; otherwise every target of the
+    installed set the extension declares a ``[for.<target>]`` table for,
+    the default.
     """
     names = extension_names(start)
     declared = declared_targets(start)
@@ -1111,13 +1169,14 @@ def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
 def contributions_for(
     target: str, start: Path | None = None
 ) -> dict[str, dict[str, Any]]:
-    """What the listed extensions declare for *target*, by extension, in list order.
+    """What the installed extensions declare for *target*, by extension.
 
-    An extension contributes its ``[for.<target>]`` table while
-    *target* is listed and the extension's listing contributes to it
-    (its ``for`` list, or every listed target it declares a table for
-    when it has none), the rule the mount grafts by; an extension
-    that requires *target* contributes its top-level tables. The
+    The extensions come in composition order. An extension contributes
+    its ``[for.<target>]`` table while *target* is listed and the
+    extension's listing contributes to it (its ``for`` list, or every
+    listed target it declares a table for when it has none), the rule
+    the mount grafts by; an extension that requires *target*
+    contributes its top-level tables. The
     tables come as the declaration file holds them, and an extension
     that declares nothing for *target* is left out, as is every
     extension when *target* is not listed. *start* is a directory in
@@ -1156,8 +1215,9 @@ def _contributing(active: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ..
     """What `contributing` answers, from *active*: each listed extension's targets.
 
     *active* is [livery.workshop._extensions.resolved_targets][]'s
-    answer, which holds every listed extension, in list order, so a
-    caller that already has it reads no contract again.
+    answer, which holds every extension of the installed set, in
+    composition order, so a caller that already has it reads no
+    contract again.
     """
     found: dict[str, tuple[str, ...]] = {}
     for owner, resolved in active.items():
@@ -1236,10 +1296,10 @@ def _spoken(names: list[str]) -> str:
 def describe_extensions(start: Path | None = None) -> list[str]:
     """The lines ``fm extensions`` prints: each extension with what it declares.
 
-    The base, then each extension in mount order: the ones a package's
-    set holds with those packages, then the workspace list; under each,
-    whether it is dormant and what would wake it, and the steps it
-    declares off, each with whether it is on.
+    The base, then each extension of the installed set in mount order;
+    under each, who requires it, the packages whose sets hold it, its
+    tools, its targets, whether it is dormant and what would wake it,
+    and the steps it declares off, each with whether it is on.
     """
     names = extension_names(start)
     who = requirers(start)
@@ -1325,45 +1385,27 @@ def _holders(start: Path | None) -> dict[str, tuple[str, ...]]:
 
 
 def closure_problems(start: Path | None = None) -> list[str]:
-    """Why the contracts' lists are not closed under the extensions' declarations.
+    """Why the contracts' lists are not valid compositions in their canonical form.
 
-    Empty when every extension a workspace entry requires is listed
-    before it, or is one some package's set holds; when every listed
-    extension is installed and every package's entry is a name alone
+    Empty when every target a root entry's ``for`` names is in the
+    installed set and declared a contribution for; when every listed
+    extension is installed and every entry is a name alone
     ([livery.workshop._extensions.entry_problems][]); when every step
     the root contract turns on is one a listed extension declares off
-    ([livery.workshop._extensions.enabled_problems][]); and when every
+    ([livery.workshop._extensions.enabled_problems][]); when the root's
+    list is its canonical one (``root_list_problems``); and when every
     package's list is a valid composition in its canonical form
-    ([livery.workshop._extensions.composition_problems][]). A missing
-    workspace entry names the fix; one listed after its dependent names
-    the move, which is a person's edit.
+    ([livery.workshop._extensions.composition_problems][]). The gate's
+    ``--fix`` writes each list in its canonical form
+    (``write_extensions``).
     """
     root = workspace_root(start)
-    names = workspace_names(start)
-    order_at = {name: index for index, name in enumerate(names)}
-    packaged = set(_packages_hold(root)) if root is not None else set[str]()
+    installed = set(installed_set(start))
     problems: list[str] = []
-    for extension in names:
-        found = _readable(extension)
-        for needed in found.requires if found is not None else ():
-            if needed in order_at:
-                if order_at[needed] > order_at[extension]:
-                    problems.append(
-                        f"[workspace] extensions lists {needed} after {extension},"
-                        f" which depends on it; move {needed} before {extension}"
-                    )
-            elif needed in packaged:
-                continue
-            else:
-                problems.append(
-                    f"[workspace] extensions lists {extension}, which depends on"
-                    f" {needed}, and does not list it; the gate's --fix adds"
-                    f" it before {extension}"
-                )
     declared = declared_targets(start)
     for owner, targets in extension_targets(start).items():
         for target in targets or ():
-            if target not in order_at and target not in packaged:
+            if target not in installed:
                 problems.append(
                     f"[workspace] extensions: the entry for {owner} names {target}"
                     " in `for`, and does not list it; list it, or remove it"
@@ -1381,8 +1423,169 @@ def closure_problems(start: Path | None = None) -> list[str]:
         problems += entry_problems(root)
         problems += listing_problems(root)
         problems += enabled_problems(root)
+        problems += root_list_problems(root)
         problems += composition_problems(root)
     return problems
+
+
+#: An entry of the root's list as the contract holds it: a name, or a
+#: table of the name and the targets it contributes to.
+Entry = str | dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _RootList:
+    """The root's ``[workspace] extensions`` as written, and its canonical form.
+
+    Attributes:
+        written: Each entry as the contract holds it, in the written order.
+        wanted: Each entry of the canonical list, with the index of the
+            written entry it comes from.
+        why: Why the two differ, after a semicolon; empty when they agree.
+    """
+
+    written: tuple[Entry, ...]
+    wanted: tuple[tuple[int, Entry], ...]
+    why: str
+
+
+def _root_list(root: Path) -> _RootList | str | None:
+    """The root's list and its canonical form; a cycle's refusal; None when not judged.
+
+    Judged once every entry is the name of an installed extension, or a
+    table of that name and ``for``: the other problems name any other
+    entry first. The canonical list holds each extension of the root's
+    set once, in composition order. It leaves out an entry
+    another listed extension requires, unless the entry carries a
+    ``for``: an implied extension's opt-out has no other place to be
+    written. A ``for`` naming exactly its default targets, every target
+    of the installed set the extension declares a table for, is written
+    as the name alone.
+    """
+    from livery.workshop._composition import implied, order
+
+    written: tuple[Entry, ...] = tuple(_listed(root))
+    names: list[str] = []
+    for entry in written:
+        name = _spelling(entry)
+        if isinstance(entry, dict) and not _judged_table(entry):
+            return None
+        if listing(name).name != name or installed_declaration(name) is None:
+            return None
+        names.append(name)
+    members = closure(names, installed_declaration)
+    try:
+        ordered = order(members, installed_declaration)
+    except OrderCycle as error:
+        return f"[workspace] extensions: {error}"
+    required = implied(members, installed_declaration)
+    installed = installed_set(root)
+    declared = declared_targets(root)
+
+    def canonical(name: str, entry: Entry) -> Entry:
+        if isinstance(entry, str) or "for" not in entry:
+            return name
+        default = {other for other in installed if other in declared.get(name, {})}
+        return name if set(entry["for"]) == default else entry
+
+    chosen: dict[str, tuple[int, Entry]] = {}
+    for index, (name, entry) in enumerate(zip(names, written, strict=True)):
+        wanted = canonical(name, entry)
+        held = chosen.get(name)
+        if held is None or (isinstance(wanted, dict) and isinstance(held[1], str)):
+            chosen[name] = (index, wanted)
+    kept = tuple(
+        chosen[name]
+        for name in ordered
+        if name in chosen
+        and (name not in required or isinstance(chosen[name][1], dict))
+    )
+    if [entry for _index, entry in kept] == list(written):
+        return _RootList(written, kept, "")
+    gone = [name for name in chosen if name not in {_spelling(e) for _i, e in kept}]
+    plain = [
+        _spelling(written[index])
+        for index, entry in kept
+        if isinstance(entry, str) and isinstance(written[index], dict)
+    ]
+    if gone:
+        verb = "is" if len(gone) == 1 else "are"
+        why = f"; {', '.join(gone)} {verb} required by another listed extension"
+    elif len(plain) == 1:
+        why = (
+            f"; the entry for {plain[0]} names its default targets, which the"
+            " name alone says"
+        )
+    elif plain:
+        why = (
+            f"; the entries for {' and '.join(plain)} name their default"
+            " targets, which a name alone says"
+        )
+    elif len(chosen) != len(names):
+        why = "; it lists an extension twice"
+    else:
+        why = (
+            "; its order is composition order: each extension after what it"
+            " requires, ties alphabetical"
+        )
+    return _RootList(written, kept, why)
+
+
+def _judged_table(entry: dict[str, Any]) -> bool:
+    """Whether the root's table entry *entry* is a name and a ``for`` of names.
+
+    Any other table is the contract judge's to name, and the list is
+    judged canonical once it is gone.
+    """
+    targets = entry.get("for", [])
+    return (
+        set(entry) <= {"name", "for"}
+        and isinstance(targets, list)
+        and all(isinstance(target, str) for target in cast("list[object]", targets))
+    )
+
+
+def _spelled_entries(entries: Iterable[Entry]) -> str:
+    """*entries* as a contract spells the root's list."""
+    spelled: list[str] = []
+    for entry in entries:
+        if isinstance(entry, str):
+            spelled.append(f'"{entry}"')
+            continue
+        parts = [f'name = "{_spelling(entry)}"']
+        if "for" in entry:
+            targets = ", ".join(f'"{target}"' for target in entry["for"])
+            parts.append(f"for = [{targets}]")
+        spelled.append("{ " + ", ".join(parts) + " }")
+    return "[" + ", ".join(spelled) + "]"
+
+
+def root_list_problems(root: Path) -> list[str]:
+    """Why ``[workspace] extensions`` is not its canonical list; empty when it is.
+
+    The canonical list holds each extension once, in composition order,
+    without an entry another listed extension requires unless the entry
+    carries a ``for``, and with a ``for`` naming exactly its default
+    targets written as the name alone. No other order means anything,
+    so the list is written in this one, which the gate's ``--fix``
+    writes. A list whose set's declared order has no start names the
+    cycle. An entry that is not an installed extension's name is named
+    by ``entry_problems`` and ``listing_problems``, and the list is
+    judged once they pass.
+    """
+    found = _root_list(root)
+    if found is None:
+        return []
+    if isinstance(found, str):
+        return [found]
+    if not found.why:
+        return []
+    wanted = (entry for _index, entry in found.wanted)
+    return [
+        f"[workspace] extensions is {_spelled_entries(found.written)}, and its"
+        f" canonical list is {_spelled_entries(wanted)}{found.why}; the gate's"
+        " --fix rewrites it"
+    ]
 
 
 def _composable(listed: tuple[str, ...]) -> bool:
@@ -1577,43 +1780,44 @@ def requirers(start: Path | None = None) -> dict[str, tuple[str, ...]]:
 
 
 def write_extensions(root: Path) -> list[str]:
-    """Close the root's list under the declarations; write each package's canonically.
+    """Write the root's list and each package's in its canonical form.
 
-    Returns the lines written, one per change.
+    Returns the lines written, one per list changed.
 
-    A workspace extension's missing requirement lands before its first
-    dependent, with a comment naming who requires it, so the list stays
-    the whole truth a reader sees; one a package's set holds already is
-    left out, as the judge leaves it. A dependency listed out of order
-    is not moved: that is a person's edit, and the judge that follows
-    names it. Each package's list becomes its canonical one
-    ([livery.workshop._composition.canonical][]), which drops an
-    extension another listed one requires. A package whose list the
-    judge refuses for another reason, or whose order has no start, is
-    left for a person. Idempotent. A root without a contract lists no
-    extensions, so nothing is written.
+    The root's list becomes its canonical one (``root_list_problems``),
+    and each package's its canonical one
+    ([livery.workshop._composition.canonical][]). Each entry keeps the
+    comment lines above it and the comment after it on its line, and an
+    entry left out takes its comments with it. A list the judge refuses
+    for another reason, one whose order has no start, and one whose
+    array this does not read are left for a person, and the judge names
+    each. Idempotent. A root without a contract lists no extensions, so
+    nothing is written.
     """
     from livery.workshop._composition import canonical
 
     contract = root / "workshop.toml"
     if not contract.is_file():
         return []
-    text = contract.read_text(encoding="utf-8")
     written: list[str] = []
-    names = list(workspace_names(root))
-    packaged = set(_packages_hold(root))
-    for extension in list(names):
-        found = _readable(extension)
-        for needed in found.requires if found is not None else ():
-            if needed in names or needed in packaged:
-                continue
-            text, done = _insert_extension(text, needed, before=extension)
-            if not done:
-                continue
-            names.insert(names.index(extension), needed)
+    found = _root_list(root)
+    if isinstance(found, _RootList) and found.why:
+        text = contract.read_text(encoding="utf-8")
+        array = _read_array(text, "workspace")
+        if array is not None and _reads_as(array, found.written):
+            entries = [
+                replace(array.entries[index], text=f'"{entry}"')
+                if isinstance(entry, str) and isinstance(found.written[index], dict)
+                else array.entries[index]
+                for index, entry in found.wanted
+            ]
+            contract.write_text(
+                text[: array.start] + _array_text(array, entries) + text[array.end :],
+                encoding="utf-8",
+            )
+            spelled = _spelled_entries(entry for _index, entry in found.wanted)
             written.append(
-                f"  layering: [workspace] extensions gains {needed} before {extension},"
-                " which requires it"
+                f"  layering: [workspace] extensions is {spelled}, its canonical list"
             )
     for package_contract, listed in _package_lists(root):
         if not _composable(listed):
@@ -1626,155 +1830,229 @@ def write_extensions(root: Path) -> list[str]:
         if wanted == listed:
             continue
         package_text = package_contract.read_text(encoding="utf-8")
-        rewritten = _rewrite_list(package_text, wanted)
-        if rewritten == package_text:
+        array = _read_array(package_text, None)
+        if array is None or not _reads_as(array, listed):
             continue
-        package_contract.write_text(rewritten, encoding="utf-8")
+        # The canonical list holds each extension once, each one listed.
+        entries = [array.entries[listed.index(name)] for name in wanted]
+        package_contract.write_text(
+            package_text[: array.start]
+            + _array_text(array, entries)
+            + package_text[array.end :],
+            encoding="utf-8",
+        )
         written.append(
             f"  layering: {where} `extensions` is {_spelled(wanted)},"
             " its canonical list"
         )
-    recorded = extension_targets(root)
-    resolved = resolved_targets(root)
-    for owner in workspace_names(root):
-        targets = resolved.get(owner, ())
-        if recorded.get(owner) is not None or not targets:
-            continue
-        text, done = _write_for(text, owner, targets)
-        if not done:
-            continue
-        written.append(
-            f"  layering: [workspace] extensions records {owner}"
-            f" for {', '.join(targets)}"
-        )
-    if written:
-        contract.write_text(text, encoding="utf-8")
     return written
 
 
-def _rewrite_list(text: str, names: tuple[str, ...]) -> str:
-    """*text* with its ``extensions`` list holding *names*; unchanged without one."""
-    found = _INLINE.search(text)
+@dataclass(frozen=True)
+class _Entry:
+    """One entry of an ``extensions`` array as written, with its comments.
+
+    Attributes:
+        text: The entry itself, ``"ruff"`` or ``{ name = "pytest", for = [] }``.
+        above: The whole lines between the entry before it and this one,
+            its comment lines and blank lines, as written.
+        after: The comment after the entry on its own line; empty without one.
+    """
+
+    text: str
+    above: tuple[str, ...] = ()
+    after: str = ""
+
+
+@dataclass(frozen=True)
+class _Array:
+    """An ``extensions`` array as a contract writes it, read for a rewrite.
+
+    Attributes:
+        start: Where the key's line starts in the contract's text.
+        end: Where the array ends, after its closing bracket.
+        key: The text from the line's start to the opening bracket.
+        head: The comment after the opening bracket on its line; empty
+            without one.
+        entries: The entries, in the written order.
+        tail: The whole lines after the last entry, before the closing
+            bracket.
+        indent: What stands before an entry on a line of its own.
+        multiline: Whether the array spans more than one line.
+    """
+
+    start: int
+    end: int
+    key: str
+    head: str
+    entries: tuple[_Entry, ...]
+    tail: tuple[str, ...]
+    indent: str
+    multiline: bool
+
+
+#: A table header: the line's first character after its indent is ``[``.
+_HEADER = re.compile(r"^[ \t]*\[", re.M)
+
+#: The ``extensions`` key, up to its array's opening bracket.
+_KEY = re.compile(r"^[ \t]*extensions[ \t]*=[ \t]*\[", re.M)
+
+
+def _region(text: str, table: str | None) -> tuple[int, int] | None:
+    """Where *table*'s keys stand in *text*; the top level's for None.
+
+    None when *text* has no header for *table*.
+    """
+    if table is None:
+        header = _HEADER.search(text)
+        return 0, header.start() if header is not None else len(text)
+    found = re.compile(
+        rf"^[ \t]*\[[ \t]*{re.escape(table)}[ \t]*\][ \t]*(?:#.*)?$", re.M
+    ).search(text)
     if found is None:
-        return text
-    return (
-        text[: found.start()] + f"extensions = {_spelled(names)}" + text[found.end() :]
-    )
+        return None
+    after = _HEADER.search(text, found.end())
+    return found.end(), after.start() if after is not None else len(text)
 
 
-def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bool]:
-    """*text* with *owner*'s entry carrying ``for = [targets]``, and whether it does.
+def _read_array(text: str, table: str | None) -> _Array | None:
+    """The ``extensions`` array of *table* in *text*, as written; None when not read.
 
-    Written once: the string entry becomes a table entry with the
-    same spelling, options included, a table entry gains the key, and
-    an entry in a shape this does not read is left for a person, with
-    the judge naming nothing since a missing ``for`` is not a problem.
+    *table* is ``workspace`` for the root's list and None for a
+    package's, which stands at the top level. An entry is a string or
+    an inline table; an array holding anything else, a multi-line
+    string among them, is not read, and neither is a key spelled
+    otherwise.
     """
-    listed = ", ".join(f'"{target}"' for target in targets)
-    # The entry's own line alone: a newline in the gap before the comment
-    # would take the next line's comment onto the rewritten entry.
-    line = re.compile(rf'^(\s*)"({_entry_pattern(owner)})",?[ \t]*(#.*)?$', re.M)
-    match = line.search(text)
-    if match is not None:
-        comment = f"  {match.group(3)}" if match.group(3) else ""
-        table = f'{{ name = "{match.group(2)}", for = [{listed}] }}'
-        return (
-            text[: match.start()]
-            + f"{match.group(1)}{table},{comment}"
-            + text[match.end() :],
-            True,
-        )
-    entry = re.compile(
-        rf'^(\s*\{{ name = "{_entry_pattern(owner)}"(?:, [a-z]+ = [^,}}]+)*)'
-        r" \}(,?\s*(?:#.*)?)$",
-        re.M,
-    )
-    match = entry.search(text)
-    if match is not None:
-        return (
-            text[: match.start()]
-            + f"{match.group(1)}, for = [{listed}] }}{match.group(2)}"
-            + text[match.end() :],
-            True,
-        )
-    match = _INLINE.search(text)
-    if match is None:
-        return text, False
-    items = _items(match.group(2))
-    index = _string_item(items, owner)
-    if index is None:
-        return text, False
-    items[index] = f"{{ name = {items[index]}, for = [{listed}] }}"
-    return text[: match.start()] + "extensions = [" + ", ".join(items) + "]" + text[
-        match.end() :
-    ], True
-
-
-#: An inline ``extensions = [...]`` list: its body runs to the bracket
-#: that closes it, past an entry's own brackets and a table's.
-_INLINE = re.compile(r'^(extensions = \[)((?:"[^"]*"|\{[^}]*\}|[^\]"{}])*)(\])', re.M)
-
-
-def _entry_pattern(name: str) -> str:
-    """A pattern for *name* as an entry spells it: the name, with its options if any."""
-    return rf'{re.escape(name)}(?:\[[^\]"]*\])?'
-
-
-def _items(body: str) -> list[str]:
-    """The entries of an inline ``extensions = [...]`` body, as written."""
-    return re.findall(r'\{[^}]*\}|"[^"]*"', body)
-
-
-def _string_item(items: list[str], name: str) -> int | None:
-    """Where *name*'s string entry is among *items*; None without one."""
-    for index, item in enumerate(items):
-        if item.startswith('"') and listing(item.strip('"')).name == name:
-            return index
+    region = _region(text, table)
+    if region is None:
+        return None
+    key = _KEY.search(text, *region)
+    if key is None:
+        return None
+    entries: list[_Entry] = []
+    pending: list[str] = []
+    head = ""
+    indent = ""
+    line = key.start()
+    # Whether the line read holds the opening bracket, holds an entry or
+    # a comma, and holds nothing but space so far.
+    first, taken, blank = True, False, True
+    at = key.end()
+    while at < len(text):
+        char = text[at]
+        if char in " \t\r":
+            at += 1
+        elif char == "\n":
+            if blank and not first:
+                pending.append("")
+            at += 1
+            line, first, taken, blank = at, False, False, True
+        elif char == "]":
+            return _Array(
+                key.start(),
+                at + 1,
+                key.group(0),
+                head,
+                tuple(entries),
+                tuple(pending),
+                indent or "    ",
+                "\n" in text[key.end() : at],
+            )
+        elif char == "#":
+            stop = text.find("\n", at)
+            stop = len(text) if stop < 0 else stop
+            if taken and entries:
+                entries[-1] = replace(entries[-1], after=text[at:stop].rstrip())
+            elif first:
+                head = text[at:stop].rstrip()
+            else:
+                pending.append(text[line:stop].rstrip())
+            blank = False
+            at = stop
+        elif char == ",":
+            taken, blank = True, False
+            at += 1
+        else:
+            end = _item_end(text, at)
+            if end is None:
+                return None
+            if not taken and not first and not indent:
+                indent = text[line:at]
+            entries.append(_Entry(text[at:end], tuple(pending)))
+            pending = []
+            taken, blank = True, False
+            at = end
     return None
 
 
-def _table_name(item: str) -> str:
-    """The ``name`` a table entry ``{ name = "..." }`` spells; empty without one."""
-    found = re.search(r'\bname\s*=\s*"([^"]*)"', item)
-    return found.group(1) if found is not None else ""
+def _item_end(text: str, at: int) -> int | None:
+    """Where the string or inline table at *at* ends; None for anything else.
 
-
-def _entry_item(items: list[str], name: str) -> int | None:
-    """Where *name*'s entry is among *items*, a string or a table; None without one."""
-    for index, item in enumerate(items):
-        spelled = item.strip('"') if item.startswith('"') else _table_name(item)
-        if spelled and listing(spelled).name == name:
-            return index
+    A multi-line string is not read. The text parses as TOML already,
+    so every string and table here closes.
+    """
+    char = text[at]
+    if char in "\"'":
+        if text.startswith(char * 3, at):
+            return None
+        index = at + 1
+        while index < len(text) and text[index] != char:
+            index += 2 if char == '"' and text[index] == "\\" else 1
+        return index + 1
+    if char != "{":
+        return None
+    depth = 0
+    index = at
+    while index < len(text):
+        char = text[index]
+        if char in "\"'":
+            stop = _item_end(text, index)
+            if stop is None:
+                return None
+            index = stop
+            continue
+        if char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
     return None
 
 
-def _insert_extension(text: str, needed: str, *, before: str) -> tuple[str, bool]:
-    """*text* with *needed* listed before *before*'s entry, and whether it was.
-
-    The entry is a string or a table, on a line of its own or in an
-    inline list.
-    """
-    entry = _entry_pattern(before)
-    pattern = re.compile(
-        rf'^(\s*)(?:"{entry}"|\{{\s*name\s*=\s*"{entry}"[^}}\n]*\}}),?\s*(#.*)?$',
-        re.M,
+def _reads_as(array: _Array, values: Iterable[object]) -> bool:
+    """Whether *array*'s entries are *values*, one for one, as TOML reads them."""
+    found = list(values)
+    if len(array.entries) != len(found):
+        return False
+    # The text parses as TOML already, so each entry's text does too.
+    return all(
+        tomllib.loads(f"value = {entry.text}")["value"] == value
+        for entry, value in zip(array.entries, found, strict=True)
     )
-    match = pattern.search(text)
-    if match is not None:
-        indent = match.group(1)
-        line = f'{indent}"{needed}",  # required by {before}\n'
-        return text[: match.start()] + line + text[match.start() :], True
-    match = _INLINE.search(text)
-    if match is None:
-        return text, False
-    items = _items(match.group(2))
-    index = _entry_item(items, before)
-    if index is None:
-        return text, False
-    items.insert(index, f'"{needed}"')
-    return text[: match.start()] + "extensions = [" + ", ".join(items) + "]" + text[
-        match.end() :
-    ], True
+
+
+def _array_text(array: _Array, entries: Iterable[_Entry]) -> str:
+    """*array* written again holding *entries*, each with its comments.
+
+    One line stays one line. A multi-line array puts each entry on a
+    line of its own, after the lines above it and with its comment
+    after it, and keeps the comment after its opening bracket and the
+    lines before its closing one.
+    """
+    if not array.multiline:
+        return array.key + ", ".join(entry.text for entry in entries) + "]"
+    margin = array.key[: len(array.key) - len(array.key.lstrip())]
+    lines = [array.key + (f"  {array.head}" if array.head else "")]
+    for entry in entries:
+        lines += entry.above
+        after = f"  {entry.after}" if entry.after else ""
+        lines.append(f"{array.indent}{entry.text},{after}")
+    lines += array.tail
+    lines.append(f"{margin}]")
+    return "\n".join(lines)
 
 
 def available_extensions(

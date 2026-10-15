@@ -10,8 +10,8 @@
   // an extension without a verified id recommends none.
   "recommendations": [
     "tamasfe.even-better-toml",
-    "charliermarsh.ruff",
     "detachhead.basedpyright",
+    "charliermarsh.ruff",
     "astral-sh.ty",
     // The repository's own recommendations, each line ending with a comma.
     // -- workshop: region recommendations, yours to edit; the render keeps it --

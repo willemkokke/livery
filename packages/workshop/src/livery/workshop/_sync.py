@@ -1,12 +1,12 @@
 """``fm sync``: deliver every mounted extension's content to the repository.
 
-Walked in extension order, so a later extension's same-named file wins
-and the instance always wins last: the files each extension ships under
-``content/``, composed by the fragment engine, and the files each
-extension's code writes from its ``[fragments]`` renders
-([livery.workshop._shipped_files][]). A file that belongs to this
-checkout alone goes through the materialiser: a link where it can, a
-copy where not, and an edited copy kept and named.
+Walked in composition order, the base first, and the instance always
+wins last: the files each extension ships under ``content/``, composed
+by the fragment engine, where an extension takes another's file only
+by declaring it, and the files each extension's code writes from its
+``[fragments]`` renders ([livery.workshop._shipped_files][]). A file
+that belongs to this checkout alone goes through the materialiser: a
+link where it can, a copy where not, and an edited copy kept and named.
 
 Idempotent: a second run changes nothing and says nothing.
 """

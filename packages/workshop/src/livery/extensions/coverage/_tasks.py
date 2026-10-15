@@ -60,9 +60,10 @@ def coverage_union() -> None:
     that leg at the suite's current closure, the parts merge by the
     line format's rules into the union file, and the union judges
     every package. On main's run the record is then written back.
-    Refuses when no leg left its parts, when a leg that ran its gate
-    left none, and when a suite neither the run nor the record can
-    supply, so nothing passes as a smaller union; the verdicts print,
+    Refuses when no leg left its parts, when a leg the run runs left
+    no ref, when a leg that ran its gate left no parts, and when a
+    suite neither the run nor the record can supply, so nothing passes
+    as a smaller union; the verdicts print,
     so the numbers on screen are the numbers enforced. The percentages
     are left as the coverage section of the run's row, which the
     collect after it folds into the run's file.

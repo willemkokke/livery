@@ -864,25 +864,31 @@ def test_a_phase_no_mounted_extension_declares_refuses_naming_the_declared_ones(
         str(refused.value) == f"bkoo is not a declared phase; the phases are {listed}"
     )
     # The mount: a phase an installed extension declares reads anywhere,
-    # and a step into it refuses while the workspace does not list the
-    # declarer.
+    # and a step into it refuses while the step's extension does not
+    # require the declarer, whatever the list holds.
     fake_extensions(tmp_path, monkeypatch, site=DECLARES_BOOK, index=ADDS_BOOK_STEP)
-    root_contract(tmp_path, '["acme.index"]')
+    root_contract(tmp_path, '["acme.index", "acme.site"]')
     found = _extensions.declaration("acme.index")
     assert found is not None and [r.name for r in found.additions.steps] == [
         "book.index"
     ]
     refusal = (
         r"extension 'acme\.index' adds steps to the book phase, which acme\.site"
-        r" declares and the workspace does not list; list acme\.site before"
-        r" acme\.index, or drop the steps"
+        r" declares, and does not require acme\.site"
     )
     with pytest.raises(BaseException, match=refusal), registry.capture():
         _extensions.mount_extensions(tmp_path)
-    # Listed before it, the declarer mounts first and the step registers.
+    # Requiring it, the list names the step's extension alone: the
+    # declarer joins its set, mounts first, and the step registers.
     from livery.workshop import _steps
 
-    root_contract(tmp_path, '["acme.site", "acme.index"]')
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        site=DECLARES_BOOK,
+        index='[extension]\nrequires = ["acme.site"]\n' + ADDS_BOOK_STEP,
+    )
+    root_contract(tmp_path, '["acme.index"]')
     with registry.capture():
         _extensions.mount_extensions(tmp_path)
     assert _steps.steps_by_name()["book.index"].extension == "acme.index"

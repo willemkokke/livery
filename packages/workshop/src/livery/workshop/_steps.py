@@ -6,10 +6,10 @@ over a native member. Each is a [livery.workshop._steps.StepRecord][]
 registered through [livery.workshop._steps.register_step][], and
 the gate is the walk over the registry: every applicable step
 green, the exit code the verdict. The workshop registers the
-builtin records at import, in the order the gate runs its
-rewriters; a listed extension's records register at mount, after
-them and in list order, and re-registering a name replaces the
-record.
+builtin records at import; an extension's records register at
+mount, after them and in composition order, each extension after
+the ones it requires, ties alphabetical, and re-registering a name
+replaces the record.
 
 A step names the extensions whose packages it judges, and a package
 holding none of them skips it by name: a C++ member is formatted over
@@ -217,12 +217,13 @@ class StepRecord:
             listed. An extension declares False for a step a workspace
             turns on at the step's address in the root contract,
             ``[phases.<phase>.<step>] enabled = true``.
-        replaces: The steps of earlier extensions this one replaces,
-            each ``<owner>:<phase>.<step>`` with the reason; naming the
-            step registered at this one's address is what lets a
-            second extension take the address.
-        deletes: The steps of earlier extensions this one deletes,
-            each ``<owner>:<phase>.<step>`` with the reason.
+        replaces: The steps of the base or of an extension this one
+            requires that it replaces, each ``<owner>:<phase>.<step>``
+            with the reason; naming the step registered at this one's
+            address is what lets a second extension take the address.
+        deletes: The steps of the base or of an extension this one
+            requires that it deletes, each ``<owner>:<phase>.<step>``
+            with the reason.
 
     """
 
@@ -307,9 +308,9 @@ def register_step(record: StepRecord) -> None:
         if f"{held.extension}:{held.name}" not in named:
             fail(
                 f"step {record.name} is declared by both {held.extension} and"
-                f" {record.extension}; two extensions declare one step unless the"
-                f" later names {held.extension}:{held.name} in replaces or deletes,"
-                " with a reason"
+                f" {record.extension}; two extensions declare one step unless"
+                f" {record.extension} names {held.extension}:{held.name} in"
+                " replaces or deletes, with a reason"
             )
     if record.scope not in (WORKSPACE, PACKAGE):
         fail(
@@ -1357,15 +1358,24 @@ def rewriters(ctx: PhaseContext) -> tuple[str, ...]:
     """The steps whose fix mode runs, serially and in order, under --fix.
 
     Those of the gated phases; empty unless the gate runs in its fix
-    mode.
+    mode. They run in registration order, the base's first and then
+    each extension's in composition order, with each step after the
+    ones it names in ``after`` and the providers of the keys it reads.
+
+    Raises:
+        OrderCycle: when the rewriters' order has no start, naming the
+            members of one cycle.
     """
     if not ctx.fix:
         return ()
-    return tuple(
-        record.name
+    from livery.workshop._phases import phase_order
+
+    records = [
+        record
         for record in _STEPS.values()
         if record.fix is not None and _gated(record) and _applies_now(record, ctx)
-    )
+    ]
+    return tuple(record.name for record in phase_order(records))
 
 
 def judges(ctx: PhaseContext) -> tuple[str, ...]:

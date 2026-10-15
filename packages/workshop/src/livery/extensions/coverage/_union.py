@@ -83,11 +83,17 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     line only another platform reaches stays covered by main's
     measurement of it.
 
-    Refuses by name when no leg left its parts, when a leg's ref
-    carries no readable file, when a leg names no scope the union
-    reads, when a leg that ran a suite left its parts out, when a unit
-    is neither the run's nor any record's, and when a part is off the
-    line format, naming where it came from and the key.
+    A leg the run runs and that left no ref is red by name, never
+    carried: it died before its write, or its write was refused, and
+    the union of the legs that did write would judge the floors
+    without the lines only its platform reaches.
+
+    Refuses by name when no leg left its parts, when a leg the run
+    runs left no ref, when a leg's ref carries no readable file, when
+    a leg names no scope the union reads, when a leg that ran a suite
+    left its parts out, when a unit is neither the run's nor any
+    record's, and when a part is off the line format, naming where it
+    came from and the key.
 
     Returns:
         The judged packages, in *packages* order; empty when the
@@ -250,6 +256,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             own = _read_record(root, held, target, leg.label)
             like = _numbered_like(root, held, bases, target, leg.label)
             writes.append((leg.label, dict(leg.units), carried, own, like))
+    unput = [label for label in due if label not in present]
+    if unput:
+        which = f"leg {unput[0]}" if len(unput) == 1 else f"legs {', '.join(unput)}"
+        fail(
+            f"{which} left no parts on run {run.run_id}'s refs: every leg the run"
+            f" runs puts its scope and its parts there ({RUN_FILE}) at its end, so"
+            " a leg without them died before its write or its write was refused,"
+            " and its own log says which; a missing put is a red leg, never a"
+            " smaller union"
+        )
     if not merged:
         print("  coverage: no unit to union; nothing judged")
         return ()

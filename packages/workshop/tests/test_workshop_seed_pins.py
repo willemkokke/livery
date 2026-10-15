@@ -61,9 +61,10 @@ TREES = {
 #: The three templates whose members one workspace composes.
 THREE = ("python-library", "nanobind-module", "cpp-library")
 
-#: What the composing workspace lists: the python formatter, linter, two
-#: type checkers and test runner, and the C and C++ formatter and linter.
-STACK = ("ruff", "basedpyright", "mypy", "pytest", "clang-format", "clang-tidy")
+#: What the composing workspace lists, as its canonical list: two type
+#: checkers, the C and C++ formatter and linter, the test runner, and
+#: the python formatter and linter.
+STACK = ("basedpyright", "clang-format", "clang-tidy", "mypy", "pytest", "ruff")
 
 #: The contract of every workspace here; ``{listed}`` is its list.
 CONTRACT = """\
@@ -233,20 +234,21 @@ def _three_seeds(root: Path) -> tuple[dict[str, Package], tuple[str, ...]]:
     return members, mounted
 
 
-#: What a process started in the three seeds' workspace mounts, in order:
-#: the extensions the members hold, then the list.
+#: What a process started in the three seeds' workspace mounts, in
+#: composition order: the list's set and the members' sets, each
+#: extension after the ones it requires, ties alphabetical.
 MOUNTED = (
+    "basedpyright",
+    "clang-format",
+    "clang-tidy",
     "cmake",
     "cpp",
     "conan",
+    "mypy",
+    "pytest",
     "python",
     "nanobind",
     "ruff",
-    "basedpyright",
-    "mypy",
-    "pytest",
-    "clang-format",
-    "clang-tidy",
 )
 
 #: Every file a sync writes into the three seeds' workspace and git
@@ -260,10 +262,10 @@ COMPOSED = (
     ".gitignore: livery.workshop:.gitignore",
     ".taplo.toml: livery.workshop:.taplo.toml",
     ".vscode/extensions.json: livery.workshop:.vscode/extensions.json,"
-    " ruff:ruff recommendations, basedpyright:basedpyright recommendations",
+    " basedpyright:basedpyright recommendations, ruff:ruff recommendations",
     ".vscode/settings.json: livery.workshop:.vscode/settings.json,"
-    " ruff:step format.ruff settings,"
-    " basedpyright:step typecheck.basedpyright settings",
+    " basedpyright:step typecheck.basedpyright settings,"
+    " ruff:step format.ruff settings",
     "conanws.yml: conan:conanws.yml",
     "mypy.ini: mypy:mypy.ini",
     "packages/lib/.clang-format: clang-format:step format.clang-format packages/lib",
@@ -393,19 +395,19 @@ ROOT_TESTS_READ = {
     "typecheck.mypy": (".",),
 }
 
-#: The tools the steps require in that workspace, each with its site:
-#: the library's build steps, cmake's, first, since cmake mounts first.
+#: The tools the steps require in that workspace, each with its site, in
+#: the steps' registration order: each extension's in composition order.
 ROOT_TESTS_TOOLS = (
+    ("basedpyright", "step typecheck.basedpyright"),
+    ("clang_format", "step format.clang-format"),
+    ("clang_tidy", "step lint.clang-tidy"),
     ("cmake", "step build.configure"),
     ("cmake", "step build.compile"),
-    ("ruff", "step format.ruff"),
-    ("ruff", "step lint.ruff"),
-    ("basedpyright", "step typecheck.basedpyright"),
     ("mypy", "step typecheck.mypy"),
     ("pytest", "step test.pytest"),
     ("pytest", "step examples.pytest"),
-    ("clang_format", "step format.clang-format"),
-    ("clang_tidy", "step lint.clang-tidy"),
+    ("ruff", "step format.ruff"),
+    ("ruff", "step lint.ruff"),
 )
 
 #: The per-file ignores the claims render for the root's own files there.
@@ -481,28 +483,28 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
 
 #: Each step a process registers in the three seeds' workspace, in
 #: registration order, with the extension that registered it and the
-#: members it judges. The build and test steps of the C++ library are
-#: cmake's, which mounts first since the library's set holds it.
+#: members it judges: the base's, then each extension's in composition
+#: order. The build and test steps of the C++ library are cmake's.
 JUDGED = (
     "drift.check (livery.workshop): echo, native, lib",
     "provenance.check (livery.workshop): echo, native, lib",
     "layering.graph (livery.workshop): echo, native, lib",
     "layering.base-imports-no-extension (livery.workshop): echo, native, lib",
     "layering.sibling-references (livery.workshop): echo, native, lib",
+    "typecheck.basedpyright (basedpyright): echo, native",
+    "format.clang-format (clang-format): native, lib",
+    "lint.clang-tidy (clang-tidy): native, lib",
     "build.configure (cmake): lib",
     "build.compile (cmake): lib",
     "test.ctest (cmake): lib",
+    "typecheck.mypy (mypy): echo, native",
+    "test.pytest (pytest): echo, native",
+    "examples.pytest (pytest): echo, native",
     "layering.private-reaches (python): echo, native, lib",
     "layering.runner-terminal (python): echo, native, lib",
     "layering.declared-imports (python): echo, native, lib",
     "format.ruff (ruff): echo, native, lib",
     "lint.ruff (ruff): echo, native, lib",
-    "typecheck.basedpyright (basedpyright): echo, native",
-    "typecheck.mypy (mypy): echo, native",
-    "test.pytest (pytest): echo, native",
-    "examples.pytest (pytest): echo, native",
-    "format.clang-format (clang-format): native, lib",
-    "lint.clang-tidy (clang-tidy): native, lib",
 )
 
 

@@ -23,8 +23,10 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
+import tomllib
 import urllib.request
 from pathlib import Path
 
@@ -44,6 +46,38 @@ NATIVE = ("clang-format", "clang-tidy")
 #: when it chooses its agent: the child adds it once it is born, and
 #: the brand's fragment and skill reach the child through it.
 AGENT = "claude"
+
+
+#: The stock list and the brand's own extension, as their canonical list:
+#: what the home and the child are born listing.
+BORN = (
+    "basedpyright",
+    "changelog",
+    "coverage",
+    "dummy.brandx",
+    "mkdocstrings",
+    "pytest",
+    "ruff",
+)
+
+
+def _spelled(names: tuple[str, ...] | list[str]) -> str:
+    """The root list's line naming *names*, as a contract writes it."""
+    return "extensions = [" + ", ".join(f'"{name}"' for name in names) + "]"
+
+
+def _list_also(contract: Path, *names: str) -> None:
+    """Add *names* to *contract*'s root list, written as its canonical list.
+
+    None of the extensions these lists name requires another listed one,
+    so the canonical list is the names in alphabetical order.
+    """
+    text = contract.read_text()
+    listed = tomllib.loads(text)["workspace"]["extensions"]
+    written = _spelled(sorted({*listed, *names}))
+    contract.write_text(
+        re.sub(r"^extensions = \[.*\]$", written, text, count=1, flags=re.M)
+    )
 
 
 def _rig() -> tuple[str, str]:
@@ -373,11 +407,9 @@ def _chain(
         assert "already scaffolded" in birth.stdout
         assert "seeds: already written" in birth.stdout
     contract = (home / "workshop.toml").read_text()
-    # Stock fm's births list the stock extensions; the home adds itself.
-    assert (
-        'extensions = ["changelog", "docs", "mkdocstrings", "ruff", "basedpyright",'
-        ' "pytest", "coverage", "dummy.brandx"]' in contract
-    )
+    # Stock fm's births list the stock extensions; the home adds itself,
+    # and the list is written as its canonical list.
+    assert _spelled(BORN) in contract
     # The docs seeds arrived at birth: the workspace's and the
     # member package's.
     assert (home / "docs" / "index.md").is_file()
@@ -509,26 +541,17 @@ def _chain(
     child_contract = (child / "workshop.toml").read_text()
     # The resumed pass finds the agent's and the native extensions the
     # first one listed.
-    added = "".join(f'"{name}", ' for name in (AGENT, *NATIVE)) if resumed else ""
-    assert (
-        'extensions = ["changelog", "docs", "mkdocstrings", "ruff", "basedpyright",'
-        f' "pytest", "coverage", {added}'
-        '"dummy.brandx"]' in child_contract
-    )
+    added = (AGENT, *NATIVE) if resumed else ()
+    assert _spelled(sorted({*BORN, *added})) in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's replacement reached the child's composed file.
     assert "brandx-build/" in (child / ".gitignore").read_text()
     if not resumed:
-        # The child chooses its agent's files, ahead of the brand's own;
-        # the brand's sync installs the extension and writes them, and
-        # the files it renders name the brand's runner.
-        contract_file = child / "workshop.toml"
-        contract_file.write_text(
-            contract_file.read_text().replace(
-                '"dummy.brandx"]', f'"{AGENT}", "dummy.brandx"]', 1
-            )
-        )
+        # The child chooses its agent's files; the brand's sync installs
+        # the extension and writes them, and the files it renders name
+        # the brand's runner.
+        _list_also(child / "workshop.toml", AGENT)
         _run([str(brand_cli), "sync"], child, _hermetic(env, tool))
     # The brand's content arrived through sync.
     assert (
@@ -622,15 +645,8 @@ def _chain(
             )
         _link_the_library(child / "packages" / "ext", child / "packages" / "geometry")
         # The native members' format and lint checks are extensions the
-        # child lists, as a person adding native packages would, ahead
-        # of the brand's own.
-        contract_file = child / "workshop.toml"
-        listed = "".join(f'"{name}", ' for name in NATIVE)
-        contract_file.write_text(
-            contract_file.read_text().replace(
-                '"dummy.brandx"]', f'{listed}"dummy.brandx"]', 1
-            )
-        )
+        # child lists, as a person adding native packages would.
+        _list_also(child / "workshop.toml", *NATIVE)
         _run(["git", "add", "-A"], child, env)
         _run(
             ["git", "commit", "-qm", "feat: the native library and the extension"],

@@ -55,20 +55,20 @@ dev = [
     # Every contract extension that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
     "livery-workshop",
-    "livery-extensions-ruff",
     "livery-extensions-basedpyright",
-    "livery-extensions-mypy",
-    "livery-extensions-pytest",
     "livery-extensions-clang-format",
     "livery-extensions-clang-tidy",
+    "livery-extensions-mypy",
+    "livery-extensions-pytest",
+    "livery-extensions-ruff",
     # What the listed extensions need in the venv: each line is an
     # extension's answer to the `python.dev-group` query, so an extension
     # taken off the list takes its lines with it, and its declaration is
     # where each floor and its reason live.
-    "nanobind>=2.7",
     "mypy>=1.14",
     "pytest>=9.0",
     "pytest-xdist>=3.6",
+    "nanobind>=2.7",
 ]
 
 [tool.footman]

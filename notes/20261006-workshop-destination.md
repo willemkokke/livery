@@ -128,11 +128,11 @@ on.
     registry while the mount runs, so no extension's correctness
     depends on its position in the list beyond what `requires` and
     `[for]` state.
-28. **Mount order is the base, then every extension the packages' sets
-    hold, then the root list's set.** The extensions the packages' sets
-    hold mount in composition order over the union of those sets, then
-    the root list in its listed order, each entry after what it
-    requires. Composition order is the same order. An extension that
+28. **Mount order is the base, then the installed set in composition
+    order.** The installed set is the root list's set and every
+    package's set; composition order puts each extension after what it
+    requires, and ties go alphabetically. No list's order decides
+    anything. An extension that
     names a capability at mount (a phase it adds a step to, a category
     it extends) finds it registered or refuses by name.
 29. **Every registration names its tools, and a tool is required only
@@ -518,7 +518,7 @@ a schema fragment with the shape of the file it describes.
 | --- | --- | --- | --- |
 | `[extension] api-version` | int | every | the eight tool extensions, docs |
 | `[extension] plugin` | the footman plugin carrying the verbs | every | docs |
-| `[extension] requires` | extensions it cannot work without, listed before it; it declares for them at the top level | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
+| `[extension] requires` | extensions it cannot work without, implied wherever a list names it; it declares for them at the top level | every | mkdocstrings (phase 11), housekeeping, doxygen (phase 12) |
 | `[toolroom] requires` | the tools its verbs need, in the root contract's own table and grammar | every | forge's dev plugin (as a plugin) |
 | `[options]` | option name to what it turns on | every | basedpyright |
 | `[contract.<contract>.<table>]` | the keys it owns, at the table path they have in that contract: `publish = { types = ["str"], values = [...], doc = "..." }` | every | docs |
@@ -615,7 +615,7 @@ the published form because Taplo and the editors read it and every
 language a port could use validates it; the authoring form stays TOML.
 The schema covers shape. The judge keeps the rules a schema cannot say:
 `judge` and `run` are exclusive, a `matrix` key appears in the words, a
-`for` target is an extension, a `requires` entry is listed before.
+`for` target is an extension, a list is in its canonical form.
 
 ### What stays verifiable
 
@@ -677,7 +677,7 @@ extension calls, stay public.
 | `Package`, `Edge` | a discovered package and a graph edge | the eight, docs | `livery.workshop` |
 | `discover_packages`, `verify_workspace`, `workspace_root` | the workspace and its graph | docs, tests | `livery.workshop` |
 | `read_contract` | one contract's declared keys, judged | docs (`load_contract` today) | `livery.workshop` |
-| `extension_names` | the listed extensions, in order | tests | `livery.workshop` |
+| `extension_names` | the installed set, in composition order | tests | `livery.workshop` |
 | `contributions_for` | the `[for.<target>]` tables grafted for a target, and the top-level tables of the extensions that require it | docs (phase 11) | `livery.workshop` |
 | `generated_header` | the provenance header for a file an extension writes outside the engine | docs (private today) | `livery.workshop` |
 | `ci_run`, `RunContext` | the CI run's context, or None at a desk | docs (`run_context` today) | `livery.workshop` |
@@ -1291,7 +1291,7 @@ The parts, each mergeable alone, in this order:
 
 - N1 (built, #1674): one kind; `levels` goes; the installed set; the
   proof of which extensions compose something in a package.
-- N2: no list's order means anything; `fm new.project --extensions`
+- N2 (built, #1676): no list's order means anything; `fm new.project --extensions`
   replaces `--stack`, which goes.
 - N3: the workspace's own tests hold the root list's set, and the
   stock list of `fm new.project` names python.
@@ -1669,7 +1669,6 @@ neither needs nor rules out).
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
-| the root list's order decides the mount, workspace answers, fragments and rewriters | composition order (#1673's N2) |
 
 ## Decision record
 
@@ -3358,6 +3357,20 @@ neither needs nor rules out).
   after; one leg's sets decode in 98 ms against 79 ms. The union now
   refuses a leg the run runs that left no parts, and a refused store
   push carries git's whole message (on #1676's branch).
+- 2026-10-15, one kind's N2 (#1676), built: no list's order decides
+  anything. The mount, workspace answers, rewriters, fragments and the
+  docs theme follow composition order; a step into another extension's
+  phase, or a replacement of its step or file, needs the replacer to
+  require the owner, or to contribute to it through `[for.<owner>]`;
+  two theme answers setting one key refuse unless one requires the
+  other. The root list is judged and written in its canonical form,
+  keeping comments: an implied entry goes unless it carries `for`, and
+  a `for` equal to its default is written as the plain name. livery's
+  root list lost `docs` and the two `for` keys. `fm new.project
+  --extensions` replaces `--stack`, which is deleted. This reverses the
+  2026-09-29 rule that the fix writes an entry's resolved targets once
+  and `for` is the truth from then on: cooperation is greedy among the
+  installed extensions, and `for` is written only to narrow it.
 
 ## Open
 

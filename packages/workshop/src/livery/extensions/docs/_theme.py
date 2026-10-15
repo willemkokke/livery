@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 
 #: The query deciding the theme block's values. The base's block is
 #: the default; a theme extension answers with a table of the keys it
-#: changes, and the answers merge key by key in list order, so the
-#: last listed extension's keys win.
+#: changes, and each key takes the value of the nearest answer setting
+#: it: the one no other answer setting it requires.
 THEME: Query[dict[str, object]] = Query("docs.theme")
 #: The base's theme: the stock fonts, and a palette that follows the
 #: OS with a manual light/dark/auto toggle cycle.
@@ -69,18 +69,23 @@ THEME_DEFAULT: dict[str, object] = {
 def merge_theme(
     answers: Mapping[str, object], lookup: Callable[[str], Declaration | None]
 ) -> dict[str, object]:
-    """The theme's values: the default, each answer's keys over it, by extension.
+    """The theme's values: the default, each key from the nearest answer setting it.
 
     The ``docs.theme`` query's combine rule, called with the answers by
-    extension in list order.
+    extension. A key one answer sets takes that answer's value. A key
+    several answers set takes the value of the one no other of them
+    requires, which builds on the others, so neither list's order
+    decides it.
 
     Raises:
-        ValueError: when an answer is not a table, or names a key
-            outside the block's vocabulary; the message names the
-            extension, and the query is named by the asker.
+        ValueError: when an answer is not a table, names a key outside
+            the block's vocabulary, or sets a key another answer sets
+            while neither requires the other; the message names the
+            extensions, and the query is named by the asker.
     """
-    del lookup
-    theme: dict[str, object] = dict(THEME_DEFAULT)
+    from livery.workshop._composition import implied
+
+    setters: dict[str, dict[str, object]] = {}
     for extension, value in answers.items():
         if not isinstance(value, dict):
             raise ValueError(
@@ -94,5 +99,18 @@ def merge_theme(
                     f"{extension} answers the unknown key {key!r}; the keys are"
                     f" {', '.join(THEME_DEFAULT)}"
                 )
-            theme[key] = setting
+            setters.setdefault(key, {})[extension] = setting
+    theme: dict[str, object] = dict(THEME_DEFAULT)
+    for key, held in setters.items():
+        required = implied(held, lookup)
+        nearest = [name for name in held if name not in required]
+        if len(nearest) > 1:
+            raise ValueError(
+                f"{' and '.join(nearest)} both set {key}, and neither requires the"
+                " other; one of them sets it, or one requires the other"
+            )
+        # Answers whose requires close a cycle leave none nearest: the
+        # default stands, and layering.graph names the cycle.
+        if nearest:
+            theme[key] = held[nearest[0]]
     return theme

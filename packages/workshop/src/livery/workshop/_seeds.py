@@ -25,9 +25,10 @@ workspace, and no step judges it.
 
 For one path, a template's file wins over the seeds and over the files
 of the template it extends. Two extensions seeding one path of a tree
-follow the shipped files' rule instead: the later one declares the
-earlier's under ``[replaces]`` or ``[deletes]`` in its
-``extension.toml``, or the birth refuses naming both. The fragment
+follow the shipped files' rule instead: the one later in composition
+order, which requires the other, declares the other's under
+``[replaces]`` or ``[deletes]`` in its ``extension.toml``, or the birth
+refuses naming both. The fragment
 engine keeps the composed files current; this module writes these once.
 """
 
@@ -272,8 +273,9 @@ def plan(
 
     Raises:
         Failed: for two extensions seeding one path with no declaration
-            between them, and a declaration naming a seed no earlier
-            listed extension ships.
+            between them, a declaration naming a seed no listed extension
+            ships, and one naming a seed of an extension the declaring
+            one does not require.
     """
     from livery.workshop._fragment_engine import (
         _render,  # pyright: ignore[reportPrivateUsage]
