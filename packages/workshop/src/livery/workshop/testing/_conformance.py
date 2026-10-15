@@ -1069,6 +1069,18 @@ def _probed(record: StepRecord, packages: tuple[Package, ...]) -> bool:
     )
 
 
+def _walked(record: StepRecord) -> bool:
+    """Whether the gate's walk judges *record*: registered, in a phase the gate runs.
+
+    A phase nobody declares counts as one the gate runs, so the walk
+    clauses still judge a step that names one.
+    """
+    from livery.workshop._phases import declared_phases
+
+    spec = declared_phases().get(record.phase)
+    return record.name in steps_by_name() and (spec is None or spec.gated)
+
+
 def _probe_walk(
     subject: Subject, *, fix: bool, named: bool
 ) -> tuple[list[tuple[str, str]], str, tuple[Package, ...]]:
@@ -1084,7 +1096,7 @@ def _probe_walk(
     from livery.workshop import _quality
 
     recorder = _Recorder()
-    names = [record.name for record in subject.steps if record.name in steps_by_name()]
+    names = [record.name for record in subject.steps if _walked(record)]
     state = _steps.snapshot()
     out = io.StringIO()
     try:
@@ -1127,7 +1139,7 @@ def _walk_order(subject: Subject) -> list[Violation]:
     )
     violations: list[Violation] = []
     for record in subject.steps:
-        if record.name not in steps_by_name():
+        if not _walked(record):
             continue
         where = f"step {record.name}"
         fixes = [
@@ -1169,7 +1181,7 @@ def _gate_lines(subject: Subject) -> list[Violation]:
     lines = out.splitlines()
     violations: list[Violation] = []
     for record in subject.steps:
-        if record.name not in steps_by_name():
+        if not _walked(record):
             continue
         where = f"step {record.name}"
         # A step names the extension by the name a contract lists, which
@@ -1314,14 +1326,16 @@ CLAUSES: tuple[Clause, ...] = (
     ),
     Clause(
         WALK_ORDER,
-        "Under --fix every step with a fix mode rewrites before any judge"
-        " starts and is not judged again, and every other step is judged.",
+        "Under --fix every step of a phase the gate runs that has a fix mode"
+        " rewrites before any judge starts and is not judged again, and every"
+        " other step of such a phase is judged.",
         _walk_order,
     ),
     Clause(
         GATE_LINES,
-        "Every step names the extension that registered it, which the gate prints,"
-        " and a step with no file to read is named and never started.",
+        "Every step of a phase the gate runs names the extension that registered"
+        " it, by the name a workspace lists it under, which the gate prints, and a"
+        " step with no file to read is named and never started.",
         _gate_lines,
     ),
 )

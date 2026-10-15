@@ -317,10 +317,14 @@ The base declares its phases in the `[phases]` section of its
 `run`. The gated ones, `build`, `format`, `lint`, `typecheck`,
 `typecomplete`, `examples`, `drift`, `provenance`, `layering` and
 `test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
-with a sub-task per step. A package-level phase, `sync`, `clean`,
-`build`, `stamp`, `publish`, `verify` or `run`, runs its steps once
-per package, and each extension of the package's set may add steps to
-it, as many as it needs:
+with a sub-task per step. `fm sync` runs `sync` once over the
+workspace, after it installs the tools and before `uv sync`: a step
+there runs once, and one that declares `scope = "package"` runs once
+for each package whose set holds an extension its `extensions` names.
+So an extension the root lists adds to it as one a package lists does.
+A package-level phase, `clean`, `build`, `stamp`, `publish`, `verify`
+or `run`, runs its steps once per package, and each extension of the
+package's set may add steps to it, as many as it needs:
 
 ```toml
 [phases.build.bindings]
@@ -468,6 +472,7 @@ or the rule's answer over nothing. The base declares:
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
 | `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
+| `checkout-inputs` | workspace | the inputs the checkout step of the rendered GitHub and Gitea workflows passes to the checkout action, each name to its value as the workflow writes it; GitLab's runner checks out by itself and reads none | the union; an input two answers give different values refuses, and so does one the step sets from the job's declaration (`ref`, `fetch-depth`, `fetch-tags`, `token`) or a value that is not a string |
 
 A name no extension declares refuses with the nearest one; an answer
 refuses when it is off the query's `values`. A package-level query is
@@ -794,8 +799,9 @@ file for the package's extensions, an unedited copy is removed and an
 edited one kept;
 and in the gate's walk over a probe workspace holding one package of
 each set, with the step bodies recording instead of running, every
-step that can fix rewrites before any judge starts and is not judged
-again, every step names the extension that registered it, which the
+step of a phase the gate runs that can fix rewrites before any judge
+starts and is not judged again, every such step names the extension
+that registered it by the name a workspace lists it under, which the
 gate prints, and a step with no file to read is named and never
 started. The workshop's own steps pass the same clauses in its test
 suite, probed with a package that lists nothing and one listing each

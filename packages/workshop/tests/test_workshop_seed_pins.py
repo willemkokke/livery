@@ -606,6 +606,7 @@ JUDGED = (
     "build.configure (cmake): lib",
     "build.compile (cmake): lib",
     "test.ctest (cmake): lib",
+    "sync.conan (conan): native, lib",
     "typecheck.mypy (mypy): echo, native",
     "test.pytest (pytest): echo, native",
     "examples.pytest (pytest): echo, native",
@@ -1008,6 +1009,8 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
             extras="",
         ),
     )
+    # The sync phase runs the steps the mount registered.
+    _mounted(root)
     bodies.entry("sync", lambda: _lifecycle.sync((native,), root))
     assert bodies.by_entry == NANOBIND_BODIES
     assert answers == NANOBIND_ANSWERS

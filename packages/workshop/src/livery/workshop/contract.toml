@@ -281,10 +281,6 @@ doc = "the hosts the workspace supports and locks tools for: platforms or host k
 types = ["str"]
 doc = "the size uv's cache may reach on a machine before `fm doctor` reports it and `--fix` prunes it: a number with K, M, G or T; 10G when unset"
 
-[contract.root.workspace.lfs]
-types = ["bool"]
-doc = "whether Git LFS is on: its tool, its hooks, the CI checkout and the extensions' LFS attributes; false when absent"
-
 [contract.root.workspace.name]
 types = ["str"]
 doc = "the project's name, for its project file, README and links; the workspace is unborn without it"
@@ -889,7 +885,7 @@ doc = "the extensions a package born from the template lists, written into its c
 # their phases; fm check runs the gated ones.
 
 [phases.sync]
-level = "package"
+level = "workspace"
 gated = false
 after = []
 verb = false
@@ -1160,6 +1156,16 @@ requires = ["uv"]
 [queries.job-built-members]
 level = "workspace"
 combine = "livery.workshop._queries:merged"
+
+# What the listed extensions add to the checkout step of the rendered
+# GitHub and Gitea workflows: each input of the checkout action by its
+# name, to its value as the workflow writes it. GitLab's runner checks
+# out by itself and reads none. An input two answers give different
+# values refuses, and so does one the step sets from the job's own
+# declaration.
+[queries.checkout-inputs]
+level = "workspace"
+combine = "livery.workshop._ci_generate:checkout_inputs"
 
 # The base's templates, in the grammar an extension declares one in
 # under the same table of its extension.toml; their files live under

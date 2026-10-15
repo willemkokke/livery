@@ -300,6 +300,10 @@ STORE_SERIES: Query[tuple[Series | Keyed, ...]] = Query("store.series")
 #: those of them uv installs after the tools.
 JOB_BUILT_MEMBERS: Query[Mapping[str, str]] = Query("job-built-members")
 
+#: The inputs the listed extensions add to the checkout step of the
+#: rendered GitHub and Gitea workflows, each name to its value.
+CHECKOUT_INPUTS: Query[Mapping[str, str]] = Query("checkout-inputs")
+
 
 @functools.cache
 def base_queries() -> dict[str, QuerySpec]:

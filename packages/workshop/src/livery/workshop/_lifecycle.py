@@ -37,15 +37,19 @@ if TYPE_CHECKING:
 
 
 def sync(packages: Iterable[Package], root: Path) -> None:
-    """Run the sync phase over *packages*: what a member needs before ``uv sync``.
+    """Run the sync phase over the workspace at *root* holding *packages*.
 
-    The steps are each package's set's: conan's profile step among
-    them, which a package that lists nanobind runs too, since its set
-    holds conan. A package whose set adds no step to the phase needs
-    nothing before the install, and the phase runs nothing for it.
+    The phase is what the workspace and its members need before
+    ``uv sync`` installs them: the steps the listed extensions
+    registered at mount, each once over the workspace, and a step that
+    judges one package at a time once for each of *packages* whose set
+    holds an extension it names. conan's profile step is one, which a
+    package that lists nanobind runs too, since its set holds conan.
+    With no step registered, the phase runs nothing.
     """
-    for package in packages:
-        _run_steps(package, "sync", root, {})
+    from livery.workshop._phases import PhaseContext, run_registered
+
+    run_registered(PhaseContext(root=root, packages=tuple(packages), phase="sync"))
 
 
 #: What the release train's build gives the build phase beside the

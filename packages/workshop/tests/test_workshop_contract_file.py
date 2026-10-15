@@ -74,7 +74,6 @@ def test_a_key_named_like_a_declarations_own_is_a_key_when_it_is_a_table(
 
 
 def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
-    from livery.workshop._lfs import KEY
     from livery.workshop._points import CADENCES
     from livery.workshop._registries import (
         _ECOSYSTEM,  # pyright: ignore[reportPrivateUsage]
@@ -98,7 +97,6 @@ def test_the_values_the_file_writes_are_the_ones_the_code_reads() -> None:
         if path.startswith("registries.") and path.endswith(".prerelease")
     }
     assert prerelease == set(_ECOSYSTEM)
-    assert ("root", f"workspace.{KEY}") in keys
     # A phase's declaration: its levels and the types its keys take, the
     # types a context value has.
     from livery.workshop._phases import LEVELS, TYPES

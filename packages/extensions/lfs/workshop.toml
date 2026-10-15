@@ -1,0 +1,34 @@
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+# The extensions this package is composed of.
+extensions = ["python"]
+name = "livery-extensions-lfs"
+description = "Git LFS for the livery workshop: the git-lfs tool locked, its hooks installed by every sync, and the LFS objects fetched by the rendered CI checkout."
+
+[[depends]]
+path = "packages/workshop"
+kind = "runtime"
+floor = "0.10.0"
+
+[[depends]]
+path = "packages/toolroom"
+kind = "runtime"
+floor = "0.11.0"
+
+[[depends]]
+path = "packages/footman"
+kind = "runtime"
+floor = "0.60.0"
+
+[coverage]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+floor = 100
+
+[docs]
+# Inside the workshop's entry of the site's Packages tree.
+name = "workshop.extensions.lfs"
+
+[owners]
+users = ["willemkokke"]

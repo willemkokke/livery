@@ -27,13 +27,15 @@ requirement-writers = "livery.extensions.conan._answers:requirement_writers"
 distributions = "livery.extensions.conan._answers:distributions"
 registry = "livery.extensions.conan._answers:registry"
 
-# The steps this extension adds to a package's lifecycle phases, one
-# per phase, each named for the extension. The sync step runs before
-# `uv sync` installs a member whose build goes through the cmake-conan
-# provider: conan's default profile names a compiler first, or the
-# provider writes one that names none.
+# The steps this extension adds to the phases, one per phase, each
+# named for the extension. The sync step runs before `uv sync` installs
+# a member whose build goes through the cmake-conan provider, once for
+# each package whose set holds conan: conan's default profile names a
+# compiler first, or the provider writes one that names none.
 [phases.sync.conan]
 main = "livery.extensions.conan._steps:profile"
+scope = "package"
+extensions = ["conan"]
 
 [phases.stamp.conan]
 main = "livery.extensions.conan._steps:stamp"

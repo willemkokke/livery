@@ -4,6 +4,7 @@
 /workshop.toml @willemkokke
 /.github/CODEOWNERS @willemkokke
 /packages/extensions/cmake/ @willemkokke
+/packages/extensions/lfs/ @willemkokke
 /packages/footman/ @willemkokke
 /packages/forge/ @willemkokke
 /packages/git/ @willemkokke
