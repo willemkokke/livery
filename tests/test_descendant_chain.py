@@ -57,6 +57,7 @@ BORN = (
     "dummy.brandx",
     "mkdocstrings",
     "pytest",
+    "python",
     "ruff",
 )
 

@@ -489,12 +489,13 @@ def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
 def _measured_by_pytest(root: Path) -> None:
     """List pytest and coverage at *root*: pytest's reduction reads coverage.py's data.
 
-    The reduction is the pytest extension's, a distribution of its own:
-    a run of this wheel alone has none, and the test skips.
+    The root lists python too, since the workspace's own tests hold the
+    root's set. The reduction is the pytest extension's, a distribution
+    of its own: a run of this wheel alone has none, and the test skips.
     """
     pytest.importorskip("livery.extensions.pytest")
     (root / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["pytest", "coverage"]\n'
+        '[workspace]\nextensions = ["coverage", "pytest", "python"]\n'
     )
 
 
@@ -950,8 +951,9 @@ def test_a_leg_asks_the_reductions_for_each_suite_s_tests_and_closure(
     )
     (tmp_path / "tests").mkdir()
     install_meter(tmp_path, monkeypatch)
+    # The root lists python, and its own tests hold the root's set.
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["acme.meter", "coverage"]\n'
+        '[workspace]\nextensions = ["acme.meter", "coverage", "python"]\n'
     )
     base_source = _source(tmp_path, "base").relative_to(tmp_path).as_posix()
     top_source = _source(tmp_path, "top").relative_to(tmp_path).as_posix()

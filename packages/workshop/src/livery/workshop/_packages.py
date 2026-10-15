@@ -306,18 +306,21 @@ def root_of(package: Package) -> Path:
 
 
 #: The workspace's own test directory, a unit of the gate like a
-#: package's suite. Its tests reach any package, so every run of a test
-#: step runs them, and a change under it affects that unit alone.
+#: package's suite. It holds the root's set. Its tests reach any
+#: package, so every run of a test step that judges them runs them, and
+#: a change under it affects that unit alone.
 WORKSPACE_TESTS = "tests"
 
 
 def workspace_suite(root: Path) -> Package | None:
     """The workspace's own tests, the ``tests`` directory at its root, as a unit.
 
-    ``None`` when the workspace has none. The unit lists no extension,
-    so no package step judges it; a test step runs it beside the
-    members it judges, and the workspace's category table answers for
-    its files (`is_workspace_unit`).
+    ``None`` when the workspace has none. The unit lists no extension
+    and holds the root's set. A test step whose extensions that set
+    holds runs it beside the members it judges
+    ([livery.workshop.scoped_suite][]). It is no member, so no package
+    step judges it, and the workspace's category table answers for its
+    files (`is_workspace_unit`).
     """
     directory = root / WORKSPACE_TESTS
     if not directory.is_dir():
@@ -340,12 +343,9 @@ def is_workspace_unit(package: Package) -> bool:
     return not package.path.startswith(f"{PACKAGES_DIR}/")
 
 
-#: The extension of the language the workshop runs on.
-#: The workspace's own ``tasks.py`` and tests run on that runtime
-#: whatever its members are, so the steps that judge a package holding
-#: this extension judge them too. A member holding it is a distribution
-#: of that language: discovery requires its project file, and it joins
-#: the uv workspace the venv is made from.
+#: The extension of the language the workshop runs on. A member
+#: holding it is a distribution of that language: discovery requires its
+#: project file, and it joins the uv workspace the venv is made from.
 RUNTIME_LANGUAGE = "python"
 
 
@@ -353,12 +353,11 @@ def holds_runtime_language(package: Package) -> bool:
     """Whether *package* holds the runtime's language, `RUNTIME_LANGUAGE`.
 
     A member holds it when it lists it, or when an extension it lists
-    requires it. The workspace's own tests hold it always, since they
-    run on the runtime. Discovery asks this of every member, so a
-    member that lists it is answered without reading any extension's
-    declaration.
+    requires it. The workspace's own tests hold it when the root's set
+    does. Discovery asks this of every member, so a member that lists
+    it is answered without reading any extension's declaration.
     """
-    if package.path == WORKSPACE_TESTS or RUNTIME_LANGUAGE in package.extensions:
+    if RUNTIME_LANGUAGE in package.extensions:
         return True
     from livery.workshop._composition import extension_set
 

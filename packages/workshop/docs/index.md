@@ -13,7 +13,9 @@ package's contract lists the extensions the package is composed of
 in its own `extensions`; a package that lists none holds none. Every
 extension is one kind: either list takes any of them. A list's set is
 the list and every extension it requires, and the installed set is
-the root's set and every package's set. No list's order means
+the root's set and every package's set. The workspace's own `tests/`
+directory holds the root's set, so a root lists the language its own
+tests are written in. No list's order means
 anything: the installed set mounts in composition order, each
 extension after the ones it requires and ties alphabetical, and each
 list is written as its canonical list. Those lists are the whole of
@@ -839,9 +841,11 @@ the repository's own settings go in its region at the end. It declares
 `[phases.typecomplete.basedpyright] enabled = true` registers it too; it
 verifies that each package's public API is type-complete.
 `fm new.project` lists `basedpyright`, `changelog`, `coverage`,
-`mkdocstrings`, `pytest` and `ruff`, which takes the site's `docs` in
-through `mkdocstrings`; `--extensions` names another list, and the
-birth writes either as its canonical list.
+`mkdocstrings`, `pytest`, `python` and `ruff`, which takes the site's
+`docs` in through `mkdocstrings`. `python` is there for the
+workspace's own tests and `tasks.py`: the root's tests hold the root's
+set. `--extensions` names another list, and the birth writes either as
+its canonical list.
 
 mypy is an extension of its own as well, `livery-extensions-mypy`,
 listed as `mypy`. Listed, it registers `typecheck.mypy`, which checks
@@ -1195,9 +1199,12 @@ absence.
   member list, `overrides/`, and the render's receipt. A change that
   adds or removes a package is that package's: the entries naming it
   in the root files, and the lock's entries it moves, reach it alone.
-  The workspace's own `tests/` directory is a unit of its own: a
-  change under it formats, lints, type-checks, and runs those tests
-  alone, and the record supplies every package's suite.
+  The workspace's own `tests/` directory is a unit of its own, which
+  holds the root's set: a change under it formats, lints, type-checks,
+  and runs those tests alone, by the steps whose extensions the root's
+  set holds, and the record supplies every package's suite. A root
+  whose set holds no python runs none of its own tests, and the test
+  step prints a line saying why.
   Each workspace step runs when a file it reads changed, and judges
   those files: `lint.doclinks` the changed pages, and every page when
   a file is deleted or moved or a heading is removed; `lint.docrefs`
@@ -1539,7 +1546,8 @@ affects alone; after it, the coverage leg runs every suite neither
 its branch's record nor main's holds at the suite's current closure,
 measured for its lines, and says why. The workspace's own
 `tests/` directory is a unit too, keyed by every package's tree, and
-every leg that runs a suite runs it. The gate job unions the legs'
+every leg that runs a suite runs it while the root's set holds
+python. The gate job unions the legs'
 parts with the parts of every skipped suite, carried from the records,
 before it judges, so the union is the same global union a full run produces,
 and writes that union back onto the branch's record; a suite no

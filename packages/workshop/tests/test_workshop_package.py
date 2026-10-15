@@ -73,6 +73,7 @@ def test_the_surface_is_declared() -> None:
         "scoped_files",
         "scoped_packages",
         "scoped_paths",
+        "scoped_suite",
         "selected_files",
         "shipped_content",
         "step_option",

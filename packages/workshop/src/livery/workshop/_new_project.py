@@ -186,10 +186,20 @@ def _push_target(clone_url: str, token: str) -> str:
 
 #: The extensions a stock App's birth lists, as their canonical list:
 #: the type checker's, the changelog's, coverage's, the site's API
-#: reference, which requires the site's, the test runner's and the
-#: python formatter's. An agent's files are a choice the project makes,
-#: so no agent's extension is among them.
-STOCK = ("basedpyright", "changelog", "coverage", "mkdocstrings", "pytest", "ruff")
+#: reference, which requires the site's, the test runner's, python and
+#: the python formatter's. python is the language of the workspace's own
+#: tests and ``tasks.py``: those tests hold the root's set, and run while
+#: it holds python. An agent's files are a choice the project makes, so
+#: no agent's extension is among them.
+STOCK = (
+    "basedpyright",
+    "changelog",
+    "coverage",
+    "mkdocstrings",
+    "pytest",
+    "python",
+    "ruff",
+)
 
 
 def birth_extensions(builtin: list[str] | tuple[str, ...]) -> list[str]:
@@ -265,7 +275,8 @@ def new_project(
         str,
         doc(
             "the extensions the workspace lists, comma-separated, each by name,"
-            " written as their canonical list; the stock list by default"
+            " written as their canonical list; the stock list by default, which"
+            " names python for the workspace's own tests"
         ),
     ] = "",
     resume: Annotated[bool, hidden] = False,
@@ -275,10 +286,12 @@ def new_project(
     The birth seeds the contract, whose ``[workspace] extensions`` is
     the stock list or the one ``--extensions`` names, written as its
     canonical list: no extension another one requires, in composition
-    order. It writes the project's files, locks and
-    syncs its environment, then hands the rest to the runner that
-    environment holds, run as ``new.project --resume`` inside the
-    project. There the project's own extensions are mounted, so its
+    order. The stock list names python: the workspace's own tests hold
+    the root's set, and run while it holds python. It writes the
+    project's files, locks and syncs its environment, then hands the
+    rest to the runner that environment holds, run as
+    ``new.project --resume`` inside the project. There the project's
+    own extensions are mounted, so its
     tools, its composed and generated files and its forge half come
     from them at the versions it locked. A folder that holds a project
     refuses, naming ``--resume``, which finishes that project's birth:

@@ -1423,9 +1423,9 @@ def _every_unit_reached(ctx: PhaseContext, record: StepRecord, chosen: int) -> b
     """Whether a scoped run over *chosen* units reaches every unit *record* judges.
 
     Every member the step judges, the workspace's tests unit among
-    them, with none turned off anywhere: the whole would reach the
-    same, so the step runs over its configured whole instead of a
-    list naming every unit.
+    them while the step judges it, with none turned off anywhere: the
+    whole would reach the same, so the step runs over its configured
+    whole instead of a list naming every unit.
     """
     from livery.workshop._packages import WORKSPACE_TESTS
 
@@ -1433,9 +1433,8 @@ def _every_unit_reached(ctx: PhaseContext, record: StepRecord, chosen: int) -> b
     gated_all = judged_by(record, everyone, quiet=True)
     # The workspace's tests unit rides in the scope, not always among
     # the packages: counted once from either.
-    tests_unit = {
-        p.path for p in (*ctx.packages, *ctx.judged) if p.path == WORKSPACE_TESTS
-    }
+    suites = tuple(p for p in (*ctx.packages, *ctx.judged) if p.path == WORKSPACE_TESTS)
+    tests_unit = {p.path for p in judged_by(record, suites, quiet=True)}
     units = len(gated_all) + len(tests_unit)
     on = all(option_value(record, p, "enabled") for p in gated_all)
     return on and 0 < units <= chosen
@@ -1448,8 +1447,8 @@ def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
     tree, ``.``, when the run reaches every member the step judges;
     else the ``src`` and ``tests`` directories of the reached members
     holding the runtime's language, the workspace's own tests when the
-    run judges them, and the files the step's claims give it in the
-    other reached members.
+    run and the step judge them, and the files the step's claims give
+    it in the other reached members.
     """
     from livery.workshop._packages import holds_runtime_language, package_paths
 
@@ -1460,7 +1459,7 @@ def scoped_paths(ctx: PhaseContext, name: str) -> tuple[str, ...]:
     chosen_members = enabled(name, gated_members)
     pythons = tuple(p for p in chosen_members if holds_runtime_language(p))
     natives = tuple(p for p in chosen_members if not holds_runtime_language(p))
-    unit = _workspace_unit(ctx)
+    unit = judged_by(record, _workspace_unit(ctx), quiet=True)
 
     def holding(packages: tuple[Package, ...]) -> tuple[str, ...]:
         # A directory with no file the claims reach has nothing to
@@ -1534,6 +1533,31 @@ def scoped_packages(ctx: PhaseContext, name: str) -> tuple[Package, ...]:
     return tuple(p for p in chosen if claimed_files(record, ctx, p.path))
 
 
+def scoped_suite(ctx: PhaseContext, name: str) -> Package | None:
+    """The workspace's own tests, when the step *name* judges them.
+
+    The unit ([livery.workshop.workspace_suite][]) holds the root's
+    set, so the step judges it while that set holds an extension the
+    step names. Its tests reach any package, so every run of the step
+    runs them then. None when the workspace has no ``tests``
+    directory. None as well when the step does not judge the unit, and
+    then a line says why.
+    """
+    from livery.workshop._packages import workspace_suite
+
+    record = step_for(name)
+    unit = workspace_suite(ctx.root)
+    if unit is None or judged_by(record, (unit,), quiet=True):
+        return unit
+    wanted = " or ".join(record.extensions)
+    which = "it" if len(record.extensions) == 1 else "one"
+    print(
+        f"  {name}: {unit.path} skips (the root's set holds no {wanted};"
+        f" list {which} in [workspace] extensions to run them)"
+    )
+    return None
+
+
 def step_option(name: str, package: Package, option: str) -> object:
     """What *package* sets for the step *name*'s *option*, or the option's default.
 
@@ -1547,21 +1571,13 @@ def step_option(name: str, package: Package, option: str) -> object:
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
     """The *units* whose suites a registered step of the test phase runs.
 
-    A package by the extensions it holds. The workspace's own tests
-    are the root's suite, run when a test step names the runtime's
-    language, which the root's own files hold whatever the members are.
+    Each by the extensions it holds: a member its set, and the
+    workspace's own tests the root's set.
     """
-    from livery.workshop._packages import RUNTIME_LANGUAGE, WORKSPACE_TESTS
-
     tests = [record for record in _STEPS.values() if record.phase == "test"]
-    workspace = any(RUNTIME_LANGUAGE in record.extensions for record in tests)
-
-    def runs(unit: Package) -> bool:
-        if unit.path == WORKSPACE_TESTS:
-            return workspace
-        return any(_applies(record, unit) for record in tests)
-
-    return tuple(unit for unit in units if runs(unit))
+    return tuple(
+        unit for unit in units if any(_applies(record, unit) for record in tests)
+    )
 
 
 def _register_builtin() -> None:

@@ -132,6 +132,8 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     from livery.workshop._packages import workspace_suite
 
     ran, calls = _record(monkeypatch, tmp_path)
+    # The root lists python, and its own tests hold the root's set.
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_root.py").write_text("")
     unit = workspace_suite(tmp_path)

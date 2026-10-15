@@ -233,7 +233,7 @@ def test_birth_end_to_end_and_the_second_run_resumes(
     # Without --extensions, the stock list, as its canonical list.
     assert (
         'extensions = ["basedpyright", "changelog", "coverage", "mkdocstrings",'
-        ' "pytest", "ruff"]'
+        ' "pytest", "python", "ruff"]'
     ) in (root / "workshop.toml").read_text()
     assert (root / "pyproject.toml").is_file()
     assert (root / "README.md").is_file() and (root / "LICENSE").is_file()
@@ -367,7 +367,7 @@ def test_the_extension_arm_scaffolds_a_self_hosting_home(
     # written as their canonical list.
     assert (
         'extensions = ["acme_tools.brand", "basedpyright", "changelog", "coverage",'
-        ' "mkdocstrings", "pytest", "ruff"]' in contract
+        ' "mkdocstrings", "pytest", "python", "ruff"]' in contract
     )
     pyproject = (member / "pyproject.toml").read_text()
     assert "footman.tasks" in pyproject
@@ -477,13 +477,15 @@ def test_a_birth_lists_the_stock_list_and_a_brand_s_own_canonically() -> None:
     # The fallback first: an App with no builtins of its own is stock,
     # and lists the type checker's extension, the changelog's,
     # coverage's, the site's API reference, which requires the site's,
-    # the test runner's and the python formatter's.
+    # the test runner's, python for the workspace's own tests, and the
+    # python formatter's.
     stock = [
         "basedpyright",
         "changelog",
         "coverage",
         "mkdocstrings",
         "pytest",
+        "python",
         "ruff",
     ]
     assert birth_extensions(()) == stock
@@ -497,6 +499,7 @@ def test_a_birth_lists_the_stock_list_and_a_brand_s_own_canonically() -> None:
         "dummy.brandx",
         "mkdocstrings",
         "pytest",
+        "python",
         "ruff",
     ]
     # An App that does not carry the base lists its own alone.

@@ -127,8 +127,9 @@ def native(package: Package) -> bool:
     A suite is native when its package does not hold the runtime's
     language. A native suite's measurer leaves its parts itself, so the
     reductions are never asked for it, and a package whose suite left
-    no part is not measured. The workspace's own tests hold the
-    runtime's language, so they are never native.
+    no part is not measured. The workspace's own tests hold the root's
+    set, so they are native while that set does not hold the runtime's
+    language.
     """
     from livery.workshop._packages import holds_runtime_language
 

@@ -17,10 +17,13 @@ and `fm check` runs both with the rest of the gate:
 
 - `test.pytest` runs the suites of the python packages a run reaches in one
   pytest call, across cores, with the workspace's own `tests` directory
-  beside them. While the coverage extension is listed, every run is
-  measured: on a machine the run prints each package's number beside its
-  floor, and in CI the legs' measurements combine into the union the
-  floors judge. Without it, the suites run with no meter.
+  beside them while the root's set holds python: that directory holds the
+  root's set. A root whose set holds no python runs none of its own tests,
+  and the step prints a line saying why. While the coverage extension is
+  listed, every run is measured: on a machine the run prints each
+  package's number beside its floor, and in CI the legs' measurements
+  combine into the union the floors judge. Without it, the suites run
+  with no meter.
 - `examples.pytest` runs each python package's documentation examples, the
   files under `docs/examples/`, one test per file.
 
@@ -28,10 +31,10 @@ Both steps run through the python extension. Each asks it for the
 function that runs what the step judges: its answer to
 `python.test.runner` runs the suites, and its answer to
 `python.examples.runner` runs a package's examples. The python extension
-answers while a package holds it. In a workspace where no package holds
-python, no python suite runs, the workspace's own `tests` directory
-included, and the test step says so; the examples step names each
-package it skips.
+answers while the root's set or a package's set holds it. In a workspace
+where neither holds python, no python suite runs, the workspace's own
+`tests` directory included, and the test step says so; the examples step
+names each package it skips.
 
 While the coverage extension is listed, this extension measures for it,
 through its `[for.coverage]` table, and coverage judges what it measures.

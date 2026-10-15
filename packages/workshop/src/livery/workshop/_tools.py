@@ -78,7 +78,7 @@ from typing import Any, NoReturn, cast
 
 from livery.footman import Failed, fail, prog, run
 from livery.workshop._contract import load_contract
-from livery.workshop._packages import RUNTIME_LANGUAGE, discover_packages
+from livery.workshop._packages import discover_packages
 
 WORKSPACE = "workspace"
 """The contract table the supported hosts live under."""
@@ -152,8 +152,8 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     and tests run in the venv uv makes. The steps that judge a present
     package bring the tools they run, each requirement naming
     `step <name>` as its site, and so do the steps that judge the
-    root's own files, which are judged as a package holding the
-    runtime's language is.
+    root's own files, which are judged as a package holding the root's
+    set is.
     An extension's site is `extension <name>`, read from its
     ``extension.toml``'s ``[toolroom] requires`` and from each of its
     ``[for.<target>]`` tables that applies now: cmake's build tools
@@ -174,7 +174,7 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     # naming its step: unregistering a step removes its tool.
     from livery.workshop._steps import tools_for
 
-    for tool, step in tools_for(_held(packages)):
+    for tool, step in tools_for(_held(root, packages)):
         found.append(Requirement.parse(tool, site=f"step {step}"))
     try:
         declared_by_extension = extension_tools(root)
@@ -206,16 +206,17 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     return tuple(found)
 
 
-def _held(packages: tuple[Package, ...]) -> tuple[str, ...]:
-    """The extensions the *packages* hold, and the one the root's own files hold.
+def _held(root: Path, packages: tuple[Package, ...]) -> tuple[str, ...]:
+    """The extensions the root's own files and the *packages* hold.
 
-    The root's is the runtime's language: its `tasks.py` and tests run
-    on the runtime, and are judged as a package holding it is.
+    The root's own files, its `tasks.py` and tests, hold the root's
+    set, and are judged as a package holding it is.
     """
     from livery.workshop._composition import extension_set
+    from livery.workshop._extensions import root_set
 
     held = (name for package in packages for name in extension_set(package))
-    return tuple(dict.fromkeys((RUNTIME_LANGUAGE, *held)))
+    return tuple(dict.fromkeys((*root_set(root), *held)))
 
 
 def plugin_tools(root: Path) -> dict[str, tuple[str, ...]]:
@@ -282,7 +283,7 @@ def host_allowed(root: Path) -> tuple[str, ...]:
         return ()
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     verdicts: dict[str, set[str]] = {}
-    for tool, step in tools_for(_held(packages)):
+    for tool, step in tools_for(_held(root, packages)):
         if step_for(step).phase in VERDICT_PHASES:
             verdicts.setdefault(tool, set()).add(step)
     writers: dict[str, str] = {}

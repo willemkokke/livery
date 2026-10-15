@@ -18,7 +18,7 @@ from collections.abc import Iterator
 import pytest
 
 from livery.workshop._invoke import run_batched
-from livery.workshop._packages import Package, workspace_suite
+from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import (
     PACKAGES,
@@ -30,6 +30,7 @@ from livery.workshop._steps import (
     restore,
     scoped_packages,
     scoped_paths,
+    scoped_suite,
     snapshot,
 )
 
@@ -93,8 +94,9 @@ def _typecheck_run(ctx: PhaseContext) -> None:
 
 
 def _test_run(ctx: PhaseContext) -> None:
-    # The workspace's own tests ride every run, as pytest's do.
-    unit = workspace_suite(ctx.root)
+    # The workspace's own tests ride every run that judges them, as
+    # pytest's do.
+    unit = scoped_suite(ctx, "test.fake")
     suites = scoped_packages(ctx, "test.fake") + ((unit,) if unit else ())
     if suites:
         run_test(packages=suites, scoped=ctx.scoped, point=ctx.point)

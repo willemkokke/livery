@@ -386,8 +386,13 @@ def test_each_seed_s_member_requires_these_tools(
     assert hosted == HOST_TOOLS
 
 
+#: What the root lists in a workspace whose own tests are python: the
+#: composing workspace's list and python, as their canonical list.
+PYTHON_ROOT = tuple(sorted((*STACK, "python")))
+
 #: What each python step reads when a change touches the workspace's own
-#: tests alone, in a workspace whose one member is a C++ library.
+#: tests alone, in a workspace whose one member is a C++ library and
+#: whose root lists python.
 ROOT_TESTS_READ = {
     "format.ruff": ("tests",),
     "lint.ruff": ("tests",),
@@ -410,6 +415,18 @@ ROOT_TESTS_TOOLS = (
     ("ruff", "step lint.ruff"),
 )
 
+#: The tools the steps require when the root lists the composing
+#: workspace's list alone: the C++ library's steps, ruff's among them
+#: for its recipe, and none of the steps that judge python alone.
+NATIVE_TOOLS = (
+    ("clang_format", "step format.clang-format"),
+    ("clang_tidy", "step lint.clang-tidy"),
+    ("cmake", "step build.configure"),
+    ("cmake", "step build.compile"),
+    ("ruff", "step format.ruff"),
+    ("ruff", "step lint.ruff"),
+)
+
 #: The per-file ignores the claims render for the root's own files there.
 ROOT_IGNORES = (
     ("tests/**", ("D1",)),
@@ -418,26 +435,10 @@ ROOT_IGNORES = (
 )
 
 
-def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
-    tmp_path: Path,
-) -> None:
-    from livery.workshop._composition import extension_set
-    from livery.workshop._packages import (
-        RUNTIME_LANGUAGE,
-        holds_runtime_language,
-        workspace_suite,
-    )
-    from livery.workshop._phases import PhaseContext
-    from livery.workshop._steps import (
-        PATHS,
-        per_file_ignores,
-        scoped_paths,
-        steps_by_name,
-        tested,
-    )
-    from livery.workshop._tools import requirements
+def _with_a_library(root: Path) -> tuple[Package, Package]:
+    """A C++ library and the workspace's own tests in *root*, mounted."""
+    from livery.workshop._packages import workspace_suite
 
-    root = _workspace(tmp_path / "acme", STACK)
     lib = _born(root, "cpp-library")["cpp-library"]
     (root / "tests").mkdir()
     (root / "tests" / "test_workspace.py").write_text(
@@ -446,33 +447,97 @@ def test_the_workspace_s_own_tests_are_judged_as_python_without_a_python_member(
     _mounted(root)
     unit = workspace_suite(root)
     assert unit is not None
-    # The runtime's language is python, and the root's own tests hold it
+    return lib, unit
+
+
+def _python_reads(root: Path, lib: Package, unit: Package) -> dict[str, object]:
+    """What each path step naming python reads when only the root's tests change."""
+    from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import PATHS, scoped_paths, steps_by_name
+
+    ctx = PhaseContext(root=root, packages=(lib,), subset=(unit,))
+    return {
+        name: scoped_paths(ctx, name)
+        for name, record in steps_by_name().items()
+        if record.narrowing == PATHS and "python" in record.extensions
+    }
+
+
+def _step_tools(root: Path) -> tuple[tuple[str, str], ...]:
+    """The tools the steps require at *root*, each with its site, once each."""
+    from livery.workshop._tools import requirements
+
+    return tuple(
+        dict.fromkeys(
+            (found.name, found.site)
+            for found in requirements(root)
+            if found.site.startswith("step ")
+        )
+    )
+
+
+def test_a_root_listing_no_python_runs_no_suite_of_its_own_tests_and_says_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._composition import extension_set
+    from livery.workshop._packages import holds_runtime_language
+    from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import step_for, tested
+
+    root = _workspace(tmp_path / "acme", STACK)
+    lib, unit = _with_a_library(root)
+    # The root's own tests hold the root's set, which holds no python.
+    assert extension_set(unit) == STACK
+    assert not holds_runtime_language(unit)
+    assert tested((lib, unit)) == (lib,)
+    capsys.readouterr()
+    step_for("test.pytest").run(PhaseContext(root=root, packages=(lib,)))
+    out = capsys.readouterr().out
+    assert (
+        "  test.pytest: tests skips (the root's set holds no python; list it in"
+        " [workspace] extensions to run them)\n"
+    ) in out
+    assert "  test.pytest: no python package and no workspace tests to run\n" in out
+    # A change to the root's tests alone reaches no python step.
+    assert _python_reads(root, lib, unit) == dict.fromkeys(ROOT_TESTS_READ, ())
+
+
+def test_the_tool_profile_holds_only_what_the_lists_hold(tmp_path: Path) -> None:
+    # The root's set and the library's hold no python: no python step
+    # brings its tool.
+    native = _workspace(tmp_path / "native", STACK)
+    _with_a_library(native)
+    assert _step_tools(native) == NATIVE_TOOLS
+    # The root lists python: its own files are judged as python, and
+    # the python steps bring theirs, though no member holds python.
+    acme = _workspace(tmp_path / "acme", PYTHON_ROOT)
+    _with_a_library(acme)
+    assert _step_tools(acme) == ROOT_TESTS_TOOLS
+
+
+def test_the_workspace_unit_holds_the_root_lists_set(tmp_path: Path) -> None:
+    from livery.workshop._composition import extension_set
+    from livery.workshop._packages import holds_runtime_language
+    from livery.workshop._phases import PhaseContext
+    from livery.workshop._steps import per_file_ignores, scoped_suite, tested
+
+    root = _workspace(tmp_path / "acme", PYTHON_ROOT)
+    lib, unit = _with_a_library(root)
+    # The unit lists nothing and holds the root's set, python among it,
     # while the library does not.
-    assert RUNTIME_LANGUAGE == "python"
+    assert unit.extensions == ()
+    assert extension_set(unit) == PYTHON_ROOT
     assert [p.path for p in (lib, unit) if holds_runtime_language(p)] == ["tests"]
     # The test phase runs the root's suite beside the library's.
     assert [package.path for package in tested((lib, unit))] == [
         "packages/lib",
         "tests",
     ]
-    # A change to the root's tests alone is a scoped run over that unit.
-    ctx = PhaseContext(root=root, packages=(lib,), subset=(unit,))
-    read = {
-        name: scoped_paths(ctx, name)
-        for name, record in steps_by_name().items()
-        if record.narrowing == PATHS and RUNTIME_LANGUAGE in record.extensions
-    }
-    assert read == ROOT_TESTS_READ
-    assert (
-        tuple(
-            dict.fromkeys(
-                (found.name, found.site)
-                for found in requirements(root)
-                if found.site.startswith("step ")
-            )
-        )
-        == ROOT_TESTS_TOOLS
+    assert scoped_suite(PhaseContext(root=root, packages=(lib,)), "test.pytest") == (
+        unit
     )
+    # A change to the root's tests alone is a scoped run over that unit.
+    assert _python_reads(root, lib, unit) == ROOT_TESTS_READ
     root_ignores = tuple(
         (pattern, codes)
         for pattern, codes in per_file_ignores([extension_set(lib)])
