@@ -680,7 +680,7 @@ extension calls, stay public.
 | Name | Purpose | Users | Lives in |
 | --- | --- | --- | --- |
 | `__version__` | the workshop's version | tests | `livery.workshop` |
-| `Package`, `Edge` | a discovered package and a graph edge | the eight, docs | `livery.workshop` |
+| `Package`, `Edge` | a discovered package and a graph edge; `Package.root` is the workspace root a package belongs to, from its path | the eight, docs; `root`: conan, python | `livery.workshop` |
 | `discover_packages`, `verify_workspace`, `workspace_root` | the workspace and its graph | docs, tests | `livery.workshop` |
 | `read_contract` | one contract's declared keys, judged | docs (`load_contract` today) | `livery.workshop` |
 | `extension_names` | the installed set, in composition order | tests | `livery.workshop` |
@@ -717,6 +717,7 @@ need none of these once they are words).
 | `PhaseContext` | what a phase's steps share: the package, the root, the failure | python, cpp, conan | `livery.workshop` |
 | `Query`, `answer` | a typed question about a package, and its answer across the package's extensions | basedpyright (`public_modules`), clang-tidy (`compile_commands`), docs | `livery.workshop` |
 | `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]`; an extension answers them under `[queries]` | the same | `livery.workshop` |
+| `RequirementWriter` | the protocol of a `requirement-writers` answer: writes a dependency's floor into a package's native file | conan, python | `livery.workshop` |
 | `Stamper` | what the `stamp` phase writes through | python, cpp, conan | `livery.workshop` |
 | `ParsedModule`, `RuleContext` | what a rule's `judge` reference receives (`ParsedModule` the python extension's, `RuleContext` the base's) | housekeeping | `livery.workshop` |
 | the toolchain types | phase 14 names them | cpp | `livery.workshop`, phase 14 |
@@ -729,7 +730,7 @@ need none of these once they are words).
 | `ReleaseNotes`, `release_notes` | the provider protocol and the mounted provider | changelog, docs (the release view) | `livery.workshop` |
 | `ci_changes` | the paths changed since the base a CI run measures from, as `Changes` | docs (the docs job's skip; `GitOps` and `ci_affected_base` today) | `livery.workshop` |
 | `forge_repository` | this workspace's repository name on its forge | docs (publish by container or ssh) | `livery.workshop` |
-| `registry`, `RegistryTarget` | the resolved registry target of a kind | docs (the container registry) | `livery.workshop` |
+| `registry`, `RegistryTarget` | the resolved registry target of a kind; `RegistryTarget.from_table` reads the publish phase's `registry-target` input | docs (the container registry); `from_table`: conan, python | `livery.workshop` |
 | `order_topologically` | packages in release order, every dependency before its dependents | docs (the Packages tree's order) | `livery.workshop` |
 | `release_tag` | the member path and version a release tag names | docs (the release view) | `livery.workshop` |
 | `run_phase` | runs an ungated phase's registered steps over the workspace, first removing the outputs no running step declares any more | docs (the docs and deploy phases) | `livery.workshop` |
@@ -1411,7 +1412,9 @@ remained after N1.
    reads: `build_release`, `discover_release`, `python_matrix`,
    `JOB_BUILT_MEMBERS`, `tool_receipts` with `ToolReceipt`, and
    `store_home`; python's and conan's entry modules export the names
-   nanobind reads of them.
+   nanobind reads of them. P6a (built, #1727) makes public what conan
+   reads, which python reads too: `Package.root`, `RequirementWriter`
+   and `RegistryTarget.from_table`.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -3737,6 +3740,19 @@ neither needs nor rules out).
   each loads the same four modules docs' loads. The public API tables
   above now list every name `__all__` holds; 28 were missing,
   `check_option`'s row is `step_option`'s.
+
+- 2026-10-16, step 8's P6a (#1727), built: conan reads no private
+  name of the workshop, and python reads three fewer. `RequirementWriter`
+  joins `__all__` (84 to 85); `Package.root` and
+  `RegistryTarget.from_table` are members of public types, replacing
+  `_packages.root_of` and `_registries.target_from_table`. Two shapes
+  changed: `Package.root` refuses a directory that does not end with
+  the package's path, where `root_of` returned a wrong root or raised
+  `IndexError`, and gives the directory itself for the root unit at
+  `.`; `from_table` refuses a missing field, a mistyped value or an
+  unknown key instead of coercing each value with `str()` or `bool()`,
+  naming the field and its type and never the value, since `token` is
+  a credential.
 
 ## Open
 
