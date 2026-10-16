@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._declaration import (
-    _REMOVED,
     Additions,
     CodedFix,
     Declaration,
@@ -77,43 +76,6 @@ def test_an_unknown_key_in_extension_toml_refuses_naming_the_file_and_the_neares
     refused = _refusal(package, STEP + "claim = []\n")
     assert "[phases.lint.acme] has no key 'claim'" in refused
     assert "did you mean 'claims'?" in refused
-
-
-def test_a_check_table_refuses_naming_the_step_spelling(package: Path) -> None:
-    where = package / "extension.toml"
-    body = (
-        " with main, its body: a template, the tool's name then its arguments, or"
-        " a reference to its code, module:function"
-    )
-    assert _refusal(
-        package, '[checks.acme.lint]\nrun = "acme_declared._steps:judge"\n'
-    ) == (
-        f"{where}: checks.acme.lint is the check tables' spelling; a step is"
-        f" [phases.lint.acme]{body}"
-    )
-    # A step's table with no phase beneath it, and the table under a target.
-    assert _refusal(package, "[checks.acme]\nscope = 'workspace'\n") == (
-        f"{where}: checks.acme is the check tables' spelling; a step is"
-        f" [phases.<phase>.acme]{body}"
-    )
-    assert _refusal(package, "[checks]\n") == (
-        f"{where}: checks is the check tables' spelling; a step is"
-        f" [phases.<phase>.<step>]{body}"
-    )
-    assert _refusal(
-        package, '[for.docs.checks.acme.lint]\nrun = "acme_declared._steps:judge"\n'
-    ) == (
-        f"{where}: for.docs.checks.acme.lint is the check tables' spelling; a step"
-        f" is [phases.lint.acme]{body}"
-    )
-    # An options table says what enabled says on the step.
-    assert _refusal(package, '[options]\ndeep = "judges deeper"\n') == (
-        f"{where}: options is not a table: a step a workspace turns on declares"
-        " enabled = false under [phases.<phase>.<step>], and the workspace turns"
-        " it on with [phases.<phase>.<step>] enabled = true in its root contract"
-    )
-    # The refusal comes before the contract's, which cannot name the spelling.
-    assert "has no key" not in _refusal(package, "[checks.acme.lint]\n")
 
 
 def test_the_old_tools_table_in_extension_toml_refuses_naming_toolroom(
@@ -231,32 +193,6 @@ def test_a_claim_without_a_category_and_a_fragment_off_its_shape_refuse(
     )
 
 
-def test_a_removed_key_refuses_naming_the_new_spelling(package: Path) -> None:
-    where = package / "extension.toml"
-    said = {
-        'narrowing = "paths"': "is said by {paths} in main",
-        'transport = "argv"': "the paths go on the command line, where {paths}",
-        "threshold = 0.5": "a template with {paths} runs over the paths",
-        'roles = ["format"]': "a step belongs to one phase",
-        'listed-with = "deep"': "is enabled = false on the step, which a workspace"
-        " turns on with [phases.lint.acme] enabled = true in its root contract",
-        'judge = ["acme"]': "is main: the step's body, a template or a reference",
-        'run = "acme_declared._steps:judge"': "is main: the step's body",
-        "arguments = true": "is said by {arguments} in main, where the words after"
-        " -- go",
-        'pre = "acme_declared._steps:judge"': "a step that runs after it names"
-        " it in after",
-        'post = "acme_declared._steps:judge"': "does its own cleanup on failure",
-    }
-    for line, spelling in said.items():
-        key = line.partition(" = ")[0]
-        refused = _refusal(package, STEP + line + "\n")
-        assert refused.startswith(f"{where}: phases.lint.acme.{key} "), key
-        assert spelling in refused, key
-    # The refusal comes before the contract's, which cannot name the spelling.
-    assert "has no key" not in _refusal(package, STEP + 'narrowing = "paths"\n')
-
-
 def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     where = package / "extension.toml"
     # The refusals: no body, a body of the wrong kind for its phase, a
@@ -363,34 +299,6 @@ def test_a_step_in_code_says_what_its_code_does(package: Path) -> None:
     assert (record.narrowing, record.arguments) == ("packages", True)
 
 
-def test_every_declaration_is_in_the_step_spelling() -> None:
-    import tomllib
-    from importlib.metadata import entry_points
-
-    from livery.workshop._declaration import declaration_file
-
-    # The keys that declare a phase sit beside its steps in its table.
-    declaring = {"level", "gated", "after", "verb", "keys"}
-    removed = set(_REMOVED)
-    found = 0
-    for entry in entry_points(group="workshop.extensions"):
-        path = declaration_file(entry.value.partition(":")[0])
-        assert path is not None, entry.name
-        data = tomllib.loads(path.read_text("utf-8"))
-        tables = [data, *data.get("for", {}).values()]
-        for table in tables:
-            assert "checks" not in table, path
-            assert "options" not in table, path
-            for phase, steps in table.get("phases", {}).items():
-                for step, declared in steps.items():
-                    if step in declaring:
-                        continue
-                    assert isinstance(declared, dict), (path, phase, step)
-                    assert not removed & set(declared), (path, phase, step)
-                    found += 1
-    assert found > 0
-
-
 def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     where = package / "extension.toml"
     assert _refusal(
@@ -410,11 +318,6 @@ def test_a_steps_own_keys_refuse_off_their_shape(package: Path) -> None:
     assert _refusal(package, STEP + 'replaces = { "acme.base:lint.acme" = " " }\n') == (
         f'{where}: phases.lint.acme.replaces."acme.base:lint.acme" states no reason;'
         " a step names each step it replaces or deletes with the reason"
-    )
-    # A gate phase's table holds steps alone.
-    assert _refusal(package, STEP + '[phases.lint]\nmain = "x"\n') == (
-        f"{where}: phases.lint.main belongs to a step: a phase's table holds"
-        " steps, [phases.lint.<step>], each with main"
     )
 
 
@@ -561,8 +464,7 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
     identity = "[extension]\n"
     # The refusals first: the phase's level says how often a step runs,
     # so a step of a package-level phase names no scope and no
-    # extensions; the phase table's own pre and post are gone, and its
-    # main belongs to a step.
+    # extensions.
     assert _refusal(
         package,
         identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
@@ -577,24 +479,6 @@ def test_a_package_level_phases_steps_read_as_any_step_and_run_per_package(
         identity + '[phases.build.acme]\nmain = "acme_declared._steps:judge"\n'
         'extensions = ["acme"]\n',
     ).startswith(f"{where}: phases.build.acme.extensions is not read on a step")
-    assert _refusal(
-        package, identity + '[phases.build]\npre = "acme_declared._steps:judge"\n'
-    ) == (
-        f"{where}: phases.build.pre goes: a step is named, and a step that runs"
-        " after it names it in after"
-    )
-    assert _refusal(
-        package, identity + '[phases.build]\npost = "acme_declared._steps:judge"\n'
-    ) == (
-        f"{where}: phases.build.post goes: a step is named, runs after the steps"
-        " it names in after, and does its own cleanup on failure"
-    )
-    assert _refusal(
-        package, identity + '[phases.build]\nmain = "acme_declared._steps:judge"\n'
-    ) == (
-        f"{where}: phases.build.main belongs to a step: a phase's table holds"
-        " steps, [phases.build.<step>], each with main"
-    )
     # Then the read: several steps in one phase, in code or in words,
     # each a package record naming the extension. The gate runs the
     # build phase's tree side, which a step naming no side serves, so

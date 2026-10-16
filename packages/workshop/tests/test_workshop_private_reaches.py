@@ -128,29 +128,6 @@ def test_an_allowance_no_source_uses_refuses_on_a_full_run_alone(
     assert _judged(narrowed) == []
 
 
-def test_a_rules_table_refuses_naming_the_layering_step(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.workshop._declaration import DeclarationError
-    from livery.workshop._extensions import installed_declaration
-    from workshop_extension_fakes import fake_package_extensions
-
-    fake_package_extensions(
-        tmp_path,
-        monkeypatch,
-        lint='[extension]\n\n[rules.loud]\njudge = "x:y"\n',
-    )
-    with pytest.raises(DeclarationError) as raised:
-        installed_declaration("acme.lint")
-    path = tmp_path / "site" / "acme" / "lint" / "extension.toml"
-    assert str(raised.value) == (
-        f"{path}: rules.loud is [phases.layering.loud]: a rule is a step of the"
-        " layering phase, its main a reference to its code, module:function"
-        " called with the gate's context over the one parse, and its fix the"
-        " same shape where it rewrites"
-    )
-
-
 # Then what the scan sees, and what the mount registers.
 
 

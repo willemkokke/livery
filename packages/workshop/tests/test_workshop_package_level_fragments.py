@@ -18,13 +18,6 @@ PACKAGE = "[extension]\n"
 #: A fragment written by the fake's render.
 FRAGMENT = '\n[fragments."members.txt"]\nrender = "{package}._steps:render"\n'
 
-#: What a stale declaration is told: the fragments spelling.
-SPELLING = (
-    'is [fragments."{path}"]: a file the extension\'s code writes names its'
-    " render there, module:function called with the workspace root, and the"
-    " fragment lives while the workspace's lists hold the extension"
-)
-
 #: The render: one line per package whose set holds the extension, in
 #: path order, found through the root it is handed.
 RENDER = (
@@ -83,19 +76,6 @@ def _member(root: Path, name: str, extensions: str) -> None:
     ("declared", "refusal"),
     [
         (
-            PACKAGE + FRAGMENT.replace("[fragments.", "[root-files."),
-            'root-files."members.txt" ' + SPELLING.format(path="members.txt"),
-        ),
-        (
-            PACKAGE + "\n[root-files]\n",
-            "root-files " + SPELLING.format(path="<path>"),
-        ),
-        (
-            PACKAGE + '\n[for."acme.other".root-files."members.txt"]\n',
-            'for."acme.other".root-files."members.txt" '
-            + SPELLING.format(path="members.txt"),
-        ),
-        (
             PACKAGE + '\n[fragments."members.txt"]\n',
             'fragments."members.txt" names no render; a fragment\'s code is'
             " render = 'module:function'",
@@ -107,9 +87,6 @@ def _member(root: Path, name: str, extensions: str) -> None:
         ),
     ],
     ids=[
-        "root-files",
-        "bare-root-files",
-        "root-files-for-a-target",
         "no-render",
         "no-function",
     ],

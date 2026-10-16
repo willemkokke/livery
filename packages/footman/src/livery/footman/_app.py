@@ -2350,16 +2350,14 @@ def _execute(
         base = built
     plugins_cfg = cfg.get("plugins")
     if plugins_cfg and not isinstance(plugins_cfg, dict):
-        # The old list-valued key died with the composition rework: mounts are
-        # authored in tasks.py, where placement, filtering, and overrides
-        # live. A *table* is the reserved sections child instead —
-        # `[tool.footman.plugins.<section>]` holds a provider's own settings.
+        # `[tool.footman.plugins.<section>]` holds a provider's own settings,
+        # and `unknown_keys` judges nothing in a free table: its type is
+        # refused here.
+        table = _paths.config_table()
         return _refuse(
             json_mode,
-            f"the [tool.{_paths.config_table()}] plugins key was removed — "
-            "mount plugins from "
-            'tasks.py instead: plugin("footman.docs", into="footman") '
-            "(footman.compose.plugin; see the composing docs)",
+            f"[tool.{table}] plugins is a table: [tool.{table}.plugins.<section>]"
+            " holds a provider's settings",
         )
     # The note-level policy: validated loudly (an ignored policy line is a
     # wall someone thinks is up), then installed for the run — always, so a

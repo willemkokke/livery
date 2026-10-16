@@ -479,25 +479,6 @@ def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     return tuple((name, distribution_of(name)) for name in installed_set(start))
 
 
-def _bracketed(spelled: str) -> str:
-    """Why the entry *spelled* cannot carry brackets; empty for a name alone."""
-    from livery.toolroom.store import Spec, SpecError
-
-    try:
-        spec = Spec.parse(spelled, where="[workspace] extensions")
-    except SpecError:
-        return ""
-    if not spec.options:
-        return ""
-    phase, _, step = next(iter(spec.options)).partition(".")
-    address = f"{phase}.{step}" if step else "<phase>.<step>"
-    return (
-        f"[workspace] extensions lists {spelled!r}; an entry is a name alone, and"
-        f" a step {spec.name} declares off is turned on with [phases.{address}]"
-        " enabled = true in this contract"
-    )
-
-
 def stack_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     """The base, then every listed extension in mount order, as name and distribution.
 
@@ -725,9 +706,6 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     enabled = enabled_steps(start)
     contributes = _contributing(active)
     asleep = frozenset(_dormant(tuple(active), contributes))
-    for entry in _listed(start):
-        if why := _bracketed(_spelling(entry)):
-            _note(f"{why}; the mount reads the name alone")
     # The base is present before this walk; every extension joins once
     # its mount ran.
     present = [SELF]
@@ -1723,12 +1701,9 @@ def _why(names: list[str], wanted: tuple[str, ...]) -> str:
 def listing_problems(root: Path) -> list[str]:
     """Each ``[workspace] extensions`` entry spelled as more than a name.
 
-    An entry is a name. It takes no version, ``?`` or scope: an
-    extension's version comes from its wheel's metadata, and the lock
-    pins it. It takes no brackets either: a step the extension declares
-    off is turned on at the step's address, ``[phases.<phase>.<step>]
-    enabled = true``, and the refusal names that spelling. An extension
-    no installed distribution declares is
+    An entry is a name. It takes no brackets, version, ``?`` or scope:
+    an extension's version comes from its wheel's metadata, and the
+    lock pins it. An extension no installed distribution declares is
     [livery.workshop._extensions.entry_problems][]'s to name.
     """
     from livery.toolroom.store import Spec, SpecError
@@ -1740,15 +1715,12 @@ def listing_problems(root: Path) -> list[str]:
             spec = Spec.parse(spelled, where="[workspace] extensions")
         except SpecError:
             spec = None
-        if spec is None or spec.optional or spec.floor or spec.scope:
+        if spec is None or spec.options or spec.optional or spec.floor or spec.scope:
             problems.append(
                 f"[workspace] extensions lists {spelled!r}; an entry is a name alone,"
-                " with no version or scope: the lock pins an extension's version"
-                " from its wheel"
+                " with no brackets, version or scope: the lock pins an extension's"
+                " version from its wheel"
             )
-            continue
-        if why := _bracketed(spelled):
-            problems.append(why)
     return problems
 
 

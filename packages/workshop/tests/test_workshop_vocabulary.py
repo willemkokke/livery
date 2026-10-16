@@ -281,10 +281,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "fm new.project writes the stock list, as ruled",
     ),
-    ("_contract", "mkdocstrings"): (
-        1,
-        "the refusal of [docs] python-paths names the step option that replaces it",
-    ),
 }
 
 
