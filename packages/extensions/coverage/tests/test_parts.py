@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from extensions_coverage_meter import leave_part
 from livery.extensions.coverage import _floors as coverage_floors
 from livery.extensions.coverage import _format as fmt
 from livery.extensions.coverage import _record as coverage_record
 from livery.extensions.coverage._parts import PARTS, part_files, read_part
 from livery.footman import Failed
 from livery.workshop._packages import Package
-from workshop_coverage_meter import leave_part
 
 _FAILURES = (SystemExit, Failed)
 

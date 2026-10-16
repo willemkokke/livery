@@ -43,35 +43,27 @@ dependencies = [
     # The fragment engine's renderer: one compiled template per
     # fragment content, over the subset the engine declares.
     "minijinja>=2.24",
-    # The coverage extension rides in this wheel, and highlights each
-    # file's source on its pages with Pygments, imported when the pages
-    # are drawn. The floor is the lock's.
-    "pygments>=2.21.0",
 ]
 
 [project.optional-dependencies]
 # What this package's own dev loop needs beyond its dependencies: its
 # tests parse the emitted CI files as YAML, with the stubs so mypy stays
-# strict, and the coverage pages' Pygments calls are typed by its stubs. The pyyaml floor is the oldest release whose wheels cover
+# strict. The pyyaml floor is the oldest release whose wheels cover
 # every Python this package supports; 6.0.0's sdist no longer builds
 # under a current Cython. The workspace's dev group installs the member
 # as `livery-workshop[dev]`.
-dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
+dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
 # The nanobind extension's verb, the one the release's wheels job runs.
 "livery.extensions.nanobind" = "livery.extensions.nanobind._tasks"
-# The coverage extension's verbs: the leg's entry, the union, and the
-# floors and marks a person runs.
-"livery.extensions.coverage" = "livery.extensions.coverage._tasks"
 
 # The workshop extensions this wheel ships, by the name a workspace
 # lists: each maps to the package beside its extension.toml, which the
 # mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
 conan = "livery.extensions.conan"
-coverage = "livery.extensions.coverage"
 cpp = "livery.extensions.cpp"
 nanobind = "livery.extensions.nanobind"
 python = "livery.extensions.python"
@@ -128,7 +120,6 @@ Repository = "https://github.com/willemkokke/livery"
 module-name = [
     "livery.workshop",
     "livery.extensions.conan",
-    "livery.extensions.coverage",
     "livery.extensions.cpp",
     "livery.extensions.nanobind",
     "livery.extensions.python",

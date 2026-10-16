@@ -12,6 +12,18 @@ from typing import Any
 
 import pytest
 
+from extensions_coverage_measured import measure
+from extensions_coverage_meter import (
+    asked,
+    install_meter,
+    leave_part,
+    meter,
+    part,
+    ran,
+    read_parts,
+    stored_unit,
+)
+from extensions_coverage_steps import python_steps_fixture  # noqa: F401
 from livery import git
 from livery.extensions.coverage import _floors as coverage_floors
 from livery.extensions.coverage import _leg as coverage_leg
@@ -22,18 +34,6 @@ from livery.extensions.python import _backend as _python
 from livery.footman import Failed
 from livery.workshop import LegScope, _verified
 from livery.workshop._packages import Package
-from workshop_coverage_meter import (
-    asked,
-    install_meter,
-    leave_part,
-    meter,
-    part,
-    ran,
-    read_parts,
-    stored_unit,
-)
-from workshop_measured import measure
-from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -435,21 +435,6 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
-def _python_of_the_venv(env: dict[str, str], code: str, cwd: Path) -> str:
-    """Run *code* in a fresh interpreter of this venv; what it printed."""
-    done = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=cwd,
-        timeout=60,
-        check=False,
-    )
-    assert done.returncode == 0, done.stderr
-    return done.stdout.strip()
-
-
 def _unarmed() -> dict[str, str]:
     """This process's environment without the variables that arm a meter."""
     return {
@@ -475,30 +460,6 @@ def _coverage_json(root: Path) -> dict[str, Any]:
         PurePath(name).as_posix(): entry for name, entry in report["files"].items()
     }
     return report
-
-
-def test_an_unarmed_python_of_the_venv_imports_no_coverage(tmp_path: Path) -> None:
-    # Every fm start, test worker and subprocess pays for what the
-    # venv's startup hooks import. Coverage's own hook imports coverage
-    # only when the runner arms it; a hook that imported it anyway cost
-    # most of a bare interpreter start.
-    found = _python_of_the_venv(
-        _unarmed(), "import sys; print('coverage' in sys.modules)", tmp_path
-    )
-    assert found == "False"
-
-
-def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
-    tmp_path: Path,
-) -> None:
-    pytest.importorskip("coverage")
-    config = tmp_path / "coverage.ini"
-    config.write_text(
-        f"[run]\nparallel = true\ndata_file = {(tmp_path / '.coverage').as_posix()}\n"
-    )
-    env = {**_unarmed(), "COVERAGE_PROCESS_START": str(config)}
-    _python_of_the_venv(env, "x = 1", tmp_path)
-    assert list(tmp_path.glob(".coverage.*"))
 
 
 def _measured_by_pytest(root: Path, *, python: bool = True) -> None:
@@ -1774,8 +1735,8 @@ def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
 def test_every_leg_s_write_numbers_a_unit_s_tests_alike(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from extensions_coverage_meter import COVERAGE_PY
     from livery.extensions.coverage._format import Entry, Part, digest, encode
-    from workshop_coverage_meter import COVERAGE_PY
 
     x = _suite(tmp_path, "x")
     source = _name(tmp_path, "x")
@@ -2294,3 +2255,59 @@ def test_the_union_of_two_legs_lines_covers_what_each_left_uncovered(
     assert coverage_union.combine_union(tmp_path, (package,)) == (package,)
     assert "packages/n on check-a: reused from run 5" in capsys.readouterr().out
     assert dict(_unioned(tmp_path)[_NATIVE].entry.counts) == {1: 1, 2: 1}
+
+
+def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
+    # measured_coverage and enforce_coverage run for real, against a
+    # coverage data file recorded here, not a monkeypatch. coverage.py's
+    # data reaches the figure through the pytest extension's reduction,
+    # a distribution of its own: a run of this wheel alone has none.
+    pytest.importorskip("livery.extensions.pytest")
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["pytest", "coverage"]\n'
+    )
+    package_dir = tmp_path / "packages" / "thing"
+    (package_dir / "src").mkdir(parents=True)
+    (package_dir / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 50\n'
+    )
+    module = package_dir / "src" / "mod.py"
+    module.write_text("def run():\n    return 1\n\nrun()\n")
+    # Scrubbed of the outer gate's coverage variables: pytest-cov and
+    # the subprocess patch re-point any inheriting python at the live
+    # run's data file, and this recording must land in tmp_path.
+    hermetic = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "run",
+            "--source",
+            str(package_dir),
+            str(module),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=hermetic,
+    )
+    package = Package(
+        directory=package_dir,
+        path="packages/thing",
+        name="livery-thing",
+        depends=(),
+        extensions=("python",),
+    )
+    measured = coverage_floors.measured_coverage(tmp_path, (package,))
+    assert measured["packages/thing"] > 0
+    coverage_floors.enforce_coverage(tmp_path, (package,))  # above its floor
+    (package_dir / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
+    )
+    with pytest.raises(_FAILURES):
+        coverage_floors.enforce_coverage(tmp_path, (package,))

@@ -126,12 +126,22 @@ def stamp(package: Package, root: Path, version: str) -> list[str]:
 
 
 def publish(
-    package: Package, root: Path, *, version: str, target: RegistryTarget
+    package: Package,
+    root: Path,
+    *,
+    version: str,
+    target: RegistryTarget,
+    prebuilt: bool = False,
 ) -> bool:
     """Upload *package*'s built artifacts to *target*; False when all were there.
 
     A re-run walks past what an earlier attempt uploaded, so False is
-    a success that uploaded nothing.
+    a success that uploaded nothing. *prebuilt* says a job of the run
+    built the package and the run collected what it built into the
+    package's ``dist/``, so this runner built nothing. The publish
+    phase gets it as ``prebuilt``, and a step whose upload reads
+    something other than ``dist/``, as conan's reads its cache, puts
+    the collected files there first.
 
     Raises:
         Failed: naming the package, its set and the phase, when no
@@ -142,6 +152,7 @@ def publish(
     inputs: dict[str, object] = {
         "version": version,
         "registry-target": target_table(target),
+        "prebuilt": prebuilt,
     }
     ctx = _served(package, "publish", root, inputs)
     return cast("bool", _provided(ctx, "published", bool))

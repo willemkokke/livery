@@ -237,6 +237,7 @@ def test_a_depends_edge_and_the_forge_keep_their_kind(tmp_path: Path) -> None:
 def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("coverage")
     member = _workspace(
         tmp_path, "", 'extensions = ["python"]\nname = "m"\n\n[coverage]\nfloor = 90\n'
     )

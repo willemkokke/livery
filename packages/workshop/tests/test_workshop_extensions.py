@@ -192,18 +192,20 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
 
     # Scratch contracts naming the extensions the workshop's own wheel
     # ships, so the suite needs nothing beyond the package's own
-    # dependencies when it runs against the wheel. Coverage mounts with
-    # docs unlisted: its plugin carries its verbs, and its declaration
-    # joins the gate point's jobs.
+    # dependencies when it runs against the wheel.
     contract = tmp_path / "workshop.toml"
-    contract.write_text('[workspace]\nextensions = ["coverage"]\n')
+    contract.write_text('[workspace]\nextensions = ["cpp"]\n')
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("coverage",)
+        assert mount_extensions(tmp_path) == ("cpp",)
     # With python beside it, in composition order, whatever the list's.
-    contract.write_text('[workspace]\nextensions = ["python", "coverage"]\n')
+    contract.write_text('[workspace]\nextensions = ["python", "cpp"]\n')
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("coverage", "python")
+        assert mount_extensions(tmp_path) == ("cpp", "python")
+    # An extension with a plugin mounts with every extension it requires.
+    contract.write_text('[workspace]\nextensions = ["nanobind"]\n')
+    with registry.capture():
+        assert mount_extensions(tmp_path) == ("cpp", "conan", "python", "nanobind")
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:
@@ -213,25 +215,25 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
         "[workspace]\n"
         "extensions = [\n"
         '  "livery.forge",\n'
-        '  { name = "coverage", without = [] },\n'
+        '  { name = "cpp", without = [] },\n'
         "]\n"
     )
     # The distribution is the one whose entry point declares the name,
     # in composition order.
     assert extension_entries(tmp_path) == (
-        ("coverage", "livery-workshop"),
+        ("cpp", "livery-workshop"),
         ("livery.forge", "livery-forge"),
     )
     # The stack is the base, then the installed set.
     assert stack_entries(tmp_path)[0] == ("livery.workshop", "livery-workshop")
-    assert extension_names(tmp_path) == ("coverage", "livery.forge")
+    assert extension_names(tmp_path) == ("cpp", "livery.forge")
 
 
 def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None:
     from livery.workshop._templates import render_injections
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["livery.forge", "coverage"]\n'
+        '[workspace]\nextensions = ["livery.forge", "cpp"]\n'
     )
     answers = {
         "packages": [
@@ -240,11 +242,11 @@ def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None
     }
     injections = render_injections(tmp_path, answers)
     # A member rides the roster's spelling, and a wheel shipping two
-    # extensions, the base and coverage, is one requirement.
+    # extensions, the base and cpp, is one requirement.
     assert injections["extension_requirements"] == ["livery-workshop"]
     assert injections["extension_imports"] == [
         "livery.workshop",
-        "coverage",
+        "cpp",
         "livery.forge",
     ]
 

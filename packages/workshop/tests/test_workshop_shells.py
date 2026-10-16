@@ -15,8 +15,6 @@ import pytest
 
 import workshop_python_steps as fake_steps
 from livery import git
-from livery.extensions.coverage import _floors as coverage_floors
-from livery.extensions.coverage import _tasks as coverage_tasks
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _phases, _quality
@@ -285,20 +283,6 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     fmt, lnt = by_name["format"], by_name["lint"]
     assert isinstance(fmt, dict) and fmt["check"] is True
     assert isinstance(lnt, dict) and lnt["fix"] is False
-
-
-def test_coverage_enforce_reads_the_workspace(
-    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, root = rig
-    seen: list[Path] = []
-    monkeypatch.setattr(
-        coverage_floors,
-        "enforce_coverage",
-        lambda r, packages: seen.append(r),
-    )
-    coverage_tasks.coverage_enforce()
-    assert seen == [root]
 
 
 def test_the_extensions_task_prints_the_walk(

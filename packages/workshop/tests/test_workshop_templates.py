@@ -499,50 +499,6 @@ def test_every_rendered_project_mounts_the_profiler(tmp_path: Path) -> None:
     assert f"{root}/" in ignored.splitlines()
 
 
-def test_every_coverage_data_file_is_ignored_and_its_configuration_tracked(
-    tmp_path: Path,
-) -> None:
-    # A gate writes the data at the root, and a file it leaves untracked
-    # makes the tree dirty, which a workflow verb refuses; coverage's own
-    # configuration, `.coveragerc`, is a tracked file beside them. The
-    # extensions that write the data ship its lines: the meter's data is
-    # pytest's, while it measures for coverage, the rest coverage's, and
-    # the base names none of them.
-    import subprocess
-
-    from livery.extensions.coverage._parts import PARTS, UNION
-
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    metered = (".coverage", ".coverage.host.1.2")
-    data = (*metered, "packages/geometry/htmlcov/index.html")
-    # The parts a measurer leaves and the union the gate job writes live
-    # under .workshop/, which the base ignores in every workspace.
-    held = (f"{PARTS}/gcov/packages-geometry.json", UNION)
-    for name in (*data, *held, ".coveragerc"):
-        (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text("x\n")
-
-    def ignored(name: str) -> bool:
-        done = subprocess.run(["git", "check-ignore", "-q", name], cwd=repo)
-        return done.returncode == 0
-
-    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore"))
-    assert [name for name in data if ignored(name)] == []
-    assert [name for name in held if not ignored(name)] == []
-    # The pytest extension is a distribution of its own: a run of this
-    # wheel alone has none, and the rest of the test skips.
-    pytest.importorskip("livery.extensions.pytest")
-    # Listed alone, pytest runs no meter and leaves no data to ignore.
-    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", ("pytest",)))
-    assert [name for name in data if ignored(name)] == []
-    listed = ("pytest", "coverage")
-    (repo / ".gitignore").write_text(_composed(tmp_path, ".gitignore", listed))
-    assert [name for name in (*data, *held) if not ignored(name)] == []
-    assert not ignored(".coveragerc")
-
-
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
     # Every change appends to a plan note's decision record, so two
     # changes in flight collide at the same tail; the rendered

@@ -430,8 +430,82 @@ def save_cache(package: Package, version: str, into: Path) -> Path:
     return archive
 
 
+def restore_cache(archive: Path, *, cwd: Path) -> None:
+    """Restore the package a saved cache file holds into the conan cache.
+
+    ``conan cache restore`` reads *archive*, a file `save_cache` wrote
+    on any machine, and puts its package where a build resolves it and
+    an upload reads it. Conan runs in *cwd*.
+
+    Raises:
+        Failed: when conan refuses the restore; the message carries its
+            output.
+    """
+    result = _conan(cwd, "cache", "restore", str(archive))
+    if result.code != 0:
+        fail(
+            f"conan cache restore ({archive.name}) exited {result.code}:\n"
+            f"{result.stdout[-3000:]}{result.stderr[-2000:]}"
+        )
+
+
+def collected_caches(package: Package, version: str) -> list[Path]:
+    """The saved caches in *package*'s ``dist/`` for *version*, in name order.
+
+    One file per host. A saved cache is the file `save_cache` names for
+    a host the store knows, ``<name>-<version>-<host>.tgz``, so a file
+    for another version is never among them. Both routes that ship the collected
+    caches read this: the releases route attaches them, and the folder
+    and remote routes restore them before the upload.
+    """
+    from livery.toolroom.store import HOSTS
+
+    dist = package.directory / "dist"
+    named = (dist / cache_name(package.name, version, host) for host in HOSTS)
+    return sorted(path for path in named if path.is_file())
+
+
+def restore_collected(package: Package, version: str) -> None:
+    """Restore every saved cache the run collected for *version* into the conan cache.
+
+    A job of the release creates the package on each of its legs and
+    saves it per host (`save_cache`), and the publish job collects every
+    leg's file into ``dist/``. The publish job's conan cache is its own
+    and starts without the package. Each host's file is restored, in
+    name order, so the upload, which reads that cache, sends every
+    host's binary the run collected: the same hosts the releases route
+    attaches (`collected_caches`). A file for another version is not
+    restored.
+
+    Raises:
+        Failed: when ``dist/`` holds no saved cache for *version*,
+            naming the member, the version and the files ``dist/``
+            holds; and when conan refuses a restore, before anything
+            uploads.
+    """
+    caches = collected_caches(package, version)
+    if not caches:
+        dist = package.directory / "dist"
+        held = sorted(path.name for path in dist.iterdir()) if dist.is_dir() else []
+        fail(
+            f"{package.name}: dist/ holds no saved conan cache for {version}; it"
+            f" holds {', '.join(held) or 'nothing'}. Each leg of the job that"
+            f" builds {package.name} saves one, named like"
+            f" {cache_name(package.name, version)}: re-run the release so that"
+            " job saves them before the wave."
+        )
+    for cache in caches:
+        restore_cache(cache, cwd=package.directory)
+        print(f"  conan: {package.name}/{version} restored from dist/{cache.name}")
+
+
 def publish_artifact(
-    package: Package, root: Path, *, version: str, target: RegistryTarget
+    package: Package,
+    root: Path,
+    *,
+    version: str,
+    target: RegistryTarget,
+    prebuilt: bool = False,
 ) -> bool:
     """Publish the package to the resolved target: conan's publish step calls it.
 
@@ -440,9 +514,19 @@ def publish_artifact(
     logs in with the target's token, the forge lane's token for a
     forge's own registry, unless conan's own variables are set
     (``publish``).
+
+    *prebuilt* says a job of the run built the package and the run
+    collected the saved caches into ``dist/``, so this job built
+    nothing. The folder and remote routes read the conan cache, and
+    restore every host's file into it first (`restore_collected`), so
+    the upload sends every host's binary the run collected. The
+    releases route attaches the same files themselves and restores
+    nothing.
     """
     if target.releases:
         return publish_to_releases(package, root, version=version)
+    if prebuilt:
+        restore_collected(package, version)
     return publish(
         package, target.url, version=version, local=target.local, token=target.token
     )
@@ -498,9 +582,7 @@ def publish_to_releases(package: Package, root: Path, *, version: str) -> bool:
     from livery.workshop import this_repository
 
     tag = f"{package.path}/v{version}"
-    caches = sorted(
-        (package.directory / "dist").glob(f"{package.name}-{version}-*.tgz")
-    )
+    caches = collected_caches(package, version)
     if not caches:
         fail(
             f"{package.name}: no saved conan cache in dist/ for {version}."
@@ -778,12 +860,7 @@ def restore_from_releases(root: Path, name: str, version: str, *, cwd: Path) -> 
     with tempfile.TemporaryDirectory() as scratch:
         archive = Path(scratch) / wanted
         archive.write_bytes(data)
-        result = _conan(cwd, "cache", "restore", str(archive))
-        if result.code != 0:
-            fail(
-                f"conan cache restore ({wanted}) exited {result.code}:\n"
-                f"{result.stdout[-3000:]}{result.stderr[-2000:]}"
-            )
+        restore_cache(archive, cwd=cwd)
     print(f"  conan: {name}/{version} restored from {tag}")
 
 
