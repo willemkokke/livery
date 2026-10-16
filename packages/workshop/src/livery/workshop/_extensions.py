@@ -775,7 +775,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 f" {named.get(extension, 'listed')}, and no installed"
                 f" distribution declares it in {GROUP}; install the distribution"
                 f" that ships it ({dist} by its name), or remove the entry;"
-                f" `{prog()} sync` installs one this workspace builds"
+                f" `{prog()} sync` installs it the way this workspace resolves it"
             )
             continue
         check_api_version(extension, found)

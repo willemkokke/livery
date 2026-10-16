@@ -43,6 +43,7 @@ from workshop_seeds import (  # noqa: F401
     seed_copier,
     wire_pushes,
 )
+from workshop_wheels import write_wheel
 
 ROOT = Path(__file__).resolve().parents[3]
 _FAILURES = (SystemExit, Failed)
@@ -766,44 +767,6 @@ fault fails the test on the fetch rather than on the property it pins.
 """
 
 
-def _wheel(directory: Path, name: str, version: str) -> Path:
-    """Write a minimal installable wheel for *name* at *version*.
-
-    Metadata and an empty module, which is all a resolution reads. The
-    wheel exists so an isolated leg can resolve with no index at all.
-    """
-    import base64
-    import hashlib
-    import zipfile
-
-    module = name.replace("-", "_")
-    dist = f"{module}-{version}"
-    path = directory / f"{module}-{version}-py3-none-any.whl"
-    records: list[str] = []
-
-    def _add(archive: zipfile.ZipFile, arcname: str, data: bytes) -> None:
-        archive.writestr(arcname, data)
-        digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=")
-        records.append(f"{arcname},sha256={digest.decode()},{len(data)}")
-
-    with zipfile.ZipFile(path, "w") as archive:
-        _add(archive, f"{module}/__init__.py", f'__version__ = "{version}"\n'.encode())
-        _add(
-            archive,
-            f"{dist}.dist-info/METADATA",
-            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n".encode(),
-        )
-        _add(
-            archive,
-            f"{dist}.dist-info/WHEEL",
-            b"Wheel-Version: 1.0\nGenerator: livery\nRoot-Is-Purelib: true\n"
-            b"Tag: py3-none-any\n",
-        )
-        records.append(f"{dist}.dist-info/RECORD,,")
-        archive.writestr(f"{dist}.dist-info/RECORD", "\n".join(records) + "\n")
-    return path
-
-
 def _starve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *versions: str) -> Path:
     """Let the isolated legs resolve from local wheels and nothing else.
 
@@ -818,8 +781,8 @@ def _starve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *versions: str) -> 
     links = tmp_path / "links"
     links.mkdir(exist_ok=True)
     for version in versions:
-        _wheel(links, PROBE, version)
-    _wheel(links, "pytest", "9.0.0")
+        write_wheel(links, PROBE, version)
+    write_wheel(links, "pytest", "9.0.0")
     monkeypatch.setattr(
         _python,
         "_index_args",

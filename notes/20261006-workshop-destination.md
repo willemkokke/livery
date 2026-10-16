@@ -3493,6 +3493,16 @@ neither needs nor rules out).
   and `gate-lines` clauses judge only gated phases' steps, and take a
   step's extension by the name the workspace lists.
 
+- 2026-10-16, #1695: `fm sync` installs a newly listed extension the
+  way the workspace resolves it. The project file's dev group, which
+  already names every distribution of the installed set, is written
+  alone, then `uv sync` locks and installs, so `[tool.uv.sources]` and
+  the workspace's indexes apply; the hand-off to a fresh process
+  follows as before. A direct `uv pip install` used to take the index's
+  version of a path- or git-sourced extension (for cmake, PyPI's empty
+  placeholder). A failed install, or one that still finds no
+  declaration, puts the project file, its receipt and `uv.lock` back.
+
 ## Open
 
 Each with its options, what each option does not cover, and a

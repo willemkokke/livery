@@ -55,6 +55,7 @@ from livery.workshop._fragment_engine import (
     apply,
     drift,
     plan,
+    write_root_file,
 )
 
 ROOT_CONTENT = "root"
@@ -384,6 +385,30 @@ def deliver(root: Path, *, local_only: bool = False) -> list[str]:
     if lines:
         lines += apply(root, outputs(root), packages=homes)
     return lines
+
+
+def deliver_project_file(root: Path) -> list[str]:
+    """Write the workspace's project file alone, as the installed set renders it now.
+
+    The dev group the file renders names the distribution of each
+    extension of the installed set, one no installed distribution
+    declares yet among them, so a ``uv sync`` after this write locks
+    and installs that distribution through the file's
+    ``[tool.uv.sources]`` and indexes. No other file is written or
+    withdrawn: a whole delivery while a listed extension is not
+    installed would withdraw that extension's files. A file edited
+    here is kept and named, as a delivery keeps it, and a workspace
+    whose contract names no project renders no project file.
+
+    Returns:
+        The line for the file when it changed or was kept; empty when
+        it already held the render or none renders.
+    """
+    fragments, order = shipped(root)
+    for output in plan(root, fragments, order, _data(root)):
+        if output.path == PROJECT_FILE:
+            return write_root_file(root, output)
+    return []
 
 
 def shipped_drift(root: Path) -> list[str]:

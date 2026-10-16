@@ -383,7 +383,8 @@ def test_a_listed_extension_no_distribution_declares_is_named_with_its_list(
     ]
     assert notes[0].endswith(
         "install the distribution that ships it (acme-ghost by its name), or"
-        " remove the entry; `fm sync` installs one this workspace builds"
+        " remove the entry; `fm sync` installs it the way this workspace"
+        " resolves it"
     )
     # The sync installs each of them, a package's own among them.
     assert _extensions.unmounted(tmp_path) == ("acme.ghost", "acme.gone", "acme.later")

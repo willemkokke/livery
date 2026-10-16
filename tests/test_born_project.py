@@ -28,7 +28,8 @@ _END_TABLES = "# -- workshop: end tables --"
 
 #: What conan's cpp-library template needs, which the root lists before
 #: the C++ member is created. cmake ships as a distribution of its own,
-#: so the checkout's index serves it to the sync that installs it.
+#: which the newborn's region sources from this checkout, so the sync
+#: that installs it takes it from there.
 NATIVE = ("cmake", "conan")
 
 
@@ -87,9 +88,11 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     (bridge / "tasks.py").write_text(
         'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
-    # The index serves what the birth lists and what the root lists later.
-    listed = (*birth_extensions([SELF]), *NATIVE)
-    index = checkout_index(ROOT, tmp_path / "checkout-index", listed)
+    # The index serves what the birth lists; the newborn's own sources
+    # name this checkout's members for that and for what the root lists
+    # later.
+    births = birth_extensions([SELF])
+    index = checkout_index(ROOT, tmp_path / "checkout-index", births)
     born = {**env, "FOOTMAN_CONFIG_DIR": str(bridge), "UV_INDEX": index}
     _run(
         [
@@ -109,7 +112,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     for seed in ("README.md", "LICENSE", "docs/index.md"):
         assert (project / seed).is_file(), seed
     assert not (project / "tests").exists()
-    _point_at_this_checkout(project, listed)
+    _point_at_this_checkout(project, (*births, *NATIVE))
     _run(["uv", "lock"], project, env)
     _run(["uv", "sync"], project, env)
     scripts = "Scripts" if sys.platform == "win32" else "bin"
@@ -133,11 +136,12 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
         " extensions and run `fm sync`, then create the package again"
     ) in said, said
     assert not (project / "packages" / "geometry").exists()
-    # Listed, as the refusal says, and installed by the sync.
+    # Listed, as the refusal says, and installed by the sync from the
+    # source the newborn's project file names.
     from livery.workshop._extensions import list_in_root
 
     list_in_root(project, NATIVE)
-    _run([fm, "sync"], project, {**env, "UV_INDEX": index})
+    _run([fm, "sync"], project, env)
     _run([fm, "new.package", "geometry", "cpp-library"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.

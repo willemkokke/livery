@@ -306,9 +306,25 @@ either list. So an extension's content, tools and distribution belong
 to the workspace while any list holds it: one that only a package
 lists joins the dev group, and `fm sync` installs it. While no
 installed distribution declares it, the mount names it with the list
-that brings it, and a sync that cannot install it refuses the same
-way. A set is named by
-its canonical list joined with `+`, such as `cmake+cpp`.
+that brings it. A set is named by its canonical list joined with `+`,
+such as `cmake+cpp`.
+
+`fm sync` installs a newly listed extension the way the workspace
+resolves it, before it renders anything else:
+
+1. It writes the project file alone. Its dev group now names the
+   extension's distribution.
+2. It runs `uv sync`, which locks and installs through the project
+   file's `[tool.uv.sources]` and indexes. An extension the workspace
+   sources from a path or from git installs from there, even when an
+   index also offers it.
+3. It continues in a fresh process, which mounts the extension and
+   renders every file with it.
+
+When no installed distribution declares the extension after the
+install, the sync refuses, naming it and the list that brings it.
+Before that refusal, and when the install fails, the sync puts
+`pyproject.toml`, its receipt and `uv.lock` back as they were.
 
 The base declares its phases in the `[phases]` section of its
 `contract.toml`: `sync`, `clean`, `build`, `format`, `lint`,
