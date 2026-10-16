@@ -11,6 +11,7 @@ import pytest
 from livery import git
 from livery.workshop import _ci_context, _metrics, _store_tasks, _verified
 from livery.workshop._ci_context import state_store
+from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
@@ -89,7 +90,9 @@ def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> No
     # A workspace that lists no extension keeping a series lists the base's.
     listed = _store_tasks.ls_flow(work)
     assert not [line for line in listed if line.startswith("  coverage")]
-    # An extension's answer to store.series joins them while it is listed.
+    # An extension's answer to store.series joins them while it is listed:
+    # coverage's, a distribution of its own, while it is installed.
+    skip_unless_installed("coverage")
     (work / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     listed = _store_tasks.ls_flow(work)
     assert "  metrics: remote, window 300; 0 row(s)" in listed

@@ -32,7 +32,6 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
 #: that leaves the wheel for a distribution of its own leaves this pin.
 SHIPPED = {
     "conan": "livery.extensions.conan",
-    "coverage": "livery.extensions.coverage",
     "cpp": "livery.extensions.cpp",
     "nanobind": "livery.extensions.nanobind",
     "python": "livery.extensions.python",
@@ -51,10 +50,13 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
     }
     assert declared == SHIPPED
     # What an extension that left needed goes with it: griffelib, which
-    # the API reference's check reads sources with, is none of the
+    # the API reference's check reads sources with, and Pygments and its
+    # stubs, which the coverage pages highlight with, are none of the
     # wheel's requirements, in any extra.
     required = distribution("livery-workshop").requires or []
-    assert [line for line in required if "griffelib" in line] == []
+    assert [
+        line for line in required if "griffelib" in line or "pygments" in line
+    ] == []
     # The build ships the base's root and each of theirs, and no other.
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")

@@ -4,6 +4,7 @@
 /workshop.toml @willemkokke
 /.github/CODEOWNERS @willemkokke
 /packages/extensions/cmake/ @willemkokke
+/packages/extensions/coverage/ @willemkokke
 /packages/extensions/docs/ @willemkokke
 /packages/extensions/lfs/ @willemkokke
 /packages/extensions/mkdocstrings/ @willemkokke

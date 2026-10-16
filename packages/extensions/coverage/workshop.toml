@@ -1,0 +1,45 @@
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+# The extensions this package is composed of.
+extensions = ["python"]
+name = "livery-extensions-coverage"
+# The pages' Pygments calls are typed by the stubs the dev extra installs.
+dev-extras = ["dev"]
+description = "Each package's coverage floor in the livery workshop, judged on the union of what every CI leg measured, the record that carries it across runs, and the site's coverage pages."
+
+[[depends]]
+path = "packages/workshop"
+kind = "runtime"
+floor = "0.10.0"
+
+[[depends]]
+path = "packages/footman"
+kind = "runtime"
+floor = "0.60.0"
+
+[[depends]]
+path = "packages/git"
+kind = "runtime"
+floor = "0.2.0"
+
+# The suite collects a run's rows through the forge's fake.
+[[depends]]
+path = "packages/forge"
+kind = "test"
+floor = "0.7.0"
+
+[coverage]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately. The measured value of the
+# suite that moved here with the extension.
+floor = 96
+
+[docs]
+# Inside the workshop's entry of the site's Packages tree.
+name = "workshop.extensions.coverage"
+
+# Who reviews this package; the codeowners file renders from
+# these declarations.
+[owners]
+users = ["willemkokke"]

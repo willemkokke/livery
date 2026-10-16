@@ -30,8 +30,9 @@ extensions = [
     "clang-tidy",
     # CLAUDE.md, the agent's guidance, .claude/ and the hook verbs.
     "claude",
-    # The site's coverage pages, drawn from the measured data; shipped
-    # in the workshop wheel.
+    # Each package's coverage floor, judged on the union every CI leg
+    # measured, and the site's coverage pages drawn from it, in a
+    # distribution of its own, livery-extensions-coverage.
     "coverage",
     # The site's python API reference, its handler's tables in the
     # site's config, and the docstring checks, in a distribution of its

@@ -1,0 +1,61 @@
+# The package's own: edit it directly, nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-coverage"
+version = "0.0.0"
+description = "Each package's coverage floor in the livery workshop, judged on the union of what every CI leg measured, the record that carries it across runs, and the site's coverage pages."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "livery-footman>=0.60.0",
+    # Every git call goes through livery.git: the blob id of a measured
+    # file, the closure of a suite, and the user who accepts a mark.
+    "livery-git>=0.2.0",
+    "livery-workshop>=0.10.0",
+    # The coverage pages highlight each file's source with Pygments,
+    # imported when the pages are drawn. The floor is the lock's.
+    "pygments>=2.21.0",
+]
+
+[project.optional-dependencies]
+# What this package's own dev loop needs beyond its dependencies: the
+# pages' Pygments calls are typed by its stubs, so mypy stays strict.
+# The workspace's dev group installs the member with this extra.
+dev = ["types-pygments"]
+# The members this package's tests need beyond its dependencies, one
+# for each test edge of its workshop.toml, at the edge's floor.
+test = ["livery-forge>=0.7.0"]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The coverage verbs: the leg's entry, the union, and the floors and
+# marks a person runs, which the extension's plugin mounts while a
+# workspace lists it.
+[project.entry-points."footman.tasks"]
+"livery.extensions.coverage" = "livery.extensions.coverage._tasks"
+
+# The name a workspace lists in [workspace] extensions, and the package
+# whose extension.toml the workshop mounts it from.
+[project.entry-points."workshop.extensions"]
+coverage = "livery.extensions.coverage"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.extensions.coverage,
+# which has no __init__.py, and there is no livery/__init__.py anywhere
+# in this repository. The flag lets uv ship a package with no
+# __init__.py.
+module-name = "livery.extensions.coverage"
+namespace = true

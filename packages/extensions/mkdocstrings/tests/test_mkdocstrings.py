@@ -747,6 +747,7 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
                 "packages/extensions/clang-tidy/src",
                 "packages/extensions/claude/src",
                 "packages/extensions/cmake/src",
+                "packages/extensions/coverage/src",
                 "packages/extensions/docs/src",
                 "packages/extensions/lfs/src",
                 "packages/extensions/mkdocstrings/src",

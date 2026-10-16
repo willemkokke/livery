@@ -195,6 +195,8 @@ def test_the_copy_is_the_committed_tree_alone_with_no_remote(tmp_path: Path) -> 
 
 
 def test_the_copy_loses_its_own_test_modules_and_floors(tmp_path: Path) -> None:
+    # The floor is coverage's table, a distribution of its own.
+    skip_unless_installed("coverage")
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     helped = _member(tmp_path, "helped")

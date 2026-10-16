@@ -10,6 +10,15 @@ from typing import Any
 
 import pytest
 
+from extensions_coverage_meter import (
+    COVERAGE_PY,
+    install_meter,
+    leave_part,
+    meter,
+    stored_unit,
+)
+from extensions_coverage_pages import read_page
+from extensions_coverage_workspace import skip_unless_installed
 from livery.extensions.coverage import _format as fmt
 from livery.extensions.coverage import _pages, _parts, _render
 from livery.extensions.coverage._format import (
@@ -23,15 +32,6 @@ from livery.extensions.coverage._format import (
 )
 from livery.extensions.coverage._record import Unit
 from livery.footman import Failed
-from workshop_coverage_meter import (
-    COVERAGE_PY,
-    install_meter,
-    leave_part,
-    meter,
-    stored_unit,
-)
-from workshop_coverage_pages import read_page
-from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -914,7 +914,7 @@ def test_a_partial_line_s_page_names_the_jump_that_never_ran(
     # reduction, a distribution of its own: a run of this wheel alone
     # has none.
     pytest.importorskip("livery.extensions.pytest")
-    from workshop_measured import measure
+    from extensions_coverage_measured import measure
 
     root = _workspace(tmp_path, monkeypatch, '["docs", "pytest", "coverage"]')
     measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)

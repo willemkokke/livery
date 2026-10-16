@@ -1025,7 +1025,8 @@ names first, the same way.
 | `livery-extensions-python`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
 | `livery-extensions-mkdocstrings` | step 8's release wave; the package exists since step 8's P2b (#1708) |
 | `livery-extensions-docs` | step 8's release wave; the package exists since step 8's P3b (#1712) |
-| `livery-extensions-housekeeping`, `-doxygen`, `-coverage` | 12b to 12e (`-coverage` with step 8's P4) |
+| `livery-extensions-coverage` | step 8's release wave; the package exists since step 8's P4b (#1718) |
+| `livery-extensions-housekeeping`, `-doxygen` | 12b and 12c |
 | `livery-lodge` | 15 |
 
 Whether `livery-extensions-housekeeping` publishes at all is decided in
@@ -1401,7 +1402,12 @@ remained after N1.
    `leave_leg_file`, `leave_section`, `check_legs`,
    `pull_request_legs`, `leg_scope` with `LegScope`, `verified_branch`
    with `VerifiedBranch`, `tested`, `WORKSPACE_TESTS`,
-   `holds_runtime_language`, and `category_of` with `Category`.
+   `holds_runtime_language`, and `category_of` with `Category`. P4b
+   (built, #1718) moves coverage to `packages/extensions/coverage`,
+   distribution `livery-extensions-coverage` 0.0.0, with its tests, its
+   footman plugin and Pygments; the suites of pytest, cmake and docs
+   reach it through a test edge, and the workshop wheel depends on
+   Pygments no more.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1645,9 +1651,9 @@ renders footman's reference with every exported name present;
 `grep -rn "_API_SECTIONS" packages/footman/src` finds nothing.
 
 **12e, coverage** (issue #1538, before 11c; built through P5 on
-2026-10-13, P6 moving with step 8). The coverage extension,
-`livery.extensions.coverage`, starts in the workshop wheel the way docs
-did and later ships as `livery-extensions-coverage`. It takes what the
+2026-10-13, P6 built as step 8's P4b). The coverage extension,
+`livery.extensions.coverage`, ships as `livery-extensions-coverage`,
+its own distribution, as docs does. It takes what the
 base holds today: the floors (a percentage or `auto-ratchet`), the
 epsilon, the ratchet's marks, the line format and its union across
 legs, `coverage.leg`, `coverage.union`, `coverage.enforce` and
@@ -1677,7 +1683,7 @@ packages), which closes #1225; P2c dormancy and the measurers'
 `[for.coverage]` tables; P3 the line format and the one renderer,
 parity-tested against coverage.py's own pages before they go; P4 the
 record and the union in the line format; P5 the tests that reached
-each line; P6, later, the distribution apart. Acceptance, refusals
+each line; P6 the distribution apart. Acceptance, refusals
 first: `test_a_package_with_coverage_not_required_is_never_judged`,
 `test_a_workspace_without_coverage_runs_no_coverage_leg`,
 `test_a_coverage_listing_with_no_measurer_is_dormant_and_named`;
@@ -1748,7 +1754,7 @@ neither needs nor rules out).
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
-| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs) | fixture extensions in the workshop's suite |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage) | fixture extensions in the workshop's suite |
 | `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled`, and on `livery-extensions-docs`, which ships the docs entry module | the release wave raising the floor within its set (step 8's R1) |
 | mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
 | `livery-extensions-docs`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `run_phase`, `order_topologically`, `release_tag` and `nearest_extensions` | the release wave raising the floor within its set (step 8's R1) |
@@ -1756,6 +1762,8 @@ neither needs nor rules out).
 | docs' coverage floor at its measured 91 | the ratchet back to 100 |
 | `livery-extensions-cmake`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `undeployed` | the release wave raising the floor within its set (step 8's R1) |
 | cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
+| `livery-extensions-coverage`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `state_store`, `leg_scope`, `verified_branch` and the other names coverage reads | the release wave raising the floor within its set (step 8's R1) |
+| coverage's coverage floor at its measured 96 | the ratchet back to 100 |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
@@ -3677,6 +3685,19 @@ neither needs nor rules out).
   `_steps.tested_suite` went with their last private readers. On a
   push whose tree git cannot name, the union prints the reason and
   reads main's record instead of raising.
+
+- 2026-10-16, step 8's P4b (#1718), built: coverage, its footman
+  plugin, Pygments and their stubs leave the workshop wheel for
+  `livery-extensions-coverage`. docs' suite imports coverage modules,
+  so docs gains a test edge on it beside pytest and cmake. The tests of
+  the venv's meter hook stay in the workshop's suite: they test
+  python's runner, not coverage. The moved parts test is
+  `test_parts.py`, since mypy refuses a second `test_coverage_parts`
+  module beside cmake's. The vocabulary test reads coverage's verbs
+  from its plugin's task tree in a fresh interpreter. `fm ci.e2e
+  --extension=coverage` refuses: coverage registers no step of its
+  own, so the plain pass is its proof, where the ratchet and scoped-leg
+  scenarios run coverage end to end.
 
 ## Open
 
