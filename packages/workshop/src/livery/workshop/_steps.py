@@ -54,7 +54,7 @@ from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
     from livery.workshop._categories import CategoryRule
-    from livery.workshop._influence import Inputs, Selection
+    from livery.workshop._influence import Changes, Inputs, Selection
     from livery.workshop._packages import Package
     from livery.workshop._phases import PhaseContext
     from livery.workshop._words import Words
@@ -1126,6 +1126,35 @@ def graph_files(root: Path) -> tuple[str, ...]:
     moves what the rules read, so every source is judged again.
     """
     return ("workshop.toml", "src/**", *package_files(root))
+
+
+def graph_changed(changes: Changes) -> bool:
+    """Tell whether a contract, a native manifest or a root ``src/`` changed.
+
+    A step over a language's sources widens on it through its
+    ``widen`` reference, a function of its own extension that calls
+    this one: the members, their module roots and what they declare
+    come from these files, so a change to one judges every source
+    again, as the base's own layering steps do. Prose and the licence
+    beside a manifest never count.
+
+    Args:
+        changes: What the run changed, as a step's ``widen`` reference
+            receives it.
+
+    Returns:
+        True when a changed path is the root contract, a file directly
+        in a member's directory, or a file under ``src/`` at the root.
+    """
+    from livery.workshop._categories import matches
+
+    patterns = graph_files(changes.root)
+    return any(
+        matches(pattern, path)
+        for path in changes.paths
+        if not any(matches(ignored, path) for ignored in NOT_INPUTS)
+        for pattern in patterns
+    )
 
 
 #: The files the generated outputs land in, for every forge: the CI

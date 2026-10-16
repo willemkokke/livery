@@ -417,6 +417,55 @@ def test_a_reference_guarded_by_try_except_is_accounted_for(
     verify_workspace(tmp_path)
 
 
+def test_neighbours_own_no_name_for_a_member_whose_set_answers_no_root(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import Neighbours, neighbours
+
+    plain = Package(
+        directory=tmp_path / "packages" / "plain",
+        path="packages/plain",
+        name="acme-plain",
+        depends=(),
+        extensions=(),
+    )
+    found = neighbours((plain,))
+    assert found == Neighbours(owners={}, by_path={"packages/plain": plain})
+    assert found.owner_of("acme.plain") == ""
+    assert neighbours(()) == Neighbours(owners={}, by_path={})
+
+
+def test_neighbours_give_a_name_to_the_member_with_the_longest_root(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import neighbours
+
+    _package(tmp_path, "space")
+    _sourced(tmp_path, "space", "livery/space/__init__.py", "")
+    _package(tmp_path, "inner")
+    _sourced(tmp_path, "inner", "livery/space/inner/__init__.py", "")
+    found = neighbours(discover_packages(tmp_path))
+    assert dict(found.owners) == {
+        "livery.space": "packages/space",
+        "livery.space.inner": "packages/inner",
+    }
+    # Nobody's first: a name beside a root, and the standard library.
+    assert found.owner_of("livery.spaces") == ""
+    assert found.owner_of("json") == ""
+    assert found.owner_of("livery.space.other") == "packages/space"
+    assert found.owner_of("livery.space.inner.deep") == "packages/inner"
+    assert sorted(found.by_path) == ["packages/inner", "packages/space"]
+
+
+def test_a_source_record_takes_no_module_no_reference_and_nothing_accounted() -> None:
+    from livery.workshop import ReferencedName, SourceReferences
+
+    record = SourceReferences("packages/core/tests/test_x.py")
+    assert (record.module, record.references, record.accounted) == ("", (), ())
+    name = ReferencedName("json")
+    assert (name.lazy, name.type_checking, name.optional) == (False, False, False)
+
+
 def test_the_longest_prefix_decides_which_package_owns_a_module(
     tmp_path: Path,
 ) -> None:
@@ -1007,9 +1056,9 @@ def test_the_layering_phase_parses_each_source_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.python import _declared, _parse, _terminal
+    from livery.extensions.python._parse import RuleContext
     from livery.extensions.python._reaches import scan
     from livery.workshop import _lifecycle
-    from livery.workshop._packages import RuleContext
 
     _package(tmp_path, "tool")
     _module(tmp_path, "tool", "a.py", "import json\n")

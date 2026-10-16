@@ -18,8 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.forge import Registry
-    from livery.workshop import Package, RequirementWriter
-    from livery.workshop._packages import SourceReferences
+    from livery.workshop import Package, RequirementWriter, SourceReferences
 
 
 def current_version(package: Package) -> str:

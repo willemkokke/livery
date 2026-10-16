@@ -1162,13 +1162,6 @@ combine = "union"
 level = "workspace"
 combine = "union"
 
-# The words the rendered pytest.toml's addopts holds, as the test
-# runner's extension answers them. Declared by the base while the
-# python extension ships in its wheel.
-[queries."python.test.addopts"]
-level = "workspace"
-combine = "union"
-
 # The state store's series the listed extensions keep beside the
 # base's own, each a livery.git Series or Keyed family: the janitor
 # bounds them and fm store.ls lists them.

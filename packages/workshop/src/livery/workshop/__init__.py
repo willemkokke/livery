@@ -127,6 +127,28 @@ installed of each tool is [livery.workshop.tool_receipts][], a
 [livery.workshop.ToolReceipt][] per tool, and the tool store's home on
 this machine is [livery.workshop.store_home][].
 
+An extension that judges a language's sources reads what each source
+references from its package's ``references`` answer: one
+[livery.workshop.SourceReferences][] per source, and a
+[livery.workshop.ReferencedName][] for each name the source references
+and how it makes the reference. Which member owns a referenced name is
+what [livery.workshop.neighbours][] answers, a
+[livery.workshop.Neighbours][] made from each member's module roots. A
+step over the sources runs over every one of them when
+[livery.workshop.graph_changed][] says a contract, a native manifest or
+a root ``src/`` changed.
+
+An extension that runs python in a venv names its interpreter with
+[livery.workshop.venv_python][] and its executables directory with
+[livery.workshop.scripts_dir][]. A runner that starts pytest shares two
+names with the workshop's pytest plugins: [livery.workshop.is_example][]
+says which files the examples plugin collects as documentation
+examples, and the speed plugin sums each package's test time into the
+file the runner names in the variable
+[livery.workshop.SPEED_FILE_VARIABLE][]. Each package's mark on each
+check leg, a [livery.workshop.SpeedMark][], is what
+[livery.workshop.speed_marks][] reads.
+
 An extension adds steps to a package's lifecycle phases under
 ``[phases.<phase>.<step>]``, with the keys every step takes;
 each runs once per package whose set holds the extension and
@@ -176,11 +198,15 @@ if TYPE_CHECKING:
     from livery.workshop._metrics import leave_section as leave_section
     from livery.workshop._packages import WORKSPACE_TESTS as WORKSPACE_TESTS
     from livery.workshop._packages import Edge as Edge
+    from livery.workshop._packages import Neighbours as Neighbours
     from livery.workshop._packages import Package as Package
+    from livery.workshop._packages import ReferencedName as ReferencedName
+    from livery.workshop._packages import SourceReferences as SourceReferences
     from livery.workshop._packages import discover_packages as discover_packages
     from livery.workshop._packages import (
         holds_runtime_language as holds_runtime_language,
     )
+    from livery.workshop._packages import neighbours as neighbours
     from livery.workshop._packages import release_tag as release_tag
     from livery.workshop._packages import verify_workspace as verify_workspace
     from livery.workshop._packages import workspace_suite as workspace_suite
@@ -194,7 +220,13 @@ if TYPE_CHECKING:
     from livery.workshop._prose import guidance as guidance
     from livery.workshop._provenance import generated_header as generated_header
     from livery.workshop._publish import discover_release as discover_release
+    from livery.workshop._pytest_examples import is_example as is_example
+    from livery.workshop._pytest_speed import (
+        SPEED_FILE_VARIABLE as SPEED_FILE_VARIABLE,
+    )
     from livery.workshop._pythons import python_matrix as python_matrix
+    from livery.workshop._pythons import scripts_dir as scripts_dir
+    from livery.workshop._pythons import venv_python as venv_python
     from livery.workshop._quality import ci_changes as ci_changes
     from livery.workshop._quality import fix_files as fix_files
     from livery.workshop._quality import run_phase_over as run_phase_over
@@ -214,11 +246,14 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
+    from livery.workshop._speed import SpeedMark as SpeedMark
+    from livery.workshop._speed import speed_marks as speed_marks
     from livery.workshop._steps import NONE as NONE
     from livery.workshop._steps import PACKAGE as PACKAGE
     from livery.workshop._steps import PACKAGES as PACKAGES
     from livery.workshop._steps import PATHS as PATHS
     from livery.workshop._steps import WHOLE as WHOLE
+    from livery.workshop._steps import graph_changed as graph_changed
     from livery.workshop._steps import scoped_files as scoped_files
     from livery.workshop._steps import scoped_packages as scoped_packages
     from livery.workshop._steps import scoped_paths as scoped_paths
@@ -256,6 +291,7 @@ __all__ = [
     "PUBLIC_MODULES",
     "REQUIREMENTS",
     "RUNS",
+    "SPEED_FILE_VARIABLE",
     "VERSION_FILES",
     "WHOLE",
     "WORKSPACE_TESTS",
@@ -263,14 +299,18 @@ __all__ = [
     "Changes",
     "Edge",
     "LegScope",
+    "Neighbours",
     "Package",
     "PhaseContext",
     "Prose",
     "Query",
+    "ReferencedName",
     "RegistryTarget",
     "ReleaseNotes",
     "RequirementWriter",
     "RunContext",
+    "SourceReferences",
+    "SpeedMark",
     "ToolReceipt",
     "VerifiedBranch",
     "__version__",
@@ -289,12 +329,15 @@ __all__ = [
     "forge_repository",
     "forge_token",
     "generated_header",
+    "graph_changed",
     "guidance",
     "holds_runtime_language",
+    "is_example",
     "leave_leg_file",
     "leave_section",
     "leg_scope",
     "nearest_extensions",
+    "neighbours",
     "order_topologically",
     "pull_request_legs",
     "python_matrix",
@@ -309,8 +352,10 @@ __all__ = [
     "scoped_packages",
     "scoped_paths",
     "scoped_suite",
+    "scripts_dir",
     "selected_files",
     "shipped_content",
+    "speed_marks",
     "state_store",
     "step_enabled",
     "step_extensions",
@@ -322,6 +367,7 @@ __all__ = [
     "this_repository",
     "tool_receipts",
     "undeployed",
+    "venv_python",
     "verified_branch",
     "verify_workspace",
     "workspace_root",
@@ -345,6 +391,17 @@ _EXPORTS: dict[str, str] = {
     "python_matrix": "livery.workshop._pythons",
     "store_home": "livery.workshop._tools",
     "tool_receipts": "livery.workshop._tools",
+    "Neighbours": "livery.workshop._packages",
+    "ReferencedName": "livery.workshop._packages",
+    "SourceReferences": "livery.workshop._packages",
+    "neighbours": "livery.workshop._packages",
+    "graph_changed": "livery.workshop._steps",
+    "scripts_dir": "livery.workshop._pythons",
+    "venv_python": "livery.workshop._pythons",
+    "is_example": "livery.workshop._pytest_examples",
+    "SPEED_FILE_VARIABLE": "livery.workshop._pytest_speed",
+    "SpeedMark": "livery.workshop._speed",
+    "speed_marks": "livery.workshop._speed",
     "RUNS": "livery.workshop._metrics",
     "WORKSPACE_TESTS": "livery.workshop._packages",
     "Category": "livery.workshop._categories",

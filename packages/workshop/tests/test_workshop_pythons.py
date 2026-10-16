@@ -22,6 +22,26 @@ def _root(tmp_path: Path, ci: str = "", floor: str = "3.11") -> Path:
     return tmp_path
 
 
+def test_a_venv_s_interpreter_and_scripts_follow_the_running_platform(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Windows first: its venv keeps the interpreter and every script in
+    # Scripts, as python.exe. Neither name reads the disk, so a venv
+    # not made yet has both.
+    import sys
+
+    from livery.workshop import scripts_dir, venv_python
+
+    venv = tmp_path / "venv"
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert scripts_dir(venv) == venv / "Scripts"
+    assert venv_python(venv) == venv / "Scripts" / "python.exe"
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert scripts_dir(venv) == venv / "bin"
+    assert venv_python(venv) == venv / "bin" / "python"
+    assert not venv.exists()
+
+
 def test_a_declaration_that_is_not_a_list_refuses(tmp_path: Path) -> None:
     with pytest.raises(
         _FAILURES, match=r"ci.python-versions is a string .*; it takes a list of"

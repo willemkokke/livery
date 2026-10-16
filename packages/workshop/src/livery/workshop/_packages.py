@@ -380,16 +380,6 @@ def holds_runtime_language(package: Package) -> bool:
     return RUNTIME_LANGUAGE in extension_set(package)
 
 
-def root_marks(src: Path) -> list[Path]:
-    """The files that mark an importable root under *src*, shallowest first.
-
-    A root carries an ``__init__.py``; the topmost on a branch is that
-    branch's root. A namespace, one with no ``__init__.py``, marks
-    nothing.
-    """
-    return sorted(src.rglob("__init__.py"), key=lambda path: (len(path.parts), path))
-
-
 def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
     """The src and tests directories the *packages* own, as they exist.
 
@@ -690,6 +680,10 @@ def graph_problems(root: Path, packages: tuple[Package, ...]) -> list[str]:
 class ReferencedName:
     """One name a source references, and how the source makes the reference.
 
+    A record of [livery.workshop.SourceReferences][]: an extension that
+    answers the ``references`` query makes one for each name a source
+    references, once for each way the source makes the reference.
+
     Attributes:
         name: The dotted name, as the source spells it.
         lazy: Whether only a function or a method body makes the
@@ -709,6 +703,11 @@ class ReferencedName:
 @dataclass(frozen=True)
 class SourceReferences:
     """What one source references: one record of a package's ``references`` answer.
+
+    An extension that reads a language's sources answers the
+    ``references`` query with one record for each source file of the
+    package, and the layering steps resolve each name to the member
+    that owns it with [livery.workshop.neighbours][].
 
     Attributes:
         path: The source, relative to the workspace root, posix: a file
@@ -730,18 +729,21 @@ class SourceReferences:
 
 @dataclass(frozen=True)
 class Neighbours:
-    """What resolving one package's references to its siblings needs.
+    """Who owns each name the workspace's members reference each other by.
+
+    [livery.workshop.neighbours][] makes it from the members; a rule
+    over the sources asks it which member a referenced name belongs to.
 
     Attributes:
-        owners: Each package's own import prefixes, mapped to its
-            path. The packages' extensions answer these; the core
-            collects them, so a reference is resolved the same way
-            whoever made it.
-        by_path: Every package by its identity path.
+        owners: Each module root a member ships, to the member's path.
+            Each member's extensions answer its roots
+            ([livery.workshop.MODULE_ROOTS][]), so a reference resolves
+            the same way whichever extension made it.
+        by_path: Every member by its path.
     """
 
-    owners: dict[str, str]
-    by_path: dict[str, Package]
+    owners: Mapping[str, str]
+    by_path: Mapping[str, Package]
 
     def owner_of(self, reference: str) -> str:
         """The package path owning *reference*, longest prefix winning.
@@ -760,7 +762,19 @@ class Neighbours:
 
 
 def neighbours(packages: tuple[Package, ...]) -> Neighbours:
-    """The reference map for *packages*, each package's set answering for its own."""
+    """Map each module root *packages* ship to the member that ships it.
+
+    Each member's set answers the roots it ships
+    ([livery.workshop.MODULE_ROOTS][]), so the map names no language.
+    A member whose set answers no root owns no name.
+
+    Args:
+        packages: The workspace's members, as
+            [livery.workshop.discover_packages][] reads them.
+
+    Returns:
+        The roots by owner and the members by path.
+    """
     from livery.workshop import _lifecycle
 
     owners: dict[str, str] = {}
@@ -770,7 +784,7 @@ def neighbours(packages: tuple[Package, ...]) -> Neighbours:
     return Neighbours(owners=owners, by_path={p.path: p for p in packages})
 
 
-def _reachable(by_path: dict[str, Package], start: str) -> set[str]:
+def _reachable(by_path: Mapping[str, Package], start: str) -> set[str]:
     """Every package path *start* reaches through declared edges."""
     seen: set[str] = set()
     queue = [edge.path for edge in by_path[start].depends]
@@ -783,7 +797,7 @@ def _reachable(by_path: dict[str, Package], start: str) -> set[str]:
     return seen
 
 
-def inherited_floor(by_path: dict[str, Package], reach: set[str], dep: str) -> str:
+def inherited_floor(by_path: Mapping[str, Package], reach: set[str], dep: str) -> str:
     """The floor *dep* already carries within *reach*; the highest declared.
 
     Every declaration inside the reachable set is installed, so the

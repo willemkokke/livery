@@ -12,7 +12,14 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.workshop import _ci_context, _metrics, _speed
+from livery.workshop import (
+    SPEED_FILE_VARIABLE,
+    SpeedMark,
+    _ci_context,
+    _metrics,
+    _speed,
+    speed_marks,
+)
 from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 from workshop_spawns import counting_spawns
@@ -191,9 +198,9 @@ def test_leg_label_reads_a_matrix_display_name_and_keeps_a_plain_one() -> None:
 
 def test_the_limit_is_the_margin_or_the_floor_whichever_is_higher() -> None:
     sample = _speed.Sample("packages/forge", LEG, 10.0, 3, ())
-    small = _speed.Mark("packages/forge", LEG, 10.0, "first", "run 1", "", "")
+    small = SpeedMark("packages/forge", LEG, 10.0, "first", "run 1", "", "")
     assert _speed.Verdict(sample, small).limit == 30.0  # 15 % of 10 s is under 20 s
-    big = _speed.Mark("packages/forge", LEG, 400.0, "first", "run 1", "", "")
+    big = SpeedMark("packages/forge", LEG, 400.0, "first", "run 1", "", "")
     assert _speed.Verdict(sample, big).limit == 460.0
     assert _speed.Verdict(sample, None).limit is None
     assert not _speed.Verdict(sample, None).over
@@ -205,9 +212,9 @@ def test_the_limit_is_the_margin_or_the_floor_whichever_is_higher() -> None:
 def test_an_empty_store_has_no_marks_and_an_unreadable_one_names_its_reason(
     work: Path, tmp_path: Path
 ) -> None:
-    assert _speed.marks(work) == ({}, "")
+    assert speed_marks(work) == ({}, "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    current, why = _speed.marks(work)
+    current, why = speed_marks(work)
     assert current is None
     assert why.startswith("the speed/marks series could not be read: ")
 
@@ -261,7 +268,7 @@ def test_a_bad_mark_row_is_skipped_and_the_others_stand(work: Path) -> None:
         )
         == ""
     )
-    current, why = _speed.marks(work)
+    current, why = speed_marks(work)
     assert why == "" and current is not None
     assert set(current) == {("packages/forge", LEG)}
     assert current[("packages/forge", LEG)].seconds == 30.0
@@ -337,7 +344,7 @@ def test_no_mark_counts_the_green_runs_then_records_the_median_of_five(
         "speed packages/forge on check-ubuntu-latest-3.14: 42.0s, no mark yet"
         " (4/5 green runs)" in out
     )
-    assert _speed.marks(work) == ({}, "")
+    assert speed_marks(work) == ({}, "")
     _store(
         work, [*_history([40.0, 41.0, 39.0, 43.0]), _entry(50, {UBUNTU: _leg(42.0)})]
     )
@@ -345,7 +352,7 @@ def test_no_mark_counts_the_green_runs_then_records_the_median_of_five(
     out = capsys.readouterr().out
     assert "42.0s, no mark yet; this run records 41.0s" in out
     assert "recorded (packages/forge on check-ubuntu-latest-3.14, first 41.0s)" in out
-    current, _ = _speed.marks(work)
+    current, _ = speed_marks(work)
     assert current is not None
     mark = current[("packages/forge", LEG)]
     assert mark.seconds == 41.0 and mark.kind == "first" and mark.by == "run 50"
@@ -403,7 +410,7 @@ def test_one_run_over_warns_naming_the_culprits_and_the_second_in_a_row_is_red(
         " the second run in a row"
     ]
     assert "OVER for the second run in a row: red" in capsys.readouterr().out
-    current, _ = _speed.marks(work)
+    current, _ = speed_marks(work)
     assert current is not None and current[("packages/forge", LEG)].seconds == 100.0
 
 
@@ -477,7 +484,7 @@ def test_the_mark_ratchets_down_when_the_median_of_five_beats_it(
     out = capsys.readouterr().out
     assert "new mark: 90.0s (the median of 5 beats 100.0s by more than 5%)" in out
     assert "recorded (packages/forge on check-ubuntu-latest-3.14, ratchet 90.0s)" in out
-    current, _ = _speed.marks(work)
+    current, _ = speed_marks(work)
     assert current is not None
     assert current[("packages/forge", LEG)].seconds == 90.0
     assert current[("packages/forge", LEG)].kind == "ratchet"
@@ -526,7 +533,7 @@ def test_accept_refuses_then_raises_the_mark(work: Path, tmp_path: Path) -> None
         " accepted by tester",
         "    reason: a new heavy test",
     ]
-    current, _ = _speed.marks(work)
+    current, _ = speed_marks(work)
     assert current is not None
     mark = current[("packages/forge", LEG)]
     assert mark.seconds == 150.0 and mark.kind == "accept"
@@ -587,13 +594,13 @@ def test_the_plugin_sums_every_phase_per_package_from_the_controller_only(
         return SimpleNamespace(config=config)
 
     # Without the variable nothing is summed and nothing is written.
-    monkeypatch.delenv(_pytest_speed.FILE_VARIABLE, raising=False)
+    monkeypatch.delenv(SPEED_FILE_VARIABLE, raising=False)
     _pytest_speed.pytest_runtest_logreport(
         report("packages/forge/tests/t.py::a", "call", 2.0)
     )
     _pytest_speed.pytest_sessionfinish(session(worker=False), 0)
     assert not target.exists()
-    monkeypatch.setenv(_pytest_speed.FILE_VARIABLE, str(target))
+    monkeypatch.setenv(SPEED_FILE_VARIABLE, str(target))
     for when, seconds in (("setup", 0.5), ("call", 2.0), ("teardown", 0.25)):
         _pytest_speed.pytest_runtest_logreport(
             report("packages/forge/tests/t.py::a", when, seconds)

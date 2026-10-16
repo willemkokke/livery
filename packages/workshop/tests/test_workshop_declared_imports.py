@@ -13,8 +13,9 @@ from livery.extensions.python._installed import (
     read_installed,
     requirement_name,
 )
+from livery.extensions.python._parse import RuleContext
 from livery.footman import prog
-from livery.workshop._packages import Package, RuleContext, discover_packages
+from livery.workshop._packages import Package, discover_packages
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = "packages/core/src/acme/core/__init__.py"

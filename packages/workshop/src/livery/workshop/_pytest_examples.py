@@ -31,9 +31,18 @@ MARKER = "example"
 
 
 def is_example(path: Path) -> bool:
-    """Whether *path* is an example: a python file under ``docs/examples/``.
+    """Tell whether *path* is a documentation example.
 
-    A ``conftest.py`` there is the package's setup, never an example.
+    An example is a python file under a ``docs/examples/`` directory at
+    any depth of *path*, which this plugin collects as one test. A
+    ``conftest.py`` there is the package's setup around the examples,
+    never an example. Nothing is read from the disk.
+
+    Args:
+        path: The file, relative or absolute.
+
+    Returns:
+        True for an example; False for any other file.
     """
     if path.suffix != ".py" or path.name == "conftest.py":
         return False

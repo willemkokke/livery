@@ -19,7 +19,6 @@ duplicate-tolerant publish making that safe.
 
 from __future__ import annotations
 
-import os
 import re
 import threading
 import time
@@ -27,14 +26,16 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
 from livery import git
 from livery.footman import fail
 from livery.workshop import _lifecycle
 from livery.workshop._packages import Package, discover_packages
+
+if TYPE_CHECKING:
+    from livery.workshop._registries import RegistryTarget
 
 #: The release set's own record, committed on the release branch by
 #: prepare: every member's directory, name and version. Discovery,
@@ -183,6 +184,21 @@ def movement_check(root: Path, package: Package, ref: str) -> None:
         )
 
 
+def index_target(index_url: str, token: str) -> RegistryTarget:
+    """Make the python registry target an upload index names, *token* its credential.
+
+    The release train's wave hands it to each member that releases
+    python distributions, and the dev act to each member whose
+    distributions are all python's: both read and publish at the one
+    address the caller resolved.
+    """
+    from livery.workshop._registries import RegistryTarget
+
+    return RegistryTarget(
+        kind="python", url=index_url, publish_url=index_url, token=token
+    )
+
+
 def collected(package: Package) -> bool:
     """Whether *package*'s ``dist/`` holds a file.
 
@@ -192,65 +208,6 @@ def collected(package: Package) -> bool:
     """
     dist = package.directory / "dist"
     return dist.is_dir() and any(path.is_file() for path in dist.iterdir())
-
-
-def publish_wheels(package: Package, *, index_url: str = "", token: str = "") -> bool:
-    """Upload ``dist/*``; False when everything was already published.
-
-    ``uv publish``, with the already-published duplicate the one
-    tolerated failure: a re-run must walk past what an earlier
-    attempt landed. Anything else, a rejected credential, an
-    unreachable index, surfaces verbatim.
-
-    The upload address is required: without ``--publish-url`` uv
-    silently defaults to PyPI, and an undeclared endpoint must
-    refuse rather than surprise. A deliberate PyPI publish arrives
-    here as the ecosystem rung's explicit URL.
-    """
-    if not index_url:
-        fail(
-            f"{package.name}: no publish address given, and an upload"
-            " endpoint is never defaulted (uv's silent default is"
-            " PyPI). Declare [registries.python] publish in"
-            " workshop.toml, or set PYTHON_PUBLISH_INDEX."
-        )
-    command = ["publish", "--publish-url", index_url]
-    if token:
-        # A Secret, so a profile trace and every other place the
-        # command line is shown carry *** in its place and uv alone
-        # receives the value; recorded=False keeps the call out of
-        # receipts, --json, and recordings as well.
-        command += ["--token", footman.Secret(token)]
-    command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
-    # CI renders UV_PUBLISH_TOKEN from a secret that may be absent, and
-    # an absent secret arrives as an empty string. uv treats a set but
-    # empty token as a credential rather than as none: trusted
-    # publishing is skipped and the index refuses the empty token. The
-    # child sees the variable only when it carries a value.
-    env = {k: v for k, v in os.environ.items() if k != "UV_PUBLISH_TOKEN" or v}
-    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False, env=env)(
-        *command
-    )
-    if result.code == 0:
-        return True
-    output = f"{result.stdout}{result.stderr}"
-    if _is_duplicate(output):
-        print(f"  {package.name}: already published; walking past")
-        return False
-    fail(f"uv publish ({package.name}) exited {result.code}:\n{output}")
-    return False  # unreachable; fail raises
-
-
-#: How each index refuses a file it already serves. Gitea and PyPI
-#: say the version already exists, twine-style indexes say duplicate,
-#: GitLab's package registry says the file name is taken.
-_DUPLICATE_PHRASES = ("already exists", "duplicate", "file name has already been taken")
-
-
-def _is_duplicate(output: str) -> bool:
-    """Whether *output*, an upload's refusal, means the file is already served."""
-    lowered = output.lower()
-    return any(phrase in lowered for phrase in _DUPLICATE_PHRASES)
 
 
 def probe_until_served(
@@ -375,7 +332,7 @@ def publish_release(
 
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
-    from livery.workshop._registries import RegistryTarget, resolve_registry
+    from livery.workshop._registries import resolve_registry
 
     # Each member goes to the target of the ecosystem its extensions
     # release it to, and each target is resolved once, before anything
@@ -383,9 +340,7 @@ def publish_release(
     # that resolves no target, stop the wave while there is still nothing
     # to undo. The python target is the one the caller resolved. A member
     # that opts out of publishing needs no target and asks for none.
-    python_target = RegistryTarget(
-        kind="python", url=index_url, publish_url=index_url, token=token
-    )
+    python_target = index_target(index_url, token)
     targets = {python_target.kind: python_target}
     releases_to = {p.path: _lifecycle.ecosystem(p) for p in ordered if p.publish}
     for ecosystem in releases_to.values():

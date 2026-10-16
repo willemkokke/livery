@@ -18,10 +18,13 @@ from livery.extensions.python._backend import (
     module_docs,
     module_docs_dir,
 )
+from livery.footman import Failed
 from livery.workshop._packages import discover_packages
 from workshop_installed import skip_unless_installed
 
 ROOT = Path(__file__).resolve().parents[3]
+
+_FAILURES = (SystemExit, Failed)
 
 
 def test_python_s_build_refuses_a_platform_wheel(
@@ -154,7 +157,8 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     tmp_path: Path,
 ) -> None:
     from livery.extensions.python._backend import references
-    from livery.workshop._packages import Package, ReferencedName
+    from livery.workshop import ReferencedName, SourceReferences
+    from livery.workshop._packages import Package
 
     directory = tmp_path / "packages" / "core"
     source = directory / "src" / "acme" / "core" / "__init__.py"
@@ -185,6 +189,7 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
         extensions=("python",),
     )
     (record,) = references(package)
+    assert isinstance(record, SourceReferences)
     assert record.path == "packages/core/src/acme/core/__init__.py"
     assert record.module == "acme.core"
     # Guarded and lazy first: a type checker's import, one the source
@@ -255,7 +260,7 @@ def test_the_python_steps_stamp_and_publish_as_its_code_does(
         uploads.append((package.name, index_url, token))
         return True
 
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _upload)
+    monkeypatch.setattr("livery.extensions.python._backend.publish_wheels", _upload)
     target = RegistryTarget(
         kind="python",
         url="https://idx.example/simple",
@@ -264,6 +269,120 @@ def test_the_python_steps_stamp_and_publish_as_its_code_does(
     )
     assert _lifecycle.publish(listing, tmp_path, version="2.0.0", target=target)
     assert uploads == [("acme-core", "https://idx.example/", "t")]
+
+
+def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
+    # The refusal first: uv's silent default is PyPI, so an empty
+    # publish address must die loudly before any upload, teaching
+    # the declaration that fixes it.
+    from livery.extensions.python._backend import publish_wheels
+    from livery.workshop._packages import Package
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        depends=(),
+        extensions=("python",),
+    )
+    with pytest.raises(_FAILURES) as caught:
+        publish_wheels(package, index_url="", token="t")
+    message = str(caught.value)
+    assert "never defaulted" in message
+    assert "[registries.python] publish" in message
+
+
+def test_an_empty_publish_token_variable_never_reaches_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: CI renders UV_PUBLISH_TOKEN from a secret that
+    # may be absent, which arrives as an empty string, and uv treats a
+    # set but empty token as a credential, skipping trusted publishing.
+    # The empty variable is dropped from the child; a carried value and
+    # an explicit token both stay.
+    from types import SimpleNamespace
+    from typing import cast
+
+    import livery.toolroom.tools as tools
+    from livery.extensions.python._backend import publish_wheels
+    from livery.workshop._packages import Package
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        depends=(),
+        extensions=("python",),
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
+    seen: list[tuple[object, tuple[str, ...]]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            seen.append((kwargs.get("env"), args))
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    monkeypatch.setenv("UV_PUBLISH_TOKEN", "")
+    assert publish_wheels(package, index_url="https://index.test/upload") is True
+    env = cast("dict[str, str]", seen[-1][0])
+    assert "UV_PUBLISH_TOKEN" not in env
+    assert "--token" not in seen[-1][1]
+    monkeypatch.setenv("UV_PUBLISH_TOKEN", "carried")
+    publish_wheels(package, index_url="https://index.test/upload")
+    env = cast("dict[str, str]", seen[-1][0])
+    assert env["UV_PUBLISH_TOKEN"] == "carried"
+    publish_wheels(package, index_url="https://index.test/upload", token="given")
+    args = seen[-1][1]
+    assert args[args.index("--token") + 1] == "given"
+
+
+def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: a re-run must walk past what an earlier
+    # attempt landed, and each index refuses the duplicate in its own
+    # words. Gitea says the version already exists, GitLab's registry
+    # says the file name has already been taken; any other refusal
+    # surfaces verbatim.
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as tools
+    from livery.extensions.python._backend import publish_wheels
+    from livery.workshop._packages import Package
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        depends=(),
+        extensions=("python",),
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
+    refusal = {"text": ""}
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            return SimpleNamespace(code=2, stdout="", stderr=refusal["text"])
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    refusal["text"] = (
+        'Server returned status code 400 Bad Request. Server says: {"message":'
+        '"400 Bad request - Validation failed: File name has already been taken"}'
+    )
+    assert publish_wheels(package, index_url="https://index.test/upload") is False
+    refusal["text"] = "409 Conflict: package version already exists"
+    assert publish_wheels(package, index_url="https://index.test/upload") is False
+    refusal["text"] = "403 Forbidden: bad credentials"
+    with pytest.raises(_FAILURES) as caught:
+        publish_wheels(package, index_url="https://index.test/upload")
+    assert "bad credentials" in str(caught.value)
 
 
 def test_the_python_isolated_test_runs_the_release_leg(

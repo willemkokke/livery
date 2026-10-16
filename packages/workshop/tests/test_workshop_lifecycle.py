@@ -250,7 +250,7 @@ def _references_of(*paths: str) -> str:
     """A fake's steps answering the references query with a record per path."""
     records = ", ".join(f"SourceReferences({path!r})" for path in paths)
     return (
-        "from livery.workshop._packages import SourceReferences\n\n\n"
+        "from livery.workshop import SourceReferences\n\n\n"
         f"def references(package):\n    return ({records},)\n"
     )
 

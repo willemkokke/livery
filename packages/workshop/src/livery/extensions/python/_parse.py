@@ -7,8 +7,8 @@ parses a file once for a given content, memoised by the file's path,
 size and modification time, so the steps, which run in one process,
 read one tree, and an unchanged file is never parsed twice.
 ``parsed_modules`` hands a rule the sources in its scope, every one or
-the files a narrowed run selects, and ``graph_changed`` is what each
-step's inputs widen on.
+the files a narrowed run selects, `RuleContext` is what a rule judges,
+and ``graph_changed`` is what each step's inputs widen on.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from livery.workshop._packages import ReferencedName
+from livery.workshop import ReferencedName
 
 if TYPE_CHECKING:
     from livery.workshop import Changes, Package
@@ -188,6 +188,33 @@ def _handles_absence(statement: ast.stmt) -> bool:
 
 
 @dataclass(frozen=True)
+class RuleContext:
+    """What a layering rule over the python sources judges: the workspace and a scope.
+
+    Attributes:
+        root: The workspace root.
+        packages: Every package the workspace carries.
+        files: The root-relative sources the run judges; None for every
+            one.
+    """
+
+    root: Path
+    packages: tuple[Package, ...]
+    files: frozenset[str] | None = None
+
+    def packages_in_scope(self) -> tuple[Package, ...]:
+        """The packages holding a source this run judges, every one without a scope."""
+        if self.files is None:
+            return self.packages
+        files = self.files
+        return tuple(
+            package
+            for package in self.packages
+            if any(path.startswith(f"{package.path}/") for path in files)
+        )
+
+
+@dataclass(frozen=True)
 class ParsedModule:
     """One python source as a rule sees it.
 
@@ -288,15 +315,10 @@ def graph_changed(changes: Changes) -> bool:
     The layering steps' inputs widen on them: the distributions' roots
     and declarations come from the manifests, and the allowances from
     the root contract, so a change there judges every source, as the
-    base's layering steps do.
+    base's layering steps do. The workshop answers it
+    ([livery.workshop.graph_changed][]); a step's ``widen`` reference
+    names the extension's own code, so this function hands it on.
     """
-    from livery.workshop._categories import matches
-    from livery.workshop._steps import NOT_INPUTS, graph_files
+    from livery.workshop import graph_changed as workspace_graph_changed
 
-    patterns = graph_files(changes.root)
-    return any(
-        matches(pattern, path)
-        for path in changes.paths
-        if not any(matches(ignored, path) for ignored in NOT_INPUTS)
-        for pattern in patterns
-    )
+    return workspace_graph_changed(changes)

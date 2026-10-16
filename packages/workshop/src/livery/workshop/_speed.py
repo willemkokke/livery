@@ -17,7 +17,8 @@ writes nothing. The margins are constants here, chosen before the rows
 could set them; a reading of a month of rows may move them.
 
 Reach for `judge_run` to judge the run the gate job is in, `accept` for
-the person's raise, and `render_marks` for what ``fm ci.timings`` adds.
+the person's raise, `render_marks` for what ``fm ci.timings`` adds, and
+[livery.workshop.speed_marks][] for the current marks.
 """
 
 from __future__ import annotations
@@ -144,8 +145,12 @@ def is_reference(leg: str) -> bool:
 
 
 @dataclass(frozen=True)
-class Mark:
-    """A package's mark on one leg and the row that set it.
+class SpeedMark:
+    """A package's mark on one check leg and the row that set it.
+
+    The mark is the suite's summed test time the gate job judges the
+    leg's runs against; [livery.workshop.speed_marks][] reads the
+    current mark of each package on each leg.
 
     Attributes:
         package: The package path (``packages/forge``).
@@ -202,7 +207,7 @@ class Verdict:
     """
 
     sample: Sample
-    mark: Mark | None
+    mark: SpeedMark | None
 
     @property
     def limit(self) -> float | None:
@@ -259,18 +264,28 @@ def _row_name(when: datetime, package: str, leg: str) -> str:
     return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{git.slug(package)}--{git.slug(leg)}"
 
 
-def marks(root: Path) -> tuple[dict[tuple[str, str], Mark] | None, str]:
-    """The current mark per package and leg; ``(None, reason)`` when unreadable.
+def speed_marks(root: Path) -> tuple[dict[tuple[str, str], SpeedMark] | None, str]:
+    """Read each package's current test-time mark on each check leg.
 
-    An empty store is ``({}, "")``. A row that does not parse, is of
-    another schema, or lacks a mark's fields is skipped, so one bad
-    row disables nothing. The newest row per package and leg is its
-    mark.
+    The marks live on the checkout's state store
+    ([livery.workshop.state_store][]). The newest row per package and
+    leg is its mark. A row that does not parse, is of another schema,
+    or lacks a mark's fields is skipped, so one bad row disables
+    nothing. A store that cannot be read falls open: the caller prints
+    the reason and judges nothing.
+
+    Args:
+        root: The checkout whose state store holds the marks.
+
+    Returns:
+        Each mark by its package's path and its leg, with an empty
+        reason; an empty store gives ``({}, "")``. When the store
+        cannot be read, None and the reason.
     """
     found = SERIES.rows(state_store(root))
     if found.failed:
         return None, found.reason
-    current: dict[tuple[str, str], Mark] = {}
+    current: dict[tuple[str, str], SpeedMark] = {}
     for row in found.rows:
         mark = _mark(row.data)
         if mark is not None:
@@ -278,9 +293,9 @@ def marks(root: Path) -> tuple[dict[tuple[str, str], Mark] | None, str]:
     return current, ""
 
 
-def _mark(data: dict[str, Any]) -> Mark | None:
+def _mark(data: dict[str, Any]) -> SpeedMark | None:
     try:
-        return Mark(
+        return SpeedMark(
             package=str(data["package"]),
             leg=str(data["leg"]),
             seconds=float(data["seconds"]),
@@ -429,7 +444,9 @@ def samples(entries: list[dict[str, Any]], run_id: str) -> list[Sample]:
     return out
 
 
-def judge(found: list[Sample], current: dict[tuple[str, str], Mark]) -> list[Verdict]:
+def judge(
+    found: list[Sample], current: dict[tuple[str, str], SpeedMark]
+) -> list[Verdict]:
     """Each sample against its mark; one verdict each."""
     return [
         Verdict(sample=sample, mark=current.get((sample.package, sample.leg)))
@@ -491,7 +508,7 @@ def judge_run(root: Path, run: RunContext) -> tuple[list[Verdict], list[str]]:
     rows = METRICS.rows(state_store(root))
     if rows.failed:
         return [], [f"  speed: not judged ({rows.reason})"]
-    current, why = marks(root)
+    current, why = speed_marks(root)
     if current is None:
         return [], [f"  speed: not judged ({why})"]
     found = samples([row.data for row in rows.rows], run.run_id)
@@ -551,7 +568,7 @@ def accept(
         fail(f"no package at {package!r}; the packages are {', '.join(packages)}")
     if seconds <= 0:
         fail(f"the mark is a time in seconds; {seconds!r} is not")
-    current, why = marks(root)
+    current, why = speed_marks(root)
     if current is None:
         fail(f"refusing: {why}; a write from an unread store would erase its rows")
     mark = current.get((package, leg))
@@ -583,7 +600,7 @@ def render_marks(root: Path) -> list[str]:
     """The marks beside the newest run's times, for ``fm ci.timings``."""
     from livery.workshop._metrics import SERIES as METRICS
 
-    current, why = marks(root)
+    current, why = speed_marks(root)
     if current is None:
         return [f"  speed marks: not read ({why})"]
     if not current:

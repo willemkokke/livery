@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.extensions.python._parse import parsed_modules
+from livery.extensions.python._parse import RuleContext, parsed_modules
 from livery.extensions.python._reaches import problems, scan
-from livery.workshop._packages import RuleContext, discover_packages
+from livery.workshop._packages import discover_packages
 
 ALLOWANCE = """
 [[python.private-reaches]]
