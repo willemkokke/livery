@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -100,46 +99,6 @@ def test_the_drift_check_names_a_composed_files_drift(
     (root / ".gitattributes").write_text("* text\n")
     with pytest.raises(Failed, match=r"\.gitattributes: differs from what"):
         drift_check()
-
-
-def test_the_conan_workspace_comes_with_the_first_conan_member_and_goes_with_the_last(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = _workspace(tmp_path / "ws", "[]")
-    monkeypatch.setattr(
-        "livery.workshop._extensions.workspace_root", lambda start=None: root
-    )
-    deliver(root)
-    assert not (root / "conanws.yml").exists()
-    member = root / "packages" / "geometry"
-    member.mkdir(parents=True)
-    (member / "workshop.toml").write_text(
-        'extensions = ["cmake", "conan"]\nname = "acme-geometry"\n'
-    )
-    # The recipe's reference is what the workspace lists a member by.
-    (member / "conanfile.py").write_text('name = "acme-geometry"\nversion = "0.0.0"\n')
-    assert "  wrote conanws.yml" in deliver(root)
-    text = (root / "conanws.yml").read_text()
-    assert text.endswith("packages:\n  - path: packages/geometry\n")
-    assert shipped_drift(root) == []
-    # A member listing conan joins the same file as one listing nothing.
-    listing = root / "packages" / "mesh"
-    listing.mkdir(parents=True)
-    (listing / "workshop.toml").write_text(
-        'name = "acme-mesh"\nextensions = ["cmake", "conan"]\n'
-    )
-    (listing / "conanfile.py").write_text('name = "acme-mesh"\nversion = "0.0.0"\n')
-    deliver(root)
-    text = (root / "conanws.yml").read_text()
-    assert text.endswith(
-        "packages:\n  - path: packages/geometry\n  - path: packages/mesh\n"
-    )
-    assert shipped_drift(root) == []
-    # The last members leave, and the file goes with them.
-    shutil.rmtree(listing)
-    shutil.rmtree(member)
-    assert any(line.startswith("  removed conanws.yml") for line in deliver(root))
-    assert not (root / "conanws.yml").exists()
 
 
 def test_two_contributions_to_one_key_refuse_naming_both_owners(tmp_path: Path) -> None:

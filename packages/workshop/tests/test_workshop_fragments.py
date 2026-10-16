@@ -118,6 +118,7 @@ def test_a_withdrawn_steps_file_is_kept_when_edited_and_removed_when_unedited(
     from livery.workshop._fragment_engine import read_rendered
     from livery.workshop._shipped_files import deliver, shipped_drift
 
+    skip_unless_installed("conan")
     record = _native_style()
     root = tmp_path / "ws"
     member = root / "packages" / "native"

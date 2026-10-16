@@ -267,7 +267,7 @@ def test_guidance_is_one_readers_set_of_every_fragment_in_play(
 def test_the_gate_fragment_renders_the_steps_for_the_extensions_held_and_the_reader(
     tmp_path: Path, restored, python_steps: object
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "conan")
     root = _workspace(tmp_path)
     register_step(
         StepRecord(

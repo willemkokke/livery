@@ -243,6 +243,27 @@ def test_the_legs_follow_release_prove_package_over_workspace(
     )
 
 
+def test_validate_member_skips_a_member_with_no_isolated_test(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._release_driver import validate_member
+
+    # A C++ package: cpp, which the workshop's wheel ships, adds no
+    # isolated test.
+    directory = tmp_path / "packages" / "lib"
+    directory.mkdir(parents=True)
+    package = Package(
+        directory=directory,
+        path="packages/lib",
+        name="acme-lib",
+        depends=(),
+        extensions=("cpp",),
+    )
+    validate_member(tmp_path, MemberPlan(package=package, version="0.1.0"), ())
+    out = capsys.readouterr().out
+    assert "isolated legs skip (its extensions add no isolated test" in out
+
+
 def test_the_base_gate_refuses_red_and_teaches(
     workspace: tuple[FakeForge, Path],
 ) -> None:

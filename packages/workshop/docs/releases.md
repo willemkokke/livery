@@ -155,32 +155,13 @@ renders:
   to the registry the contract's `[registries]` table names for the
   kind, else the forge's own package registry.
 
-A conan package resolves the same ladder for its own kind: the
-`[registries.conan]` declaration first, then a conan registry the
-forge hosts, and on a forge that hosts none, the forge's releases.
-On that route each wheel-platform leg creates the package and saves
-its cache as `dist/<name>-<version>-<host>.tgz`, and the wave
-attaches every collected file to the member's own release. The tag
-is pushed before the upload, because a release is addressed by its
-tag, so a tag alone is not a receipt there: the probe reads the
-attached caches, and a re-run after a half-finished upload finishes
-it. A consumer lists the release, checks the bytes against the
-digest the forge reports, and restores the cache into its conan
-home; a forge that reports no digest says so rather than passing
-silently.
-
-The two other routes, a conan remote and a folder, upload from the
-publish job's conan cache, and every CI job has a conan home of its
-own, so that cache starts without the package. When the wave
-publishes what the run collected, the conan publish step first
-restores every host's file for the version from `dist/`, in name
-order (`conan cache restore`), and then uploads. The upload sends
-every host's binary the run collected, the same hosts the releases
-route attaches. A file for another version is not restored. A
-`dist/` without a saved cache for the version refuses, naming the
-member, the version and the files `dist/` holds. A member the
-publish job built itself is in its cache already, and nothing is
-restored.
+A member that lists the conan extension, a distribution of its own,
+`livery-extensions-conan`, resolves the same ladder for its own kind:
+the `[registries.conan]` declaration first, then a conan registry the
+forge hosts, and on a forge that hosts none, the forge's releases,
+where each host's saved cache is attached to the member's own release.
+Its page describes the three routes, the saved caches and their
+restore.
 
 A member that lists the nanobind extension, a distribution of its own,
 `livery-extensions-nanobind`, builds its platform wheels in a wheels

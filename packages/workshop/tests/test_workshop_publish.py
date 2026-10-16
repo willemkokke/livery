@@ -24,6 +24,7 @@ from livery.workshop._publish import (
     probe_until_served,
     publish_release,
 )
+from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -796,6 +797,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     train, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The opt-out is the base kind's: a conan member obeys it the same way."""
+    skip_unless_installed("conan")
     root, registry, _spans = train
     native = root / "packages" / "native"
     native.mkdir()

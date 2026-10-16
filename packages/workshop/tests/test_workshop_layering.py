@@ -544,7 +544,7 @@ def _tree(root: Path) -> dict[str, str]:
 def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("cmake", "nanobind")
+    skip_unless_installed("cmake", "conan", "nanobind")
     from livery.footman import Failed
     from livery.workshop import _lifecycle
     from livery.workshop._packages import declare_edge
@@ -578,43 +578,20 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     assert _tree(tmp_path) == before
 
 
-def test_each_writer_leaves_a_sibling_outside_its_ecosystem_alone(
+def test_python_s_writer_leaves_a_sibling_outside_its_ecosystem_alone(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("nanobind")
-    from livery.extensions.conan import _package as conan
+    # conan's own suite judges conan's writer the same way.
+    skip_unless_installed("conan", "nanobind")
     from livery.extensions.python import _backend as python
 
     echo, lib, native = _three_ecosystems(tmp_path)
     before = _tree(tmp_path)
     # Python's writer takes a sibling that holds python alone.
     assert python.declare_requirement(echo, lib, "0.1.0") is None
-    # Conan's takes a conan package alone: neither a sibling that holds
-    # no conan, nor one whose recipe, a consumer's, names no reference.
-    assert conan.declare_requirement(lib, echo, "0.1.0") is None
-    assert conan.declare_requirement(lib, native, "0.1.0") is None
     assert _tree(tmp_path) == before
-    # Each takes a sibling of its own ecosystem.
+    # It takes a sibling of its own ecosystem.
     assert python.declare_requirement(native, echo, "0.1.0") == ["pyproject.toml"]
-    assert conan.declare_requirement(native, lib, "0.1.0") == ["conanfile.py"]
-
-
-def test_conan_s_answer_is_a_requirement_writer(tmp_path: Path) -> None:
-    from livery.extensions.conan import _answers, _package
-    from livery.workshop import RequirementWriter
-
-    echo, lib, native = _three_ecosystems(tmp_path)
-    # The type checkers hold the recipe's writer to the protocol here,
-    # and conan answers the query with it.
-    writer: RequirementWriter = _package.declare_requirement
-    assert _answers.requirement_writers(native) == (writer,)
-    # Called as the protocol, it leaves a sibling outside conan alone
-    # and writes a conan sibling into the recipe.
-    before = _tree(tmp_path)
-    assert writer(native, echo, "0.1.0") is None
-    assert _tree(tmp_path) == before
-    assert writer(native, lib, "0.1.0") == ["conanfile.py"]
-    assert '"acme-lib/[>=0.1.0]"' in (native.directory / "conanfile.py").read_text()
 
 
 def test_a_reference_nothing_reaches_is_not_written(tmp_path: Path) -> None:
@@ -785,7 +762,7 @@ def test_a_test_edge_with_no_home_and_a_tool_edge_are_not_judged(
 
 
 def test_a_test_edge_no_writer_takes_refuses_naming_both_sets(tmp_path: Path) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "conan")
     from livery.footman import Failed
     from livery.workshop import _lifecycle
 
@@ -1021,102 +998,6 @@ def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_projec
     orphan = member("orphan", "[tool.uv]\npackage = false\n")
     with pytest.raises(_FAILURES, match="no \\[project\\] table"):
         _python.declare_requirement(orphan, low, "1.2.0")
-
-
-def _recipe_member(root: Path, name: str, body: str) -> Package:
-    """The conan package ``acme-<name>``, its recipe *body*."""
-    return _member(root, name, {"conanfile.py": body}, ("cmake", "conan"))
-
-
-def test_the_conan_requirement_refuses_a_recipe_it_cannot_place_the_tuple_in(
-    tmp_path: Path,
-) -> None:
-    from livery.extensions.conan import _package as conan
-
-    low = _recipe_member(tmp_path, "low", _recipe("low"))
-    called = _recipe_member(
-        tmp_path,
-        "called",
-        "from conan import ConanFile\n\n\nclass Called(ConanFile):\n"
-        '    name = "acme-called"\n\n    def requirements(self):\n'
-        '        self.requires("fmt/[>=11.0]")\n',
-    )
-    with pytest.raises(
-        _FAILURES,
-        match=re.escape(
-            "declares its requirements without a `requires = (...)` tuple to add"
-            ' "acme-low/[>=0.3.0]" to; add the requirement by hand'
-        ),
-    ):
-        conan.declare_requirement(called, low, "0.3.0")
-    # No class derives from ConanFile, or the recipe class's body shares
-    # its line: nothing marks where the tuple goes.
-    for name, body in (
-        ("plain", 'class Plain:\n    name = "acme-plain"\n'),
-        (
-            "inline",
-            'from conan import ConanFile\n\n\nclass Inline(ConanFile): name = "x"\n',
-        ),
-    ):
-        refused = _recipe_member(tmp_path, name, body)
-        with pytest.raises(_FAILURES, match=re.escape("defines no recipe class")):
-            conan.declare_requirement(refused, low, "0.3.0")
-        assert (refused.directory / "conanfile.py").read_text() == body
-
-
-def test_the_conan_requirement_joins_the_tuple_or_opens_one(tmp_path: Path) -> None:
-    from livery.extensions.conan import _package as conan
-
-    low = _recipe_member(tmp_path, "low", _recipe("low"))
-    seeded = _recipe_member(
-        tmp_path,
-        "seeded",
-        'class Seeded:\n    name = "acme-seeded"\n    requires = ("fmt/[>=11.0]",)\n',
-    )
-    assert conan.declare_requirement(seeded, low, "0.3.0") == ["conanfile.py"]
-    assert (
-        'requires = ("fmt/[>=11.0]", "acme-low/[>=0.3.0]")'
-        in (seeded.directory / "conanfile.py").read_text()
-    )
-    assert conan.declare_requirement(seeded, low, "0.4.0") == []
-    empty = _recipe_member(
-        tmp_path, "empty", 'class Empty:\n    name = "acme-empty"\n    requires = ()\n'
-    )
-    conan.declare_requirement(empty, low, "0.3.0")
-    assert (
-        'requires = ("acme-low/[>=0.3.0]",)'
-        in (empty.directory / "conanfile.py").read_text()
-    )
-    # A recipe that declares no requirement gets the tuple after the
-    # attributes of its recipe class, or first in a class that starts
-    # with a method.
-    opened = '    requires = ("acme-low/[>=0.3.0]",)\n'
-    head = "from conan import ConanFile\n\n\n"
-    for name, body, written in (
-        (
-            "methods",
-            f'{head}class Methods(ConanFile):\n    """Doc."""\n\n'
-            '    name = "x"\n\n    def build(self):\n        pass\n',
-            f'{head}class Methods(ConanFile):\n    """Doc."""\n\n'
-            f'    name = "x"\n{opened}\n    def build(self):\n        pass\n',
-        ),
-        (
-            "attributes",
-            f'{head}class Attributes(ConanFile):\n    name = "x"\n    version = "1"',
-            f"{head}class Attributes(ConanFile):\n"
-            f'    name = "x"\n    version = "1"\n{opened}',
-        ),
-        (
-            "decorated",
-            f"{head}class Decorated(ConanFile):\n    @property\n"
-            "    def build(self):\n        pass\n",
-            f"{head}class Decorated(ConanFile):\n{opened}\n    @property\n"
-            "    def build(self):\n        pass\n",
-        ),
-    ):
-        bare = _recipe_member(tmp_path, name, body)
-        assert conan.declare_requirement(bare, low, "0.3.0") == ["conanfile.py"]
-        assert (bare.directory / "conanfile.py").read_text() == written
 
 
 # The one parse, and the rules an extension registers into it.

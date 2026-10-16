@@ -614,6 +614,7 @@ def test_a_member_answering_two_registries_refuses_naming_both(
     # releases its distribution and conan its package, and a package
     # releases to one registry. The refusal comes before either probe
     # resolves its target.
+    skip_unless_installed("conan")
     _no_target(monkeypatch)
     package = _releasing(tmp_path, "geometry", "python", "conan", recipe=REFERENCE)
     assert _lifecycle.distributions(package) == (

@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from extensions_conan_workspace import Said, seed_into, skip_unless_installed
 from livery.extensions.conan import _package as _conan
 from livery.footman import Failed
 from livery.workshop._packages import Package
 from livery.workshop._registries import RegistryTarget
-from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -105,6 +105,136 @@ def _upload_logins(
     calls: list[tuple[tuple[str, ...], dict[str, str]]],
 ) -> list[dict[str, str]]:
     return [env for args, env in calls if args[0] == "upload"]
+
+
+def _answering(
+    monkeypatch: pytest.MonkeyPatch, **answers: Said
+) -> list[tuple[str, ...]]:
+    """Fake conan, each command answered by its first word; every call's arguments.
+
+    A command *answers* does not name succeeds with no output.
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def _fake(cwd: Path, *args: str, env: dict[str, str] | None = None) -> Said:
+        del cwd, env
+        calls.append(args)
+        return answers.get(args[0], Said())
+
+    monkeypatch.setattr(_conan, "_conan", _fake)
+    return calls
+
+
+# The refusals conan's answers make, before the routes that succeed.
+
+
+def test_a_save_conan_refuses_is_named_with_its_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answering(monkeypatch, cache=Said(1, stderr="no such package"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.save_cache(package, "0.1.0", tmp_path / "dist")
+    assert str(refused.value) == (
+        "conan cache save (acme-lib/0.1.0) exited 1:\nno such package"
+    )
+
+
+def test_a_folder_publish_conan_refuses_is_named_with_its_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answering(monkeypatch, cache=Said(1, stdout="saving\n", stderr="disk full"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish(package, str(tmp_path / "share"), version="0.1.0", local=True)
+    assert str(refused.value) == (
+        "conan cache save (acme-lib/0.1.0) exited 1:\nsaving\ndisk full"
+    )
+
+
+def test_a_remote_conan_will_not_add_refuses_before_the_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _answering(monkeypatch, remote=Said(2, stderr="bad url"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert (
+        str(refused.value) == f"conan remote add workshop {_REMOTE} exited 2:\nbad url"
+    )
+    assert [args[0] for args in calls] == ["remote"]
+
+
+def test_an_upload_the_remote_holds_already_is_walked_past(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _answering(monkeypatch, upload=Said(1, stderr="Recipe already exists"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    assert not _conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert "  acme-lib: already uploaded; walking past" in capsys.readouterr().out
+
+
+def test_an_upload_the_remote_refuses_for_a_login_names_conan_s_variables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answering(monkeypatch, upload=Said(1, stderr="ERROR: 401 Unauthorized"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert str(refused.value) == (
+        "conan upload (acme-lib/0.1.0) exited 1:\nERROR: 401 Unauthorized\n"
+        "  the remote wants credentials: set CONAN_LOGIN_USERNAME and"
+        " CONAN_PASSWORD (conan's own variables) and re-run"
+    )
+
+
+def test_any_other_upload_refusal_is_named_with_its_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answering(monkeypatch, upload=Said(1, stderr="connection reset"))
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish(package, _REMOTE, version="0.1.0", local=False)
+    assert str(refused.value) == (
+        "conan upload (acme-lib/0.1.0) exited 1:\nconnection reset"
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [Said(1, stderr="remote down"), Said(stdout="not json")],
+    ids=["failed", "unparsed"],
+)
+def test_a_remote_whose_listing_fails_or_does_not_parse_answers_no_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: Said
+) -> None:
+    _answering(monkeypatch, list=answer)
+    registry = _conan.ConanRegistry(
+        RegistryTarget(kind="conan", url=_REMOTE), root=tmp_path
+    )
+    assert registry.versions("acme-lib") == ()
+
+
+def test_a_remote_answers_each_listed_reference_s_version_and_skips_a_bare_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    listed: dict[str, dict[str, object]] = {
+        "workshop": {"acme-lib": {}, "acme-lib/0.2.0": {}, "acme-lib/0.1.0": {}}
+    }
+    _answering(monkeypatch, list=Said(stdout=json.dumps(listed)))
+    registry = _conan.ConanRegistry(
+        RegistryTarget(kind="conan", url=_REMOTE), root=tmp_path
+    )
+    assert registry.versions("acme-lib") == ("0.1.0", "0.2.0")
+
+
+def test_a_member_without_a_changelog_releases_with_an_empty_body(
+    tmp_path: Path,
+) -> None:
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    assert _conan.changelog_entry(package, "0.1.0") == ""
 
 
 @pytest.mark.parametrize(
@@ -346,17 +476,6 @@ def test_a_prebuilt_member_s_caches_are_restored_and_then_uploaded(
     assert _restored(calls) == [str(archive) for archive in collected]
 
 
-def test_validate_member_skips_a_member_with_no_isolated_test(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from livery.workshop._release_driver import MemberPlan, validate_member
-
-    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    validate_member(tmp_path, MemberPlan(package=package, version="0.1.0"), ())
-    out = capsys.readouterr().out
-    assert "isolated legs skip (its extensions add no isolated test" in out
-
-
 # The armed proofs: a real conan against the folder target and the
 # rig's gitea registry.
 
@@ -367,13 +486,12 @@ _CONAN_GAP = (
 )
 needs_conan = pytest.mark.skipif(bool(_CONAN_GAP), reason=_CONAN_GAP)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
     """A rendered cpp-conan package, built into an isolated CONAN_HOME."""
     from livery.workshop._identity import project_facts
-    from workshop_composed import seed_into
 
     home = tmp_path / "conan-home"
     monkeypatch.setenv("CONAN_HOME", str(home))

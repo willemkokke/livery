@@ -21,6 +21,7 @@ from livery.workshop._steps import (
     step_for,
 )
 from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
@@ -85,6 +86,7 @@ def test_a_file_the_repository_ignores_is_beyond_every_claim(
 def test_a_step_judges_the_files_its_claims_reach_and_no_other(
     tmp_path: Path, restored_steps, python_steps: object, cmake_steps: object
 ) -> None:
+    skip_unless_installed("conan")
     native = _native(tmp_path)
     python = Package(
         tmp_path / "packages" / "py",

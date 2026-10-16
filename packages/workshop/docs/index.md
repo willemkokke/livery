@@ -555,8 +555,9 @@ and nothing records the template: an extension that needs to know what
 a package is reads it from the package's own manifests, as python reads
 its scripts. The templates the livery distributions declare, each
 available while the extension that declares it is installed. The
-nanobind extension ships in `livery-extensions-nanobind`, and the
-workshop's wheel ships the others:
+nanobind extension ships in `livery-extensions-nanobind`, the conan
+extension in `livery-extensions-conan`, and the workshop's wheel ships
+the others:
 
 | Template | Declared by | Lists | Extends | Options |
 |---|---|---|---|---|
@@ -1069,15 +1070,11 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
-While the workspace has a member whose set holds the `conan`
-extension, listing it or an extension that requires it, `fm sync`
-also writes `conanws.yml` at the root, the conan extension's fragment, listing
-each such member by its path. A conan command run inside the checkout
-resolves a member from its source tree through that file, and nothing
-is registered in the conan home. So each checkout of a repository, a
-worktree included, resolves to its own sources, and all of them share
-one package cache. The file goes with the last such member, and the
-drift check judges it like any composed file.
+An extension's fragment can write a root file only while a member
+needs it. The conan extension, a distribution of its own,
+`livery-extensions-conan`, writes `conanws.yml` at the root while a
+member's set holds conan, listing each such member by its path, and
+removes the file with the last of them. Its page describes the file.
 
 A composed file is the extensions', judged byte for byte, and some of
 them carry lines of your own. Those lines live in a region: a pair of

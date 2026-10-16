@@ -193,7 +193,7 @@ def test_a_package_step_runs_for_its_extensions_alone_and_skips_by_name(
 
     register_step(StepRecord("probe", "lint", spy, scope=PACKAGE, extensions=("cpp",)))
     py = _package(tmp_path, "member", "python")
-    native = _package(tmp_path, "native", "cmake", "conan")
+    native = _package(tmp_path, "native", "cpp")
     # The probe judges the native package alone, announcing it by name;
     # a workspace of python packages schedules no probe at all.
     assert "lint.probe" in judges(PhaseContext(root=tmp_path, packages=(py, native)))

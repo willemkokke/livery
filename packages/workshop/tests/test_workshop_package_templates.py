@@ -220,6 +220,7 @@ def test_a_template_whose_declarer_is_not_installed_refuses_naming_it_its_distri
         " then create the package again"
     )
     # conan declares cpp-package, which lists cmake and conan.
+    skip_unless_installed("conan")
     with pytest.raises(_FAILURES) as caught:
         render_member(root, "geometry", "cpp-package")
     assert str(caught.value) == (
@@ -265,6 +266,7 @@ def test_a_template_needing_an_extension_listed_and_not_installed_refuses_naming
     # The root lists cmake and conan, and no installed distribution
     # declares cmake yet: a creation installs nothing, so it names the
     # sync that does.
+    skip_unless_installed("conan")
     root = _workspace(tmp_path / "acme", "cmake", "conan")
     withheld(monkeypatch, "cmake")
     before = _files(root)
@@ -284,7 +286,7 @@ def test_a_creation_runs_no_lock_or_sync_before_it_renders(
     from workshop_composed import compose_into
     from workshop_members import template_verb, wired_here
 
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "conan")
     # conan declares cpp-package, so its verb exists; the template lists
     # cmake too, which the root's list does not hold yet.
     root = compose_into(_workspace(tmp_path / "acme", "conan"))
@@ -915,6 +917,7 @@ def test_a_template_s_verb_refuses_while_its_chain_needs_an_extension_no_list_ho
     ) in result.stderr
     assert _files(root) == before
     # conan declares cpp-package, which lists cmake as well.
+    skip_unless_installed("conan")
     native = _workspace(tmp_path / "native", "conan")
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: native
@@ -1323,54 +1326,6 @@ def test_python_library_with_a_command_births_a_script_fm_run_starts(
     monkeypatch.setattr("livery.footman.run", run)
     assert start(root, "tool", ("one", "two"), root) == 5
     assert started == [[str(script), "one", "two"]]
-
-
-# A C++ package, born for each package type and built.
-
-_TOOLCHAIN = ("cmake", "ninja", "ctest", "c++")
-_MISSING_TOOLS = tuple(tool for tool in _TOOLCHAIN if shutil.which(tool) is None)
-
-
-@pytest.mark.skipif(
-    bool(_MISSING_TOOLS) or sys.platform == "win32",
-    reason=f"host toolchain incomplete: {', '.join(_MISSING_TOOLS)} missing"
-    if _MISSING_TOOLS
-    else "the Windows leg builds with MSVC, which this test does not enter",
-)
-@pytest.mark.parametrize(
-    "package_type",
-    ["library", "application", "header-library", "static-library", "shared-library"],
-)
-def test_cpp_package_builds_and_tests_each_package_type(
-    tmp_path: Path, package_type: str
-) -> None:
-    skip_unless_installed("cmake")
-    root = _workspace(tmp_path / "acme", "cmake", "conan")
-    render_member(root, "tool", "cpp-package", {"package_type": package_type})
-    tool = root / "packages" / "tool"
-    contract = (tool / "workshop.toml").read_text("utf-8")
-    assert 'extensions = ["cmake", "conan"]' in contract
-    recipe = (tool / "conanfile.py").read_text()
-    assert f'package_type = "{package_type}"' in recipe
-    for argv in (
-        ["cmake", "--preset", "release"],
-        ["cmake", "--build", "--preset", "release"],
-        ["ctest", "--preset", "release"],
-    ):
-        done = subprocess.run(
-            argv, cwd=tool, capture_output=True, text=True, check=False
-        )
-        assert done.returncode == 0, done.stdout + done.stderr
-    if package_type != "application":
-        assert not (tool / "src" / "main.cpp").exists()
-        return
-    ran = subprocess.run(
-        [str(tool / "build" / "release" / "tool")],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert (ran.returncode, ran.stdout) == (0, "acme-tool 0.0.0\n")
 
 
 def test_the_docs_seeds_live_once_in_the_base_tree() -> None:

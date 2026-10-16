@@ -15,6 +15,7 @@ members = [
     "livery-extensions-clang-tidy",
     "livery-extensions-claude",
     "livery-extensions-cmake",
+    "livery-extensions-conan",
     "livery-extensions-coverage",
     "livery-extensions-docs",
     "livery-extensions-lfs",
@@ -812,6 +813,7 @@ dev = [
     { name = "livery-extensions-clang-tidy" },
     { name = "livery-extensions-claude" },
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-conan" },
     { name = "livery-extensions-coverage", extra = ["dev"] },
     { name = "livery-extensions-docs" },
     { name = "livery-extensions-lfs" },
@@ -852,6 +854,7 @@ dev = [
     { name = "livery-extensions-clang-tidy", editable = "packages/extensions/clang-tidy" },
     { name = "livery-extensions-claude", editable = "packages/extensions/claude" },
     { name = "livery-extensions-cmake", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-conan", editable = "packages/extensions/conan" },
     { name = "livery-extensions-coverage", extras = ["dev"], editable = "packages/extensions/coverage" },
     { name = "livery-extensions-docs", editable = "packages/extensions/docs" },
     { name = "livery-extensions-lfs", editable = "packages/extensions/lfs" },
@@ -893,12 +896,14 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-conan" },
     { name = "livery-footman" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -919,11 +924,13 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-conan" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
@@ -944,11 +951,13 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-conan" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -968,11 +977,13 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-conan" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -1007,17 +1018,47 @@ dependencies = [
 
 [package.optional-dependencies]
 test = [
+    { name = "livery-extensions-conan" },
     { name = "livery-extensions-coverage" },
     { name = "livery-extensions-nanobind" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-extensions-coverage", marker = "extra == 'test'", editable = "packages/extensions/coverage" },
     { name = "livery-extensions-nanobind", marker = "extra == 'test'", editable = "packages/extensions/nanobind" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-git", editable = "packages/git" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["test"]
+
+[[package]]
+name = "livery-extensions-conan"
+version = "0.0.0"
+source = { editable = "packages/extensions/conan" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-forge" },
+    { name = "livery-toolroom" },
+    { name = "livery-toolroom-store" },
+    { name = "livery-workshop" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "livery-git" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-forge", editable = "packages/forge" },
+    { name = "livery-git", marker = "extra == 'test'", editable = "packages/git" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-toolroom-store", editable = "packages/toolroom-store" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
 provides-extras = ["test"]
@@ -1038,11 +1079,13 @@ dev = [
     { name = "types-pygments" },
 ]
 test = [
+    { name = "livery-extensions-conan" },
     { name = "livery-forge" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1145,6 +1188,7 @@ name = "livery-extensions-nanobind"
 version = "0.0.0"
 source = { editable = "packages/extensions/nanobind" }
 dependencies = [
+    { name = "livery-extensions-conan" },
     { name = "livery-footman" },
     { name = "livery-git" },
     { name = "livery-toolroom" },
@@ -1159,6 +1203,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-conan", editable = "packages/extensions/conan" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },

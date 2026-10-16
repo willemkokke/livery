@@ -41,6 +41,12 @@ path = "packages/extensions/nanobind"
 kind = "test"
 floor = "0.0.0"
 
+# The suite creates packages from conan's cpp-package template.
+[[depends]]
+path = "packages/extensions/conan"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately. The measured value of the

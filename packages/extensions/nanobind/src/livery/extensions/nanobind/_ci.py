@@ -221,7 +221,11 @@ def floor_legs(
     """
     import shutil
 
-    from livery.extensions import conan, python
+    # Two distributions ship these entry modules under the one namespace,
+    # and basedpyright resolves a from-import that names both in one of
+    # them alone, so each is imported by its own path.
+    import livery.extensions.conan as conan
+    import livery.extensions.python as python
     from livery.extensions.nanobind import _build
 
     by_path = {member.path: member for member in discover_packages(root)}

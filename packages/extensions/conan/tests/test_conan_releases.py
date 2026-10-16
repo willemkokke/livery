@@ -118,6 +118,29 @@ def test_the_publish_refuses_when_no_leg_saved_a_cache(
         _conan.publish_to_releases(_member(root), root, version="0.3.0")
 
 
+def test_the_publish_refuses_when_the_forge_refuses_the_release_naming_the_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import ForgeError
+
+    root = _workspace(tmp_path)
+    fake, repository = _forge(monkeypatch)
+    fake.create_tag(OWNER, REPO, "packages/geometry/v0.3.0")
+    _saved(root, "0.3.0")
+
+    def _refused(*_args: object, **_kwargs: object) -> None:
+        raise ForgeError("413 the asset is too large", status=413)
+
+    monkeypatch.setattr(repository.release, "upload_asset", _refused)
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish_to_releases(_member(root), root, version="0.3.0")
+    assert str(refused.value) == (
+        "acme-geometry: the forge refused the release packages/geometry/v0.3.0:"
+        " 413 the asset is too large. Re-run the publish: the tag is cut, the"
+        " release is reused, and each cache already attached is walked past."
+    )
+
+
 def test_the_restore_refuses_a_name_no_member_carries(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -226,6 +249,12 @@ def test_the_probe_answers_only_versions_whose_release_carries_a_cache(
     registry = _conan.ConanRegistry(target, root=root)
     assert registry.versions("acme-geometry") == ("0.3.0",)
     assert registry.versions("acme-ghost") == ()
+    # The wave polls the probe: each later answer reads the same
+    # repository, and sees what was attached since.
+    repository.release.upload_asset(
+        "packages/geometry/v0.2.0", _conan.cache_name("acme-geometry", "0.2.0"), b"c"
+    )
+    assert registry.versions("acme-geometry") == ("0.2.0", "0.3.0")
 
 
 def test_the_restore_verifies_the_digest_and_hands_the_file_to_conan(

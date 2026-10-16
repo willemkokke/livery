@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 import livery.forge as forge_module
@@ -31,7 +33,6 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
 #: name a contract lists to the package it mounts from. Each extension
 #: that leaves the wheel for a distribution of its own leaves this pin.
 SHIPPED = {
-    "conan": "livery.extensions.conan",
     "cpp": "livery.extensions.cpp",
     "python": "livery.extensions.python",
 }
@@ -179,37 +180,31 @@ def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name
         workshop_module.nothing_here  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
 
 
-def test_the_python_and_conan_entry_modules_refuse_a_name_they_do_not_export() -> None:
-    import importlib
+def test_the_python_entry_module_refuses_a_name_it_does_not_export() -> None:
+    import livery.extensions.python as python_module
 
-    # Each refused name is a function of the module that defines the
+    # The refused name is a function of the module that defines the
     # exported ones: only the declared names are served.
-    for root, name in (
-        ("livery.extensions.python", "materialise_module_docs"),
-        ("livery.extensions.conan", "restore_cache"),
+    with pytest.raises(
+        AttributeError,
+        match=re.escape(
+            "module 'livery.extensions.python' has no attribute"
+            " 'materialise_module_docs'"
+        ),
     ):
-        module = importlib.import_module(root)
-        with pytest.raises(
-            AttributeError, match=f"module '{root}' has no attribute '{name}'"
-        ):
-            getattr(module, name)
+        python_module.materialise_module_docs  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_an_entry_module_serves_what_the_defining_module_holds_at_each_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import livery.extensions.conan as conan_module
     import livery.extensions.python as python_module
-    from livery.extensions.conan import _package
     from livery.extensions.python import _backend
 
     # A test patches the defining module, and a reader of the entry
     # module sees the patch.
-    saved, tested = object(), object()
-    monkeypatch.setattr(_package, "save_cache", saved)
+    tested = object()
     monkeypatch.setattr(_backend, "run_isolated_test", tested)
-    assert conan_module.save_cache is saved
     assert python_module.run_isolated_test is tested
     monkeypatch.undo()
-    assert conan_module.save_cache is _package.save_cache
     assert python_module.run_isolated_test is _backend.run_isolated_test

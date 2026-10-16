@@ -94,11 +94,11 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_registries", "python"): (4, "the registry tables; phase 13"),
     ("_release", "python"): (1, "the python registry a release resolves; phase 13"),
     ("_release_driver", "conanfile.py"): (
-        2,
+        1,
         "the manifests a release stamps and commits; phase 13",
     ),
     ("_release_driver", "pyproject.toml"): (
-        2,
+        1,
         "the manifests a release stamps and commits; phase 13",
     ),
     ("_release_driver", "python"): (
@@ -344,7 +344,7 @@ def tool_scan(src: Path, tools: set[str]) -> Counter[tuple[str, str]]:
 
 
 def test_the_base_names_no_tool_an_extension_brings() -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "conan")
     import livery.workshop
 
     if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):

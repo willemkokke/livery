@@ -59,6 +59,7 @@ dev = [
     "livery-extensions-clang-format",
     "livery-extensions-clang-tidy",
     "livery-extensions-cmake",
+    "livery-extensions-conan",
     "livery-extensions-mypy",
     "livery-extensions-pytest",
     "livery-extensions-nanobind",

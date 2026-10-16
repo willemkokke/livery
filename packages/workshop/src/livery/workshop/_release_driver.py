@@ -179,14 +179,20 @@ def member_pairs_at(root: Path, ref: str) -> list[tuple[str, str]] | None:
     return pairs
 
 
+#: The files in a member's directory that can declare a floor on a
+#: sibling: the pyproject requirement, the ``[[depends]]`` floor, and a
+#: conan reference's version range.
+FLOOR_HOMES = ("pyproject.toml", "workshop.toml", "conanfile.py")
+
+
 def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     """Raise floors between co-released members; the files changed.
 
     Within the set only (contract: a solo release never moves a
     floor): a member depending on a co-member gets the co-released
-    version, in every home it is declared, the pyproject
-    requirement, the ``[[depends]]`` floor, and a conan reference's
-    version range.
+    version, in every home it is declared (``FLOOR_HOMES``), the
+    pyproject requirement, the ``[[depends]]`` floor, and a conan
+    reference's version range.
     """
     import re
 
@@ -194,7 +200,7 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     members = {plan.package.name: plan.package.member for plan in plans}
     changed: list[str] = []
     for plan in plans:
-        for home in ("pyproject.toml", "workshop.toml", "conanfile.py"):
+        for home in FLOOR_HOMES:
             path = plan.package.directory / home
             if not path.is_file():
                 continue
@@ -251,12 +257,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         # is the right filter.
         paths.extend(
             str(base / name)
-            for name in (
-                "CHANGELOG.md",
-                "pyproject.toml",
-                "workshop.toml",
-                "conanfile.py",
-            )
+            for name in ("CHANGELOG.md", *FLOOR_HOMES)
             if (package.directory / name).is_file()
         )
         # Every file the set's stamp writes a version into. A set that

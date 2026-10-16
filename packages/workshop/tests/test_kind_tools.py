@@ -464,6 +464,7 @@ def test_the_root_keeps_its_python_tools_beside_a_native_member_while_it_lists_p
 ) -> None:
     # The root's own files hold the root's set. Listing nothing, they
     # bring no python step's tool beside a native member alone.
+    skip_unless_installed("conan")
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     member = tmp_path / "packages" / "native"
     member.mkdir(parents=True)

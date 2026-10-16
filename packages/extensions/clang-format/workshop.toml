@@ -37,3 +37,9 @@ name = "workshop.extensions.clang-format"
 path = "packages/extensions/cmake"
 kind = "test"
 floor = "0.0.0"
+
+# The suite mounts a workspace whose packages list conan.
+[[depends]]
+path = "packages/extensions/conan"
+kind = "test"
+floor = "0.0.0"

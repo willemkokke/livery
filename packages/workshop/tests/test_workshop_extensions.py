@@ -8,6 +8,7 @@ import pytest
 
 from livery.workshop import extension_names, workspace_root
 from livery.workshop._extensions import mount_extensions
+from workshop_installed import skip_unless_installed
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -203,6 +204,7 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
     with registry.capture():
         assert mount_extensions(tmp_path) == ("cpp", "python")
     # An extension mounts with every extension it requires.
+    skip_unless_installed("conan")
     contract.write_text('[workspace]\nextensions = ["conan"]\n')
     with registry.capture():
         assert mount_extensions(tmp_path) == ("cpp", "conan")
