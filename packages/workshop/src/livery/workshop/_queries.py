@@ -208,16 +208,25 @@ class RequirementWriter(Protocol):
     """Write a package's requirement on a sibling into one ecosystem's manifest.
 
     An extension answers the ``requirement-writers`` query with its
-    writers, and every writer of a package's set is called for each
-    requirement. A writer takes a sibling of its own ecosystem alone:
-    for any other sibling it writes nothing and returns None, so the
-    requirement lands in the manifest of the sibling's ecosystem.
+    writers, and the ``test-requirement-writers`` query with the writers
+    of a requirement the package's tests alone have. Every writer of a
+    package's set is called for each requirement. A writer takes a
+    sibling of its own ecosystem alone: for any other sibling it writes
+    nothing and returns None, so the requirement lands in the manifest
+    of the sibling's ecosystem. A requirement no writer of the set
+    takes refuses, naming the sibling's set.
     """
 
     def __call__(
         self, package: Package, dependency: Package, floor: str
     ) -> list[str] | None:
         """Write *dependency* at *floor* into *package*'s manifest.
+
+        Args:
+            package: The package whose manifest gains the requirement.
+            dependency: The sibling it requires.
+            floor: The lowest version of *dependency* the requirement
+                takes.
 
         Returns:
             The files changed, relative to the package; empty when the

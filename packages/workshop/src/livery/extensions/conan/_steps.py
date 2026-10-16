@@ -46,10 +46,10 @@ def publish(ctx: PhaseContext) -> None:
     host's file the run collected before the upload reads it, so the
     upload sends every host's binary.
     """
-    from livery.workshop._registries import target_from_table
+    from livery.workshop import RegistryTarget
 
     version = cast("str", ctx.read("version"))
-    target = target_from_table(
+    target = RegistryTarget.from_table(
         cast("Mapping[str, object]", ctx.read("registry-target"))
     )
     published = _package.publish_artifact(

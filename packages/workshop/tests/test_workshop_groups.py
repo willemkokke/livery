@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import discover_packages, verify_workspace
+from livery.workshop import (
+    Package,
+    discover_packages,
+    verify_workspace,
+    workspace_suite,
+)
 from livery.workshop._contract import contract_paths
 from livery.workshop._packages import (
     member_depth,
@@ -79,6 +84,59 @@ def test_a_grouped_package_is_found_by_its_path_in_path_order(
     ]
     assert packages[1].member == "extensions/ruff"
     assert packages[1].name == "livery-extensions-ruff"
+
+
+def test_a_package_whose_directory_does_not_end_with_its_path_has_no_root(
+    tmp_path: Path,
+) -> None:
+    stray = Package(
+        tmp_path / "elsewhere" / "ruff",
+        "packages/extensions/ruff",
+        "livery-extensions-ruff",
+        (),
+    )
+    with pytest.raises(ValueError) as refused:
+        stray.root  # noqa: B018
+    assert str(refused.value) == (
+        f"{stray.directory} does not end with the package's path"
+        " packages/extensions/ruff, so it names no workspace root: a package's"
+        " directory is its path under the root"
+    )
+    # A directory with fewer parts than the path names none either.
+    short = Package(Path("ruff"), "packages/extensions/ruff", "livery-ruff", ())
+    with pytest.raises(ValueError, match="names no workspace root"):
+        short.root  # noqa: B018
+
+
+def test_a_package_s_root_is_its_workspace_at_either_depth(tmp_path: Path) -> None:
+    _package(tmp_path, "forge")
+    _package(tmp_path, "extensions/ruff")
+    assert [package.root for package in discover_packages(tmp_path)] == [
+        tmp_path,
+        tmp_path,
+    ]
+    # Read from the fields alone: a workspace that is not on disk has one.
+    ghost = tmp_path / "ghost"
+    assert not ghost.exists()
+    assert (
+        Package(
+            ghost / "packages" / "extensions" / "ruff",
+            "packages/extensions/ruff",
+            "livery-extensions-ruff",
+            (),
+        ).root
+        == ghost
+    )
+
+
+def test_the_workspace_s_own_units_have_its_root(tmp_path: Path) -> None:
+    (tmp_path / "tests").mkdir()
+    suite = workspace_suite(tmp_path)
+    assert suite is not None
+    assert suite.root == tmp_path
+    # The unit of a root without its own tests is the root's directory,
+    # at the path ".".
+    assert Package(tmp_path, ".", "workspace", ()).root == tmp_path
 
 
 def test_an_edge_to_a_grouped_package_passes_the_layering_lint(

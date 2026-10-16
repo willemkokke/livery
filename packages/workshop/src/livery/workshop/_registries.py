@@ -14,7 +14,7 @@ to a path, so a workspace can work with no registry server at all.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -86,6 +86,75 @@ class RegistryTarget:
     token: str = ""
     releases: bool = False
 
+    @classmethod
+    def from_table(cls, table: Mapping[str, object]) -> RegistryTarget:
+        """The target a ``registry-target`` table holds.
+
+        The engine gives each step of the ``publish`` phase the registry
+        it resolved as the ``registry-target`` key: a table of this
+        class's fields by name, which the step reads back with this
+        constructor. The table holds ``kind`` and ``url``, and a field
+        it leaves out takes its default.
+
+        Args:
+            table: Each field of the target by its name.
+
+        Returns:
+            The target the table holds.
+
+        Raises:
+            ValueError: when the table is not a registry target: it has
+                no ``kind`` or no ``url``, a value has another type than
+                its field, or a key names no field. The message names
+                the field and what it takes, and never a value, since
+                ``token`` is a credential.
+        """
+        names = tuple(field.name for field in fields(cls))
+        unknown = [name for name in table if name not in names]
+        if unknown:
+            raise ValueError(
+                f"not a registry target: the table holds {', '.join(unknown)};"
+                f" a registry target holds {', '.join(names)}"
+            )
+        for field in fields(cls):
+            if field.default is MISSING and field.name not in table:
+                raise ValueError(
+                    f"not a registry target: the table has no {field.name},"
+                    " which every registry target holds"
+                )
+        return cls(
+            kind=_text(table, "kind"),
+            url=_text(table, "url"),
+            publish_url=_text(table, "publish_url"),
+            local=_flag(table, "local"),
+            token=_text(table, "token"),
+            releases=_flag(table, "releases"),
+        )
+
+
+def _text(table: Mapping[str, object], name: str) -> str:
+    """*table*'s string at *name*; empty when the table has none."""
+    value = table.get(name, "")
+    if not isinstance(value, str):
+        raise ValueError(_wrong_type(name, "str", value))
+    return value
+
+
+def _flag(table: Mapping[str, object], name: str) -> bool:
+    """*table*'s boolean at *name*; false when the table has none."""
+    value = table.get(name, False)
+    if not isinstance(value, bool):
+        raise ValueError(_wrong_type(name, "bool", value))
+    return value
+
+
+def _wrong_type(name: str, wanted: str, value: object) -> str:
+    """The refusal of a field whose value is not a *wanted*, naming no value."""
+    return (
+        f"not a registry target: {name} takes a {wanted}, and the table's"
+        f" {name} is of type {type(value).__name__}"
+    )
+
 
 def target_table(target: RegistryTarget) -> dict[str, object]:
     """*target* as the ``publish`` phase's ``registry-target``: its fields by name."""
@@ -97,18 +166,6 @@ def target_table(target: RegistryTarget) -> dict[str, object]:
         "token": target.token,
         "releases": target.releases,
     }
-
-
-def target_from_table(table: Mapping[str, object]) -> RegistryTarget:
-    """The target the ``publish`` phase's ``registry-target`` key holds."""
-    return RegistryTarget(
-        kind=str(table["kind"]),
-        url=str(table["url"]),
-        publish_url=str(table.get("publish_url", "")),
-        local=bool(table.get("local", False)),
-        token=str(table.get("token", "")),
-        releases=bool(table.get("releases", False)),
-    )
 
 
 def _is_local(value: str) -> bool:

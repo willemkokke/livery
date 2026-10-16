@@ -598,6 +598,24 @@ def test_each_writer_leaves_a_sibling_outside_its_ecosystem_alone(
     assert conan.declare_requirement(native, lib, "0.1.0") == ["conanfile.py"]
 
 
+def test_conan_s_answer_is_a_requirement_writer(tmp_path: Path) -> None:
+    from livery.extensions.conan import _answers, _package
+    from livery.workshop import RequirementWriter
+
+    echo, lib, native = _three_ecosystems(tmp_path)
+    # The type checkers hold the recipe's writer to the protocol here,
+    # and conan answers the query with it.
+    writer: RequirementWriter = _package.declare_requirement
+    assert _answers.requirement_writers(native) == (writer,)
+    # Called as the protocol, it leaves a sibling outside conan alone
+    # and writes a conan sibling into the recipe.
+    before = _tree(tmp_path)
+    assert writer(native, echo, "0.1.0") is None
+    assert _tree(tmp_path) == before
+    assert writer(native, lib, "0.1.0") == ["conanfile.py"]
+    assert '"acme-lib/[>=0.1.0]"' in (native.directory / "conanfile.py").read_text()
+
+
 def test_a_reference_nothing_reaches_is_not_written(tmp_path: Path) -> None:
     _forge_stub(tmp_path)
     _package(tmp_path, "low")

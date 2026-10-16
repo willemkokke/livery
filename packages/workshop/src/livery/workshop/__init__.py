@@ -53,8 +53,10 @@ returns the unit then. A step whose tool of the store is not on
 names the tool and the sync that deploys it.
 
 An extension reads the workspace through the names the engine reads
-it by: a contract's judged keys, [livery.workshop.read_contract][];
-a query's answer, [livery.workshop.answer][], asked with a package or
+it by: the root of the workspace a package is a member of,
+[livery.workshop.Package.root][]; a contract's judged keys,
+[livery.workshop.read_contract][]; a query's answer,
+[livery.workshop.answer][], asked with a package or
 the workspace root through a [livery.workshop.Query][] handle; the CI
 run it belongs to, [livery.workshop.ci_run][], a
 [livery.workshop.RunContext][] or None at a desk; the workspace's
@@ -63,8 +65,11 @@ connected, [livery.workshop.this_repository][] on
 [livery.workshop.this_forge][], whose everyday token
 [livery.workshop.forge_token][] resolves; the
 registry an artifact kind goes to, [livery.workshop.registry][], a
-[livery.workshop.RegistryTarget][]; and the release notes' provider
-the listed extensions answer, [livery.workshop.release_notes][], which
+[livery.workshop.RegistryTarget][], which a step of the ``publish``
+phase reads from its ``registry-target`` key with
+[livery.workshop.RegistryTarget.from_table][]; and the release
+notes' provider the listed extensions answer,
+[livery.workshop.release_notes][], which
 answers the [livery.workshop.ReleaseNotes][] protocol. A file an extension
 writes outside the engine opens with
 [livery.workshop.generated_header][]. What a CI run changed
@@ -131,7 +136,9 @@ answers questions about a package under ``[queries]``: each a
 [livery.workshop.Query][] the workshop defines, such as
 [livery.workshop.PUBLIC_MODULES][] or [livery.workshop.EXECUTABLES][],
 which [livery.workshop.answer][] asks of a package's extensions and
-combines by the query's rule.
+combines by the query's rule. Each function it answers
+``requirement-writers`` with writes a requirement on a sibling into
+the package's manifest, and is a [livery.workshop.RequirementWriter][].
 """
 
 from __future__ import annotations
@@ -201,6 +208,7 @@ if TYPE_CHECKING:
     from livery.workshop._queries import REQUIREMENTS as REQUIREMENTS
     from livery.workshop._queries import VERSION_FILES as VERSION_FILES
     from livery.workshop._queries import Query as Query
+    from livery.workshop._queries import RequirementWriter as RequirementWriter
     from livery.workshop._queries import answer as answer
     from livery.workshop._registries import RegistryTarget as RegistryTarget
     from livery.workshop._registries import registry as registry
@@ -261,6 +269,7 @@ __all__ = [
     "Query",
     "RegistryTarget",
     "ReleaseNotes",
+    "RequirementWriter",
     "RunContext",
     "ToolReceipt",
     "VerifiedBranch",
@@ -352,6 +361,7 @@ _EXPORTS: dict[str, str] = {
     "tested": "livery.workshop._steps",
     "verified_branch": "livery.workshop._verified",
     "Query": "livery.workshop._queries",
+    "RequirementWriter": "livery.workshop._queries",
     "answer": "livery.workshop._queries",
     "AGENT": "livery.workshop._prose",
     "Changes": "livery.workshop._influence",

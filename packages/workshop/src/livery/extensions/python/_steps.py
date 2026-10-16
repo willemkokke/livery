@@ -26,10 +26,10 @@ def build(ctx: PhaseContext) -> None:
 
 def publish(ctx: PhaseContext) -> None:
     """Upload the built distributions to the registry target the engine resolved."""
-    from livery.workshop._registries import target_from_table
+    from livery.workshop import RegistryTarget
 
     version = cast("str", ctx.read("version"))
-    target = target_from_table(
+    target = RegistryTarget.from_table(
         cast("Mapping[str, object]", ctx.read("registry-target"))
     )
     published = _backend.publish_artifact(
