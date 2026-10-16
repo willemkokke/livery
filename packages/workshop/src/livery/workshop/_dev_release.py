@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -78,6 +80,17 @@ def semver_to_pep440(semver: str) -> str:
     local = match.group("local")
     tail = f"{branch}.{local}" if local else branch
     return f"{base}.dev{distance}+{tail}"
+
+
+def public_version(version: str) -> str:
+    """The dev *version*'s public PEP 440 form, without its local segment.
+
+    ``1.2.3-dev.feat.x.4+gabc1234.20260901`` becomes ``1.2.3.dev4``. A
+    floor is a ``>=`` specifier, which cannot carry a local segment,
+    and a floor without one ignores a candidate's local label, so
+    ``>=1.2.3.dev4`` admits ``1.2.3.dev4+feat.x.gabc1234.20260901``.
+    """
+    return semver_to_pep440(version).partition("+")[0]
 
 
 def describe_distance(root: Path, package: Package) -> tuple[int, str]:
@@ -199,6 +212,53 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
             os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
+@contextmanager
+def set_floors(root: Path, plans: tuple[DevPlan, ...]) -> Generator[list[str]]:
+    """Raise each floor between the set's members to the co-member's dev version.
+
+    The release train raises the floors within its set before it builds,
+    and a dev build needs the same: a dev version sorts below the release
+    it leads to, so a floor that names that release, or ``0.0.0`` for a
+    member never released, admits no dev wheel of it. Each floor names
+    the co-member's public dev version instead, in every home the train
+    moves. A set of one moves no floor, as a release of one moves none.
+
+    The raise lasts for the block alone: every file it may touch is
+    restored from an in-memory snapshot when the block ends, a failure
+    included, with its timestamps, as the build restores what it
+    stamps. Yields the files the raise changed, relative to *root*.
+    """
+    from livery.workshop._release_driver import (
+        FLOOR_HOMES,
+        MemberPlan,
+        bump_set_floors,
+    )
+
+    homes = [
+        plan.package.directory / home
+        for plan in plans
+        for home in FLOOR_HOMES
+        if (plan.package.directory / home).is_file()
+    ]
+    snapshots = {path: path.read_bytes() for path in homes}
+    stamps = {path: path.stat() for path in homes}
+    try:
+        yield bump_set_floors(
+            root,
+            tuple(
+                MemberPlan(package=plan.package, version=public_version(plan.version))
+                for plan in plans
+            ),
+        )
+    finally:
+        for path, content in snapshots.items():
+            if not path.is_file() or path.read_bytes() != content:
+                path.write_bytes(content)
+            stat = stamps[path]
+            if path.stat().st_mtime_ns != stat.st_mtime_ns:
+                os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+
 def dev_release(
     root: Path,
     members: tuple[Package, ...],
@@ -216,7 +276,10 @@ def dev_release(
     ``--yes``: a decline and an unanswered question are told apart by
     [livery.footman.attended][], which knows about ``--no-input`` and
     ``--dry-run`` as well as the terminal, so silence never publishes
-    under any of them.
+    under any of them. While the members build, each floor one declares
+    on another member of the set names that member's dev version, as
+    the release train raises the floors within its set; a member built
+    alone moves no floor.
     """
     branch = git.current_branch(root)
     index = os.environ.get(INDEX_VAR, "")
@@ -236,27 +299,30 @@ def dev_release(
             f" {INDEX_VAR} (and UV_PUBLISH_TOKEN) to publish dev wheels;"
             " PyPI is never the fallback."
         )
-    for plan in plans:
-        if publishing and not footman.confirm(
-            f"Publish a dev release of {plan.package.name}"
-            f" {plan.version} from '{branch}'?"
-        ):
-            if not footman.attended():
-                raise SystemExit(
-                    "a dev release nobody was asked about needs the explicit"
-                    f" --yes global (`{footman.prog()} --yes workflow.release ...`);"
-                    " silence never publishes."
+    with set_floors(root, plans) as raised:
+        if raised:
+            print(f"  floors raised within the set for the build: {', '.join(raised)}")
+        for plan in plans:
+            if publishing and not footman.confirm(
+                f"Publish a dev release of {plan.package.name}"
+                f" {plan.version} from '{branch}'?"
+            ):
+                if not footman.attended():
+                    raise SystemExit(
+                        "a dev release nobody was asked about needs the explicit"
+                        f" --yes global (`{footman.prog()} --yes workflow.release"
+                        " ...`); silence never publishes."
+                    )
+                print(f"  skipped {plan.package.name}")
+                continue
+            dist = build_dev(root, plan)
+            wheel = next(iter(dist.glob("*.whl")), None)
+            built = wheel.name if wheel else "dist/"
+            print(f"  built {plan.package.name} {plan.version} -> {built}")
+            if publishing:
+                publish_wheels(
+                    plan.package,
+                    index_url=index,
+                    token=os.environ.get("UV_PUBLISH_TOKEN", ""),
                 )
-            print(f"  skipped {plan.package.name}")
-            continue
-        dist = build_dev(root, plan)
-        wheel = next(iter(dist.glob("*.whl")), None)
-        built = wheel.name if wheel else "dist/"
-        print(f"  built {plan.package.name} {plan.version} -> {built}")
-        if publishing:
-            publish_wheels(
-                plan.package,
-                index_url=index,
-                token=os.environ.get("UV_PUBLISH_TOKEN", ""),
-            )
-            print(f"  published {plan.package.name} {plan.version} to {index}")
+                print(f"  published {plan.package.name} {plan.version} to {index}")

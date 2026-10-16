@@ -15,10 +15,11 @@ from livery.workshop._dev_release import (
     describe_distance,
     dev_release,
     dev_version,
+    public_version,
     sanitise_branch,
     semver_to_pep440,
 )
-from livery.workshop._packages import discover_packages
+from livery.workshop._packages import Package, discover_packages
 from workshop_seeds import FakeNotes, fake_notes, member  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -299,6 +300,175 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
     # The timestamp too: uv judges the editable install by it, and a
     # touched pyproject makes the next sync re-install the package.
     assert pyproject.stat().st_mtime_ns == stamped_at
+
+
+def _set_of_two(tmp_path: Path) -> Path:
+    """A workspace on a feature branch: core, and app with a floor on core.
+
+    Both released at 0.2.0 and grown since, so each has a dev version;
+    app's requirement and its contract name core at 0.1.0.
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _git(root, "init", "-q", "--initial-branch=main")
+    (root / "workshop.toml").write_text("[workspace]\n")
+    member(root, "core")
+    member(root, "app", floor_on="core")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: seed")
+    _git(root, "tag", "packages/core/v0.2.0")
+    _git(root, "tag", "packages/app/v0.2.0")
+    _git(root, "checkout", "-b", "feat/9-widget")
+    for name in ("core", "app"):
+        grown = root / "packages" / name / "src" / "livery" / name / "grown.py"
+        grown.write_text("x = 1\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: widget")
+    return root
+
+
+def _files_under(directory: Path) -> dict[Path, tuple[bytes, int]]:
+    """Every file under *directory* but a build's output: its bytes and mtime."""
+    return {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in sorted(directory.rglob("*"))
+        if path.is_file() and "dist" not in path.parts
+    }
+
+
+def test_a_build_failing_mid_set_restores_every_file_the_set_touched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _set_of_two(tmp_path)
+    before = _files_under(root / "packages")
+    app = root / "packages" / "app"
+    seen: list[str] = []
+
+    def _build(package: Package, _root: Path) -> Path:
+        # app builds first, with core's floor raised; core's build fails.
+        if package.member == "core":
+            raise Failed("uv build exploded")
+        seen.append((app / "pyproject.toml").read_text())
+        seen.append((app / "workshop.toml").read_text())
+        dist = package.directory / "dist"
+        dist.mkdir()
+        return dist
+
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _build)
+    with pytest.raises(_FAILURES, match="uv build exploded"):
+        dev_release(root, discover_packages(root), local=True)
+    requirement, contract = seen
+    assert '"livery-core>=0.3.0.dev1"' in requirement
+    assert 'floor = "0.3.0.dev1"' in contract
+    # Every file the raise and the stamps touched is back, byte for
+    # byte, with its timestamp.
+    assert _files_under(root / "packages") == before
+
+
+def test_a_member_built_alone_moves_no_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _set_of_two(tmp_path)
+    app = root / "packages" / "app"
+    seen: list[str] = []
+
+    def _build(package: Package, _root: Path) -> Path:
+        seen.append((app / "pyproject.toml").read_text())
+        return package.directory / "dist"
+
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _build)
+    alone = tuple(p for p in discover_packages(root) if p.member == "app")
+    dev_release(root, alone, local=True)
+    assert len(seen) == 1 and '"livery-core>=0.1.0"' in seen[0]
+    assert "floors raised" not in capsys.readouterr().out
+
+
+def test_the_public_version_drops_the_local_segment() -> None:
+    assert public_version("0.0.0-dev.refactor.1727-x.916+gc073261f.20261016") == (
+        "0.0.0.dev916"
+    )
+    assert public_version("1.2.3") == "1.2.3"
+
+
+#: A python member's pyproject the real build reads: uv_build, the
+#: package under its namespace, and the dependencies given.
+_BUILT = (
+    '[project]\nname = "livery-{name}"\nversion = "{version}"\n'
+    'requires-python = ">=3.11"\ndependencies = [{dependencies}]\n'
+    "[build-system]\n"
+    'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
+    "[tool.uv.build-backend]\n"
+    'module-name = "livery.{name}"\nnamespace = true\n'
+)
+
+
+def test_a_set_s_requirer_wheel_admits_its_co_member_s_dev_wheel(
+    tmp_path: Path,
+) -> None:
+    import livery.toolroom.tools as tools
+
+    # core was never released: its dev version, 0.0.0.devN, sorts below
+    # the 0.0.0 app's floor names, so only a raised floor admits it.
+    root = tmp_path / "ws"
+    root.mkdir()
+    _git(root, "init", "-q", "--initial-branch=main")
+    (root / "workshop.toml").write_text("[workspace]\n")
+    member(root, "core")
+    member(root, "app")
+    core, app = root / "packages" / "core", root / "packages" / "app"
+    (core / "pyproject.toml").write_text(
+        _BUILT.format(name="core", version="0.0.0", dependencies="")
+    )
+    (core / "src" / "livery" / "core" / "__init__.py").write_text(
+        '__version__ = "0.0.0"\n'
+    )
+    (app / "pyproject.toml").write_text(
+        _BUILT.format(name="app", version="0.0.0", dependencies='"livery-core>=0.0.0"')
+    )
+    (app / "src" / "livery" / "app" / "__init__.py").write_text(
+        '__version__ = "0.0.0"\n'
+    )
+    (app / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-app"\n'
+        '[[depends]]\npath = "packages/core"\nkind = "runtime"\nfloor = "0.0.0"\n'
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: seed")
+    _git(root, "checkout", "-b", "feat/9-widget")
+    before = _files_under(root / "packages")
+    dev_release(root, discover_packages(root), local=True)
+    assert _files_under(root / "packages") == before
+
+    def _metadata(directory: Path) -> list[str]:
+        wheel = next((directory / "dist").glob("*.whl"))
+        with zipfile.ZipFile(wheel) as archive:
+            name = next(n for n in archive.namelist() if n.endswith("METADATA"))
+            return archive.read(name).decode().splitlines()
+
+    (core_version,) = [
+        line.removeprefix("Version: ")
+        for line in _metadata(core)
+        if line.startswith("Version: ")
+    ]
+    public = core_version.partition("+")[0]
+    assert public.startswith("0.0.0.dev")
+    assert [line for line in _metadata(app) if "livery-core" in line] == [
+        f"Requires-Dist: livery-core>={public}"
+    ]
+    # The resolver takes core's dev wheel for app's requirement.
+    (tmp_path / "requirements.in").write_text("livery-app\n")
+    compiled = tools.uv.opts(cwd=tmp_path, nofail=True, recorded=False)(
+        "pip",
+        "compile",
+        "--no-index",
+        "--find-links",
+        str(core / "dist"),
+        "--find-links",
+        str(app / "dist"),
+        "requirements.in",
+    )
+    assert compiled.code == 0, compiled.stderr
+    assert f"livery-core=={core_version}" in compiled.stdout
 
 
 def test_a_roots_init_is_stamped_and_restored(

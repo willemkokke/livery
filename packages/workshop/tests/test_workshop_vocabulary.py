@@ -94,11 +94,11 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_registries", "python"): (4, "the registry tables; phase 13"),
     ("_release", "python"): (1, "the python registry a release resolves; phase 13"),
     ("_release_driver", "conanfile.py"): (
-        2,
+        1,
         "the manifests a release stamps and commits; phase 13",
     ),
     ("_release_driver", "pyproject.toml"): (
-        2,
+        1,
         "the manifests a release stamps and commits; phase 13",
     ),
     ("_release_driver", "python"): (
