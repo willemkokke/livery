@@ -112,7 +112,6 @@ EXPORTS: dict[str, list[str]] = {
         "markdown",
         "matching",
         "nosplit",
-        "options_of",
         "parallel",
         "passthrough",
         "plugin",

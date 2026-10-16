@@ -742,36 +742,36 @@ def _wheel_instance(tmp_path: Path, listed: str = "python") -> Path:
     return compose_into(root)
 
 
-def test_resuming_a_package_that_does_not_exist_refuses_naming_it(
+def test_wiring_a_package_that_does_not_exist_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import new_package
+    from livery.workshop._templates import new_wire
 
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
     with pytest.raises(BaseException, match="packages/ghost holds no package"):
-        new_package("ghost", resume=True)
+        new_wire("ghost")
     with pytest.raises(BaseException, match="package name"):
-        new_package("../ghost", resume=True)
+        new_wire("../ghost")
 
 
-def test_a_seeded_package_without_a_runner_to_wire_it_names_the_resume(
+def test_a_seeded_package_without_a_runner_to_wire_it_names_the_wiring(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The seeds are written; the environment has no runner of its own
     # to wire them with, and the refusal names the verb that finishes.
-    from livery.workshop._templates import new_package
+    from workshop_members import template_verb
 
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
     with pytest.raises(BaseException) as caught:
-        new_package("thing", "python-library")
+        template_verb(root, "python-library")("thing")
     assert "environment has no fm to wire packages/thing" in str(caught.value)
-    assert "`fm new.package thing --resume`" in str(caught.value)
+    assert "`fm new.wire thing`" in str(caught.value)
     assert (root / "packages" / "thing" / "workshop.toml").is_file()
 
 
@@ -780,8 +780,7 @@ def test_new_package_writes_the_installed_seeds(
 ) -> None:
     # The member's seeds come from the installed extensions, and the
     # runner the workspace's environment holds wires it.
-    from livery.workshop._templates import new_package
-    from workshop_members import wired_here
+    from workshop_members import template_verb, wired_here
 
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
@@ -795,8 +794,8 @@ def test_new_package_writes_the_installed_seeds(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
     handed = wired_here(monkeypatch, root)
-    new_package("thing", "python-library")
-    assert [argv[1:] for argv in handed] == [["new.package", "thing", "--resume"]]
+    template_verb(root, "python-library")("thing")
+    assert [argv[1:] for argv in handed] == [["new.wire", "thing"]]
     assert (root / "packages" / "thing" / "README.md").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
     assert (root / "packages" / "thing" / "docs" / "index.md").is_file()
@@ -815,9 +814,8 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
     # what the wiring wrote.
     from livery.workshop import _steps
     from livery.workshop._shipped_files import shipped_drift
-    from livery.workshop._templates import new_package
     from workshop_docs_declared import jobs_restored
-    from workshop_members import mounted_now, wired_here
+    from workshop_members import mounted_now, template_verb, wired_here
 
     root = _wheel_instance(tmp_path, "nanobind")
     monkeypatch.setattr(
@@ -833,7 +831,7 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
         with jobs_restored():
             assert "nanobind" in mounted_now(root)
             handed = wired_here(monkeypatch, root, starting=lambda: mounted_now(root))
-            new_package("ext", "nanobind-module")
+            template_verb(root, "nanobind-module")("ext")
             # The next command mounts nanobind too, and nothing drifts.
             assert "nanobind" in mounted_now(root)
             assert shipped_drift(root) + project_drift(root) == []

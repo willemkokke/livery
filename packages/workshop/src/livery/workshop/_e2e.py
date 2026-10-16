@@ -584,8 +584,9 @@ class LoopMember:
 
     Attributes:
         name: The member's directory under ``packages/``.
-        template: The template ``fm new.package`` births it from, whose
-            ``extensions`` the member's contract lists.
+        template: The template whose verb, ``fm new.package.<template>``,
+            births it, and whose ``extensions`` the member's contract
+            lists.
     """
 
     name: str
@@ -1995,8 +1996,9 @@ def extension_under_test(name: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
     """Give the loop its *members*, by name, all when empty, in one pull request.
 
-    ``new.package`` renders and wires each missing member, a `[release]
-    baseline` seeds the first release's number, the nanobind member's
+    Its template's verb, ``new.package.<template>``, renders and wires
+    each missing member, a `[release] baseline` seeds the first
+    release's number, the nanobind member's
     ``[nanobind] wheel-platforms`` names the loop's one runner, and the
     loop's own ``fm submit --armed`` lands them together: one branch,
     one pull request, one gate on the runner over every kind at once
@@ -2024,7 +2026,7 @@ def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
         return
     _fresh_branch(root, "feat/members")
     for name, template in missing:
-        _loop_fm(root, "new.package", name, template)
+        _loop_fm(root, f"new.package.{template}", name)
         member = root / "packages" / name / "workshop.toml"
         body = member.read_text("utf-8")
         # The nanobind template names the hosted runners under
@@ -2061,7 +2063,7 @@ def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
     names = ", ".join(name for name, _template in missing)
     git.commit_all(
         root,
-        f"feat: the loop's members\n\n{names}: born through new.package on"
+        f"feat: the loop's members\n\n{names}: born through their templates' verbs on"
         " the dev wheels, with the release baseline seeded so the"
         " first release lands at 0.1.0.",
     )
@@ -2358,7 +2360,7 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
 def _prove_scoped_leg(root: Path, kind: str) -> None:
     """Prove the scoped check leg on a member-only pull request.
 
-    The loop's other pull requests all touch the root (``new.package``
+    The loop's other pull requests all touch the root (a template's verb
     wires the workspace, the release stamps the manifest), so their
     legs pay the full gate by the affected rule. This one rewrites a
     test file inside ``loop-echo`` and nothing else, lands it through

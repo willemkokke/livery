@@ -3,8 +3,8 @@
 The verbs fragment, ``verbs.extensions.md``, gives each extension of
 the installed set a block of its own, in composition order: what the
 extension does, its verbs with the first line of each one's help, the
-templates ``fm new.package`` creates a package from with their creation
-options, the contract keys
+templates it declares, each with its verb ``fm new.package.<template>``
+and its creation options, the contract keys
 it reads and the step options a package may set, each with its doc and
 where it is written, the steps it declares off with the switch that
 turns each on, and the installed extensions it contributes to and
@@ -32,6 +32,9 @@ from livery.workshop._prose import HUMAN, REPOSITORY
 if TYPE_CHECKING:
     from livery.workshop._declaration import Declaration
     from livery.workshop._steps import StepRecord
+
+#: The group of the templates' verbs, ``new.package.<template>``.
+TEMPLATE_VERBS = "new.package"
 
 #: The kinds of line a block holds, in the order a block lists them.
 VERB = "verb"
@@ -160,10 +163,12 @@ def blocks(
     *verbs* are the composed tree's, by provider
     (`verbs_by_provider`). An extension's block takes every verb its
     plugin mounts, and each verb the base generates for a step the
-    extension declares: ``lint.ruff`` is ruff's. The verbs no block
-    takes come back by provider, the base's and those of the plugins
-    no extension of the set carries, a provider with none left out.
-    The blocks come in composition order.
+    extension declares: ``lint.ruff`` is ruff's. The verb the base
+    generates for a template the extension declares,
+    ``new.package.python-library``, is its template's line. The verbs
+    no block takes come back by provider, the base's and those of the
+    plugins no extension of the set carries, a provider with none left
+    out. The blocks come in composition order.
     """
     from livery.workshop._extensions import (
         SELF,
@@ -183,10 +188,18 @@ def blocks(
         if found is not None
     }
     owners = _step_owners(steps)
+    templated = {
+        f"{TEMPLATE_VERBS}.{template}"
+        for found in declared.values()
+        if found is not None
+        for template in found.templates
+    }
     rest = {provider: list(found) for provider, found in verbs.items()}
     taken: dict[str, list[Verb]] = {}
     kept: list[Verb] = []
     for verb in rest.get(SELF, []):
+        if verb.address in templated:
+            continue
         owner = owners.get(verb.address)
         if owner is None:
             kept.append(verb)
@@ -257,10 +270,10 @@ def _step_owners(steps: Mapping[str, Sequence[StepRecord]]) -> dict[str, str]:
 
 def _items(found: Declaration, steps: Sequence[StepRecord]) -> list[Item]:
     """*found*'s templates with their options, keys, step options and switches."""
-    from livery.workshop._declaration import contract_keys, template_declarations
+    from livery.workshop._declaration import contract_keys
 
     items: list[Item] = []
-    for template in template_declarations(found.extension, found.package):
+    for template in found.templates.values():
         items.append(Item(TEMPLATE, template.name, doc=template.doc))
         items += [
             Item(
@@ -352,8 +365,14 @@ def render_block(block: Block, audience: str | None) -> list[str]:
 
 
 def _written(item: Item, prog: str) -> str:
-    """How a reader writes *item*: a verb with the runner's name before it."""
-    return f"{prog} {item.name}" if item.kind == VERB else item.name
+    """How a reader writes *item*: a verb, a template's or its option's, as run."""
+    if item.kind == VERB:
+        return f"{prog} {item.name}"
+    if item.kind == TEMPLATE:
+        return f"{prog} {TEMPLATE_VERBS}.{item.name} <name>"
+    if item.kind == TEMPLATE_OPTION:
+        return f"{prog} {TEMPLATE_VERBS}.{item.name}"
+    return item.name
 
 
 def _answers(choices: Sequence[str], kind: str, default: object) -> str:
@@ -370,10 +389,13 @@ def _agent_line(item: Item, prog: str) -> str:
     if item.kind == VERB:
         return f"`{prog} {item.name}`{doc}"
     if item.kind == TEMPLATE:
-        return f"template `{item.name}`, `{prog} new.package <name> {item.name}`{doc}"
+        return f"template `{item.name}`, `{_written(item, prog)}`{doc}"
     if item.kind == TEMPLATE_OPTION:
         template, _, option = item.name.partition(" ")
-        return f"option `{option}` of the template `{template}`, {item.detail}{doc}"
+        return (
+            f"option `{option}` of `{prog} {TEMPLATE_VERBS}.{template}`,"
+            f" {item.detail}{doc}"
+        )
     where = "the root contract" if item.where == "root" else "a package contract"
     detail = f", {item.detail}" if item.detail else ""
     return f"`{item.name}` in {where}{detail}{doc}"

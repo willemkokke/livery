@@ -158,8 +158,9 @@ spelling. Every key is optional to the mount:
 - `[replaces]` and `[deletes]`, a shipped file of the base or of an
   extension it requires, `"<owner>:<name>"`, that its own file of that
   name replaces or that it deletes, to the reason;
-- `[templates.<name>]`, a template `fm new.package` creates a package
-  from: `doc`, one line saying what a package born from it is;
+- `[templates.<name>]`, a template, whose verb `fm new.package.<name>`
+  creates a package from it: `doc`, one line saying what a package born
+  from it is;
   `extensions`, the extensions such a package lists; and
   `extends`, another template whose files the birth writes first. Its
   files live under `content/templates/<name>/` beside the
@@ -534,12 +535,15 @@ answers with the scripts a package's `pyproject.toml` names under
 `[project.scripts]`, and its step starts the one the workspace's
 environment holds, which `fm sync` installs.
 
-`fm new.package <name> <template>` creates a package under
-`packages/<name>` from a template an installed extension declares, and
-wires it into the workspace. The installed templates are the base's and
-those of each extension the installed set holds that an installed
-distribution declares; completion offers them, and the verb without
-one refuses, naming each with its `doc`. The birth writes the
+Each installed template is a verb: `fm new.package.<template> <name>`
+creates a package under `packages/<name>` from the template, and wires
+it into the workspace. The installed templates are the base's and those
+of each extension the installed set holds that an installed
+distribution declares. The workshop makes their verbs when it loads,
+from the declarations it reads as it mounts the installed set, and
+makes them again when the installed set changes.
+`fm new.package --help` lists each with its `doc`, and `fm new.package`
+alone refuses as any group does, naming them. The birth writes the
 `package-base` seeds every package starts from, the base's docs page
 and what the listed extensions add to it, then the files of each
 template the born one extends, the template extended first and the born
@@ -557,9 +561,9 @@ its scripts. The templates the workshop's wheel declares:
 | `nanobind-module` | nanobind | `["nanobind"]` | `python-library` | fixes `--command` to none |
 | `cpp-package` | conan | `["cmake", "conan"]` | | `--package-type` |
 
-A template declares its creation options, and the words after the
-template's name answer them: `fm new.package <name> <template>
---<option>=<answer>`. An option is a table under
+A template declares its creation options, and its verb takes them as
+options: `fm new.package.<template> <name> --<option>=<answer>`. An
+option is a table under
 `[templates.<name>.options.<option>]` in the file that declares the
 template:
 
@@ -570,7 +574,7 @@ choices = ["library", "application", "header-library", "static-library", "shared
 default = "library"
 ```
 
-Its `doc` is required, and `fm new.package --help`, completion and the
+Its `doc` is required, and the verb's `--help`, completion and the
 conformance kit's `declaration-documented` clause read it. It takes
 either `choices`, a list of the answers it takes, or a `type`, one of
 `str`, `int` and `bool`; a `bool` option is spelled `--<option>` and
@@ -579,14 +583,18 @@ that extends another takes the other's options too, and its `fixes`
 table gives an answer to one of them, which a birth from it then takes
 no answer for: `workshop-extension` writes `fixes = { command = "" }`,
 since its one script is the App's. Declaring an option of a template it
-extends again refuses; fixing one is the way to change it.
+extends again refuses; fixing one is the way to change it. The
+declaration also refuses an option named `name`, the package's name
+every template's verb takes first, or `help`, footman's own flag.
 
 Every answer is checked before anything is written. An option the
 template does not take is an unknown option, a required one without an
 answer is named, and an answer outside the option's choices or type is
-refused, naming the option and what it takes. Completion lists the
-options of the template the line names, and the choices of each, read
-from the installed declarations.
+refused, naming the option and what it takes. Each option is an
+ordinary option of the template's verb, with its choices as a
+`Literal`, its `doc` as its help line and its `default` as its default,
+so footman's completion manifest lists every template's options and
+choices as data, and a completion runs no code of the template's.
 
 Each answer renders the template's files as a variable: the option's
 name with its hyphens as underscores, so `--package-type` is
@@ -598,24 +606,30 @@ writes its `__main__.py` and the test of it only with `--command`. The
 answers are not stored: a step that needs one later reads the file the
 answer wrote, as `fm run` reads the script from `[project.scripts]`.
 
-- `python-library --command=<name>` adds the script `<name>` to
-  `[project.scripts]`, which runs `main()` in the package's
-  `__main__.py`, and a test of it. Without it the package has no script.
-- `workshop-extension --app=<name>` adds the branded App: `_app.py` and
-  the script `<name>`, which runs the workshop with the extension's
-  verbs. Without it the package puts nothing on `PATH`.
-- `cpp-package --package-type=<type>` writes conan's package type into
-  the recipe's `package_type`, and the CMake target that follows from
-  it: a library static or shared as conan's `shared` option says for
-  `library`, `STATIC` or `SHARED` for `static-library` and
-  `shared-library`, an interface library over the header for
-  `header-library`, and a program with the library its tests link for
-  `application`.
+- `fm new.package.python-library <name> --command=<script>` adds the
+  script `<script>` to `[project.scripts]`, which runs `main()` in the
+  package's `__main__.py`, and a test of it. Without it the package has
+  no script.
+- `fm new.package.workshop-extension <name> --app=<script>` adds the
+  branded App: `_app.py` and the script `<script>`, which runs the
+  workshop with the extension's verbs. Without it the package puts
+  nothing on `PATH`.
+- `fm new.package.cpp-package <name> --package-type=<type>` writes
+  conan's package type into the recipe's `package_type`, and the CMake
+  target that follows from it: a library static or shared as conan's
+  `shared` option says for `library`, `STATIC` or `SHARED` for
+  `static-library` and `shared-library`, an interface library over the
+  header for `header-library`, and a program with the library its tests
+  link for `application`.
 
 A creation installs nothing. A template needs its own `extensions`,
 those of each template it extends, and the extension that declares each
-template of that chain, the base aside. A birth refuses before it
-writes anything, in this order:
+template of that chain, the base aside. A template has its verb while
+the installed set holds the extension that declares it; for any other
+template, `fm new.package.<template>` meets footman's refusal of an
+unknown task. Every creation, a template's verb and `fm ci.scale`
+alike, writes the member through one function, and that birth refuses
+before it writes anything, in this order:
 
 1. A template no installed extension declares, while the workspace's
    lists hold an extension no installed distribution declares yet,
@@ -633,7 +647,9 @@ writes anything, in this order:
 
 So a workspace whose root lists the stock list creates a
 `python-library` at once, and lists `cmake` and `conan` before it
-creates a `cpp-package`.
+creates a `cpp-package`: until a list holds conan, which declares the
+template, `fm new.package.cpp-package` does not exist, and with conan
+listed and cmake not, it refuses naming cmake.
 Two extensions declaring one template refuse every birth, naming both.
 A package's contract that writes `template` refuses: the template is
 read at the birth alone.
@@ -852,8 +868,9 @@ to `[workspace] extensions`. Its `--fix` moves the entry to the root's
 list with its comment lines and writes both lists in their canonical
 form. An entry another entry of the list requires is left out of the
 canonical list instead, and is not moved. A template's list follows the
-same rule: `fm new.package` refuses a template that lists such an
-extension, or extends one that does, before it writes anything. Because the proof reads
+same rule: a template's verb refuses to create a package from a template
+that lists such an extension, or extends one that does, before it writes
+anything. Because the proof reads
 declarations alone, an extension whose only effect on a package lives
 in its code, such as a workspace answer that varies with which
 packages list it, is refused in a package's list and is listed in
@@ -1443,7 +1460,7 @@ absence.
 - `fm drift` keeps the composed and generated files byte-identical
   to what the listed extensions and the contract write, and names
   `fm sync` as the remedy;
-  `fm new.package <name> <template>` creates a member from an
+  `fm new.package.<template> <name>` creates a member from an
   installed template and wires it in.
 - `fm release.prepare` and `fm release.check-tag` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also

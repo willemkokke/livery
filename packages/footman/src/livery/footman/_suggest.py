@@ -10,10 +10,6 @@ It lives out of the hot path precisely because it imports the framework and the
 user's code — the thing a TAB press must never do. Isolation is the point: a
 slow or crashing completer dies here, bounded by the caller's timeout, and the
 hot path degrades to no candidates rather than a hung keystroke.
-
-The options a positional's value declares (`options_of(param, fn)`) come the
-same way: `--chosen` names the marked parameter and `--value` the value, and
-this process prints each option's manifest entry as one line of JSON.
 """
 
 from __future__ import annotations
@@ -107,45 +103,6 @@ def _values(param: str, path: list[str], g: dict[str, object]) -> list[str]:
     return []
 
 
-def _chosen(param: str, value: str, path: list[str], g: dict[str, object]) -> list[str]:
-    """The options *value* declares through the task's parameter *param*.
-
-    Each option's manifest entry, as one line of JSON: the parameter is
-    marked `options_of()`, and its function runs here with *value*. Any
-    miss, and any failure of the function, is an empty list.
-    """
-    import json
-
-    from livery.footman import _app, _coerce, _discover, _manifest
-    from livery.footman import _registry as registry
-
-    found = _app.resolve_task_files(g, on_warning=lambda *a: None, on_note=None)
-    files = found.files
-    if not files or not path:
-        return []
-    _maybe_reexec(files)  # before any user code is imported
-    root = _discover.load_tree(files, base=registry.Group("root"))
-    node: registry.Group | None = root
-    for name in path[:-1]:
-        node = node.groups.get(name) if node else None
-    task = node.tasks.get(path[-1]) if node else None
-    if task is None:
-        return []
-    for p in _manifest.resolved_signature(task).parameters.values():
-        if registry.cli_name(p.name) != param:
-            continue
-        chooser = _coerce.peel(p.annotation).chooser
-        if chooser is None:
-            return []
-        with (
-            contextlib.redirect_stdout(io.StringIO()),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            specs = _manifest.chosen_options(chooser, value)
-        return [json.dumps(spec) for spec in specs]
-    return []
-
-
 def _global_values(name: str, g: dict[str, object]) -> list[str]:
     """The fresh output of the completer on the plugin global *name*.
 
@@ -176,8 +133,6 @@ def _global_values(name: str, g: dict[str, object]) -> list[str]:
 def main(argv: list[str]) -> int:
     param: str | None = None
     globopt: str | None = None
-    chosen: str | None = None
-    value = ""
     path: list[str] = []
     g: dict[str, object] = {}
     i = 0
@@ -187,10 +142,6 @@ def main(argv: list[str]) -> int:
             param, i = argv[i + 1], i + 2
         elif arg == "--global" and i + 1 < len(argv):
             globopt, i = argv[i + 1], i + 2
-        elif arg == "--chosen" and i + 1 < len(argv):
-            chosen, i = argv[i + 1], i + 2
-        elif arg == "--value" and i + 1 < len(argv):
-            value, i = argv[i + 1], i + 2
         elif arg == "--path" and i + 1 < len(argv):
             path.append(argv[i + 1])
             i += 2
@@ -226,9 +177,7 @@ def main(argv: list[str]) -> int:
             contextlib.redirect_stdout(io.StringIO()),
             contextlib.redirect_stderr(io.StringIO()),
         ):
-            if chosen is not None:
-                values = _chosen(chosen, value, path, g)
-            elif globopt is not None:
+            if globopt is not None:
                 values = _global_values(globopt, g)
             elif param is not None:
                 values = _values(param, path, g)

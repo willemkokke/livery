@@ -666,7 +666,7 @@ def _chain(
             ("ext", "nanobind-module"),
         ):
             _run(
-                [str(brand_cli), "new.package", member_name, template],
+                [str(brand_cli), f"new.package.{template}", member_name],
                 child,
                 _hermetic(env, tool),
             )
@@ -694,7 +694,7 @@ def _chain(
         # The wiring is idempotent by refusal: the resumed pass
         # names the existing directory and changes nothing.
         again = _run(
-            [str(brand_cli), "new.package", "geometry", "cpp-package"],
+            [str(brand_cli), "new.package.cpp-package", "geometry"],
             child,
             _hermetic(env, tool),
             check=False,

@@ -156,24 +156,20 @@ def _script(project: Path, name: str) -> str:
 
 def test_a_born_project_is_green(tmp_path: Path) -> None:
     project, fm, env = _birth(tmp_path)
-    _run([fm, "new.package", "thing", "python-library"], project, env)
-    # The stock list holds python and neither cmake nor conan, which
-    # cpp-package needs: a creation installs nothing, so it refuses
-    # before it writes anything, naming both and what to do.
+    _run([fm, "new.package.python-library", "thing"], project, env)
+    # The stock list holds python and not conan, which declares
+    # cpp-package: a template has a verb while the installed set holds
+    # the extension that declares it, so there is no such verb yet.
     refused = subprocess.run(
-        [fm, "new.package", "geometry", "cpp-package"],
+        [fm, "new.package.cpp-package", "geometry"],
         cwd=project,
         env=env,
         capture_output=True,
         text=True,
     )
     said = refused.stdout + refused.stderr
-    assert refused.returncode != 0, said
-    assert "the template cpp-package needs cmake (" in said, said
-    assert (
-        "which the workspace's lists do not hold: list them in [workspace]"
-        " extensions and run `fm sync`, then create the package again"
-    ) in said, said
+    assert refused.returncode == 64, said
+    assert "no task named 'new.package.cpp-package'" in said, said
     assert not (project / "packages" / "geometry").exists()
     # Listed, as the refusal says, and installed by the sync from the
     # source the newborn's project file names.
@@ -181,10 +177,10 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
 
     list_in_root(project, NATIVE)
     _run([fm, "sync"], project, env)
-    _run([fm, "new.package", "geometry", "cpp-package"], project, env)
+    _run([fm, "new.package.cpp-package", "geometry"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.
-    _run([fm, "new.package", "extensions/demo", "python-library"], project, env)
+    _run([fm, "new.package.python-library", "extensions/demo"], project, env)
     grouped = project / "packages" / "extensions" / "demo"
     assert 'name = "acme-extensions-demo"' in (grouped / "workshop.toml").read_text()
     assert (grouped / "src" / "acme" / "extensions" / "demo").is_dir()
@@ -228,7 +224,7 @@ def test_a_creation_with_each_answer_is_green_in_a_workspace_of_its_own(
 
         list_in_root(project, NATIVE)
         _run([fm, "sync"], project, env)
-    _run([fm, "new.package", name, template, *answers], project, env)
+    _run([fm, f"new.package.{template}", name, *answers], project, env)
     member = project / "packages" / name
     # The script an answer names is on PATH after the wiring's sync, and
     # a creation without one puts none there.

@@ -88,7 +88,7 @@ publish job through artifacts, so one release ships the complete set."""
 collects = "wheels"
 needs = ["wheels"]
 
-# The template fm new.package creates a nanobind package from: python's
+# The template fm new.package.nanobind-module creates a package from: python's
 # library with the extension module, its build and the conan recipe
 # that names its C++ requirements. Its files live under
 # content/templates/nanobind-module/ beside this file.

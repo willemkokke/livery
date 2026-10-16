@@ -1,11 +1,12 @@
-"""Templates: what an extension declares `fm new.package` creates, refusals first.
+"""Templates: what an extension declares, each one a verb, refusals first.
 
 An installed extension, or the base, declares ``[templates.<name>]``
 with a ``doc``, the ``extensions`` a package born from it lists,
 ``extends``, the template whose files come first, its creation options,
-and the answers it fixes for the options of the templates it extends;
-``fm new.package <name> <template> --<option>=<answer>`` answers the
-options, each checked before anything is written. A workspace offers
+and the answers it fixes for the options of the templates it extends.
+Each template the workspace offers is a verb made from its declaration,
+``fm new.package.<template> <name> --<option>=<answer>``, and every
+answer is checked before anything is written. A workspace offers
 the base's templates and those of the extensions its installed set
 holds, and a birth needs every extension the chain names held and
 installed: a creation installs nothing. The birth writes the base's
@@ -27,6 +28,7 @@ from typing import Any
 import pytest
 
 import livery.footman as footman
+from livery.footman import Group
 from livery.workshop._extensions import distribution_of
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import render_member
@@ -105,6 +107,29 @@ def _declaring(
             files.mkdir(parents=True, exist_ok=True)
             (files / "NOTE.md").write_text(f"{template}\n", "utf-8")
     return site
+
+
+def _mounted(root: Path) -> Group:
+    """The tree a process started now at *root* mounts, as footman holds it.
+
+    The points' jobs start as a new process has them, and the verbs the
+    mount makes, the templates' among them, land in the tree returned.
+    The isolation plugin puts the steps, the jobs and the mount's
+    records back after the test.
+    """
+    from livery.footman import _registry as registry
+    from livery.workshop import _points
+    from livery.workshop._extensions import mount_extensions
+
+    _points.restore(_points.snapshot(initial=True))
+    with registry.capture() as tree:
+        mount_extensions(root)
+    return tree
+
+
+def _package_verbs(tree: Group) -> Group:
+    """The group of *tree* that holds the templates' verbs, ``new.package``."""
+    return tree.groups["new"].groups["package"]
 
 
 # The refusals first, in the order a birth judges them, each before
@@ -255,12 +280,13 @@ def test_a_template_needing_an_extension_listed_and_not_installed_refuses_naming
 def test_a_creation_runs_no_lock_or_sync_before_it_renders(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import new_package
     from workshop_composed import compose_into
-    from workshop_members import wired_here
+    from workshop_members import template_verb, wired_here
 
     skip_unless_installed("cmake")
-    root = compose_into(_workspace(tmp_path / "acme", "python"))
+    # conan declares cpp-package, so its verb exists; the template lists
+    # cmake too, which the root's list does not hold yet.
+    root = compose_into(_workspace(tmp_path / "acme", "conan"))
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
@@ -275,16 +301,17 @@ def test_a_creation_runs_no_lock_or_sync_before_it_renders(
         lambda root, **_kwargs: calls.append(("tools", member.is_dir())),
     )
     handed = wired_here(monkeypatch, root)
+    create = template_verb(root, "cpp-package")
     # The refusal first: nothing is locked, synced or handed on.
-    with pytest.raises(_FAILURES, match="list them in \\[workspace\\] extensions"):
-        new_package("geometry", "cpp-package")
+    with pytest.raises(_FAILURES, match="list it in \\[workspace\\] extensions"):
+        create("geometry", package_type="library")
     assert (calls, handed) == ([], [])
     assert not member.exists()
     # Listed and installed: the template renders, and the one lock and
     # sync are the wiring's, after the member exists.
     _workspace_lists(root, "cmake", "conan")
-    new_package("geometry", "cpp-package")
-    assert [argv[1:] for argv in handed] == [["new.package", "geometry", "--resume"]]
+    create("geometry", package_type="library")
+    assert [argv[1:] for argv in handed] == [["new.wire", "geometry"]]
     assert calls == [("uv lock", True), ("uv sync", True), ("tools", True)]
     assert (member / "CMakeLists.txt").is_file()
 
@@ -448,7 +475,8 @@ def test_a_template_listing_an_extension_that_composes_nothing_refuses(
         (
             "[templates.lua-module]\nextensions = []\n",
             "templates.lua-module.doc is missing: one line saying what a package"
-            " born from the template is, which fm new.package names",
+            " born from the template is, which the template's verb shows as its"
+            " help",
         ),
         (
             '[templates.lua-module]\ndoc = "a lua module"\n',
@@ -458,7 +486,8 @@ def test_a_template_listing_an_extension_that_composes_nothing_refuses(
         (
             '[templates.Lua]\ndoc = "a lua module"\nextensions = []\n',
             "templates.Lua is no template name: lower-case letters, digits and"
-            " hyphens, starting with a letter, the word fm new.package takes",
+            " hyphens, starting with a letter, as fm new.package.<template>"
+            " spells it",
         ),
     ],
 )
@@ -507,31 +536,33 @@ def test_the_base_s_templates_take_the_grammar_an_extension_declares_one_in() ->
     assert judged == []
 
 
-def test_new_package_without_a_template_refuses_naming_the_installed_templates(
+def test_fm_new_package_alone_is_a_group_naming_each_template_s_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.workshop._templates import new_package
+    from livery.footman.testing import Runner
+    from livery.workshop._seeds import installed_templates
 
     # cmake and nanobind take in every extension the four templates need.
     root = _workspace(tmp_path / "acme", "cmake", "nanobind")
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    with pytest.raises(_FAILURES) as caught:
-        new_package("thing")
-    text = str(caught.value)
-    assert (
-        "name the template packages/thing is born from:"
-        " `fm new.package thing <template>`; the installed templates are:"
-    ) in text
-    for line in (
-        "  cpp-package: ",
-        "  nanobind-module: ",
-        "  python-library: ",
-        "  workshop-extension: ",
-    ):
-        assert f"\n{line}" in text
+    tree = _mounted(root)
+    # The refusal first: a group runs nothing, and names its verbs.
+    result = Runner().invoke("new.package", tasks=tree, cwd=root)
+    assert result.exit_code == 64, result.stderr
+    assert "'new.package' is a group, not a task" in result.stderr
+    for name in AVAILABLE:
+        assert f"new.package.{name}" in result.stderr
+    # The removed spelling, a template after the package's name, meets
+    # the same refusal.
+    result = Runner().invoke("new.package thing python-library", tasks=tree, cwd=root)
+    assert result.exit_code == 64, result.stderr
+    assert "'new.package' is a group, not a task" in result.stderr
     assert not (root / "packages").exists()
+    # Its help lists each template's verb with the template's doc.
+    result = Runner().invoke("new.package --help", tasks=tree, cwd=root)
+    assert result.exit_code == 0, result.stderr
+    listed = " ".join(result.stdout.split())
+    for name, template in installed_templates(root).items():
+        assert f"new.package.{name} Create {template.doc}." in listed
 
 
 # Creation options: the refusals first, each before anything is written.
@@ -572,7 +603,7 @@ _FLAVOUR = "templates.lua-module.options.flavour"
         (
             'type = "str"\n',
             f"{_FLAVOUR}.doc is one line of text saying what the answer decides,"
-            " which fm new.package's help and completion show",
+            " which the template's verb shows in its help and completion",
         ),
         (
             'doc = "the lua"\n',
@@ -633,6 +664,16 @@ def test_an_option_off_its_shape_refuses_naming_the_key(
             '[templates.lua-module.options.class]\ndoc = "x"\ntype = "str"\n',
             "options.class is a Python keyword once its hyphens are underscores,"
             " which the template variable it renders as cannot be",
+        ),
+        (
+            '[templates.lua-module.options.name]\ndoc = "x"\ntype = "str"\n',
+            "options.name is taken: --name is the package's name, the word every"
+            " template's verb takes first; rename the option",
+        ),
+        (
+            '[templates.lua-module.options.help]\ndoc = "x"\ntype = "bool"\n',
+            "options.help is taken: --help is footman's own flag, which shows the"
+            " verb's help on any line; rename the option",
         ),
         (
             '[templates.lua-module.fixes]\nflavour = ["lua"]\n',
@@ -804,101 +845,243 @@ def test_the_answers_render_as_variables_and_an_empty_file_is_not_written(
     assert (background / "daemon.txt").read_text() == "runs in the background\n"
 
 
-def test_the_template_s_options_are_the_parameters_fm_new_package_takes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import inspect
-    import typing
-
-    from livery.workshop._templates import template_options
-
-    root = _lua(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    # A fixed option is none of the template's.
-    assert [p.name for p in template_options("lua-app")] == ["flavour", "daemon"]
-    flavour, rocks = template_options("lua-module")
-    assert flavour.kind is inspect.Parameter.KEYWORD_ONLY
-    assert flavour.default is inspect.Parameter.empty
-    literal, marker = typing.get_args(flavour.annotation)
-    assert typing.get_args(literal) == ("lua", "luajit")
-    assert marker.text == "the lua the module targets"
-    assert (rocks.name, rocks.default) == ("rock_count", 1)
-    assert typing.get_args(rocks.annotation)[0] is int
-    with pytest.raises(_FAILURES) as caught:
-        template_options("lua-rock")
-    assert str(caught.value).startswith("no installed template is named lua-rock;")
+# Each installed template is a verb, made from its declaration.
 
 
-#: A tasks file that mounts the ``new`` verbs alone.
-_NEW = (
-    "from livery.footman import include\n"
-    "from livery.workshop._templates import new\n\n"
-    "include(new)\n"
-)
-
-
-def test_fm_new_package_takes_the_template_s_options_on_the_command_line(
+def test_a_template_s_verb_refuses_an_answer_its_options_do_not_take(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.footman.testing import Runner
 
     root = _lua(tmp_path, monkeypatch)
-    tasks = tmp_path / "tasks.py"
-    tasks.write_text(_NEW, "utf-8")
+    tree = _mounted(root)
 
     def refused(line: str) -> str:
-        result = Runner().invoke(line, tasks=tasks, cwd=root)
+        result = Runner().invoke(line, tasks=tree, cwd=root)
         assert result.exit_code == 64, result.stderr
         return result.stderr.strip()
 
-    assert refused("new.package thing lua-module --flavor=lua") == (
-        "fm: new.package: unknown option --flavor — did you mean '--flavour'?"
+    # A required option without an answer is named.
+    assert refused("new.package.lua-module thing") == (
+        "fm: new.package.lua-module: missing required option(s): --flavour"
     )
-    assert refused("new.package thing lua-module --flavour=moon") == (
-        "fm: new.package: --flavour must be one of lua|luajit (got 'moon')"
+    # An answer outside an option's choices names them.
+    assert refused("new.package.lua-module thing --flavour=moon") == (
+        "fm: new.package.lua-module: --flavour must be one of lua|luajit (got 'moon')"
     )
-    assert refused("new.package thing lua-module") == (
-        "fm: new.package: missing required option(s) of <template> lua-module:"
-        " --flavour"
+    # An option the template does not take is an unknown option.
+    assert refused("new.package.lua-module thing --flavor=lua") == (
+        "fm: new.package.lua-module: unknown option --flavor — did you mean"
+        " '--flavour'?"
     )
-    assert refused("new.package thing lua-app --flavour=lua --rock-count=3") == (
-        "fm: new.package: unknown option --rock-count (<template> lua-app takes"
-        " --flavour, --daemon)"
+    # The answer lua-app's chain fixes is no option of its verb.
+    assert refused("new.package.lua-app thing --flavour=lua --rock-count=3") == (
+        "fm: new.package.lua-app: unknown option --rock-count (task options come"
+        " right after their task; globals go before the first task)"
+    )
+    # A template no installed extension declares has no verb.
+    assert refused("new.package.lua-rock thing") == (
+        "fm: no task named 'new.package.lua-rock' — did you mean"
+        " 'new.package.lua-app'? (new.package has: new.package.lua-app,"
+        " new.package.lua-module, new.package.workshop-extension)"
     )
     assert not (root / "packages").exists()
 
 
-def test_completion_lists_the_template_s_options_and_their_choices(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_template_s_verb_refuses_while_its_chain_needs_an_extension_no_list_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import json
+    from livery.footman.testing import Runner
 
-    from livery.footman import _complete, _suggest
+    # acme.lua is listed, so the verbs of its templates exist; lua-module
+    # lists acme.rocks, which no list holds.
+    root = _workspace(tmp_path / "acme", "acme.lua")
+    _declaring(tmp_path, monkeypatch, lua=_ROCKS)
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    before = _files(root)
+    result = Runner().invoke(
+        "new.package.lua-module thing", tasks=_mounted(root), cwd=root
+    )
+    assert result.exit_code == 1, result.stderr
+    assert (
+        "the template lua-module needs acme.rocks (acme-rocks), which the"
+        " workspace's lists do not hold: list it in [workspace] extensions and"
+        " run `fm sync`, then create the package again"
+    ) in result.stderr
+    assert _files(root) == before
+    # conan declares cpp-package, which lists cmake as well.
+    native = _workspace(tmp_path / "native", "conan")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: native
+    )
+    result = Runner().invoke(
+        "new.package.cpp-package geometry", tasks=_mounted(native), cwd=native
+    )
+    assert result.exit_code == 1, result.stderr
+    assert (
+        f"the template cpp-package needs cmake ({distribution_of('cmake')}),"
+        " which the workspace's lists do not hold: list it in [workspace]"
+        " extensions and run `fm sync`, then create the package again"
+    ) in result.stderr
+    assert not (native / "packages").exists()
+
+
+def test_a_template_s_verb_takes_its_chain_s_options_less_the_fixed_ones(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import inspect
+    import typing
+
+    from workshop_members import template_verb
 
     root = _lua(tmp_path, monkeypatch)
-    (root / "tasks.py").write_text(_NEW, "utf-8")
-    monkeypatch.chdir(root)
-    specs = [
-        json.loads(line)
-        for line in _suggest._chosen("answers", "lua-app", ["new", "package"], {})
+    module = inspect.signature(template_verb(root, "lua-module")).parameters
+    app = inspect.signature(template_verb(root, "lua-app")).parameters
+    # The package's name, then each option by its variable. lua-app
+    # extends lua-module and fixes its rock count, so its verb offers
+    # lua-module's flavour and its own switch, and no rock count.
+    assert list(module) == ["name", "flavour", "rock_count"]
+    assert list(app) == ["name", "flavour", "daemon"]
+    flavour = module["flavour"]
+    assert flavour.kind is inspect.Parameter.KEYWORD_ONLY
+    assert flavour.default is inspect.Parameter.empty
+    literal, marker = typing.get_args(flavour.annotation)
+    assert typing.get_args(literal) == ("lua", "luajit")
+    assert marker.text == "the lua the module targets"
+    rocks = module["rock_count"]
+    assert (typing.get_args(rocks.annotation)[0], rocks.default) == (int, 1)
+    daemon = app["daemon"]
+    assert (typing.get_args(daemon.annotation)[0], daemon.default) == (bool, False)
+
+
+def test_footman_s_manifest_lists_each_template_verb_with_its_options_and_choices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman import _registry as registry
+    from livery.footman import task_tree
+    from livery.footman._complete import complete
+    from livery.workshop import _points
+    from livery.workshop._extensions import mount_extensions
+
+    root = _lua(tmp_path, monkeypatch)
+    _points.restore(_points.snapshot(initial=True))
+    # The tree the background refresh builds: what the plugin's mount
+    # registered, through footman's own manifest.
+    with registry.capture():
+        mount_extensions(root)
+        tree = task_tree()
+    verbs = tree["groups"]["new"]["groups"]["package"]["tasks"]
+
+    def params(name: str) -> list[tuple[str, str, object]]:
+        return [
+            (param["name"], param["kind"], param.get("choices"))
+            for param in verbs[name]["params"]
+        ]
+
+    assert params("lua-module") == [
+        ("name", "positional", None),
+        ("flavour", "option", ["lua", "luajit"]),
+        ("rock-count", "option", None),
     ]
-    assert [(spec["name"], spec.get("choices")) for spec in specs] == [
-        ("flavour", ["lua", "luajit"]),
-        ("daemon", None),
+    assert params("lua-app") == [
+        ("name", "positional", None),
+        ("flavour", "option", ["lua", "luajit"]),
+        ("daemon", "flag", None),
     ]
-    names = {"partial": "--", "bash": False, "used": []}
-    assert _complete._chosen_rows(specs, names) == [
-        "--flavour\tthe lua the module targets",
-        "--flavour=\tthe lua the module targets",
-        "--daemon\twhether the app runs in the background",
-    ]
-    choices = {"partial": "--flavour=", "bash": False, "used": []}
-    assert _complete._chosen_rows(specs, choices) == [
+    assert verbs["lua-app"]["help"] == "Create a lua app."
+
+    # Completion answers from the manifest alone: it starts no process.
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise AssertionError(f"completion started a process: {args}")
+
+    monkeypatch.setattr(subprocess, "Popen", refuse)
+    assert complete(tree, ["new.package.lua-module", "thing", "--flavour="]) == [
         "--flavour=lua",
         "--flavour=luajit",
     ]
+    offered = complete(tree, ["new.package.lua-app", "thing", "--"])
+    assert any(row.startswith("--flavour") for row in offered), offered
+    assert any(row.startswith("--daemon") for row in offered), offered
+    assert not any(row.startswith("--rock-count") for row in offered), offered
+
+
+def test_the_template_verbs_follow_the_installed_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman import _registry as registry
+    from livery.workshop import _points
+    from livery.workshop._extensions import mount_extensions
+    from livery.workshop._seeds import installed_templates
+
+    root = _workspace(tmp_path / "acme", "acme.lua")
+    _declaring(tmp_path, monkeypatch, lua=_OPTIONS)
+    install = withheld(monkeypatch, "acme.lua")
+    _points.restore(_points.snapshot(initial=True))
+    with registry.capture() as tree:
+        # acme.lua is listed and not installed: the base's verb alone.
+        mount_extensions(root)
+        package = _package_verbs(tree)
+        assert list(package.tasks) == ["workshop-extension"]
+        # Installed, the verbs of its templates appear: one per template
+        # the workspace offers.
+        install()
+        mount_extensions(root)
+        assert sorted(package.tasks) == sorted(installed_templates(root))
+        assert sorted(package.tasks) == ["lua-app", "lua-module", "workshop-extension"]
+        made = package.tasks["lua-module"]
+        # A mount that finds the same templates keeps each verb.
+        mount_extensions(root)
+        assert package.tasks["lua-module"] is made
+        # Taken away again, its verbs go.
+        reinstall = withheld(monkeypatch, "acme.lua")
+        mount_extensions(root)
+        assert list(package.tasks) == ["workshop-extension"]
+        # Installed and off the list, they go too.
+        reinstall()
+        mount_extensions(root)
+        assert "lua-module" in package.tasks
+        _workspace_lists(root)
+        mount_extensions(root)
+        assert list(package.tasks) == ["workshop-extension"]
+
+
+def test_the_generator_remakes_a_changed_verb_and_keeps_a_task_it_did_not_make(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dataclasses
+    import inspect
+
+    from livery.workshop._seeds import installed_templates
+    from livery.workshop._templates import generate_template_verbs
+
+    root = _lua(tmp_path, monkeypatch)
+    templates = installed_templates(root)
+    tree = Group("root")
+    package = tree.group("new").group("package")
+
+    @package.task(name="lua-rock")
+    def lua_rock(name: str) -> None:
+        """A verb of an extension's own at a template's address."""
+        del name
+
+    generate_template_verbs({**templates, "lua-rock": templates["lua-app"]}, into=tree)
+    assert inspect.unwrap(package.tasks["lua-rock"]) is inspect.unwrap(lua_rock)
+    app, module = package.tasks["lua-app"], package.tasks["lua-module"]
+    # A template whose doc changed gets its verb made again; the others
+    # stay as they are.
+    changed = dataclasses.replace(templates["lua-module"], doc="a moon module")
+    generate_template_verbs({**templates, "lua-module": changed}, into=tree)
+    assert package.tasks["lua-app"] is app
+    assert package.tasks["lua-module"] is not module
+    assert (inspect.unwrap(package.tasks["lua-module"]).__doc__ or "").startswith(
+        "Create a moon module.\n"
+    )
+    # A template that is gone loses its verb; the task the generator did
+    # not make stays.
+    generate_template_verbs({"lua-module": changed}, into=tree)
+    assert sorted(package.tasks) == ["lua-module", "lua-rock"]
 
 
 # The templates the workshop's wheel declares.

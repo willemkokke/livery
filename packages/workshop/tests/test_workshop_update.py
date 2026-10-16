@@ -12,11 +12,10 @@ from livery.footman import Failed
 from livery.forge import Repository
 from livery.forge.testing import FakeForge
 from livery.workshop._submit import arming_reason, ci_automerge
-from livery.workshop._templates import new_package
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
 from workshop_composed import IDENTITY
-from workshop_members import wired_here
+from workshop_members import template_verb, wired_here
 from workshop_seeds import Seeds, _seed_home, seed_copier, wire_pushes  # noqa: F401
 
 # Bound before the autouse no-op fixture patches the module attribute,
@@ -599,17 +598,18 @@ def test_new_package_renders_and_wires(
         "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
     )
     wired_here(monkeypatch, root)
-    with pytest.raises(_FAILURES):
-        new_package("Bad Name", "python-library")
     # The template needs python, which the root lists before the
     # creation: a creation installs nothing.
     contract = root / "workshop.toml"
     contract.write_text(
         contract.read_text().replace("extensions = []", 'extensions = ["python"]')
     )
-    new_package("scratch", "python-library")
+    create = template_verb(root, "python-library")
+    with pytest.raises(_FAILURES):
+        create("Bad Name")
+    create("scratch")
     assert (root / "packages" / "scratch" / "workshop.toml").is_file()
     assert "livery-scratch" in (root / "pyproject.toml").read_text()
     assert '"packages/scratch"' in (root / "pyproject.toml").read_text()
     with pytest.raises(_FAILURES):
-        new_package("scratch", "python-library")  # already exists
+        create("scratch")  # already exists

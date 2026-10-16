@@ -50,10 +50,10 @@ from livery.footman import (
     _registry as registry,
 )
 from livery.footman._context import context_param_name
-from livery.footman._params import options_of, suggest
+from livery.footman._params import suggest
 from livery.footman._registry import Group
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 11
 
 _warned: set[str] = set()
 
@@ -271,9 +271,6 @@ def param_spec(param: inspect.Parameter) -> dict[str, Any]:
     # the same shape defaultless dicts and flags already take.
     kw_only = param.kind is inspect.Parameter.KEYWORD_ONLY
 
-    if ann is not empty and (chooser := _coerce.peel(ann).chooser) is not None:
-        return _chosen_spec(spec, param, chooser, has_default)
-
     if ann is empty:
         if isinstance(param.default, bool):
             spec["kind"] = "flag"
@@ -465,77 +462,6 @@ def param_spec(param: inspect.Parameter) -> dict[str, Any]:
                 f"is not a usable type; values are passed through as text"
             )
     return spec
-
-
-def _chosen_spec(
-    spec: dict[str, Any],
-    param: inspect.Parameter,
-    chooser: options_of,
-    has_default: bool,
-) -> dict[str, Any]:
-    """The entry of a parameter marked `options_of()`.
-
-    Its kind is `chosen`, and `of` names the parameter whose value declares
-    the options. The options themselves are not in the manifest: they
-    depend on a value only a line gives, so the splitter asks for them when
-    it has one, and completion asks in a subprocess.
-
-    Raises:
-        SpecError: when the marked parameter is not a dict with a default.
-    """
-    peeled = _coerce.peel(param.annotation)
-    if not peeled.mapping:
-        raise SpecError(
-            f"<{param.name}>: options_of() marks a dict parameter, which receives"
-            f" the options by name"
-        )
-    if not has_default:
-        raise SpecError(
-            f"<{param.name}>: options_of() needs a default, such as None: a line"
-            f" may give none of the options"
-        )
-    spec.pop("default", None)
-    spec["kind"] = "chosen"
-    spec["of"] = registry.cli_name(chooser.param)
-    if peeled.doc is not None:
-        spec["doc"] = peeled.doc
-    if peeled.hidden:
-        spec["hidden"] = True
-    return spec
-
-
-def chosen_options(chooser: options_of, value: str) -> list[dict[str, Any]]:
-    """The entries of the options *value* declares through *chooser*.
-
-    Each parameter `chooser.fn(value)` returns becomes the entry a task's own
-    keyword-only parameter would, with `key` naming the parameter: the body's
-    mapping holds the option under that name.
-
-    Raises:
-        SpecError: for an object that is not a keyword-only
-            `inspect.Parameter`, and for one that is no option or flag,
-            a dict among them.
-    """
-    specs: list[dict[str, Any]] = []
-    for param in chooser.fn(value):
-        if (
-            not isinstance(param, inspect.Parameter)
-            or param.kind is not inspect.Parameter.KEYWORD_ONLY
-        ):
-            raise SpecError(
-                f"options_of({chooser.param!r}, …) returned {param!r} for"
-                f" {value!r}: each option is a keyword-only inspect.Parameter"
-            )
-        spec = _finish(param_spec(param), {})
-        if spec["kind"] not in ("flag", "option") or spec.get("mapping"):
-            raise SpecError(
-                f"options_of({chooser.param!r}, …) returned {param.name!r} for"
-                f" {value!r}, which is no option: a dict, a document or a"
-                f" positional has no place among a value's options"
-            )
-        spec["key"] = param.name
-        specs.append(spec)
-    return specs
 
 
 def _shape_spec(target: Any, seen: tuple[Any, ...] = ()) -> dict[str, Any]:
@@ -1009,14 +935,6 @@ def _task_node(
             )
         if spec["kind"] == "positional" and spec.get("optional"):
             seen_optional = spec["name"]
-    positional = {spec["name"] for spec in params if spec["kind"] == "positional"}
-    for spec in params:
-        if spec["kind"] == "chosen" and spec["of"] not in positional:
-            raise SpecError(
-                f"<{spec['name']}>: options_of({spec['of'].replace('-', '_')!r}, …)"
-                f" names no positional of this task; the options follow the value"
-                f" a positional is given"
-            )
     for spec in params:
         if spec["name"] == "help" and spec["kind"] in ("flag", "option"):
             raise SpecError(

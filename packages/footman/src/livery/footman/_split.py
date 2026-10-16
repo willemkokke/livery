@@ -649,10 +649,6 @@ class Segment:
     cannot say."""
     variadic: list[str] = field(default_factory=list)
     passthrough: list[str] | None = None
-    chosen: dict[str, dict[str, Any]] = field(default_factory=dict)
-    """The options a positional's value declares, through a parameter marked
-    `options_of()`: each one's manifest entry by its CLI name, which binding
-    coerces the given values by. Empty for a task without such a parameter."""
     # Advisory stderr lines the app prints before running — `{prog}` is
     # substituted there. Notes never change what runs; the grammar stays
     # deterministic (a positional wins), they just say so out loud.
@@ -763,12 +759,6 @@ ChoicesFor = Callable[[str, str], "list[str] | None"]
 """How the app resolves a dynamic parameter's choices, live: given the task's
 dotted address and the parameter's CLI name, the values its `suggest()`
 completer offers right now, or `None` when it cannot be asked."""
-
-OptionsFor = Callable[[str, str, str], "list[dict[str, Any]]"]
-"""How the app resolves the options a positional's value declares, live: given
-the task's dotted address, the CLI name of the parameter marked `options_of()`,
-and the value its positional was given, each option's manifest entry. Raises
-`ChainError` for a value its function refuses."""
 
 
 def live_choices(
@@ -1242,14 +1232,8 @@ def split_chain(
     tree: dict[str, Any],
     argv: list[str],
     choices_for: ChoicesFor | None = None,
-    options_for: OptionsFor | None = None,
 ) -> tuple[list[str], list[Segment]]:
-    """Split *argv* into leading globals and a list of resolved segments.
-
-    A task with a parameter marked `options_of()` reads an option it does not
-    declare once its positionals are read, against the options the chosen
-    positional's value declares (*options_for*).
-    """
+    """Split *argv* into leading globals and a list of resolved segments."""
     plugin: dict[str, str] = {}
     for g in tree.get("globals", ()):
         if g["kind"] == "flag":
@@ -1298,10 +1282,6 @@ def split_chain(
             ),
             None,
         )
-        # The parameter that takes the options a positional's value
-        # declares; an option the task does not declare waits for that value.
-        chosen = next((p for p in task["params"] if p["kind"] == "chosen"), None)
-        deferred: list[int] = []
         seg = Segment(task=".".join(path), path=list(path))
         filled = 0
         rest_count = 0
@@ -1315,11 +1295,6 @@ def split_chain(
                 seg.passthrough = argv[i + 1 :]
                 i = len(argv)
                 break
-            if tok.startswith("--") and chosen is not None and not _declares(opts, tok):
-                deferred.append(i)
-                i += 1
-                bare_before = None
-                continue
             if tok.startswith("--"):
                 before = len(seg.bare)
                 i = _consume_option(seg, opts, argv, i, frozenset(plugin), choices_for)
@@ -1360,17 +1335,6 @@ def split_chain(
             raise ChainError(
                 f"{seg.task}: missing required positional(s): {', '.join(missing)}"
             )
-        if chosen is not None:
-            _consume_chosen(
-                seg,
-                chosen,
-                opts,
-                argv,
-                deferred,
-                frozenset(plugin),
-                choices_for,
-                options_for,
-            )
 
         # Required options — a mapping or bool with no default. (Dicts are only
         # ever options; a bool is a flag, so teach both --x and --no-x forms.)
@@ -1397,78 +1361,6 @@ def split_chain(
     return globals_, segments
 
 
-def _declares(opts: dict[str, dict[str, Any]], tok: str) -> bool:
-    """Whether *tok* names one of *opts*, a flag's `--no-` spelling included."""
-    name = tok.split("=", 1)[0]
-    if name in opts:
-        return True
-    flag = "--" + name[len("--no-") :] if name.startswith("--no-") else ""
-    return flag in opts and opts[flag]["kind"] == "flag"
-
-
-def _consume_chosen(
-    seg: Segment,
-    chosen: dict[str, Any],
-    opts: dict[str, dict[str, Any]],
-    argv: list[str],
-    deferred: list[int],
-    plugin_flags: frozenset[str],
-    choices_for: ChoicesFor | None,
-    options_for: OptionsFor | None,
-) -> None:
-    """Read the options a positional's value declares, once the value is known.
-
-    *deferred* holds the index of each option token the task does not
-    declare itself. Each is read against the options the value of the
-    positional `chosen["of"]` declares, with every refusal an option gets;
-    then a required one the line does not give is refused. The given ones
-    land in `seg.values` under the marked parameter, as one mapping.
-    """
-    of = str(chosen["of"])
-    given_value = seg.values.get(of)
-    value = given_value if isinstance(given_value, str) else ""
-    named = bool(value)
-    specs: list[dict[str, Any]] = []
-    if named and options_for is not None:
-        specs = options_for(seg.task, str(chosen["name"]), value)
-    table = {"--" + str(spec["name"]): spec for spec in specs}
-    for name in table:
-        if name in opts:
-            raise ChainError(
-                f"{seg.task}: <{of}> {value} declares the option {name}, which"
-                f" {seg.task} declares itself; one of them renames it"
-            )
-    if named:
-        offered = ", ".join(table) if table else "no options"
-        hint = f" (<{of}> {value} takes {offered})"
-    else:
-        hint = f" (name <{of}> first: its value declares the options it takes)"
-    # The task's own options join the table only for the near-miss hint: a
-    # token that names one was read already, and none is deferred.
-    known = {**opts, **table}
-    taken = Segment(task=seg.task, path=seg.path)
-    for at in deferred:
-        _consume_option(taken, known, argv, at, plugin_flags, choices_for, hint)
-    missing = [
-        _required_label(spec)
-        for spec in specs
-        if spec.get("required") and spec["name"] not in taken.values
-    ]
-    if missing:
-        raise ChainError(
-            f"{seg.task}: missing required option(s) of <{of}> {value}:"
-            f" {', '.join(missing)}"
-        )
-    given: dict[str, Any] = dict(taken.values)
-    for name in taken.bare:
-        # A bare mention stands for the option's default, as it does for a
-        # task's own option; a required one never gets here bare.
-        given[name] = table["--" + name].get("default")
-    if given:
-        seg.values[str(chosen["name"])] = given
-    seg.chosen = {str(spec["name"]): spec for spec in specs}
-
-
 def _consume_option(
     seg: Segment,
     opts: dict[str, dict[str, Any]],
@@ -1476,13 +1368,7 @@ def _consume_option(
     i: int,
     plugin_flags: frozenset[str] = frozenset(),
     choices_for: ChoicesFor | None = None,
-    unknown: str | None = None,
 ) -> int:
-    """Read the option token `argv[i]` into *seg*; the index after it.
-
-    *unknown* is the hint an option *opts* does not hold gets when no
-    declared one is close to it.
-    """
     tok = argv[i]
     name = tok.split("=", 1)[0]
     negated = False
@@ -1506,13 +1392,9 @@ def _consume_option(
         forms = list(opts) + [
             f"--no-{opts[k]['name']}" for k in opts if opts[k]["kind"] == "flag"
         ]
-        hint = (
-            _did_you_mean(name, forms)
-            or unknown
-            or (
-                " (task options come right after their task; "
-                "globals go before the first task)"
-            )
+        hint = _did_you_mean(name, forms) or (
+            " (task options come right after their task; "
+            "globals go before the first task)"
         )
         raise ChainError(f"{seg.task}: unknown option {name}{hint}")
 

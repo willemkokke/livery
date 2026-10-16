@@ -433,6 +433,7 @@ def test_an_item_without_its_doc_line_breaks_the_clause_naming_each(
         '[extension]\nplugin = "acme_kit_docs"\n\n'
         '[contract.package.acme.depth]\ntypes = ["str"]\n\n'
         "[templates.acme-app]\nextensions = []\n\n"
+        '[templates.acme-app.options.flavour]\nchoices = ["sweet", "sour"]\n\n'
         '[phases.lint.acme]\nmain = "acme_kit_docs._steps:judged"\n\n'
         '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n\n'
         '[for.docs.phases.lint.acme-pages]\nmain = "acme_kit_docs._steps:judged"\n\n'
@@ -454,8 +455,12 @@ def test_an_item_without_its_doc_line_breaks_the_clause_naming_each(
         " contract key acme.depth with no doc; the editor, the agent's guidance"
         " and the site show a key by its doc",
         "declaration-documented: extension acme_kit_docs: declares the template"
-        " acme-app with no doc; fm new.package, the agent's guidance and the site"
-        " show a template by its doc",
+        " acme-app with no doc; fm new.package.acme-app, the agent's guidance and"
+        " the site show a template by its doc",
+        "declaration-documented: extension acme_kit_docs: declares the option"
+        " flavour of the template acme-app with no doc; fm new.package.acme-app's"
+        " help and completion, the agent's guidance and the site show an option"
+        " by its doc",
         "declaration-documented: extension acme_kit_docs: declares the option"
         " strict of [phases.lint.acme] with no doc; the agent's guidance and the"
         " site show an option by its doc",
@@ -553,10 +558,13 @@ def test_the_kit_refuses_a_template_whose_list_composes_nothing(
         site='[phases.lint.site]\nmain = "{package}._steps:noop"\n',
     )
     clause = "template-composes"
-    inert = (
-        "lists acme.site, which composes nothing in a package: its steps judge the"
-        " workspace as a whole; fm new.package refuses the template"
-    )
+
+    def inert(name: str) -> str:
+        return (
+            "lists acme.site, which composes nothing in a package: its steps judge"
+            f" the workspace as a whole; fm new.package.{name} refuses to create a"
+            " package from it"
+        )
 
     def outside(name: str) -> str:
         return (
@@ -568,9 +576,9 @@ def test_the_kit_refuses_a_template_whose_list_composes_nothing(
     # lua-module's list holds what its chain needs; the templates
     # extending it list less than lua-module does.
     assert _names(Subject("acme.lua"), clause) == [
-        f"template-composes: template lua-app: {inert}",
+        f"template-composes: template lua-app: {inert('lua-app')}",
         f"template-composes: template lua-app: {outside('acme.lua')}",
-        f"template-composes: template lua-module: {inert}",
+        f"template-composes: template lua-module: {inert('lua-module')}",
         "template-composes: template lua-rock: lists acme.ghost, which no installed"
         " distribution declares in workshop.extensions, so nothing shows that it"
         " composes something in a package",

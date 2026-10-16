@@ -139,7 +139,7 @@ def _lists_also(root: Path, *names: str) -> None:
 
 
 def _born(root: Path, *births: str) -> dict[str, Package]:
-    """Birth one member of each of *births* in *root*, as ``fm new.package`` does.
+    """Birth one member of each of *births* in *root*, as a template's verb does.
 
     The root lists what each template needs first, as a person does
     before the creation: a creation installs nothing. The members
@@ -259,7 +259,7 @@ def _three_seeds(root: Path) -> tuple[dict[str, Package], tuple[str, ...]]:
 
     The members by their templates, and the extensions the mount took, in
     its order. The members are born first, and a process started after
-    them mounts and composes, as ``fm new.package`` hands the wiring to
+    them mounts and composes, as a template's verb hands the wiring to
     a runner started after the birth.
     """
     _workspace(root, STACK)

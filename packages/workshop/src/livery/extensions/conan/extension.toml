@@ -61,8 +61,8 @@ provides = { published = "bool" }
 [fragments."conanws.yml"]
 render = "livery.extensions.conan._package:workspace_file"
 
-# The template fm new.package creates a C++ package from, built with
-# CMake and packaged by conan. Its files live under
+# The template fm new.package.cpp-package creates a C++ package from,
+# built with CMake and packaged by conan. Its files live under
 # content/templates/cpp-package/ beside this file.
 [templates.cpp-package]
 doc = "a C++ package built with CMake and packaged by conan: a library, or with --package-type another of conan's package types"

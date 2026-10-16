@@ -2113,7 +2113,7 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
 
     def loop_fm(root: Path, *args: str, **kw: object) -> int:
         calls.append(("fm", *args))
-        if args[0] == "new.package":
+        if args[0].startswith("new.package."):
             member = root / "packages" / args[1]
             member.mkdir(parents=True)
             hosted = '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -2142,8 +2142,8 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert calls == [
         ("align",),
         ("branch", "feat/members"),
-        ("fm", "new.package", "loop-native", "nanobind-module"),
-        ("fm", "new.package", "loop-cpp", "cpp-package"),
+        ("fm", "new.package.nanobind-module", "loop-native"),
+        ("fm", "new.package.cpp-package", "loop-cpp"),
         ("fm", "drift.check", "--fix"),
         ("commit", "feat: the loop's members"),
         ("fm", "submit", "--force", "--armed"),

@@ -302,8 +302,6 @@ def usage_fragment(p: dict[str, Any]) -> str:
     required = p.get("required")
     if kind == "stdin":
         return ""  # a whole-document parameter has no token spelling
-    if kind == "chosen":
-        return f"[<{p['of']}>'s options ...]"
     if kind == "flag":
         # The usage line shows the spelling that changes something: a flag
         # on by default is only ever turned off there.
@@ -328,8 +326,6 @@ def param_label(p: dict[str, Any]) -> str:
         return f"--{p['name']}"
     if kind == "option":
         return f"--{p['name']}={value_hint(p)}"
-    if kind == "chosen":
-        return f"<{p['of']}>'s options"
     suffix = "..." if kind == "variadic" or p.get("multiple") else ""
     return f"<{p['name']}>{suffix}"
 
@@ -369,10 +365,6 @@ def default_text(p: dict[str, Any]) -> str:
 
 def _mechanics(p: dict[str, Any]) -> str:
     bits: list[str] = []
-    if p["kind"] == "chosen":
-        # Its options follow a value only a line gives, so the row says
-        # where they come from rather than listing them.
-        return f"--<option>=VALUE, the options the value of <{p['of']}> declares"
     if p["kind"] == "flag":
         # A flag on by default says so: its row's text describes it on,
         # and --no-<name> is the spelling a reader types to change it.

@@ -32,7 +32,6 @@ from livery.footman._params import (
     doc,
     env,
     matching,
-    options_of,
     suggest,
 )
 from livery.footman._params import _arg as _ARG
@@ -121,8 +120,6 @@ class Peeled:
     hidden: bool = False  # out of the listings; still binds, still completes
     default_fn: _default_marker | None = None  # computed default (default(fn))
     container: type = list  # the collection named: list/tuple/set/frozenset
-    # options_of(): the options another parameter's value declares
-    chooser: options_of | None = None
 
 
 class _Markers(TypedDict):
@@ -141,7 +138,6 @@ class _Markers(TypedDict):
     stdin: _stdin_marker | None
     hidden: bool
     default_fn: _default_marker | None
-    chooser: options_of | None
 
 
 def collection_of(ann: Any) -> type | None:
@@ -182,7 +178,6 @@ def peel(ann: Any) -> Peeled:
     is_optional = False
     stdin_marker: _stdin_marker | None = None
     default_marker: _default_marker | None = None
-    chooser: options_of | None = None
 
     # Strip Annotated and Optional wrappers in any order/nesting, e.g. both
     # `Annotated[list[X], nosplit] | None` and `Annotated[list[X] | None, nosplit]`.
@@ -194,8 +189,6 @@ def peel(ann: Any) -> Peeled:
             for mark in meta:
                 if isinstance(mark, suggest):
                     completer = mark
-                elif isinstance(mark, options_of):
-                    chooser = mark
                 elif mark is _NOSPLIT:
                     is_nosplit = True
                 elif isinstance(mark, PathRequirement):
@@ -267,7 +260,6 @@ def peel(ann: Any) -> Peeled:
         "stdin": stdin_marker,
         "hidden": is_hidden,
         "default_fn": default_marker,
-        "chooser": chooser,
     }
 
     if ann is dict or typing.get_origin(ann) is dict:  # dict[K, V] or bare dict
@@ -293,7 +285,6 @@ def peel(ann: Any) -> Peeled:
             checks=(*checks, *value.checks),
             doc=doc_text,
             stdin=stdin_marker,
-            chooser=chooser,
         )
 
     if (kind := collection_of(ann)) is not None:  # list/set/frozenset/tuple[T, ...]

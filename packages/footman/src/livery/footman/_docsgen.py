@@ -340,7 +340,6 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
             "Hidden",
             "hidden",
             "suggest",
-            "options_of",
             "exists",
             "isfile",
             "isdir",

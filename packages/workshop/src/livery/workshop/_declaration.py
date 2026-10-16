@@ -38,13 +38,13 @@ declares no ``[for.<target>]`` table for refuses, naming both. A
 ``[for.<target>.toolroom]`` table's ``requires`` names the tools the
 workspace requires while the table applies.
 
-A ``[templates.<name>]`` table declares a template ``fm new.package``
-creates a package from: its ``doc``, the ``extensions`` such a package
-lists, ``extends``, the template whose files come first, its creation
-options under ``[templates.<name>.options.<option>]``
-(``TemplateOption``), and ``fixes``, the answers it gives options of the
-templates it extends (``DeclaredTemplate``). The base declares its own in
-the same grammar,
+A ``[templates.<name>]`` table declares a template, which
+``fm new.package.<name>`` creates a package from: its ``doc``, the
+``extensions`` such a package lists, ``extends``, the template whose
+files come first, its creation options under
+``[templates.<name>.options.<option>]`` (``TemplateOption``), and
+``fixes``, the answers it gives options of the templates it extends
+(``DeclaredTemplate``). The base declares its own in the same grammar,
 and a ``[for.<target>]`` table declares none: a template names the
 extensions it needs in its own ``extensions``, and a workspace offers
 it while its installed set holds the extension that declares it.
@@ -272,6 +272,8 @@ class Declaration:
             whose table answers none is left out.
         categories: The categories it gives its packages' paths, each
             category to the patterns it takes, relative to the package.
+        templates: The templates it declares, by name, in the file's
+            order.
     """
 
     extension: str
@@ -310,6 +312,9 @@ class Declaration:
         default_factory=dict[str, "dict[str, Reference | DeclaredValue]"]
     )
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    templates: dict[str, DeclaredTemplate] = field(
+        default_factory=dict[str, "DeclaredTemplate"]
+    )
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -498,7 +503,7 @@ def _read(
         for target, table in held.items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
-    template_specs_of(data, path, extension=extension)  # and so are these
+    templates = template_specs_of(data, path, extension=extension)
     queries = reader.answers(data, ())
     answered = {
         target: reader.answers(table, ("for", target)) for target, table in held.items()
@@ -555,6 +560,7 @@ def _read(
             (str(category), tuple(str(pattern) for pattern in patterns))
             for category, patterns in data.get("categories", {}).items()
         ),
+        templates=templates,
     )
 
 
@@ -1510,7 +1516,7 @@ def query_declarations(extension: str, package: str) -> tuple[QuerySpec, ...]:
     )
 
 
-#: A template's name: the word ``fm new.package`` takes after the package's.
+#: A template's name: the last word of its verb, ``fm new.package.<name>``.
 _TEMPLATE_NAME = re.compile(r"[a-z][a-z0-9-]*")
 
 #: The keys a ``[templates.<name>]`` table takes.
@@ -1523,6 +1529,13 @@ _OPTION_KEYS = ("doc", "choices", "type", "default")
 #: Python type of its answer.
 OPTION_TYPES: dict[str, type] = {"str": str, "int": int, "bool": bool}
 
+#: The option names a template's verb cannot take, each to the reason:
+#: the verb's positional, and the flag footman reads on every line.
+_TAKEN_OPTIONS = {
+    "name": "the package's name, the word every template's verb takes first",
+    "help": "footman's own flag, which shows the verb's help on any line",
+}
+
 Answer = str | int | bool
 """The answer to a template's option: a string, an integer or a boolean."""
 
@@ -1531,7 +1544,7 @@ Answer = str | int | bool
 class TemplateOption:
     """A creation option: a ``[templates.<name>.options.<option>]`` table.
 
-    ``fm new.package <name> <template> --<option>=<answer>`` answers it,
+    ``fm new.package.<template> <name> --<option>=<answer>`` answers it,
     and the answer renders the template's files as the variable
     `variable`. A template that extends this one's template takes the
     option too, unless it fixes the answer under ``fixes``.
@@ -1581,12 +1594,12 @@ class TemplateOption:
 class DeclaredTemplate:
     """A template a declaration file declares under ``[templates.<name>]``.
 
-    ``fm new.package <name> <template>`` creates a package from it: the
+    ``fm new.package.<name> <package>`` creates a package from it: the
     files of the template it extends first, then its own, which live
     under ``content/templates/<name>/`` beside the file that declares it.
 
     Attributes:
-        name: The name ``fm new.package`` takes it by.
+        name: The template's name, the last word of its verb.
         extension: The extension that declares it, or the base.
         doc: One line saying what a package born from it is.
         extensions: The extensions a package born from it lists.
@@ -1617,7 +1630,8 @@ def _option_specs(
 
     Raises:
         DeclarationError: for an option off its shape: a name that is not
-            kebab-case, or that is a Python keyword as a variable, a key it
+            kebab-case, or that is a Python keyword as a variable, or that
+            the template's verb takes for itself, a key it
             does not take, a missing or blank ``doc``, ``choices`` and
             ``type`` both or neither, choices that are not distinct
             strings, a type outside ``OPTION_TYPES``, and a ``default``
@@ -1646,6 +1660,11 @@ def _option_specs(
                 "is a Python keyword once its hyphens are underscores, which"
                 " the template variable it renders as cannot be",
             )
+        if name in _TAKEN_OPTIONS:
+            raise reader.refuse(
+                at,
+                f"is taken: --{name} is {_TAKEN_OPTIONS[name]}; rename the option",
+            )
         if not isinstance(spec, dict):
             raise reader.refuse(at, "is a table: doc, choices or type, and default")
         entry = cast("dict[str, Any]", spec)
@@ -1661,7 +1680,7 @@ def _option_specs(
             raise reader.refuse(
                 (*at, "doc"),
                 "is one line of text saying what the answer decides, which"
-                " fm new.package's help and completion show",
+                " the template's verb shows in its help and completion",
             )
         choices = entry.get("choices")
         kind = entry.get("type")
@@ -1767,7 +1786,7 @@ def template_specs_of(
             raise reader.refuse(
                 where,
                 "is no template name: lower-case letters, digits and hyphens,"
-                " starting with a letter, the word fm new.package takes",
+                " starting with a letter, as fm new.package.<template> spells it",
             )
         if not isinstance(table, dict):
             raise reader.refuse(
@@ -1786,7 +1805,7 @@ def template_specs_of(
             raise reader.refuse(
                 (*where, "doc"),
                 "is missing: one line saying what a package born from the"
-                " template is, which fm new.package names",
+                " template is, which the template's verb shows as its help",
             )
         if not isinstance(doc, str) or not doc.strip():
             raise reader.refuse(

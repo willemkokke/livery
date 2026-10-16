@@ -80,6 +80,28 @@ class Declared:
 #: The base's declaration of every key it reads, beside this module.
 BASE_FILE = Path(__file__).with_name("contract.toml")
 
+
+def base_contract() -> dict[str, Any]:
+    """The base's contract file, `BASE_FILE`, parsed once per process.
+
+    The file ships with the workshop and does not change while it runs,
+    so its readers share one parse: the base's keys, phases, queries,
+    tools and templates. The parse is kept by the file's path, so a
+    `BASE_FILE` that names another file is read afresh. A reader
+    copies what it changes: the parse it gets is the one every reader
+    gets.
+    """
+    return _parsed(BASE_FILE)
+
+
+@functools.cache
+def _parsed(path: Path) -> dict[str, Any]:
+    """The TOML file at *path*, parsed once per process."""
+    import tomllib
+
+    return tomllib.loads(path.read_text("utf-8"))
+
+
 #: The top-level tables of ``extension.toml`` that ``[for.<target>]``
 #: does not take again: the extension's identity, the targets table
 #: itself, and the contract keys it owns, which no target changes, and
@@ -101,14 +123,10 @@ def base_keys() -> tuple[Declared, ...]:
         DeclarationError: when the file declares a key off the shape an
             extension's ``[contract]`` table has.
     """
-    import tomllib
-
     from livery.workshop._declaration import contract_keys_of
 
     found = contract_keys_of(
-        tomllib.loads(BASE_FILE.read_text("utf-8")),
-        BASE_FILE,
-        contracts=("root", "package", "extension"),
+        base_contract(), BASE_FILE, contracts=("root", "package", "extension")
     )
     return found + _mirrored(found)
 

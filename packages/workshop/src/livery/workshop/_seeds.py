@@ -20,9 +20,11 @@ A template declares creation options under
 a ``type``, and a ``default``; one without a default is required. A
 template that extends another takes the other's options too, and its
 ``fixes`` table gives an answer to an option of a template it extends,
-which a birth from it then takes no answer for. ``fm new.package <name>
-<template> --<option>=<answer>`` answers them, and every answer is
-checked before anything is written (`answered`). Each answer renders the
+which a birth from it then takes no answer for. ``fm
+new.package.<template> <name> --<option>=<answer>`` answers them
+(`livery.workshop._templates.generate_template_verbs` makes the
+verb), and every answer is checked before anything is written
+(`answered`). Each answer renders the
 files as a template variable, the option's name with its hyphens as
 underscores (``--package-type`` is ``package_type``). Nothing stores the
 answers: a later step that needs one reads the file the answer wrote.
@@ -55,12 +57,12 @@ engine keeps the composed files current; this module writes these once.
 
 from __future__ import annotations
 
-import inspect
+import functools
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from livery.footman import doc, fail, prog
+from livery.footman import Failed, fail, prog
 from livery.workshop._extensions import extension_content, stack_names
 from livery.workshop._fragment_engine import Fragment
 
@@ -122,6 +124,25 @@ def template_files(template: DeclaredTemplate) -> Path:
     return template.path.resolve().parent / "content" / TEMPLATES / template.name
 
 
+@functools.cache
+def base_templates() -> dict[str, DeclaredTemplate]:
+    """The templates the base declares in its contract file, by name.
+
+    Read from the one parse of the file its other readers share.
+
+    Raises:
+        Failed: for a template off its shape, naming the file and the key.
+    """
+    from livery.workshop._contract_keys import BASE_FILE, base_contract
+    from livery.workshop._declaration import DeclarationError, template_specs_of
+    from livery.workshop._extensions import SELF
+
+    try:
+        return template_specs_of(base_contract(), BASE_FILE, extension=SELF)
+    except DeclarationError as error:
+        fail(str(error))
+
+
 def available_templates() -> dict[str, DeclaredTemplate]:
     """Every template the base or an installed distribution declares, by name.
 
@@ -135,23 +156,17 @@ def available_templates() -> dict[str, DeclaredTemplate]:
         Failed: for a template two extensions declare, naming both, and
             for a template off its shape, naming the file and the key.
     """
-    import tomllib
-
-    from livery.workshop._contract_keys import BASE_FILE
     from livery.workshop._declaration import (
         DeclarationError,
         template_declarations,
-        template_specs_of,
     )
     from livery.workshop._extensions import (
-        SELF,
         extension_package,
         installed_extensions,
     )
 
+    found = list(base_templates().values())
     try:
-        base = tomllib.loads(BASE_FILE.read_text("utf-8"))
-        found = list(template_specs_of(base, BASE_FILE, extension=SELF).values())
         for extension in installed_extensions():
             found += template_declarations(extension, extension_package(extension))
     except DeclarationError as error:
@@ -179,8 +194,10 @@ def installed_templates(start: Path | None = None) -> dict[str, DeclaredTemplate
 
     The base's, and those of each extension the workspace's installed
     set holds that an installed distribution declares. Outside a
-    workspace, the base's alone. Completion offers these, and a refusal
-    naming the installed templates names these.
+    workspace, the base's alone. Each has a verb,
+    ``fm new.package.<template>``, which the mount makes from the
+    declarations it reads, and a refusal naming the installed templates
+    names these.
 
     Raises:
         Failed: as `available_templates` does.
@@ -330,7 +347,7 @@ def answered(
     """The template variables a birth from *chain* renders with, each answer checked.
 
     *answers* holds an answer by each option's variable (`package_type`
-    for ``--package-type``), as ``fm new.package`` passes them. An option
+    for ``--package-type``), as the template's verb passes them. An option
     without an answer takes its default, and a fixed option the answer
     its template fixes.
 
@@ -373,32 +390,21 @@ def answered(
     return variables
 
 
-def option_parameters(chain: Sequence[DeclaredTemplate]) -> list[inspect.Parameter]:
-    """The options a birth from *chain* takes, as ``fm new.package`` declares them.
+def verb_options(
+    name: str, templates: Mapping[str, DeclaredTemplate]
+) -> tuple[TemplateOption, ...]:
+    """The options the verb of the template *name* offers, read from *templates*.
 
-    Each is a keyword-only parameter named by its variable: its annotation
-    is a `Literal` of its choices or its type, with its doc, and an option
-    without a default has none.
+    The options of its chain less the answers the chain fixes, as a
+    birth takes them (`chain_options`). A chain that *templates* do not
+    resolve, or whose options disagree, offers the options *name*
+    declares itself: its verb exists all the same, and running it
+    refuses as a birth from it refuses.
     """
-    from livery.workshop._declaration import OPTION_TYPES
-
-    found: list[inspect.Parameter] = []
-    for option in chain_options(chain)[0].values():
-        answer: Any = OPTION_TYPES[option.type]
-        if option.choices:
-            # The choices are data, so the Literal is built at run time.
-            answer = cast("Any", Literal)[option.choices]
-        found.append(
-            inspect.Parameter(
-                option.variable,
-                inspect.Parameter.KEYWORD_ONLY,
-                default=inspect.Parameter.empty
-                if option.default is None
-                else option.default,
-                annotation=cast("Any", Annotated)[answer, doc(option.doc)],
-            )
-        )
-    return found
+    try:
+        return tuple(chain_options(template_chain(name, templates))[0].values())
+    except Failed:
+        return templates[name].options
 
 
 def resolved_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:

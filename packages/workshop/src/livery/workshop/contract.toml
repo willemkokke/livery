@@ -857,18 +857,18 @@ doc = "a shipped file of the base or of an extension this one requires, <owner>:
 
 [contract.extension.templates]
 types = ["table"]
-doc = "the templates the extension declares, each one fm new.package <name> <template> creates a package from, offered while the workspace's installed set holds the extension"
+doc = "the templates the extension declares, each the verb fm new.package.<template> <name> that creates a package from it, offered while the workspace's installed set holds the extension"
 
-# A template, by the name fm new.package takes: lower-case letters,
-# digits and hyphens. Its files live under content/templates/<name>/
-# beside the file declaring it. Its doc key is declared below, so the
+# A template, by the name its verb fm new.package.<template> ends in:
+# lower-case letters, digits and hyphens. Its files live under
+# content/templates/<name>/ beside the file declaring it. Its doc key is declared below, so the
 # table carries none of its own.
 [contract.extension.templates."*"]
 types = ["table"]
 
 [contract.extension.templates."*".doc]
 types = ["str"]
-doc = "one line saying what a package born from the template is, which fm new.package names; required"
+doc = "one line saying what a package born from the template is, which its verb shows as its help; required"
 
 [contract.extension.templates."*".extends]
 types = ["str"]
@@ -888,7 +888,7 @@ doc = "the answer the option takes"
 
 [contract.extension.templates."*".options]
 types = ["table"]
-doc = "the template's creation options, each answered as fm new.package <name> <template> --<option>=<answer>; a template extending this one takes them too"
+doc = "the template's creation options, each answered as fm new.package.<template> <name> --<option>=<answer>; a template extending this one takes them too"
 
 # An option, by the name --<option> spells: lower-case letters, digits
 # and hyphens. Its answer renders the template's files as a variable,
@@ -906,7 +906,7 @@ doc = "the answer when the command line gives none; the option is required when 
 
 [contract.extension.templates."*".options."*".doc]
 types = ["str"]
-doc = "one line saying what the answer decides, which fm new.package's help and completion show; required"
+doc = "one line saying what the answer decides, which the template's verb shows in its help and completion; required"
 
 [contract.extension.templates."*".options."*".type]
 types = ["str"]

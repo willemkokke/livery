@@ -334,7 +334,7 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
         ("ext", "nanobind-module"),
     ):
         made = subprocess.run(
-            ["uv", "run", "fm", "new.package", name, template],
+            ["uv", "run", "fm", f"new.package.{template}", name],
             cwd=root,
             env=env,
             capture_output=True,

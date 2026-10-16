@@ -246,8 +246,6 @@ def _h(level: int, text: str, path: list[str], flavor: str) -> str:
 def _type_cell(p: dict[str, Any]) -> str:
     if p["kind"] == "flag":
         return "flag"
-    if p["kind"] == "chosen":
-        return f"the options `<{p['of']}>`'s value declares"
     if p.get("mapping"):
         return "KEY=VALUE"
     bits: list[str] = []
