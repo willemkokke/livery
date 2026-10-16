@@ -768,6 +768,7 @@ def test_a_member_is_wired_by_a_runner_started_after_it(
     # nanobind, whose mount adds the release's wheels job. A runner
     # started after the member wires it, and the next command renders
     # what the wiring wrote.
+    skip_unless_installed("nanobind")
     from livery.workshop import _steps
     from livery.workshop._shipped_files import shipped_drift
     from workshop_docs_declared import jobs_restored

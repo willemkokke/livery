@@ -35,6 +35,11 @@ _END_TABLES = "# -- workshop: end tables --"
 #: that installs it takes it from there.
 NATIVE = ("cmake", "conan")
 
+#: What nanobind's nanobind-module template needs: nanobind, which
+#: requires python, cpp and conan. It ships as a distribution of its
+#: own, which the newborn's region sources from this checkout too.
+NANOBIND = ("nanobind",)
+
 #: Each creation the templates' options make, each in a workspace of its
 #: own: the member's name, the template, and the answers on the line.
 CREATIONS = (
@@ -141,7 +146,7 @@ def _birth(tmp_path: Path) -> tuple[Path, str, dict[str, str]]:
     for seed in ("README.md", "LICENSE", "docs/index.md"):
         assert (project / seed).is_file(), seed
     assert not (project / "tests").exists()
-    _point_at_this_checkout(project, (*births, *NATIVE))
+    _point_at_this_checkout(project, (*births, *NATIVE, *NANOBIND))
     _run(["uv", "lock"], project, env)
     _run(["uv", "sync"], project, env)
     return project, _script(project, "fm"), env
@@ -152,6 +157,17 @@ def _script(project: Path, name: str) -> str:
     scripts = "Scripts" if sys.platform == "win32" else "bin"
     suffix = ".exe" if sys.platform == "win32" else ""
     return str(project / ".venv" / scripts / f"{name}{suffix}")
+
+
+def _installed(project: Path, distribution: str) -> bool:
+    """Whether *project*'s environment holds *distribution*."""
+    probe = (
+        "import importlib.metadata, sys\nimportlib.metadata.distribution(sys.argv[1])\n"
+    )
+    done = subprocess.run(
+        [_script(project, "python"), "-c", probe, distribution], capture_output=True
+    )
+    return done.returncode == 0
 
 
 def test_a_born_project_is_green(tmp_path: Path) -> None:
@@ -245,3 +261,37 @@ def test_a_creation_with_each_answer_is_green_in_a_workspace_of_its_own(
         assert "ok   test.ctest" in gate, gate
     else:
         assert "ok   test.pytest" in gate, gate
+
+
+def test_a_nanobind_module_is_created_once_its_extension_is_listed_and_synced(
+    tmp_path: Path,
+) -> None:
+    project, fm, env = _birth(tmp_path)
+    # The refusal first: the stock list holds no nanobind, so the
+    # environment holds none of its distribution, and no verb creates
+    # its template: footman refuses a task it does not know.
+    refused = subprocess.run(
+        [fm, "new.package.nanobind-module", "native"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode == 64, said
+    assert "no task named 'new.package.nanobind-module'" in said, said
+    assert not (project / "packages" / "native").exists()
+    assert not _installed(project, "livery-extensions-nanobind")
+    # Listed, the sync installs its distribution from the source the
+    # newborn's project file names, and the template's verb exists.
+    from livery.workshop._extensions import list_in_root
+
+    list_in_root(project, NANOBIND)
+    _run([fm, "sync"], project, env)
+    assert _installed(project, "livery-extensions-nanobind")
+    _run([fm, "new.package.nanobind-module", "native"], project, env)
+    member = project / "packages" / "native"
+    assert 'extensions = ["nanobind"]' in (member / "workshop.toml").read_text()
+    gate = _run([fm, "check"], project, env)
+    for step in ("drift.check", "test.pytest"):
+        assert f"ok   {step}" in gate, gate

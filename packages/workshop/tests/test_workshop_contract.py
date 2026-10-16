@@ -193,6 +193,7 @@ def test_the_release_resolutions_refuse_another_word_and_one_listed_twice(
 def test_a_package_listing_no_extensions_mounts_none_and_takes_no_extension_s_keys(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._extensions import installed_set
 
     member = _workspace(tmp_path, "", 'name = "m"\n')

@@ -1022,7 +1022,8 @@ names first, the same way.
 | --- | --- |
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
 | `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
-| `livery-extensions-python`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
+| `livery-extensions-python`, `-conan`, `-cpp`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
+| `livery-extensions-nanobind` | step 8's release wave; the package exists since step 8's P5b (#1723) |
 | `livery-extensions-mkdocstrings` | step 8's release wave; the package exists since step 8's P2b (#1708) |
 | `livery-extensions-docs` | step 8's release wave; the package exists since step 8's P3b (#1712) |
 | `livery-extensions-coverage` | step 8's release wave; the package exists since step 8's P4b (#1718) |
@@ -1411,7 +1412,14 @@ remained after N1.
    reads: `build_release`, `discover_release`, `python_matrix`,
    `JOB_BUILT_MEMBERS`, `tool_receipts` with `ToolReceipt`, and
    `store_home`; python's and conan's entry modules export the names
-   nanobind reads of them.
+   nanobind reads of them. P5b (built, #1723) moves nanobind to
+   `packages/extensions/nanobind`, distribution
+   `livery-extensions-nanobind` 0.0.0, with its tests, its footman
+   plugin (`nanobind.wheels`) and the `nanobind-module` template; its
+   wheel requires `livery-workshop`, which ships python, cpp and conan
+   until they leave too. The seed pins and the three-seeds golden judge
+   several extensions' templates, so they moved to the root workspace
+   suite.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1766,7 +1774,7 @@ neither needs nor rules out).
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
-| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage) | fixture extensions in the workshop's suite |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage, 34 for nanobind) | fixture extensions in the workshop's suite |
 | `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled`, and on `livery-extensions-docs`, which ships the docs entry module | the release wave raising the floor within its set (step 8's R1) |
 | mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
 | `livery-extensions-docs`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `run_phase`, `order_topologically`, `release_tag` and `nearest_extensions` | the release wave raising the floor within its set (step 8's R1) |
@@ -1776,6 +1784,8 @@ neither needs nor rules out).
 | cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
 | `livery-extensions-coverage`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `state_store`, `leg_scope`, `verified_branch` and the other names coverage reads | the release wave raising the floor within its set (step 8's R1) |
 | coverage's coverage floor at its measured 96 | the ratchet back to 100 |
+| `livery-extensions-nanobind`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `build_release`, `discover_release`, `python_matrix`, `JOB_BUILT_MEMBERS`, `tool_receipts` with `ToolReceipt`, `store_home`, and python's and conan's entry modules | the release wave raising the floor within its set (step 8's R1) |
+| nanobind's coverage floor at its measured 84: the Linux container branch and the native build run only in the armed tests | the ratchet back to 100 |
 | `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache` and `restore_from_releases` to nanobind | conan's per-host artifact (phase 13) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
@@ -3737,6 +3747,19 @@ neither needs nor rules out).
   each loads the same four modules docs' loads. The public API tables
   above now list every name `__all__` holds; 28 were missing,
   `check_option`'s row is `step_option`'s.
+
+- 2026-10-16, step 8's P5b (#1723), built: nanobind, its footman
+  plugin and its template leave the workshop wheel for
+  `livery-extensions-nanobind`. With one kind of extension there is no
+  `--extension` option to birth a package from an uninstalled
+  extension's template, as the plan's F2 had it: a workspace lists
+  nanobind, `fm sync` installs the distribution, and the template's
+  verb exists from then on; before, `fm new.package.nanobind-module`
+  is an unknown task. The born-project suite proves that flow. The
+  loop needed no change: its stack lists nanobind for `loop-native`,
+  so its dev wheels build and serve the new distribution. A race in
+  the suite's shared scratch tool store failed three armed tests once
+  (#1725).
 
 ## Open
 

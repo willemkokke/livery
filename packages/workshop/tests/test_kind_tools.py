@@ -359,7 +359,7 @@ NATIVE_SITES = {
 def test_each_native_tool_names_the_extension_that_requires_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     from livery.workshop._extensions import installed_declaration
 
     root = _workspace(tmp_path, monkeypatch)

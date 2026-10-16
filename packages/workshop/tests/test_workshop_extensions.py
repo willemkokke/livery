@@ -202,10 +202,10 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
     contract.write_text('[workspace]\nextensions = ["python", "cpp"]\n')
     with registry.capture():
         assert mount_extensions(tmp_path) == ("cpp", "python")
-    # An extension with a plugin mounts with every extension it requires.
-    contract.write_text('[workspace]\nextensions = ["nanobind"]\n')
+    # An extension mounts with every extension it requires.
+    contract.write_text('[workspace]\nextensions = ["conan"]\n')
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("cpp", "conan", "python", "nanobind")
+        assert mount_extensions(tmp_path) == ("cpp", "conan")
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:

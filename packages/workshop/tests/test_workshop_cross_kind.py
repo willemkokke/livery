@@ -167,6 +167,7 @@ def test_conan_requirements_reads_every_declared_form(tmp_path: Path) -> None:
 def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop import _lifecycle
 
     directory = _member(

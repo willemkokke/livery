@@ -33,7 +33,6 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
 SHIPPED = {
     "conan": "livery.extensions.conan",
     "cpp": "livery.extensions.cpp",
-    "nanobind": "livery.extensions.nanobind",
     "python": "livery.extensions.python",
 }
 
@@ -49,6 +48,14 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
         if entry.group == "workshop.extensions"
     }
     assert declared == SHIPPED
+    # None of the extensions it ships carries a plugin: the wheel's one
+    # footman plugin is the base's.
+    plugins = [
+        entry.name
+        for entry in distribution("livery-workshop").entry_points
+        if entry.group == "footman.tasks"
+    ]
+    assert plugins == ["livery.workshop"]
     # What an extension that left needed goes with it: griffelib, which
     # the API reference's check reads sources with, and Pygments and its
     # stubs, which the coverage pages highlight with, are none of the

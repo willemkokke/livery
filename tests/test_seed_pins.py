@@ -12,7 +12,9 @@ each step judges, where a requirement on a sibling lands, what the
 release wave and the lifecycle run, the guidance the workspace reads,
 and what each file of a nanobind member is to it. A change that moves
 one of these on purpose restates it here in the same change, so the
-diff says what moved.
+diff says what moved. The templates and the extensions they compose
+ship in several distributions, so the pins are the workspace's own
+tests, which run where every member is installed.
 
 The goldens live under ``fixtures/templates/<template>/``,
 ``fixtures/three-seeds/`` and ``fixtures/three-seeds-guidance/``, each
@@ -20,7 +22,7 @@ file at its path in the workspace with ``.golden`` appended: without
 the suffix, pytest would collect a seeded test module, the type
 checkers would read it, and a seeded ``.gitignore`` would apply to the
 fixtures beside it. When a render moves, the test writes the new files
-under its temporary directory and names them (`workshop_goldens.match`).
+under its temporary directory and names them (`goldens.match`).
 """
 
 from __future__ import annotations
@@ -35,13 +37,11 @@ from typing import TypeVar
 import pytest
 
 import livery.footman as footman
+from goldens import FIXTURES, match
 from livery.footman import Failed
 from livery.workshop import _lifecycle
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import apply_project, render_member
-from workshop_goldens import FIXTURES, match
-from workshop_installed import skip_unless_installed
-from workshop_members import mounted_now
 
 _T = TypeVar("_T")
 
@@ -124,7 +124,6 @@ def _as_a_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:
     """A workspace named acme at *root* that lists *listed* and has no member."""
-    skip_unless_installed(*listed)
     root.mkdir(parents=True)
     spelled = ", ".join(f'"{name}"' for name in listed)
     (root / "workshop.toml").write_text(CONTRACT.format(listed=spelled), "utf-8")
@@ -143,12 +142,10 @@ def _born(root: Path, *births: str) -> dict[str, Package]:
 
     The root lists what each template needs first, as a person does
     before the creation: a creation installs nothing. The members
-    discovered, each by its birth's name. The test skips while an
-    extension a member holds is not installed.
+    discovered, each by its birth's name.
     """
     from livery.workshop._seeds import chain_needs, template_chain
 
-    skip_unless_installed(*(name for birth in births for name in HELD[birth]))
     _lists_also(
         root,
         *(
@@ -165,11 +162,21 @@ def _born(root: Path, *births: str) -> dict[str, Package]:
 
 
 def _mounted(root: Path) -> tuple[str, ...]:
-    """Mount *root*'s extensions as a process started there now would; the names."""
-    from livery.workshop import _steps
+    """Mount *root*'s extensions as a process started there now would; the names.
+
+    The steps and the points' jobs start as a new process has them, and
+    the verbs the mount makes land in a throwaway tree. The isolation
+    plugin puts the steps, the jobs and the mount's records back after
+    the test.
+    """
+    from livery.footman import _registry as registry
+    from livery.workshop import _points, _steps
+    from livery.workshop._extensions import mount_extensions
 
     _steps.restore(_steps.snapshot(initial=True))
-    return mounted_now(root)
+    _points.restore(_points.snapshot(initial=True))
+    with registry.capture():
+        return mount_extensions(root)
 
 
 def _files(directory: Path) -> dict[str, str]:
@@ -705,7 +712,6 @@ LANDED = {
 def test_the_sibling_requirement_lands_in_its_ecosystem_s_manifest(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("cmake")
     root = _workspace(tmp_path / "acme")
     _lists_also(root, "cmake", "nanobind")
     for name, template in (

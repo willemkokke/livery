@@ -566,7 +566,7 @@ def test_what_composes_a_package_is_read_from_the_declarations(
 
 
 def test_the_proof_composes_exactly_cmake_conan_cpp_nanobind_python() -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     composing = [
         name
         for name in _extensions.installed_extensions()
