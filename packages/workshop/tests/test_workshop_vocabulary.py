@@ -5,8 +5,7 @@ no extension that composes a package and no registry kind, the words this test
 looks for, and imports no backend: it asks the extensions a package
 holds instead. It names no tool a listed extension's steps bring, and
 none of the coverage extension's verbs. This test scans the base's
-sources for each, and every extension's (``livery.extensions``) for an
-import of a backend.
+sources for each: the workshop's wheel ships the base alone.
 
 Two lists say what is allowed. ``RUNTIME`` holds the words the base
 uses for its own python runtime (the root ``pyproject.toml``, the
@@ -174,8 +173,6 @@ def scan(src: Path, words: set[str]) -> Counter[tuple[str, str]]:
         if "templates" in relative.parts:
             continue
         dotted = ".".join(relative.with_suffix("").parts).removesuffix(".__init__")
-        if not dotted.startswith("livery.workshop."):
-            continue
         module = dotted.removeprefix("livery.workshop.")
         tree = ast.parse(path.read_text("utf-8"))
         skip = _docstrings(tree)
