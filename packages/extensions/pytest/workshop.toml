@@ -47,3 +47,10 @@ floor = "0.0.0"
 path = "packages/extensions/coverage"
 kind = "test"
 floor = "0.0.0"
+
+# The suite runs the suites and the examples through python's runners.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+

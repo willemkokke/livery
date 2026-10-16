@@ -310,19 +310,18 @@ def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> No
     ] == []
     shipped = shipping_distribution("livery.extensions.nanobind")
     assert shipped is not None and shipped.name == "livery-extensions-nanobind"
-    # The extensions it requires: python ships in the workshop's wheel,
-    # cpp and conan each in a distribution of its own, and this wheel
-    # requires all three.
+    # The extensions it requires, python, cpp and conan, each ship in a
+    # distribution of its own, and this wheel requires all three beside
+    # the base.
     required = importlib.metadata.requires("livery-extensions-nanobind") or []
     assert [
         line
         for line in required
-        if line.startswith(
-            ("livery-workshop", "livery-extensions-conan", "livery-extensions-cpp")
-        )
+        if line.startswith(("livery-workshop", "livery-extensions-"))
     ] == [
         "livery-extensions-conan>=0.0.0",
         "livery-extensions-cpp>=0.0.0",
+        "livery-extensions-python>=0.0.0",
         "livery-workshop>=0.10.0",
     ]
     declared = declaration("nanobind")
@@ -331,7 +330,7 @@ def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> No
         name: getattr(shipping_distribution(f"livery.extensions.{name}"), "name", "")
         for name in declared.requires
     } == {
-        "python": "livery-workshop",
+        "python": "livery-extensions-python",
         "cpp": "livery-extensions-cpp",
         "conan": "livery-extensions-conan",
     }

@@ -15,6 +15,7 @@ from livery.workshop._steps import (
     unregister_step,
 )
 from workshop_extension_fakes import fake_extensions, package_contract, root_contract
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -310,6 +311,7 @@ def test_the_doctor_lists_installed_extensions_the_contract_does_not_mount() -> 
 
 
 def test_a_footman_plugin_is_not_offered_as_an_extension() -> None:
+    skip_unless_installed("python")
     # footman's own task providers declare no extension: never offered,
     # however many verbs they add.
     offered = {name for name, _ in _extensions.available_extensions(())}
@@ -763,6 +765,7 @@ def test_a_workspace_listing_coverage_without_docs_mounts(tmp_path: Path) -> Non
 
     Coverage is awake there, and its tables for the docs extension apply
     to nothing while docs is unlisted, so the mount refuses none of them.
+    Its table for python applies, since the stack lists python.
     """
     import livery.workshop
     from livery.workshop._e2e import loop_stack
@@ -775,7 +778,7 @@ def test_a_workspace_listing_coverage_without_docs_mounts(tmp_path: Path) -> Non
     assert "coverage" in stack and "docs" not in stack
     root_contract(tmp_path, "[" + ", ".join(f'"{name}"' for name in stack) + "]")
     assert _extensions.dormancy(tmp_path) == {}
-    assert _extensions.resolved_targets(tmp_path)["coverage"] == ()
+    assert _extensions.resolved_targets(tmp_path)["coverage"] == ("python",)
     from livery.footman import _registry as registry
 
     # The stack names nanobind, so its set takes in python, cpp and conan,

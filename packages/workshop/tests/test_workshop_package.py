@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -31,33 +31,18 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
     assert getattr(livery, "__file__", None) is None
 
 
-#: The extension the workshop's wheel ships beside the base, by the name
-#: a contract lists to the package it mounts from: python alone. Each
-#: extension that leaves the wheel for a distribution of its own leaves
-#: this pin.
-SHIPPED = {
-    "python": "livery.extensions.python",
-}
-
-
-def test_the_workshop_wheel_ships_the_base_and_the_python_extension() -> None:
+def test_the_workshop_wheel_ships_the_base_alone(tmp_path: Path) -> None:
     import tomllib
+    import zipfile
     from importlib.metadata import distribution
-    from pathlib import Path
 
-    declared = {
-        entry.name: entry.value
-        for entry in distribution("livery-workshop").entry_points
-        if entry.group == "workshop.extensions"
-    }
-    assert declared == SHIPPED
-    # The extension it ships carries no plugin: the wheel's one footman
-    # plugin is the base's.
-    plugins = [
-        entry.name
-        for entry in distribution("livery-workshop").entry_points
-        if entry.group == "footman.tasks"
-    ]
+    import livery.toolroom.tools as tools
+
+    # It declares no extension: every extension ships in a distribution
+    # of its own, and the wheel's one footman plugin is the base's.
+    entries = distribution("livery-workshop").entry_points
+    assert [entry for entry in entries if entry.group == "workshop.extensions"] == []
+    plugins = [entry.name for entry in entries if entry.group == "footman.tasks"]
     assert plugins == ["livery.workshop"]
     # What an extension that left needed goes with it: griffelib, which
     # the API reference's check reads sources with, and Pygments and its
@@ -67,15 +52,27 @@ def test_the_workshop_wheel_ships_the_base_and_the_python_extension() -> None:
     assert [
         line for line in required if "griffelib" in line or "pygments" in line
     ] == []
-    # The build ships the base's root and python's, and no other.
-    project = tomllib.loads(
-        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")
-    )
+    # The build ships the base's root alone, which has its __init__.py,
+    # so the build takes no namespace flag and refuses a root that
+    # lacks one.
+    member = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((member / "pyproject.toml").read_text("utf-8"))
     backend = project["tool"]["uv"]["build-backend"]
-    assert backend["module-name"] == ["livery.workshop", *sorted(SHIPPED.values())]
-    # Each root has its __init__.py, so the build takes no namespace
-    # flag and refuses a root that lacks one.
-    assert "namespace" not in backend
+    assert backend == {"module-name": "livery.workshop"}
+    # The wheel the build writes holds livery/workshop/ and its metadata,
+    # and nothing else.
+    built = tools.uv.opts(cwd=member, nofail=True, recorded=False)(
+        "build", "--wheel", "--out-dir", str(tmp_path)
+    )
+    assert built.code == 0, built.stdout + built.stderr
+    (wheel,) = tmp_path.glob("*.whl")
+    with zipfile.ZipFile(wheel) as archive:
+        roots = {
+            "/".join(entry.filename.split("/")[:2])
+            for entry in archive.infolist()
+            if not entry.is_dir() and ".dist-info/" not in entry.filename
+        }
+    assert roots == {"livery/workshop"}
 
 
 def test_the_surface_is_declared() -> None:
@@ -261,33 +258,3 @@ def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name
     assert workshop_module.testing is importlib.import_module("livery.workshop.testing")
     with pytest.raises(AttributeError, match="has no attribute 'nothing_here'"):
         workshop_module.nothing_here  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
-
-
-def test_the_python_entry_module_refuses_a_name_it_does_not_export() -> None:
-    import livery.extensions.python as python_module
-
-    # The refused name is a function of the module that defines the
-    # exported ones: only the declared names are served.
-    with pytest.raises(
-        AttributeError,
-        match=re.escape(
-            "module 'livery.extensions.python' has no attribute"
-            " 'materialise_module_docs'"
-        ),
-    ):
-        python_module.materialise_module_docs  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
-
-
-def test_an_entry_module_serves_what_the_defining_module_holds_at_each_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import livery.extensions.python as python_module
-    from livery.extensions.python import _backend
-
-    # A test patches the defining module, and a reader of the entry
-    # module sees the patch.
-    tested = object()
-    monkeypatch.setattr(_backend, "run_isolated_test", tested)
-    assert python_module.run_isolated_test is tested
-    monkeypatch.undo()
-    assert python_module.run_isolated_test is _backend.run_isolated_test

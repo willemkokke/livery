@@ -1,30 +1,146 @@
-"""The python extension inside the wheel: its load order, its entry point, its level.
+"""The python extension: its distribution, its declaration, its answers and its steps.
 
-Then the package docs its wheel carries beside the module it ships.
+Its own distribution first: what it declares and requires, the kit,
+and the loop's dev wheels. Then the build's refusal of a platform
+wheel, the answers a python package gives, the stamp, the publish and
+the verification, and the package docs its wheel carries beside the
+module it ships.
 """
 
 from __future__ import annotations
 
 import importlib.metadata
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+from extensions_python_workspace import (
+    package_contract,
+    root_contract,
+    skip_unless_installed,
+)
 from livery.extensions.python._backend import (
     materialise_module_docs,
     module_docs,
     module_docs_dir,
 )
 from livery.footman import Failed
-from livery.workshop._packages import discover_packages
-from workshop_installed import skip_unless_installed
+from livery.workshop import discover_packages
+from livery.workshop.testing import CLAUSES, Clause
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 _FAILURES = (SystemExit, Failed)
+
+
+def _mount(root: Path) -> tuple[str, ...]:
+    """Mount what *root*'s lists hold, as a verb there would; the names mounted."""
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_extensions
+
+    with registry.capture():
+        return mount_extensions(root)
+
+
+def _in_this_checkout() -> None:
+    """Skip the running test unless the extension runs from this checkout.
+
+    The release train's isolated leg installs this distribution's wheel
+    alone, beside no checkout's packages.
+    """
+    import livery.extensions.python
+
+    here = Path(livery.extensions.python.__file__).resolve()
+    if not here.is_relative_to(ROOT):
+        pytest.skip("the test reads this checkout's packages")
+
+
+# --- its own distribution -----------------------------------------------------
+
+
+def test_its_own_distribution_ships_python_and_the_workshop_wheel_none() -> None:
+    from livery.workshop._extensions import declaration, shipping_distribution
+
+    ours = {
+        (entry.group, entry.name, entry.value)
+        for entry in importlib.metadata.distribution(
+            "livery-extensions-python"
+        ).entry_points
+    }
+    assert ours == {("workshop.extensions", "python", "livery.extensions.python")}
+    theirs = importlib.metadata.distribution("livery-workshop").entry_points
+    assert [entry for entry in theirs if entry.group == "workshop.extensions"] == []
+    shipped = shipping_distribution("livery.extensions.python")
+    assert shipped is not None and shipped.name == "livery-extensions-python"
+    # At runtime it requires the base, footman, the forge's index probe
+    # and the toolroom's tools, and nothing else.
+    required = importlib.metadata.requires("livery-extensions-python") or []
+    assert sorted(required) == [
+        "livery-footman>=0.60.0",
+        "livery-forge>=0.7.0",
+        "livery-toolroom>=0.11.0",
+        "livery-workshop>=0.10.0",
+    ]
+    declared = declaration("python")
+    assert declared is not None
+    assert declared.requires == ()
+    assert declared.plugin == ""
+
+
+def test_a_package_listing_python_mounts_it(tmp_path: Path) -> None:
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
+    assert _mount(tmp_path) == ("python",)
+
+
+@pytest.mark.parametrize("clause", CLAUSES, ids=lambda clause: clause.name)
+def test_python_conforms(clause: Clause, tmp_path: Path) -> None:
+    from livery.workshop._steps import StepRecord, steps_by_name
+    from livery.workshop.testing import Subject
+
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
+    _mount(tmp_path)
+    # python registers the layering phase's three steps in the gate; its
+    # stamp, build, publish, test, verify and run steps run in a release
+    # or a verb, and none of them reaches the gate.
+    steps: tuple[StepRecord, ...] = tuple(
+        record for record in steps_by_name().values() if record.extension == "python"
+    )
+    assert sorted(record.name for record in steps) == [
+        "layering.declared-imports",
+        "layering.private-reaches",
+        "layering.runner-terminal",
+    ]
+    subject = Subject("livery.extensions.python", sets=(("python",),), steps=steps)
+    assert clause.judge(subject) == []
+
+
+def test_the_loop_s_dev_wheels_hold_this_distribution() -> None:
+    # The loop's members loop-echo and loop-native are python
+    # distributions. The dev wheels the pass builds and publishes before
+    # the birth hold this distribution, so the newborn installs it, and
+    # each python member builds and publishes through python's steps
+    # from it.
+    from livery.workshop._composition import closure
+    from livery.workshop._e2e import LOOP_MEMBERS, dev_members, loop_stack
+    from livery.workshop._extensions import installed_declaration
+
+    _in_this_checkout()
+    # The loop's members need nanobind too, so the stack is read where it
+    # is installed.
+    skip_unless_installed("nanobind")
+    templates = {member.name: member.template for member in LOOP_MEMBERS}
+    assert templates["loop-echo"] == "python-library"
+    # The canonical list leaves python out, since nanobind requires it,
+    # and the stack's set holds it.
+    assert "python" in closure(loop_stack(), installed_declaration)
+    assert "extensions/python" in dev_members(ROOT, loop_stack())
+
+
+# --- the build ------------------------------------------------------------------
 
 
 def test_python_s_build_refuses_a_platform_wheel(
@@ -74,21 +190,8 @@ def test_python_s_build_refuses_a_platform_wheel(
     assert _backend.build(package, tmp_path) == directory / "dist"
 
 
-def test_the_wheel_ships_python_as_an_extension() -> None:
-    from livery.workshop._extensions import declaration
-
-    found = {
-        entry.name: entry.value
-        for entry in importlib.metadata.entry_points(group="workshop.extensions")
-    }
-    assert found["python"] == "livery.extensions.python"
-    declared = declaration("python")
-    assert declared is not None
-
-
 def test_the_extension_answers_each_python_package_here_as_its_code_does() -> None:
     """Every package here holding python is answered as python's code reads it."""
-    import livery.workshop
     from livery.extensions.python import _backend
     from livery.workshop._composition import extension_set
     from livery.workshop._queries import (
@@ -101,10 +204,7 @@ def test_the_extension_answers_each_python_package_here_as_its_code_does() -> No
         answer,
     )
 
-    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
-        # The release train's isolated leg installs the workshop's wheel
-        # alone, beside no checkout's packages.
-        pytest.skip("the comparison reads this checkout's packages")
+    _in_this_checkout()
     listing = [
         package
         for package in discover_packages(ROOT)
@@ -131,7 +231,6 @@ def test_python_answers_its_runners_while_pytest_is_listed_and_a_package_holds_i
     """Pytest's steps ask for the functions that run the suites and the examples."""
     from livery.extensions.python import _backend
     from livery.workshop import Query, answer
-    from workshop_extension_fakes import package_contract, root_contract
 
     skip_unless_installed("pytest")
 
@@ -590,12 +689,10 @@ def test_the_released_version_installs_alone_into_a_plain_environment(
 
 def test_each_python_package_here_is_categorised_by_python_s_table() -> None:
     """The extension's table answers for every package here that holds python."""
-    import livery.workshop
     from livery.workshop._categories import category_of
     from livery.workshop._composition import extension_set
 
-    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
-        pytest.skip("the categories are read from this checkout's packages")
+    _in_this_checkout()
     expected = {
         "src/livery/x/mod.py": "source",
         "tests/test_x.py": "test",
@@ -759,3 +856,33 @@ def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
     env = {**_unarmed(), "COVERAGE_PROCESS_START": str(config)}
     _python_of_the_venv(env, "x = 1", tmp_path)
     assert list(tmp_path.glob(".coverage.*"))
+
+
+def test_the_python_entry_module_refuses_a_name_it_does_not_export() -> None:
+    import livery.extensions.python as python_module
+
+    # The refused name is a function of the module that defines the
+    # exported ones: only the declared names are served.
+    with pytest.raises(
+        AttributeError,
+        match=re.escape(
+            "module 'livery.extensions.python' has no attribute"
+            " 'materialise_module_docs'"
+        ),
+    ):
+        python_module.materialise_module_docs  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_an_entry_module_serves_what_the_defining_module_holds_at_each_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import livery.extensions.python as python_module
+    from livery.extensions.python import _backend
+
+    # A test patches the defining module, and a reader of the entry
+    # module sees the patch.
+    tested = object()
+    monkeypatch.setattr(_backend, "run_isolated_test", tested)
+    assert python_module.run_isolated_test is tested
+    monkeypatch.undo()
+    assert python_module.run_isolated_test is _backend.run_isolated_test

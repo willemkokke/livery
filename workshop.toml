@@ -48,9 +48,10 @@ extensions = [
     # The test runner and its coverage meter, configured by the root
     # pytest.toml and .coveragerc.
     "pytest",
-    # The root's own tests are python, and so is tasks.py. The root's
-    # tests hold the root's set, so the python steps judge them and
-    # pytest runs them.
+    # Each python package's build, release and layering rules, in a
+    # distribution of its own, livery-extensions-python. The root's own
+    # tests are python, and so is tasks.py: the root's tests hold the
+    # root's set, so the python steps judge them and pytest runs them.
     "python",
     # The python formatter and linter, configured by the root ruff.toml.
     "ruff",

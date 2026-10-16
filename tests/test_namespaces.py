@@ -547,7 +547,9 @@ SOURCES = {
     "livery.toolroom.bench": "packages/toolroom-bench/src/livery/toolroom/bench",
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
     "livery.extensions.docs": "packages/extensions/docs/src/livery/extensions/docs",
-    "livery.extensions.python": "packages/workshop/src/livery/extensions/python",
+    "livery.extensions.python": (
+        "packages/extensions/python/src/livery/extensions/python"
+    ),
     "livery.extensions.conan": "packages/extensions/conan/src/livery/extensions/conan",
 }
 

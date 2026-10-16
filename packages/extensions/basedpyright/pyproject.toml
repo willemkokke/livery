@@ -33,6 +33,7 @@ test = [
     "livery-footman>=0.59.0",
     "livery-extensions-cmake>=0.0.0",
     "livery-extensions-conan>=0.0.0",
+    "livery-extensions-python>=0.0.0",
 ]
 
 [project.urls]

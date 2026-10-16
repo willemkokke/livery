@@ -35,6 +35,12 @@ path = "packages/extensions/conan"
 kind = "test"
 floor = "0.0.0"
 
+# The suite runs python's suites measured, over packages that list python.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately. The measured value of the

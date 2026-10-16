@@ -720,6 +720,7 @@ def test_a_seeded_package_without_a_runner_to_wire_it_names_the_wiring(
     # to wire them with, and the refusal names the verb that finishes.
     from workshop_members import template_verb
 
+    skip_unless_installed("python")
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
@@ -738,6 +739,7 @@ def test_new_package_writes_the_installed_seeds(
     # runner the workspace's environment holds wires it.
     from workshop_members import template_verb, wired_here
 
+    skip_unless_installed("python")
     root = _wheel_instance(tmp_path)
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root

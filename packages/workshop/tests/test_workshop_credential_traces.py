@@ -16,12 +16,9 @@ from typing import Any
 import pytest
 
 import livery.footman as footman
-import livery.toolroom.tools as tools
 from livery import git
-from livery.extensions.python._backend import publish_wheels
 from livery.footman import Secret
 from livery.workshop import _devenv, _e2e, _new_project
-from livery.workshop._packages import Package
 from workshop_traced import traced
 
 TOKEN = "s3cret-token-value"
@@ -84,35 +81,6 @@ def test_a_birth_push_reaches_a_trace_as_stars_and_lands(tmp_path: Path) -> None
     assert TOKEN not in text
     assert "git push -q --force -u *** main" in names
     assert _git(origin, "rev-parse", "main") == _git(work, "rev-parse", "HEAD")
-
-
-def test_a_publish_token_reaches_a_trace_as_stars(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The fault first: uv publish takes the index token as an argument.
-    # Python stands in for uv and runs the file named like uv's
-    # subcommand, which exits 0; the shown line keeps uv's name.
-    member = tmp_path / "thing"
-    (member / "dist").mkdir(parents=True)
-    (member / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
-    (member / "publish").write_text("pass\n")
-    monkeypatch.setattr(tools, "uv", tools.uv.at(sys.executable))
-    package = Package(
-        directory=member,
-        path="packages/thing",
-        name="thing",
-        depends=(),
-        extensions=("python",),
-    )
-    text, names = traced(
-        tmp_path,
-        lambda: publish_wheels(
-            package, index_url="https://index.test/upload", token=TOKEN
-        ),
-    )
-    assert TOKEN not in text
-    (shown,) = [name for name in names if name.startswith("uv publish ")]
-    assert "--token *** " in shown
 
 
 #: The stand-in for gitea and its runner: a token for each mint, and

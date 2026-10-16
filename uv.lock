@@ -25,6 +25,7 @@ members = [
     "livery-extensions-nanobind",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",
+    "livery-extensions-python",
     "livery-extensions-ruff",
     "livery-extensions-ty",
     "livery-footman",
@@ -824,6 +825,7 @@ dev = [
     { name = "livery-extensions-nanobind" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-pytest" },
+    { name = "livery-extensions-python" },
     { name = "livery-extensions-ruff" },
     { name = "livery-extensions-ty" },
     { name = "livery-footman", extra = ["test"] },
@@ -866,6 +868,7 @@ dev = [
     { name = "livery-extensions-nanobind", editable = "packages/extensions/nanobind" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-pytest", editable = "packages/extensions/pytest" },
+    { name = "livery-extensions-python", editable = "packages/extensions/python" },
     { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
     { name = "livery-extensions-ty", editable = "packages/extensions/ty" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
@@ -900,6 +903,7 @@ dependencies = [
 test = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-python" },
     { name = "livery-footman" },
 ]
 
@@ -907,6 +911,7 @@ test = [
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -928,12 +933,14 @@ dependencies = [
 test = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-python" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
@@ -1006,11 +1013,18 @@ dependencies = [
     { name = "livery-workshop" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "livery-extensions-python" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-cmake"
@@ -1089,12 +1103,14 @@ dev = [
 ]
 test = [
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-python" },
     { name = "livery-forge" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1184,12 +1200,14 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "griffelib" },
+    { name = "livery-extensions-python" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "griffelib", marker = "extra == 'test'", specifier = ">=2.2.0" },
     { name = "livery-extensions-docs", editable = "packages/extensions/docs" },
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
@@ -1219,6 +1237,7 @@ source = { editable = "packages/extensions/nanobind" }
 dependencies = [
     { name = "livery-extensions-conan" },
     { name = "livery-extensions-cpp" },
+    { name = "livery-extensions-python" },
     { name = "livery-footman" },
     { name = "livery-git" },
     { name = "livery-toolroom" },
@@ -1235,6 +1254,7 @@ test = [
 requires-dist = [
     { name = "livery-extensions-conan", editable = "packages/extensions/conan" },
     { name = "livery-extensions-cpp", editable = "packages/extensions/cpp" },
+    { name = "livery-extensions-python", editable = "packages/extensions/python" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1282,6 +1302,7 @@ test = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-coverage" },
     { name = "livery-extensions-docs" },
+    { name = "livery-extensions-python" },
     { name = "livery-footman" },
     { name = "livery-git" },
 ]
@@ -1292,11 +1313,31 @@ requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-coverage", marker = "extra == 'test'", editable = "packages/extensions/coverage" },
     { name = "livery-extensions-docs", marker = "extra == 'test'", editable = "packages/extensions/docs" },
+    { name = "livery-extensions-python", marker = "extra == 'test'", editable = "packages/extensions/python" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-git", marker = "extra == 'test'", editable = "packages/git" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
 provides-extras = ["coverage", "test"]
+
+[[package]]
+name = "livery-extensions-python"
+version = "0.0.0"
+source = { editable = "packages/extensions/python" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-forge" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-forge", editable = "packages/forge" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
 
 [[package]]
 name = "livery-extensions-ruff"

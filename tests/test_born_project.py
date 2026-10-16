@@ -42,6 +42,22 @@ NATIVE = ("cmake", "conan")
 #: sources all three from this checkout too.
 NANOBIND = ("nanobind",)
 
+#: What python's python-library template and the base's
+#: workshop-extension need: python, which ships as a distribution of its
+#: own, and which the newborn's region sources from this checkout.
+PYTHON = ("python",)
+
+#: The stock list without python: a project born from it has no python
+#: template and no python steps until its root lists python.
+WITHOUT_PYTHON = (
+    "basedpyright",
+    "changelog",
+    "coverage",
+    "mkdocstrings",
+    "pytest",
+    "ruff",
+)
+
 #: Each creation the templates' options make, each in a workspace of its
 #: own: the member's name, the template, and the answers on the line.
 CREATIONS = (
@@ -89,12 +105,15 @@ def _point_at_this_checkout(project: Path, listed: tuple[str, ...]) -> None:
     pyproject.write_text(text.replace(_END_TABLES, sources + _END_TABLES), "utf-8")
 
 
-def _birth(tmp_path: Path) -> tuple[Path, str, dict[str, str]]:
+def _birth(
+    tmp_path: Path, extensions: tuple[str, ...] = ()
+) -> tuple[Path, str, dict[str, str]]:
     """A project born by `fm new.project` under *tmp_path*, locked and synced.
 
-    Its region points at this checkout's packages. The project, the
-    runner its environment holds, and the environment to run it in.
-    Skips unless WORKSHOP_CONFORMANCE_DRIVE is set.
+    The birth lists *extensions*, the stock list when empty. Its region
+    points at this checkout's packages. The project, the runner its
+    environment holds, and the environment to run it in. Skips unless
+    WORKSHOP_CONFORMANCE_DRIVE is set.
     """
     if not os.environ.get("WORKSHOP_CONFORMANCE_DRIVE"):
         pytest.skip(
@@ -127,9 +146,10 @@ def _birth(tmp_path: Path) -> tuple[Path, str, dict[str, str]]:
     # The index serves what the birth lists; the newborn's own sources
     # name this checkout's members for that and for what the root lists
     # later.
-    births = birth_extensions([SELF])
+    births = list(extensions) or birth_extensions([SELF])
     index = checkout_index(ROOT, tmp_path / "checkout-index", births)
     born = {**env, "FOOTMAN_CONFIG_DIR": str(bridge), "UV_INDEX": index}
+    listed = [f"--extensions={','.join(extensions)}"] if extensions else []
     _run(
         [
             sys.executable,
@@ -140,6 +160,7 @@ def _birth(tmp_path: Path) -> tuple[Path, str, dict[str, str]]:
             "acme-born",
             "--local",
             "--namespace=acme",
+            *listed,
         ],
         tmp_path,
         born,
@@ -148,7 +169,7 @@ def _birth(tmp_path: Path) -> tuple[Path, str, dict[str, str]]:
     for seed in ("README.md", "LICENSE", "docs/index.md"):
         assert (project / seed).is_file(), seed
     assert not (project / "tests").exists()
-    _point_at_this_checkout(project, (*births, *NATIVE, *NANOBIND))
+    _point_at_this_checkout(project, (*births, *PYTHON, *NATIVE, *NANOBIND))
     _run(["uv", "lock"], project, env)
     _run(["uv", "sync"], project, env)
     return project, _script(project, "fm"), env
@@ -300,6 +321,51 @@ def test_a_nanobind_module_is_created_once_its_extension_is_listed_and_synced(
     _run([fm, "new.package.nanobind-module", "native"], project, env)
     member = project / "packages" / "native"
     assert 'extensions = ["nanobind"]' in (member / "workshop.toml").read_text()
+    gate = _run([fm, "check"], project, env)
+    for step in ("drift.check", "test.pytest"):
+        assert f"ok   {step}" in gate, gate
+
+
+def test_python_s_templates_wait_until_python_is_listed_and_synced(
+    tmp_path: Path,
+) -> None:
+    project, fm, env = _birth(tmp_path, WITHOUT_PYTHON)
+    # The refusals first: the root lists no python, so the environment
+    # holds none of its distribution. python-library has no verb, and
+    # footman refuses a task it does not know.
+    assert not _installed(project, "livery-extensions-python")
+    refused = subprocess.run(
+        [fm, "new.package.python-library", "thing"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode == 64, said
+    assert "no task named 'new.package.python-library'" in said, said
+    # The base's workshop-extension has its verb, and the birth refuses
+    # before it writes anything, naming python and its distribution.
+    refused = subprocess.run(
+        [fm, "new.package.workshop-extension", "plugin"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode != 0, said
+    assert "needs python (livery-extensions-python)" in said, said
+    assert not (project / "packages").exists()
+    # Listed, the sync installs python's distribution from the source the
+    # newborn's project file names, and both templates create a member.
+    from livery.workshop._extensions import list_in_root
+
+    list_in_root(project, PYTHON)
+    _run([fm, "sync"], project, env)
+    assert _installed(project, "livery-extensions-python")
+    _run([fm, "new.package.python-library", "thing"], project, env)
+    _run([fm, "new.package.workshop-extension", "plugin"], project, env)
     gate = _run([fm, "check"], project, env)
     for step in ("drift.check", "test.pytest"):
         assert f"ok   {step}" in gate, gate

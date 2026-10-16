@@ -27,9 +27,9 @@ def skip_unless_installed(*extensions: str) -> None:
     """Skip the running test while an extension of *extensions* is not installed.
 
     The suite mounts extensions this distribution does not depend on:
-    conan and nanobind, which require cpp, and cmake, which conan's
-    template lists. A run of this wheel alone, as a release leg makes,
-    installs none of them. The reason names each missing extension and
+    conan and nanobind, which require cpp, cmake, which conan's
+    template lists, and python. A run of this wheel alone, as a release
+    leg makes, installs none of them. The reason names each missing extension and
     the distribution that ships it.
     """
     missing = [
@@ -254,6 +254,7 @@ def test_a_package_listing_cpp_mounts_it(tmp_path: Path) -> None:
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["cpp"]\n')
     assert _mount(tmp_path) == ("cpp",)
     # With python beside it, in composition order, whatever the list's.
+    skip_unless_installed("python")
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["python", "cpp"]\n'
     )

@@ -607,12 +607,12 @@ def test_dev_members_take_the_extensions_a_birth_lists(tmp_path: Path) -> None:
 
 
 def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
+    skip_unless_installed("python")
     with pytest.raises(
         _FAILURES, match="no installed distribution declares it"
     ) as caught:
         _e2e.extension_under_test("no-such-extension")
-    # The python extension rides in the workshop's own wheel, so it is
-    # installed wherever the workshop is, its release leg included.
+    # The refusal names the installed extensions, python among them.
     assert "python" in str(caught.value)
 
 
@@ -1040,6 +1040,7 @@ def test_a_child_the_pass_starts_by_hand_takes_the_task_s_environment(
 def test_the_checkout_index_refuses_a_member_without_a_version(tmp_path: Path) -> None:
     from livery.workshop._packages import Package
 
+    skip_unless_installed("python")
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "livery-x"\n')
     member = Package(
         directory=tmp_path,
@@ -1057,6 +1058,7 @@ def test_the_checkout_index_builds_what_a_newborn_installs(
 ) -> None:
     import livery.toolroom.tools as toolroom
 
+    skip_unless_installed("python")
     _member(tmp_path, "workshop", "toolroom")
     _member(tmp_path, "toolroom")
     _member(tmp_path, "unlisted")
@@ -1111,6 +1113,7 @@ def test_a_tree_rebuilt_at_one_version_installs_its_own_code(tmp_path: Path) -> 
     import livery.toolroom.tools as toolroom
     from livery.workshop._packages import discover_packages
 
+    skip_unless_installed("python")
     _member(tmp_path, "probe")
     member = tmp_path / "packages" / "probe"
     with (member / "pyproject.toml").open("a") as handle:
@@ -1788,6 +1791,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("python")
     # Two passes in one hosted job, the second fresh: the first's forge
     # listened on 47615 and its release pointed conan's remote there; the
     # second's forge listens on 57713, and its members' build asked

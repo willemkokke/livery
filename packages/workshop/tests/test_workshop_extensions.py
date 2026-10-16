@@ -90,21 +90,29 @@ def test_a_package_listing_an_uninstalled_extension_brings_its_distribution_into
     assert distribution_of("cmake") in composed_groups(tmp_path)["dev"]
 
 
-def test_a_test_needing_an_extension_not_installed_skips_naming_its_distribution() -> (
-    None
-):
+def test_a_test_needing_an_extension_not_installed_skips_naming_its_distribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _extensions
     from workshop_installed import skip_unless_installed
 
+    # One extension stands installed, whatever this environment holds.
+    real = _extensions.installed_declaration
+
+    def installed(name: str) -> object:
+        return object() if name == "acme.present" else real(name)
+
+    monkeypatch.setattr(_extensions, "installed_declaration", installed)
     # A short name nothing installs is taken at the family's
     # distribution, and an import path at its own.
     with pytest.raises(pytest.skip.Exception) as skipped:
-        skip_unless_installed("python", "no-such-extension", "acme.missing")
+        skip_unless_installed("acme.present", "no-such-extension", "acme.missing")
     assert str(skipped.value) == (
         "not installed here: no-such-extension"
         " (livery-extensions-no-such-extension), acme.missing (acme-missing)"
     )
     # Every extension installed: the test runs on.
-    skip_unless_installed("python")
+    skip_unless_installed("acme.present")
 
 
 def test_a_branded_builtin_extension_is_the_apps_to_mount(
@@ -191,12 +199,15 @@ def test_the_git_plugin_mount_tolerates_a_missing_entry_point_and_mounts_otherwi
 def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> None:
     from livery.footman import _registry as registry
 
-    # A scratch contract naming the extension the workshop's own wheel
-    # ships, so the test needs nothing beyond the package's own
-    # dependencies when it runs against the wheel.
+    # A scratch contract naming nothing mounts nothing: the base is never
+    # listed, and the workshop's wheel ships no extension.
     contract = tmp_path / "workshop.toml"
-    contract.write_text('[workspace]\nextensions = ["python"]\n')
+    contract.write_text("[workspace]\nextensions = []\n")
+    with registry.capture():
+        assert mount_extensions(tmp_path) == ()
     # The mount lands in a captured tree, never the process global.
+    skip_unless_installed("python")
+    contract.write_text('[workspace]\nextensions = ["python"]\n')
     with registry.capture():
         assert mount_extensions(tmp_path) == ("python",)
     # With cpp beside it, in composition order, whatever the list's.
@@ -214,6 +225,7 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:
     from livery.workshop._extensions import extension_entries, stack_entries
 
+    skip_unless_installed("python")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n"
         "extensions = [\n"
@@ -225,7 +237,7 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
     # in composition order.
     assert extension_entries(tmp_path) == (
         ("livery.forge", "livery-forge"),
-        ("python", "livery-workshop"),
+        ("python", "livery-extensions-python"),
     )
     # The stack is the base, then the installed set.
     assert stack_entries(tmp_path)[0] == ("livery.workshop", "livery-workshop")
@@ -235,6 +247,7 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
 def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None:
     from livery.workshop._templates import render_injections
 
+    skip_unless_installed("python")
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = ["livery.forge", "python"]\n'
     )
@@ -244,9 +257,12 @@ def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None
         ]
     }
     injections = render_injections(tmp_path, answers)
-    # A member rides the roster's spelling, and a wheel shipping two
-    # extensions, the base and python, is one requirement.
-    assert injections["extension_requirements"] == ["livery-workshop"]
+    # A member rides the roster's spelling, and each other extension is
+    # the requirement of the distribution that ships it, after the base's.
+    assert injections["extension_requirements"] == [
+        "livery-workshop",
+        "livery-extensions-python",
+    ]
     assert injections["extension_imports"] == [
         "livery.workshop",
         "livery.forge",

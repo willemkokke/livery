@@ -177,6 +177,7 @@ def test_a_roster_with_no_member_renders_the_workspace_s_own_ignores_alone(
 ) -> None:
     from livery.workshop._templates import fragment_data
 
+    skip_unless_installed("python")
     rendered = fragment_data({"packages": []})["per_file_ignores"]
     assert rendered == per_file_ignores(())
     assert rendered
@@ -192,6 +193,7 @@ def test_a_roster_with_no_member_renders_the_workspace_s_own_ignores_alone(
 def test_two_steps_claiming_one_category_under_different_rules_share_one_entry(
     restored_steps, python_steps: object
 ) -> None:
+    skip_unless_installed("python")
     register_step(
         StepRecord(
             "acme-lint",

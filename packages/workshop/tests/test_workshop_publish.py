@@ -229,6 +229,7 @@ def test_discovery_reads_members_from_the_squash_content(train) -> None:
 def test_a_version_the_index_already_serves_is_walked_past_before_upload(
     train, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     # The recovery first: a died receipt re-run must reach the tag
     # without repeating an upload it may not be able to make.
     root, registry, spans = train
@@ -427,6 +428,7 @@ def test_the_member_pairs_name_each_member_from_its_contract_at_the_ref(
 def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root, registry, _spans = train
     sha = _squash(root, ("base", "left", "right"))
     # base's project exists already; the legs are new.
@@ -460,6 +462,7 @@ def test_a_registrys_new_project_limit_stops_at_the_first_new_project(
 def test_new_projects_upload_one_at_a_time(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root, registry, _spans = train
     sha = _squash(root, ("base", "left", "right"))
     registry.serve("livery-base", "0.2.0")
@@ -483,6 +486,7 @@ def test_new_projects_upload_one_at_a_time(
 def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
     train,
 ) -> None:
+    skip_unless_installed("python")
     root, registry, spans = train
     sha = _squash(root, ("base", "left", "right", "apex"))
     # Projects the registry already knows: only a new project's first
@@ -515,6 +519,7 @@ def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(
 def test_a_failed_member_stops_only_its_dependents(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root, registry, spans = train
     sha = _squash(root, ("base", "left", "right", "apex"))
 
@@ -550,6 +555,7 @@ def test_a_failed_member_stops_only_its_dependents(
 def test_a_rerun_walks_past_the_receipts_already_cut(
     train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root, registry, _spans = train
     sha = _squash(root, ("base", "left"))
     publish_release(
@@ -610,6 +616,7 @@ def test_the_probe_times_out_teaching_the_rerun() -> None:
 
 
 def test_receipts_expose_the_ledger(train) -> None:
+    skip_unless_installed("python")
     root, registry, _spans = train
     sha = _squash(root, ("base",))
     receipts = publish_release(
@@ -652,6 +659,7 @@ def test_a_publish_key_that_is_not_a_boolean_refuses(tmp_path: Path) -> None:
 def test_an_opted_out_member_is_built_and_tagged_and_never_uploaded(
     train, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     root, registry, spans = train
     _opt_out(root, "left")
     sha = _squash(root, ("base", "left"))

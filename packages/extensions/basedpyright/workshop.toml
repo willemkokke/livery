@@ -43,3 +43,10 @@ floor = "0.0.0"
 path = "packages/extensions/conan"
 kind = "test"
 floor = "0.0.0"
+
+# The suite judges members whose public modules python answers.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+

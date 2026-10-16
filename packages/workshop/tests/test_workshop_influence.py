@@ -9,6 +9,7 @@ import pytest
 from livery.footman import Failed
 from livery.workshop._graph import reaches_no_package
 from livery.workshop._influence import WHOLE, Changes, Inputs, Selection, select
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -204,6 +205,7 @@ def test_the_rule_steps_judge_the_files_they_were_handed(
     from livery.workshop import _packages
     from livery.workshop._packages import RuleContext
 
+    skip_unless_installed("python")
     member = tmp_path / "packages" / "tool"
     (member / "src").mkdir(parents=True)
     (member / "workshop.toml").write_text(

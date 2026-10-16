@@ -18,6 +18,7 @@ from workshop_extension_fakes import (
     package_contract,
     root_contract,
 )
+from workshop_installed import skip_unless_installed
 
 #: An extension's identity, the start of every fake here.
 PACKAGE = "[extension]\n"
@@ -627,6 +628,7 @@ def test_a_step_serving_the_isolated_side_alone_registers_no_gate_step(
 def test_an_isolated_only_build_step_registers_no_gate_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     # The gate builds each package on the build phase's tree side, so of
     # that package-level phase's steps the isolated one stays out of the
     # registry and in the phase's steps, as the release's builds do.

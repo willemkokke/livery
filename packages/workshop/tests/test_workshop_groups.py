@@ -26,6 +26,7 @@ from livery.workshop._pytest_layout import offenders
 from livery.workshop._pytest_speed import package_of
 from livery.workshop._release_driver import uncut_in_set
 from livery.workshop._seeds import derived
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -225,6 +226,7 @@ def test_a_release_tag_parses_at_any_depth_and_refuses_every_other_shape() -> No
 def test_a_grouped_package_verifies_its_release_tag(tmp_path: Path) -> None:
     from livery.workshop._release import verify_release
 
+    skip_unless_installed("python")
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     directory = _package(tmp_path, "extensions/ruff")
     (directory / "pyproject.toml").write_text(

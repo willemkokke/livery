@@ -1149,7 +1149,8 @@ combine = "union"
 
 # The lines of the root project file's dev dependency group: what the
 # listed extensions need in the venv, each line naming its floor.
-# Declared by the base while the python extension ships in its wheel.
+# Declared by the base, whose root project file reads it in every
+# workspace.
 [queries."python.dev-group"]
 level = "workspace"
 combine = "union"
@@ -1157,7 +1158,7 @@ combine = "union"
 # The lines of the root project file's docs dependency group: what the
 # listed extensions' site build imports from the venv, each line naming
 # its floor; empty while no listed extension answers. Declared by the
-# base while the python extension ships in its wheel.
+# base, whose root project file reads it in every workspace.
 [queries."python.docs-group"]
 level = "workspace"
 combine = "union"

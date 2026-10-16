@@ -67,11 +67,15 @@ entries = ["coverage.leg"]
 judges = ["coverage.union"]
 
 # The record and the marks are series of the state store: the janitor
-# bounds them and fm store.ls lists them. A machine's run of the python
-# suites prints this extension's preview: each package's figure beside
-# its floor, judging nothing.
+# bounds them and fm store.ls lists them.
 [queries]
 "store.series" = "livery.extensions.coverage._record:series"
+
+# While python is listed, a machine's run of the python suites prints
+# this extension's preview: each package's figure beside its floor,
+# judging nothing. python declares the query, so the answer sits under
+# python's [for] table, which is read while python is installed.
+[for.python.queries]
 "python.test.preview" = "livery.extensions.coverage._floors:previewer"
 
 # Who reduces the data a measurer leaves to parts, coverage.py's arcs

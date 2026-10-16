@@ -17,7 +17,7 @@ from livery.extensions.python._parse import RuleContext
 from livery.footman import prog
 from livery.workshop._packages import Package, discover_packages
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 SOURCE = "packages/core/src/acme/core/__init__.py"
 MANIFEST = "packages/core/pyproject.toml"
 
@@ -47,11 +47,12 @@ def _judged(root: Path, files: frozenset[str] | None = None) -> list[str]:
 
 
 def _in_this_checkout() -> None:
-    import livery.workshop
+    import livery.extensions.python
 
-    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
-        # The release train's isolated leg installs the workshop's wheel
-        # alone, beside no checkout's packages.
+    here = Path(livery.extensions.python.__file__).resolve()
+    if not here.is_relative_to(ROOT):
+        # The release train's isolated leg installs this distribution's
+        # wheel alone, beside no checkout's packages.
         pytest.skip("the judgement reads this checkout's packages")
 
 

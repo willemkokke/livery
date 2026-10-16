@@ -22,7 +22,6 @@ from livery.workshop import (
 )
 from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
-from workshop_spawns import counting_spawns
 
 _FAILURES = (SystemExit, Failed)
 
@@ -618,23 +617,6 @@ def test_the_plugin_sums_every_phase_per_package_from_the_controller_only(
     }
 
 
-def test_speed_lines_on_a_machine_print_the_sums_and_read_no_mark(
-    work: Path, tmp_path: Path
-) -> None:
-    """The marks are judged on the CI legs, so a machine's run never asks for them."""
-    from livery.extensions.python._backend import speed_lines
-
-    sums = tmp_path / "speed.json"
-    assert speed_lines(work, sums) == []  # the plugin did not run
-    sums.write_text(json.dumps({"packages/forge": {"seconds": 12.3, "tests": 45}}))
-    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    with counting_spawns() as spawned:
-        assert speed_lines(work, sums) == [
-            "  speed packages/forge: 12.3s over 45 tests (judged on the CI legs)"
-        ]
-    assert spawned["git"] == 0
-
-
 def test_the_judge_is_a_ci_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     """Footman lists it unavailable outside CI, and a direct call refuses too."""
     from livery.footman._registry import availability
@@ -648,35 +630,3 @@ def test_the_judge_is_a_ci_verb(monkeypatch: pytest.MonkeyPatch) -> None:
         _speed_tasks.speed_judge()
     monkeypatch.setattr(_speed_tasks, "run_context", lambda: RUN)
     assert availability(_speed_tasks.speed_judge) is None
-
-
-def test_speed_lines_on_a_check_leg_print_the_sums_beside_the_marks(
-    work: Path, tmp_path: Path
-) -> None:
-    from livery.extensions.python._backend import speed_lines
-
-    sums = tmp_path / "speed.json"
-    sums.write_text(json.dumps({"packages/forge": {"seconds": 12.3, "tests": 45}}))
-    assert speed_lines(work, sums, leg=LEG) == [
-        "  speed packages/forge: 12.3s over 45 tests"
-        " (no mark on check-ubuntu-latest-3.14)"
-    ]
-    assert (
-        _speed.write_mark(
-            work,
-            package="packages/forge",
-            leg=LEG,
-            seconds=14.0,
-            kind="first",
-            by="run 1",
-        )
-        == ""
-    )
-    assert speed_lines(work, sums, leg=LEG) == [
-        "  speed packages/forge: 12.3s over 45 tests"
-        " (mark 14.0s on check-ubuntu-latest-3.14)"
-    ]
-    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    lines = speed_lines(work, sums, leg=LEG)
-    assert lines[0].startswith("  speed marks: not read (")
-    assert lines[1] == "  speed packages/forge: 12.3s over 45 tests (mark unknown)"

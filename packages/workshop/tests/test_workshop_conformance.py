@@ -605,7 +605,10 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
             for entry in installed_entry_points("workshop.extensions")
         }
     )
-    assert packages
+    # Every extension ships in a distribution of its own, and a run of
+    # the workshop's wheel alone installs none.
+    if not packages:
+        pytest.skip("no extension is installed here")
     clauses = {
         "declaration-validates",
         "references-register-nothing",
@@ -979,13 +982,12 @@ def test_the_builtin_steps_pass_every_clause() -> None:
 
     subject = builtin_subject()
     # A package that lists nothing, and one listing each installed
-    # extension that composes something in a package: python, which the
-    # workshop's wheel ships, and those of their own distributions
-    # installed here, such as cmake, conan, cpp and nanobind.
+    # extension that composes something in a package: each ships in a
+    # distribution of its own, such as cmake, conan, cpp, nanobind and
+    # python, and a run of the workshop's wheel alone installs none.
     composing = {
         (name,) for name in installed_extensions() if composes_per_package(name)
     }
-    assert composing >= {("python",)}
     assert set(subject.sets) == {(), *composing}
     assert {record.name for record in subject.steps} == {
         "drift.check",
@@ -994,6 +996,9 @@ def test_the_builtin_steps_pass_every_clause() -> None:
         "layering.base-imports-no-extension",
         "layering.sibling-references",
     }
+    # The base's workshop-extension template lists python, which the
+    # template-composes clause reads to show the template composes.
+    skip_unless_installed("python")
     assert judge(subject) == []
 
 

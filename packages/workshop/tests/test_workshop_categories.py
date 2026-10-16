@@ -148,6 +148,7 @@ def test_a_package_whose_extensions_declare_no_categories_takes_the_base_s_alone
 
     from workshop_extension_fakes import fake_extensions
 
+    skip_unless_installed("python")
     fake_extensions(tmp_path, monkeypatch, lua=PACKAGE_LEVEL)
     # The package lists an extension that declares no categories: no
     # table but the base's answers.
@@ -214,6 +215,7 @@ def test_a_extensions_rule_answers_with_its_name_and_the_more_specific_wins(
 
     from workshop_extension_fakes import fake_extensions
 
+    skip_unless_installed("python")
     fake_extensions(
         tmp_path,
         monkeypatch,

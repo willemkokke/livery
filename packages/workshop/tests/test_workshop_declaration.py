@@ -18,6 +18,7 @@ from livery.workshop._declaration import (
     read,
 )
 from workshop_extension_fakes import fake_extensions
+from workshop_installed import skip_unless_installed
 
 BODIES = """\
 def judge(ctx):
@@ -367,6 +368,7 @@ BUILD_STEP = '[extension]\n[phases.build.acme]\nmain = "acme_declared._steps:jud
 
 
 def test_a_deletion_naming_no_installed_step_refuses(package: Path) -> None:
+    skip_unless_installed("python")
     where = package / "extension.toml"
     # A step its owner does not declare: the refusal names the phase's
     # installed steps, every installed extension's.
@@ -402,6 +404,7 @@ def test_a_deletion_without_a_reason_refuses(package: Path) -> None:
 def test_a_deletion_of_a_step_run_once_over_the_workspace_refuses(
     package: Path,
 ) -> None:
+    skip_unless_installed("python")
     where = package / "extension.toml"
     # The base's render comparison runs once over the workspace, where no
     # package's set decides anything.
@@ -424,6 +427,7 @@ def test_a_deletion_of_a_step_run_once_over_the_workspace_refuses(
 
 
 def test_a_step_reads_every_key_it_takes(package: Path) -> None:
+    skip_unless_installed("python")
     # Every key a step table takes, in one text. The read judges the
     # text against the contract, so the keys the step table declares
     # pass it.

@@ -2147,6 +2147,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/nanobind": "workshop.extensions.nanobind",
         "extensions/pyrefly": "workshop.extensions.pyrefly",
         "extensions/pytest": "workshop.extensions.pytest",
+        "extensions/python": "workshop.extensions.python",
         "extensions/ruff": "workshop.extensions.ruff",
         "extensions/ty": "workshop.extensions.ty",
     }

@@ -13,6 +13,7 @@ from livery.workshop._graph import (
     dependents_closure,
 )
 from livery.workshop._packages import Package, discover_packages
+from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
@@ -217,6 +218,7 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
         category_of,
     )
 
+    skip_unless_installed("python")
     package = Package(
         Path("packages/x"),
         "packages/x",
@@ -247,6 +249,7 @@ def test_a_test_file_reaches_its_package_alone_and_runs_its_whole_suite(
     seeds: Seeds,
 ) -> None:
     """Ruled 2026-10-01: a package's tests run whole when any of them changed."""
+    skip_unless_installed("python")
     root = _workspace(seeds)
     _paths(
         root,
@@ -294,6 +297,7 @@ def test_a_test_file_reaches_its_package_alone_and_runs_its_whole_suite(
 
 
 def test_a_deleted_test_file_runs_its_packages_suite(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     # The fallback first: a test file the change removed is still a
     # changed path, and it cannot be run. Its package proves less than
     # it did, so the package's suite runs whole; nothing imports a
