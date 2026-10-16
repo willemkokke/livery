@@ -537,7 +537,7 @@ SOURCES = {
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
     "livery.extensions.docs": "packages/extensions/docs/src/livery/extensions/docs",
     "livery.extensions.python": "packages/workshop/src/livery/extensions/python",
-    "livery.extensions.conan": "packages/workshop/src/livery/extensions/conan",
+    "livery.extensions.conan": "packages/extensions/conan/src/livery/extensions/conan",
 }
 
 #: The roots with no public names: a namespace with no __init__.py,

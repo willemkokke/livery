@@ -61,7 +61,7 @@ def test_a_fact_the_contract_leaves_out_takes_the_birth_default(tmp_path: Path) 
 def test_the_roster_is_discovery_with_each_members_set_and_python_extras(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "conan")
     (tmp_path / "workshop.toml").write_text('[workspace]\nname = "acme"\n')
     _member(tmp_path, "zeta", 'extensions = ["python"]\nname = "acme-zeta"\n')
     _member(

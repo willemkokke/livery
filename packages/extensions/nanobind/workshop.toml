@@ -26,6 +26,11 @@ path = "packages/git"
 kind = "runtime"
 floor = "0.2.0"
 
+[[depends]]
+path = "packages/extensions/conan"
+kind = "runtime"
+floor = "0.0.0"
+
 # The suite publishes through the forge's fake.
 [[depends]]
 path = "packages/forge"

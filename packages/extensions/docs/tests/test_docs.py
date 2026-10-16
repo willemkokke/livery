@@ -2137,6 +2137,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/clang-tidy": "workshop.extensions.clang-tidy",
         "extensions/claude": "workshop.extensions.claude",
         "extensions/cmake": "workshop.extensions.cmake",
+        "extensions/conan": "workshop.extensions.conan",
         "extensions/coverage": "workshop.extensions.coverage",
         "extensions/docs": "workshop.extensions.docs",
         "extensions/lfs": "workshop.extensions.lfs",

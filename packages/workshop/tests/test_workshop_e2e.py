@@ -463,17 +463,15 @@ def test_the_loop_probes_each_member_through_its_extensions(
 ) -> None:
     """Each member's probe is its extensions' answer, asked by its contract's name.
 
-    The python index normalises the name, and a conan registry matches
-    it exactly, so the name the wave publishes a member under finds it
-    on either. Each probe is built once, at the target the loop's
-    workspace resolves, and polled through the wave's wait.
+    The python index normalises the name, so the name the wave publishes
+    a member under finds it there. Each probe is built at the target the
+    loop's workspace resolves, and polled through the wave's wait. The
+    conan extension's suite judges the probe of the loop's conan member.
     """
     skip_unless_installed("nanobind")
     import livery.forge as forge_package
-    from livery.extensions.conan import _package as conan_package
-    from livery.workshop._registries import RegistryTarget
 
-    index, remote = "http://gitea:3000/pypi/simple", "http://gitea:3000/conan"
+    index = "http://gitea:3000/pypi/simple"
     asked: list[tuple[str, str]] = []
     built: list[tuple[str, str]] = []
 
@@ -485,25 +483,14 @@ def test_the_loop_probes_each_member_through_its_extensions(
             asked.append(("python", name))
             return ("0.1.0",)
 
-    class _Conan:
-        def __init__(self, target: RegistryTarget, *, root: Path) -> None:
-            built.append(("conan", f"{target.url} {root.name}"))
-
-        def versions(self, name: str) -> tuple[str, ...]:
-            asked.append(("conan", name))
-            return ()
-
     monkeypatch.setattr(forge_package, "SimpleRegistry", _Simple)
-    monkeypatch.setattr(conan_package, "ConanRegistry", _Conan)
     monkeypatch.setenv("PYTHON_REGISTRY_URL", index)
     monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", "lane-token")
-    monkeypatch.setenv("CONAN_REMOTE_URL", remote)
     root = tmp_path / "loop"
     root.mkdir()
     (root / "workshop.toml").write_text("[workspace]\n")
-    # The three members as their seeds write them: the echo lists python,
-    # the native member lists nothing and consumes conan, and the library
-    # lists cmake and conan and names its reference.
+    # The python members as their seeds write them: the echo lists
+    # python, and the native member lists nanobind and consumes conan.
     _loop_member(
         root,
         "loop-echo",
@@ -517,27 +504,16 @@ def test_the_loop_probes_each_member_through_its_extensions(
         pyproject=True,
         recipe='class N:\n    requires = ("fmt/[>=11.0]",)\n',
     )
-    _loop_member(
-        root,
-        "loop-cpp",
-        'extensions = ["cmake", "conan"]\n',
-        recipe='class L:\n    name = "ci_e2e_loop-loop-cpp"\n    version = "0.1.0"\n',
-    )
     served = _e2e._serving_probe(root)
     assert served("loop-echo") == ("0.1.0",)
     assert served("loop-native") == ("0.1.0",)
-    assert served("loop-cpp") == ()
-    assert served("loop-cpp") == ()
     assert asked == [
         ("python", "ci_e2e_loop-loop-echo"),
         ("python", "ci_e2e_loop-loop-native"),
-        ("conan", "ci_e2e_loop-loop-cpp"),
-        ("conan", "ci_e2e_loop-loop-cpp"),
     ]
     assert built == [
         ("python", f"{index} lane-token"),
         ("python", f"{index} lane-token"),
-        ("conan", f"{remote} loop"),
     ]
 
 
@@ -1683,13 +1659,13 @@ def _point_the_remote(url: str, cwd: Path) -> None:
     """Point conan's ``workshop`` remote at *url*, as a release does first.
 
     The release's publish and its serving probe both run this command
-    before they upload or list. It goes to the conan home the process
-    environment names.
+    before they upload or list. It runs the store's conan, and goes to
+    the conan home the process environment names.
     """
-    from livery.extensions.conan import _package
+    from livery.toolroom.tools import conan
 
-    added = _package._conan(  # pyright: ignore[reportPrivateUsage]
-        cwd, "remote", "add", _package.CONAN_REMOTE, url, "--force"
+    added = conan.opts(cwd=cwd, env=dict(os.environ), nofail=True, recorded=False)(
+        "remote", "add", "workshop", url, "--force"
     )
     assert added.code == 0, added.stderr
 
@@ -1698,11 +1674,14 @@ def _remotes(home: Path, cwd: Path) -> dict[str, str]:
     """The remotes conan lists in *home*, name to URL, read from its JSON."""
     import json
 
-    from livery.extensions.conan import _package
+    from livery.toolroom.tools import conan
 
-    listed = _package._conan(  # pyright: ignore[reportPrivateUsage]
-        cwd, "remote", "list", "--format=json", env={"CONAN_HOME": str(home)}
-    )
+    listed = conan.opts(
+        cwd=cwd,
+        env={**os.environ, "CONAN_HOME": str(home)},
+        nofail=True,
+        recorded=False,
+    )("remote", "list", "--format=json")
     assert listed.code == 0, listed.stderr
     entries = json.loads(listed.stdout)
     return {str(entry["name"]): str(entry["url"]) for entry in entries}

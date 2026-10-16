@@ -1,4 +1,8 @@
-"""A python member's dependency on a C++ library: agreement, affected, order."""
+"""A python member's dependency on a C++ library: agreement, affected, order.
+
+The python member lists nanobind, which requires conan, so each test
+that reads it skips while nanobind is not installed.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from extensions_conan_workspace import skip_unless_installed
 from livery import git
 from livery.extensions.conan import _package as _conan
 from livery.workshop._graph import (
@@ -14,7 +19,6 @@ from livery.workshop._graph import (
     order_topologically,
 )
 from livery.workshop._packages import Package, verify_workspace
-from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -66,6 +70,7 @@ def _extension(root: Path, *, conan_ref: str, floor: str = "0.1.0") -> Path:
 
 
 def test_disagreeing_floors_refuse_naming_both(tmp_path: Path) -> None:
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.2.0")
     with pytest.raises(ValueError) as caught:
@@ -78,7 +83,7 @@ def test_disagreeing_floors_refuse_naming_both(tmp_path: Path) -> None:
 def test_a_missing_conan_requirement_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="", floor="0.1.0")
     with pytest.raises(ValueError) as caught:
@@ -93,6 +98,7 @@ def test_a_missing_conan_requirement_refuses_naming_the_sibling_s_set(
 
 
 def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     # The extension requires the library natively but declares no edge.
     _member(
@@ -112,6 +118,7 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
 
 
 def test_agreeing_floors_pass(tmp_path: Path) -> None:
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
     packages = verify_workspace(tmp_path)
@@ -121,6 +128,7 @@ def test_agreeing_floors_pass(tmp_path: Path) -> None:
 def test_touching_the_library_marks_the_extension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
 
@@ -137,6 +145,7 @@ def test_touching_the_library_marks_the_extension(
 
 
 def test_the_order_puts_the_library_first(tmp_path: Path) -> None:
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
     packages = verify_workspace(tmp_path)
@@ -198,6 +207,7 @@ def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
 def test_bump_set_floors_moves_the_conan_range(tmp_path: Path) -> None:
     from livery.workshop._release_driver import MemberPlan, bump_set_floors
 
+    skip_unless_installed("nanobind")
     _library(tmp_path)
     ext_dir = _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
     packages = {p.name: p for p in verify_workspace(tmp_path)}

@@ -651,13 +651,12 @@ def test_an_isolated_only_build_step_registers_no_gate_step(
     assert [(r.name, r.isolated) for r in both.additions.steps] == [
         ("build.both", None)
     ]
-    # The builds the release runs: python's and conan's serve the
-    # isolated side alone, and none reaches the gate.
-    for name in ("python", "conan"):
-        declared = _extensions.declaration(name)
-        assert declared is not None
-        assert [r.isolated for r in declared.phases["build"]] == [True]
-        assert [r.name for r in declared.additions.steps if r.phase == "build"] == []
+    # The build the release runs: python's serves the isolated side
+    # alone, and never reaches the gate.
+    declared = _extensions.declaration("python")
+    assert declared is not None
+    assert [r.isolated for r in declared.phases["build"]] == [True]
+    assert [r.name for r in declared.additions.steps if r.phase == "build"] == []
     # A package-level phase the gate never runs, the release's stamp,
     # registers its steps on neither side.
     fake_extensions(

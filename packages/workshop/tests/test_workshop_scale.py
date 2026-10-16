@@ -134,8 +134,9 @@ def test_generate_renders_each_member_then_the_project_once(
 ) -> None:
     from livery.workshop import _templates
 
-    # cpp-package lists cmake, which the root's canonical list orders.
-    skip_unless_installed("cmake")
+    # conan's cpp-package lists cmake, which the root's canonical list
+    # orders.
+    skip_unless_installed("cmake", "conan")
     rendered: list[tuple[str, str]] = []
     applied: list[Path] = []
 
