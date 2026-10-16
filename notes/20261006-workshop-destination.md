@@ -59,6 +59,13 @@ Willem, 2026-10-06, quoted by intent:
 6. Java is not planned and nothing may rule it out. Rust must be
    supported.
 
+Willem, 2026-10-16:
+
+7. Extensions stay as decoupled as possible. An extension's
+   `requires` names only what it cannot work without; what applies
+   only in some workspaces is cooperation through `[for.<target>]`,
+   which applies whenever both extensions are listed.
+
 The principles that rank every option below, in order: less code,
 simpler code, one way to do each thing, one concern per module.
 
@@ -1725,6 +1732,20 @@ retires `_registries`' tables; `livery.forge.RegistryKind` an open
 name; the forge's `package_admin`; `[release] publish` goes; the graph
 from the `REQUIREMENTS` query. Acceptance: the plan's.
 
+With conan's per-host artifact, nanobind stops requiring conan
+(ruling 7, #1729): its `requires` is python and cpp. The module's C++
+dependencies through conan's recipe and the cmake-conan provider, a
+C++ sibling through conan's workspace file in development and set
+aside in a release, and the floor legs against a sibling's released
+floors become cooperation between the two; the per-host build of the
+release's conan packages, which nanobind's wheels job hosts today,
+becomes conan's own. Acceptance: a workspace listing nanobind without
+conan creates, gates, builds and releases a module with no conan
+tool, recipe or profile; a workspace listing both keeps each
+behaviour with no configuration; nanobind's wheel does not depend on
+conan's. If a change to nanobind's conan code comes first, this moves
+with it.
+
 ### Phase 14: toolchains
 
 The plan's phase 12, unchanged. The toolchain records join the api
@@ -1777,6 +1798,7 @@ neither needs nor rules out).
 | the `conan-cache` key of a CI job | the review of where a phase's CI work is placed (#1534) |
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
+| nanobind's `requires` on conan, and `livery-extensions-nanobind`'s dependency on `livery-extensions-conan` | nanobind cooperating with conan (phase 13, #1729) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
 | the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage, 34 for nanobind) | fixture extensions in the workshop's suite |
 | `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled`, and on `livery-extensions-docs`, which ships the docs entry module | the release wave raising the floor within its set (step 8's R1) |
@@ -3776,6 +3798,19 @@ neither needs nor rules out).
   so its dev wheels build and serve the new distribution. A race in
   the suite's shared scratch tool store failed three armed tests once
   (#1725).
+
+- 2026-10-16, Willem: extensions stay as decoupled as possible (ruling
+  7). Asked why nanobind requires conan: the module's C++ dependencies
+  resolve through conan's recipe and the cmake-conan provider, a C++
+  sibling resolves through conan's workspace file, and nanobind's
+  wheels job builds the release's conan packages per host. Only the
+  first applies to every module, and it is a default, not a need: a
+  module that binds only its own code needs no resolver. Of the
+  `requires` edges, mkdocstrings on docs, conan on cpp, and nanobind on
+  python and cpp are what each cannot work without; nanobind on conan
+  is the one that is not. It becomes cooperation with conan's per-host
+  artifact in phase 13 (#1729), and stays for step 8, whose moves
+  change packaging and no behaviour.
 
 ## Open
 
