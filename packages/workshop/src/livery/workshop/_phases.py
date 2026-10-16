@@ -19,9 +19,10 @@ once per package in scope, independent steps concurrently, a step
 after the steps it names in ``after`` and after the providers of the
 keys it ``reads``. The gate runs its phases through it with its own
 engine around it ([livery.workshop._quality.walk][]); the release
-train, ``fm sync`` and ``fm run`` run a package's lifecycle phases
-through it ([livery.workshop._lifecycle][]), the steps those of the
-package's set ([livery.workshop._phases.phase_steps][]). Each step
+train and ``fm run`` run a package's lifecycle phases through it
+([livery.workshop._lifecycle][]), the steps those of the package's set
+([livery.workshop._phases.phase_steps][]); ``fm sync`` runs the sync
+phase's registered steps through it over the workspace. Each step
 receives the one context, [livery.workshop.PhaseContext][].
 
 A step table's ``deletes`` names steps of other extensions, each
@@ -847,7 +848,10 @@ def run_registered(ctx: PhaseContext) -> PhaseContext:
     ``[for.<target>]`` tables that apply. They run as `run_phase` runs
     any steps, so a phase the gate never runs, one declared with
     ``gated = false``, runs this way over the workspace its context
-    names. A phase with no registered step runs nothing.
+    names. A workspace step that names extensions runs once while a
+    package the context judges holds one of them; while none does, a
+    line says so and the step does not run. A phase with no registered
+    step runs nothing.
 
     Returns:
         The context the steps shared.
@@ -857,18 +861,23 @@ def run_registered(ctx: PhaseContext) -> PhaseContext:
         Exception: the first failing step's, raised again once every
             step ran.
     """
-    from livery.workshop._steps import steps_by_name
+    from livery.workshop._steps import PACKAGE, judges_unit, steps_by_name
 
     if not ctx.phase:
         raise PhaseError(
             "a run of the registered steps names its phase, and this context names none"
         )
-    return run_phase(
-        ctx,
-        tuple(
-            record for record in steps_by_name().values() if record.phase == ctx.phase
-        ),
-    )
+    records: list[StepRecord] = []
+    for record in steps_by_name().values():
+        if record.phase != ctx.phase:
+            continue
+        named = record.scope != PACKAGE and bool(record.extensions)
+        if named and not any(judges_unit(record, unit) for unit in ctx.judged):
+            wanted = " or ".join(record.extensions)
+            print(f"  {record.name}: no package holds {wanted}; not run")
+            continue
+        records.append(record)
+    return run_phase(ctx, tuple(records))
 
 
 def _judge_inputs(given: Mapping[str, Mapping[str, object]], where: str) -> None:

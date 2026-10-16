@@ -334,10 +334,14 @@ The base declares its phases in the `[phases]` section of its
 `typecomplete`, `examples`, `drift`, `provenance`, `layering` and
 `test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
 with a sub-task per step. `fm sync` runs `sync` once over the
-workspace, after it installs the tools and before `uv sync`: a step
-there runs once, and one that declares `scope = "package"` runs once
-for each package whose set holds an extension its `extensions` names.
-So an extension the root lists adds to it as one a package lists does.
+workspace, after it installs the tools and before `uv sync`, and an
+extension the root lists adds steps to it as one a package lists does.
+A step there runs once, and one that declares `scope = "package"` runs
+once for each package whose set holds an extension its `extensions`
+names. A step that runs once and names `extensions` runs while a
+package's set holds one of them, and not at all while none does: conan's
+step makes the one default profile once, however many packages hold
+conan.
 A package-level phase, `clean`, `build`, `stamp`, `publish`, `verify`
 or `run`, runs its steps once per package, and each extension of the
 package's set may add steps to it, as many as it needs:

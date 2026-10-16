@@ -43,9 +43,12 @@ def sync(packages: Iterable[Package], root: Path) -> None:
     ``uv sync`` installs them: the steps the listed extensions
     registered at mount, each once over the workspace, and a step that
     judges one package at a time once for each of *packages* whose set
-    holds an extension it names. conan's profile step is one, which a
-    package that lists nanobind runs too, since its set holds conan.
-    With no step registered, the phase runs nothing.
+    holds an extension it names. A workspace step that names
+    extensions runs while one of *packages* holds one of them, and not
+    at all while none does. conan's profile step is one: it runs once
+    while a package holds conan, a package that lists nanobind among
+    them, since its set holds conan. With no step registered, the phase
+    runs nothing.
     """
     from livery.workshop._phases import PhaseContext, run_registered
 

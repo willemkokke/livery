@@ -17,6 +17,7 @@ import os
 import platform
 import re
 import tempfile
+import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -850,6 +851,13 @@ def profile_names_compiler(path: Path) -> bool:
     return False
 
 
+#: Held while one call checks and makes the default profile. The
+#: release wave builds members side by side, each conan build makes the
+#: profile first, and two ``conan profile detect`` runs against one conan
+#: home race.
+_PROFILE_LOCK = threading.Lock()
+
+
 def ensure_profile(cwd: Path) -> list[str]:
     """Make conan's default profile name a compiler; a line when it was replaced.
 
@@ -861,7 +869,9 @@ def ensure_profile(cwd: Path) -> list[str]:
     and one that names no compiler is detected again, which replaces
     it. A profile that names a compiler is kept as it is, and when its
     file says so no conan process starts: this runs before every
-    install, on every job.
+    install, on every job. Calls in one process take turns, so no two
+    detections run at once, and a call that waited finds the profile
+    the one before it made.
 
     Returns:
         The line saying the profile was detected again; empty when it
@@ -871,13 +881,14 @@ def ensure_profile(cwd: Path) -> list[str]:
         Failed: when conan cannot detect or show the profile, in its
             own words, or when detection finds no compiler here.
     """
-    if profile_names_compiler(profile_path(os.environ)):
-        return []
-    _detect_profile(cwd, "--exist-ok")
-    if "compiler" in _host_settings(cwd):
-        return []
-    _detect_profile(cwd, "--force")
-    settings = _host_settings(cwd)
+    with _PROFILE_LOCK:
+        if profile_names_compiler(profile_path(os.environ)):
+            return []
+        _detect_profile(cwd, "--exist-ok")
+        if "compiler" in _host_settings(cwd):
+            return []
+        _detect_profile(cwd, "--force")
+        settings = _host_settings(cwd)
     compiler = settings.get("compiler")
     if compiler is None:
         fail(
