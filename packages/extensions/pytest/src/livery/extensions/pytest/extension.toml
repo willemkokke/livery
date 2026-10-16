@@ -39,9 +39,12 @@ claims = [{ category = "example", suffixes = [".py", ".pyi"] }]
 [queries."python.dev-group"]
 value = ["pytest>=9.0", "pytest-xdist>=3.6"]
 
-# The options the rendered pytest.toml hands every run.
+# The words a listed extension adds to the options the rendered
+# pytest.toml hands every run, after this extension's own, which its
+# template writes: the union of the answers, in composition order.
 [queries."python.test.addopts"]
-value = ["-q", "-n auto", "--dist=worksteal", "--import-mode=importlib"]
+level = "workspace"
+combine = "union"
 
 # While coverage is listed, this extension measures every python suite
 # for it: the test step runs the suites metered, the sync writes the

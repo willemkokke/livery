@@ -18,16 +18,34 @@ from livery.workshop._contract import load_contract
 
 
 def scripts_dir(venv: Path) -> Path:
-    """*venv*'s executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
+    """Name *venv*'s executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
 
     The running platform decides: a venv is used on the machine that
-    made it.
+    made it. Nothing is read from the disk, so the venv may not exist
+    yet.
+
+    Args:
+        venv: The venv's directory.
+
+    Returns:
+        The directory its interpreter and its console scripts are in.
     """
     return venv / ("Scripts" if sys.platform == "win32" else "bin")
 
 
 def venv_python(venv: Path) -> Path:
-    """*venv*'s interpreter: ``python.exe`` under `scripts_dir` on Windows."""
+    """Name *venv*'s interpreter on this platform.
+
+    ``python.exe`` in [livery.workshop.scripts_dir][] on Windows, and
+    ``python`` there elsewhere. Nothing is read from the disk, so the
+    venv may not exist yet.
+
+    Args:
+        venv: The venv's directory.
+
+    Returns:
+        The interpreter's path.
+    """
     return scripts_dir(venv) / ("python.exe" if sys.platform == "win32" else "python")
 
 

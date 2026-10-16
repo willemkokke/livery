@@ -503,7 +503,6 @@ or the rule's answer over nothing. The base declares:
 | `editor-extensions` | workspace | the marketplace ids the rendered `.vscode/extensions.json` recommends | the union |
 | `python.dev-group` | workspace | the lines of the root project file's `dev` dependency group | the union |
 | `python.docs-group` | workspace | the lines of the root project file's `docs` dependency group | the union |
-| `python.test.addopts` | workspace | the words of the rendered `pytest.toml`'s `addopts` | the union |
 | `release-notes` | workspace | the provider that writes each release's notes | one answer, the nearest by requires |
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
 | `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
@@ -722,10 +721,12 @@ reach the tool profile while a package it judges exists, each
 requirement naming `step <name>` as its site, so unregistering a
 step removes its tool. What the base template leaves to the listed
 extensions, they answer through workspace-level queries: the `dev`
-dependency group's tool lines, the `docs` dependency group's lines and
-pytest's `addopts` are the union of the answers in composition order, and a
-rendered template reads any workspace-level query by its name,
-`queries['python.dev-group']`. The docs extension answers
+dependency group's tool lines and the `docs` dependency group's lines are
+the union of the answers in composition order, and a rendered template
+reads any workspace-level query by its name, `queries['python.dev-group']`,
+an extension's own declared query included: the pytest extension's
+template reads the words other extensions add to its `addopts` from
+`queries['python.test.addopts']`. The docs extension answers
 `python.docs-group` with zensical, the site's builder, and the
 mkdocstrings extension with its python handler, so a workspace that
 lists neither composes an empty `docs` group.

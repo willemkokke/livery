@@ -23,22 +23,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from livery.workshop._examples import is_example
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 #: The marker every example item carries, for a conftest's hooks.
 MARKER = "example"
-
-
-def is_example(path: Path) -> bool:
-    """Whether *path* is an example: a python file under ``docs/examples/``.
-
-    A ``conftest.py`` there is the package's setup, never an example.
-    """
-    if path.suffix != ".py" or path.name == "conftest.py":
-        return False
-    parts = path.parts
-    return any(parts[i : i + 2] == ("docs", "examples") for i in range(len(parts) - 1))
 
 
 def pytest_configure(config: pytest.Config) -> None:

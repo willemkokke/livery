@@ -83,6 +83,33 @@ def test_an_installed_step_reads_everything_when_the_lock_moves(
     assert not select(PAGES, _changes(tmp_path, "uv.lock"), provider="p").runs
 
 
+def test_graph_changed_skips_prose_and_sources_and_names_a_manifest_or_a_root_src(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import Changes, graph_changed
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    member = tmp_path / "packages" / "core"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text('extensions = []\nname = "acme-core"\n')
+
+    def changed(*paths: str) -> bool:
+        return graph_changed(Changes(tmp_path, paths))
+
+    # What never widens first: nothing, the prose and the licence beside
+    # a manifest, a member's source, a file outside every member.
+    assert not changed()
+    assert not changed("packages/core/README.md", "packages/core/LICENSE")
+    assert not changed("README.md", "LICENSE")
+    assert not changed("packages/core/src/acme/core/__init__.py")
+    assert not changed("notes/plan.md", "tests/test_root.py")
+    # A contract, a native manifest beside it, and a root src/ do.
+    assert changed("workshop.toml")
+    assert changed("packages/core/workshop.toml")
+    assert changed("packages/core/pyproject.toml")
+    assert changed("packages/core/README.md", "src/stray.py")
+
+
 def test_a_widening_input_judges_everything(tmp_path: Path) -> None:
     inputs = Inputs(reads=("out/*",), widens=("workshop.toml",))
     assert select(inputs, _changes(tmp_path, "workshop.toml")) == WHOLE

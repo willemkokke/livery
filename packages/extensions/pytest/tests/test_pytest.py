@@ -15,13 +15,16 @@ import sys
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from livery.extensions.python import _backend as _python
 from livery.workshop import Package, PhaseContext, Query, answer
 from livery.workshop import _steps as registry
+
+if TYPE_CHECKING:
+    from livery.workshop._composition import Lookup
 
 CONTRACT = (
     "[workspace]\n"
@@ -174,9 +177,46 @@ def test_unlisted_it_registers_no_step_requires_no_tool_and_writes_no_file(
         settings = tomllib.loads((root / "pytest.toml").read_text())["pytest"]
         assert settings["cache_dir"] == ".workshop/.cache/pytest"
         # Each option is a word of its own: pytest reads the list as argv.
-        assert settings["addopts"][:3] == ["-q", "-n", "auto"]
+        assert settings["addopts"] == [*PYTEST_OPTIONS]
     finally:
         registry.restore(state)
+
+
+#: The options the rendered pytest.toml hands every run, word by word,
+#: before what another extension adds.
+PYTEST_OPTIONS = ("-q", "-n", "auto", "--dist=worksteal", "--import-mode=importlib")
+
+
+def test_another_extension_s_options_follow_pytest_s_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _queries
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    real = _queries.workspace_answers
+    asked: list[object] = []
+
+    def answered(root: Path, *, lookup: Lookup | None = None) -> dict[str, object]:
+        found = real(root, lookup=lookup)
+        # pytest declares the query, and with nothing else listed nobody
+        # answers it.
+        asked.append(found["python.test.addopts"])
+        return {**found, "python.test.addopts": ["-p no:randomly", "--strict-markers"]}
+
+    monkeypatch.setattr(_queries, "workspace_answers", answered)
+    _listed(root, '["pytest"]')
+    assert asked and all(found == () for found in asked)
+    settings = tomllib.loads((root / "pytest.toml").read_text())["pytest"]
+    assert settings["addopts"] == [
+        *PYTEST_OPTIONS,
+        "-p",
+        "no:randomly",
+        "--strict-markers",
+    ]
 
 
 #: The lines the dev group gains while pytest measures for coverage.

@@ -1,12 +1,15 @@
 """Dev releases: the branch decides, the wheel comes from the branch.
 
 ``workflow.release`` on a main-family branch runs the release
-train; on any other branch it is the dev act, this module: a wheel
-built straight from the branch at a dev version, no reserved
+train; on any other branch it is the dev act, this module: each
+member built straight from the branch at a dev version, no reserved
 branch, no PR, no tags. Publishing goes only to the configured
-custom index; without one the run is local, the wheel in ``dist/``
-and the publish skipped with the teaching. PyPI is never the
-fallback.
+custom index, a python index: a member whose distributions are all
+python's publishes through its own publish phase, with that index as
+its python registry target, and a member that releases anything else
+builds without a publish. Without an index the run is local, every
+member built into its ``dist/`` and the publish skipped with the
+teaching. PyPI is never the fallback.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from livery import git
 from livery.footman import fail
 from livery.workshop import _lifecycle, _release_notes
 from livery.workshop._packages import Package
-from livery.workshop._publish import publish_wheels
+from livery.workshop._publish import index_target
 from livery.workshop._update import latest_released
 from livery.workshop._versions import derive_version
 
@@ -259,6 +262,21 @@ def set_floors(root: Path, plans: tuple[DevPlan, ...]) -> Generator[list[str]]:
                 os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
+def released_to_the_index(package: Package, kind: str) -> tuple[bool, str]:
+    """Tell whether an index of *kind* takes what *package* releases, and name it.
+
+    The index takes a member whose set releases at least one
+    distribution and only distributions of the index's ecosystem. The
+    text names the ecosystems of what the member releases, or says it
+    releases none, for the line that says why a member built without a
+    publish.
+    """
+    released = sorted({found for found, _name in _lifecycle.distributions(package)})
+    taken = released == [kind]
+    named = f"{' and '.join(released)} distributions" if released else "no distribution"
+    return taken, named
+
+
 def dev_release(
     root: Path,
     members: tuple[Package, ...],
@@ -270,16 +288,21 @@ def dev_release(
     Every member's version derives before anything builds, so a
     refusal costs nothing. With ``local`` (or with no custom index
     configured, which degrades to the same run and says so) nothing
-    leaves the machine and nothing is asked. A publish always confirms
-    per member. Where nobody can answer, ``livery.footman.confirm``
-    takes its default no and the refusal teaches the explicit
-    ``--yes``: a decline and an unanswered question are told apart by
-    [livery.footman.attended][], which knows about ``--no-input`` and
-    ``--dry-run`` as well as the terminal, so silence never publishes
-    under any of them. While the members build, each floor one declares
-    on another member of the set names that member's dev version, as
-    the release train raises the floors within its set; a member built
-    alone moves no floor.
+    leaves the machine and nothing is asked. A member whose
+    distributions are python's publishes through its publish phase,
+    with the index as the python registry target and
+    ``UV_PUBLISH_TOKEN`` as its credential, as the release train hands
+    a member its target; a member that releases anything else builds,
+    is not asked about, and a line says why nothing published it. A
+    publish always confirms per member. Where nobody can answer,
+    ``livery.footman.confirm`` takes its default no and the refusal
+    teaches the explicit ``--yes``: a decline and an unanswered
+    question are told apart by [livery.footman.attended][], which
+    knows about ``--no-input`` and ``--dry-run`` as well as the
+    terminal, so silence never publishes under any of them. While the
+    members build, each floor one declares on another member of the
+    set names that member's dev version, as the release train raises
+    the floors within its set; a member built alone moves no floor.
     """
     branch = git.current_branch(root)
     index = os.environ.get(INDEX_VAR, "")
@@ -288,6 +311,17 @@ def dev_release(
         for package in members
     )
     publishing = not local and bool(index)
+    target = index_target(index, os.environ.get("UV_PUBLISH_TOKEN", ""))
+    # What the index takes is read before anything builds, as every
+    # version is derived first.
+    releases = (
+        {
+            plan.package.path: released_to_the_index(plan.package, target.kind)
+            for plan in plans
+        }
+        if publishing
+        else {}
+    )
     # The report names its act first: a dev build must never read as
     # a release.
     print(f"  act: dev, from branch '{branch}'; no tags, no release PR")
@@ -303,7 +337,8 @@ def dev_release(
         if raised:
             print(f"  floors raised within the set for the build: {', '.join(raised)}")
         for plan in plans:
-            if publishing and not footman.confirm(
+            taken, named = releases.get(plan.package.path, (False, ""))
+            if taken and not footman.confirm(
                 f"Publish a dev release of {plan.package.name}"
                 f" {plan.version} from '{branch}'?"
             ):
@@ -319,10 +354,19 @@ def dev_release(
             wheel = next(iter(dist.glob("*.whl")), None)
             built = wheel.name if wheel else "dist/"
             print(f"  built {plan.package.name} {plan.version} -> {built}")
-            if publishing:
-                publish_wheels(
+            if taken:
+                # The member's publish phase owns the upload, as in the
+                # release train's wave; a False is a re-run walking past
+                # what an earlier one published, which the step says.
+                if _lifecycle.publish(
                     plan.package,
-                    index_url=index,
-                    token=os.environ.get("UV_PUBLISH_TOKEN", ""),
+                    root,
+                    version=semver_to_pep440(plan.version),
+                    target=target,
+                ):
+                    print(f"  published {plan.package.name} {plan.version} to {index}")
+            elif publishing:
+                print(
+                    f"  not published {plan.package.name}: the custom index takes"
+                    f" {target.kind} distributions alone, and it releases {named}"
                 )
-                print(f"  published {plan.package.name} {plan.version} to {index}")

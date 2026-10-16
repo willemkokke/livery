@@ -24,11 +24,10 @@ import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery.footman import fail
 from livery.toolroom.tools import pytest
-from livery.workshop import Package, Query
-from livery.workshop._packages import Neighbours, SourceReferences
+from livery.workshop import Neighbours, Package, Query, SourceReferences
 
 if TYPE_CHECKING:
-    from livery.workshop import RegistryTarget
+    from livery.workshop import RegistryTarget, SpeedMark
 
 #: The name a package lists this extension by.
 EXTENSION = "python"
@@ -198,14 +197,14 @@ def run_examples(
     Pytest over the package's ``docs/examples/`` directory, or over
     *files* alone when every one of them is an example, whose files
     the workshop's examples plugin collects
-    ([livery.workshop._pytest_examples][]), from the workspace root so
+    ([livery.workshop.is_example][]), from the workspace root so
     the workspace's pytest configuration applies. A named file that is
     no example, the examples' ``conftest.py``, is every example's
     setup, so the whole directory runs. Captured and printed on a red
     exit, so a runner's log carries the failing example's file and
     line; a package without examples says so and passes.
     """
-    from livery.workshop._pytest_examples import is_example
+    from livery.workshop import is_example
 
     if not examples_of(package):
         print(f"  examples: {package.path} has none")
@@ -300,8 +299,7 @@ def run_test(
         names = ", ".join(package.path for package in packages)
         print(f"  tests: no test directory in {names}; nothing to collect")
         return
-    from livery.workshop import ci_run
-    from livery.workshop._pytest_speed import FILE_VARIABLE
+    from livery.workshop import SPEED_FILE_VARIABLE, ci_run
 
     run = ci_run()
     with tempfile.TemporaryDirectory() as scratch:
@@ -309,7 +307,7 @@ def run_test(
         # into this file; the sums print beside the marks afterwards,
         # on a red run too.
         sums = Path(scratch) / "speed.json"
-        env = {**os.environ, FILE_VARIABLE: str(sums)}
+        env = {**os.environ, SPEED_FILE_VARIABLE: str(sums)}
         try:
             if run is not None:
                 # Inside CI a measured run meters the tests, and only
@@ -370,7 +368,7 @@ def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
     since the marks are judged on the CI legs and a machine's clock
     is not one of them, and nothing here reads the store.
     """
-    from livery.workshop import _speed
+    from livery.workshop import speed_marks
 
     if not sums.is_file():
         return []
@@ -380,10 +378,10 @@ def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
         return []
     if not isinstance(loaded, dict) or not loaded:
         return []
-    current: dict[tuple[str, str], _speed.Mark] | None = None
+    current: dict[tuple[str, str], SpeedMark] | None = None
     lines: list[str] = []
     if leg:
-        current, why = _speed.marks(root)
+        current, why = speed_marks(root)
         if current is None:
             lines.append(f"  speed marks: not read ({why})")
     for package, data in sorted(loaded.items()):
@@ -426,8 +424,6 @@ def module_roots(package: Package) -> tuple[str, ...]:
     if declared:
         return declared
     roots: list[str] = []
-    from livery.workshop._packages import root_marks
-
     for init in root_marks(src):
         dotted = ".".join(init.relative_to(src).parts[:-1])
         if not dotted:
@@ -436,6 +432,16 @@ def module_roots(package: Package) -> tuple[str, ...]:
             continue
         roots.append(dotted)
     return tuple(sorted(roots))
+
+
+def root_marks(src: Path) -> list[Path]:
+    """The files that mark an importable root under *src*, shallowest first.
+
+    A root carries an ``__init__.py``; the topmost on a branch is that
+    branch's root. A namespace, one with no ``__init__.py``, marks
+    nothing.
+    """
+    return sorted(src.rglob("__init__.py"), key=lambda path: (len(path.parts), path))
 
 
 def _declared_modules(package: Package) -> tuple[str, ...]:
@@ -494,7 +500,7 @@ def run_script(
         Failed: when the environment holds no script of that name,
             naming the directory and the verb that installs it.
     """
-    from livery.workshop._pythons import scripts_dir
+    from livery.workshop import scripts_dir
 
     directory = scripts_dir(root / ".venv")
     script = directory / (f"{name}.exe" if sys.platform == "win32" else name)
@@ -623,8 +629,7 @@ def _extra_siblings(package: Package) -> tuple[Neighbours, frozenset[str]]:
     longest member prefix it matches is one of their roots. Empty for a
     package that declares no extra, which then reads no other member.
     """
-    from livery.workshop import discover_packages
-    from livery.workshop._packages import neighbours
+    from livery.workshop import discover_packages, neighbours
 
     extras = _extra_distributions(package)
     if not extras:
@@ -1003,10 +1008,67 @@ def publish_artifact(
     publisher reads: the wheels in ``dist/`` already carry their
     versions, and the index needs nothing from the workspace.
     """
-    from livery.workshop._publish import publish_wheels
-
     del root, version
     return publish_wheels(package, index_url=target.publish_url, token=target.token)
+
+
+def publish_wheels(package: Package, *, index_url: str = "", token: str = "") -> bool:
+    """Upload ``dist/*``; False when everything was already published.
+
+    ``uv publish``, with the already-published duplicate the one
+    tolerated failure: a re-run must walk past what an earlier
+    attempt landed. Anything else, a rejected credential, an
+    unreachable index, surfaces verbatim.
+
+    The upload address is required: without ``--publish-url`` uv
+    silently defaults to PyPI, and an undeclared endpoint must
+    refuse rather than surprise. A deliberate PyPI publish arrives
+    here as the ecosystem rung's explicit URL.
+    """
+    if not index_url:
+        fail(
+            f"{package.name}: no publish address given, and an upload"
+            " endpoint is never defaulted (uv's silent default is"
+            " PyPI). Declare [registries.python] publish in"
+            " workshop.toml, or set PYTHON_PUBLISH_INDEX."
+        )
+    command = ["publish", "--publish-url", index_url]
+    if token:
+        # A Secret, so a profile trace and every other place the
+        # command line is shown carry *** in its place and uv alone
+        # receives the value; recorded=False keeps the call out of
+        # receipts, --json, and recordings as well.
+        command += ["--token", footman.Secret(token)]
+    command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
+    # CI renders UV_PUBLISH_TOKEN from a secret that may be absent, and
+    # an absent secret arrives as an empty string. uv treats a set but
+    # empty token as a credential rather than as none: trusted
+    # publishing is skipped and the index refuses the empty token. The
+    # child sees the variable only when it carries a value.
+    env = {k: v for k, v in os.environ.items() if k != "UV_PUBLISH_TOKEN" or v}
+    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False, env=env)(
+        *command
+    )
+    if result.code == 0:
+        return True
+    output = f"{result.stdout}{result.stderr}"
+    if _is_duplicate(output):
+        print(f"  {package.name}: already published; walking past")
+        return False
+    fail(f"uv publish ({package.name}) exited {result.code}:\n{output}")
+    return False  # unreachable; fail raises
+
+
+#: How each index refuses a file it already serves. Gitea and PyPI
+#: say the version already exists, twine-style indexes say duplicate,
+#: GitLab's package registry says the file name is taken.
+_DUPLICATE_PHRASES = ("already exists", "duplicate", "file name has already been taken")
+
+
+def _is_duplicate(output: str) -> bool:
+    """Whether *output*, an upload's refusal, means the file is already served."""
+    lowered = output.lower()
+    return any(phrase in lowered for phrase in _DUPLICATE_PHRASES)
 
 
 def _index_args(root: Path) -> tuple[str, ...]:
@@ -1168,7 +1230,7 @@ def _leg_env(root: Path, venv: Path) -> dict[str, str]:
         and entry != workspace_venv
         and not entry.startswith(workspace_venv + os.sep)
     ]
-    from livery.workshop._pythons import scripts_dir
+    from livery.workshop import scripts_dir
 
     env["PATH"] = os.pathsep.join([str(scripts_dir(venv)), *kept])
     env["VIRTUAL_ENV"] = str(venv)
@@ -1336,7 +1398,7 @@ def run_isolated_test(
     if not wheels:
         fail(f"{package.name}: no wheel in {built} to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
-        from livery.workshop._pythons import venv_python
+        from livery.workshop import venv_python
 
         venv = Path(scratch) / "venv"
         python = venv_python(venv)

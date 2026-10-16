@@ -40,11 +40,12 @@ from livery.workshop import selected_files
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from livery.workshop import Package, PhaseContext
-    from livery.workshop._packages import (
+    from livery.extensions.python._parse import RuleContext
+    from livery.workshop import (
         Neighbours,
+        Package,
+        PhaseContext,
         ReferencedName,
-        RuleContext,
         SourceReferences,
     )
 
@@ -59,7 +60,7 @@ def declared_imports(ctx: PhaseContext) -> None:
     The sources the run reaches ([livery.workshop.selected_files][])
     are judged; every source when the run knows nothing of what changed.
     """
-    from livery.workshop._packages import RuleContext
+    from livery.extensions.python._parse import RuleContext
 
     context = RuleContext(
         root=ctx.root, packages=ctx.packages, files=selected_files(ctx)
@@ -129,10 +130,11 @@ def problems(context: RuleContext) -> list[str]:
     """Each import no declaration accounts for, in package and source order.
 
     A package that holds the python extension is judged, each of its
-    sources under ``src`` that the run reaches.
+    sources under ``src`` that the run reaches, as this extension's
+    ``references`` answer records them.
     """
-    from livery.workshop import _lifecycle, extension_set
-    from livery.workshop._packages import neighbours
+    from livery.extensions.python._backend import references
+    from livery.workshop import extension_set, neighbours
 
     around = neighbours(context.packages)
     found: list[str] = []
@@ -141,7 +143,7 @@ def problems(context: RuleContext) -> list[str]:
             continue
         declared = manifest(package)
         shipped = f"{package.path}/src/"
-        for source in _lifecycle.references(package):
+        for source in references(package):
             if not source.path.startswith(shipped):
                 continue
             if context.files is not None and source.path not in context.files:

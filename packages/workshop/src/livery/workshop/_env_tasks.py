@@ -366,7 +366,7 @@ def venv_bin(root: Path) -> Path:
     """The venv's executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
 
     The emission runs on the machine it enters, so the running
-    platform is the right answer ([livery.workshop._pythons.scripts_dir][]).
+    platform is the right answer ([livery.workshop.scripts_dir][]).
     """
     from livery.workshop._pythons import scripts_dir
 

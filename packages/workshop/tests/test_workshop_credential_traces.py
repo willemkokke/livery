@@ -18,10 +18,10 @@ import pytest
 import livery.footman as footman
 import livery.toolroom.tools as tools
 from livery import git
+from livery.extensions.python._backend import publish_wheels
 from livery.footman import Secret
 from livery.workshop import _devenv, _e2e, _new_project
 from livery.workshop._packages import Package
-from livery.workshop._publish import publish_wheels
 from workshop_traced import traced
 
 TOKEN = "s3cret-token-value"

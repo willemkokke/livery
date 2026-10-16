@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
+from livery.workshop import is_example
 from livery.workshop._packages import Package
-from livery.workshop._pytest_examples import MARKER, is_example
+from livery.workshop._pytest_examples import MARKER
 
 
 def _examples(tmp_path: Path) -> Path:
@@ -85,11 +86,16 @@ def test_a_named_example_runs_whole_once_and_its_test_functions_never(
 def test_only_example_files_are_collected_and_a_conftest_never_is(
     tmp_path: Path,
 ) -> None:
+    # The refusals first: the examples' setup, a page beside them, a
+    # stub, a test, and an examples directory that is not under docs.
     assert not is_example(Path("packages/x/docs/examples/conftest.py"))
     assert not is_example(Path("packages/x/docs/examples/notes.md"))
+    assert not is_example(Path("packages/x/docs/examples/guide.pyi"))
     assert not is_example(Path("packages/x/tests/test_examples.py"))
+    assert not is_example(Path("packages/x/docs/pages/examples/guide.py"))
     assert is_example(Path("packages/x/docs/examples/guide.py"))
     assert is_example(Path("docs/examples/deep/er/guide.py"))
+    assert is_example(tmp_path / "packages" / "x" / "docs" / "examples" / "guide.py")
     base = _examples(tmp_path)
     run = _pytest(str(base), "-v", cwd=tmp_path)
     assert run.returncode == 0, run.stdout + run.stderr

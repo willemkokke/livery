@@ -247,7 +247,9 @@ def test_the_cross_kind_wave_orders_and_dispatches(
     monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    monkeypatch.setattr(
+        "livery.extensions.python._backend.publish_wheels", _fake_wheels
+    )
 
     def registry_for(package: Package) -> _Ledger:
         return conan_registry if "conan" in package.extensions else registry
@@ -315,7 +317,9 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
 
     monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    monkeypatch.setattr(
+        "livery.extensions.python._backend.publish_wheels", _fake_wheels
+    )
     conan_registry = _conan.ConanRegistry(target, root=root)
 
     def registry_for(package: Package):
@@ -347,7 +351,9 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     monkeypatch.setattr(_publish, "cut_tag", _cut_and_push_to_the_forge)
     monkeypatch.setattr(_conan, "build", _fake_build)
     monkeypatch.setattr(nb, "build_dist", _fake_build)
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    monkeypatch.setattr(
+        "livery.extensions.python._backend.publish_wheels", _fake_wheels
+    )
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     receipts = publish_release(
         root, registry_for, ref=git.head_sha(root), probe_timeout=5, probe_poll=0.01
@@ -402,7 +408,9 @@ def _serving_wave(
     monkeypatch.setattr(nb, "build_dist", _no_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
     monkeypatch.setattr(_conan, "_conan", _fake_conan)
-    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    monkeypatch.setattr(
+        "livery.extensions.python._backend.publish_wheels", _fake_wheels
+    )
 
     def registry_for(package: Package) -> _Ledger:
         return conan_registry if "conan" in package.extensions else registry

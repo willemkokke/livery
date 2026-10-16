@@ -30,9 +30,8 @@ from livery.workshop import selected_files
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.extensions.python._parse import ParsedModule
+    from livery.extensions.python._parse import ParsedModule, RuleContext
     from livery.workshop import Package, PhaseContext
-    from livery.workshop._packages import RuleContext
 
 #: Where the allowance lives in the root contract.
 ALLOWANCE = "[[python.private-reaches]]"
@@ -45,8 +44,7 @@ def private_reaches(ctx: PhaseContext) -> None:
     judged over the one parse; an unused entry is judged on a run over
     every source alone.
     """
-    from livery.extensions.python._parse import parsed_modules
-    from livery.workshop._packages import RuleContext
+    from livery.extensions.python._parse import RuleContext, parsed_modules
 
     files = selected_files(ctx)
     context = RuleContext(root=ctx.root, packages=ctx.packages, files=files)

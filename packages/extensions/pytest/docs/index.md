@@ -86,6 +86,11 @@ gate:
   branches), each file named from the workspace root, the names the union
   reads, and how the data of Windows and POSIX runs combine.
 
+The options every run takes are this extension's own, followed by the
+union of the listed extensions' answers to the `python.test.addopts`
+query, in composition order. This extension declares the query, at the
+workspace level.
+
 While coverage is listed, the dev group also takes `coverage`, whose
 startup hook meters every python the tests start once the runner arms
 it, and `pytest-cov` for a machine's measured run, and the root

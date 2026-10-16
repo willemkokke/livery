@@ -1,4 +1,4 @@
-"""The dev act: refusals and degradations first, then the wheel."""
+"""The dev act: refusals and degradations first, then the wheel and its publish."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def test_no_index_degrades_to_local_with_the_teaching(
 
     monkeypatch.setattr("livery.workshop._dev_release.build_dev", _fake_build)
     monkeypatch.setattr(
-        "livery.workshop._dev_release.publish_wheels",
+        "livery.workshop._lifecycle.publish",
         lambda *a, **k: pytest.fail("nothing may publish without an index"),
     )
     monkeypatch.setattr(
@@ -144,7 +144,7 @@ def test_local_never_publishes_and_never_asks_even_with_an_index(
     _grow_on_branch(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
-        "livery.workshop._dev_release.publish_wheels",
+        "livery.workshop._lifecycle.publish",
         lambda *a, **k: pytest.fail("--local publishes nothing"),
     )
     monkeypatch.setattr(
@@ -162,29 +162,118 @@ def test_local_never_publishes_and_never_asks_even_with_an_index(
     assert len(built) == 1
 
 
-def test_a_confirmed_publish_goes_to_the_configured_index(
+def _built_into_dist(_root: Path, plan: DevPlan) -> Path:
+    """Stand in for the build: one wheel in the member's ``dist/``."""
+    dist = plan.package.directory / "dist"
+    dist.mkdir(exist_ok=True)
+    (dist / f"{plan.package.name}-0.3.0-py3-none-any.whl").write_bytes(b"")
+    return dist
+
+
+def _publishing(monkeypatch: pytest.MonkeyPatch, asked: list[str]) -> None:
+    """A configured index and token, every question answered yes and recorded."""
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/upload")
+    monkeypatch.setenv("UV_PUBLISH_TOKEN", "tok")
+
+    def _confirm(question: str, *args: object, **kwargs: object) -> bool:
+        asked.append(question)
+        return True
+
+    monkeypatch.setattr("livery.workshop._dev_release.footman.confirm", _confirm)
+    monkeypatch.setattr("livery.workshop._dev_release.build_dev", _built_into_dist)
+
+
+def test_a_refused_upload_names_the_member_and_keeps_the_uploader_s_words(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusal first: the upload runs in python's publish step, and
+    # its failure reaches the dev act whole, naming the member.
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as tools
+
+    root = _workspace(tmp_path)
+    _grow_on_branch(root)
+    _publishing(monkeypatch, [])
+    words = "403 Forbidden: the token may not upload to this index"
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            assert args[:3] == (
+                "publish",
+                "--publish-url",
+                "https://example.test/upload",
+            )
+            return SimpleNamespace(code=1, stdout="", stderr=words)
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES) as caught:
+        dev_release(root, discover_packages(root))
+    message = str(caught.value)
+    assert message.startswith("uv publish (livery-core) exited 1:")
+    assert words in message
+
+
+def test_a_member_whose_set_holds_no_python_builds_and_is_not_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path)
+    _git(root, "checkout", "-b", "feat/9-widget")
+    native = root / "packages" / "native"
+    native.mkdir()
+    (native / "workshop.toml").write_text('extensions = []\nname = "acme-native"\n')
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: a member that releases nothing")
+    asked: list[str] = []
+    _publishing(monkeypatch, asked)
+    uploads: list[str] = []
+
+    def _upload(package: Package, *, index_url: str, token: str) -> bool:
+        uploads.append(package.name)
+        return True
+
+    monkeypatch.setattr("livery.extensions.python._backend.publish_wheels", _upload)
+    members = tuple(
+        package for package in discover_packages(root) if package.name == "acme-native"
+    )
+    dev_release(root, members)
+    out = capsys.readouterr().out
+    # Built, never asked about and never uploaded, and the line says why.
+    assert "  built acme-native " in out
+    assert asked == [] and uploads == []
+    assert (
+        "  not published acme-native: the custom index takes python distributions"
+        " alone, and it releases no distribution"
+    ) in out
+    assert (native / "dist").is_dir()
+
+
+def test_a_python_member_publishes_through_its_publish_phase_to_the_dev_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)
-    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
-    monkeypatch.setenv("UV_PUBLISH_TOKEN", "tok")
-    monkeypatch.setattr(
-        "livery.workshop._dev_release.footman.confirm", lambda *a, **k: True
-    )
-    monkeypatch.setattr(
-        "livery.workshop._dev_release.build_dev",
-        lambda _root, plan: root / "packages" / "core" / "dist",
-    )
-    published: list[tuple[str, str]] = []
+    asked: list[str] = []
+    _publishing(monkeypatch, asked)
+    uploads: list[tuple[str, str, str]] = []
 
-    def _fake_publish(package: object, *, index_url: str, token: str) -> bool:
-        published.append((index_url, token))
+    def _upload(package: Package, *, index_url: str, token: str) -> bool:
+        uploads.append((package.name, index_url, token))
         return True
 
-    monkeypatch.setattr("livery.workshop._dev_release.publish_wheels", _fake_publish)
+    # Read where python's publish step reads it: the phase runs the
+    # step, and the step hands the upload the target the act resolved.
+    monkeypatch.setattr("livery.extensions.python._backend.publish_wheels", _upload)
     dev_release(root, discover_packages(root))
-    assert published == [("https://example.test/simple", "tok")]
+    assert uploads == [("livery-core", "https://example.test/upload", "tok")]
+    assert len(asked) == 1 and asked[0].startswith(
+        "Publish a dev release of livery-core"
+    )
+    out = capsys.readouterr().out
+    assert "  published livery-core " in out
+    assert out.rstrip().endswith("to https://example.test/upload")
 
 
 def test_a_package_before_its_first_tag_still_describes(tmp_path: Path) -> None:
