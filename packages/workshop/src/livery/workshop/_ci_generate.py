@@ -1070,19 +1070,7 @@ def generate(root: Path) -> dict[str, str]:
     else:
         files = {".gitlab-ci.yml": _gitlab_document(facts, prog, everything=everything)}
     files["setup.sh"] = entry_script(root)
-    rendered = {path: header + content for path, content in files.items()}
-    from livery.workshop._site_files import site_files
-
-    jinja_header = (
-        "{#\n"
-        + "".join("  " + line.removeprefix("# ") + "\n" for line in header.splitlines())
-        + "#}\n"
-    )
-    # A mounted extension's own rendered files, the site's override
-    # template for one, carry the same header in Jinja's comment form.
-    for path, render in site_files().items():
-        rendered[path] = jinja_header + render(root)
-    return rendered
+    return {path: header + content for path, content in files.items()}
 
 
 def generated_files(root: Path) -> dict[Path, str]:

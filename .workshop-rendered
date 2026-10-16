@@ -7,6 +7,7 @@
   ".vscode/settings.json": "759d0f1da4c6ba580cc5e147ab55a97f847ede072ba4be716c89306bc236063e",
   "CLAUDE.md": "82104ca38c9194808cac9fa21ba9d65764705c4c7d4adf8cc4ce6e6109c6498e",
   "mypy.ini": "3ee28c9a145c77189ce5456dc8df156d6e70a116a1ddc5516d865cbb210a831e",
+  "overrides/main.html": "261598c0d74862b95730a9a462bc729fe1e701c303947a77e39e5421e9a095a4",
   "pyproject.toml": "44bb14784f30c9bb470e78d79943adac169d4e3f68f27be403a9c7f15df9e1c2",
   "pyrefly.toml": "81b5d58e50d43ca86a76cb35dcb0f50377a5a55bb2c8b6a8e1fe973c52f12e89",
   "pyrightconfig.json": "10f80e06d041460fd07dbfb79dcbe9a5359fdc7f21a592e199b661e3c7901f28",

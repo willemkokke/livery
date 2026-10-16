@@ -676,7 +676,17 @@ the phase runs, the verb removes every generated tree, each package's
 `docs/_generated/` and the root's, which the phase's steps and the
 extension's own passes write again. So a step that no longer runs, its
 extension unlisted or the step turned off, leaves no page and no nav
-block behind.
+block behind. A step that writes elsewhere names those paths under its
+`outputs` key, each relative to the root or `package/<path>` for the
+path in each package, and a generator names its own in its `[docs]
+generators` entry, `{ verb = "...", outputs = ["docs/tools/"] }`. The
+task reference declares the root's `docs/tasks/`, where each task's
+redirect page lives, and coverage's step each package's `htmlcov/`.
+The phase's run removes each such path that no running step or listed
+generator declares any more, the extension behind it uninstalled
+included, and keeps the rest as their writers left them. An output
+that leaves the root, or names `docs/` itself, refuses when the
+extension mounts.
 `fm docs.publish` runs the `deploy` phase on the built site just before
 it publishes it, then puts each declared coverage report's tree into
 the site. A listed extension that requires docs adds its steps to

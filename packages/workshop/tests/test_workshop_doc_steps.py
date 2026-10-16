@@ -56,19 +56,26 @@ def test_a_mounted_link_maps_to_its_package_and_a_built_one_is_skipped(
 ) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
-    member_docs = tmp_path / "packages" / "core" / "docs"
-    member_docs.mkdir(parents=True)
-    (member_docs / "guide.md").write_text("# Guide\n")
+    # A member at packages/core, and one in a group directory.
+    for member in ("core", "extensions/widgets"):
+        member_docs = tmp_path / "packages" / member / "docs"
+        member_docs.mkdir(parents=True)
+        name = member.rpartition("/")[2]
+        (member_docs.parent / "workshop.toml").write_text(f'name = "acme-{name}"\n')
+        (member_docs / "guide.md").write_text("# Guide\n")
     (docs / "index.md").write_text(
         "# Home\n\n[guide](packages/core/guide.md)\n"
+        "[widgets](packages/extensions/widgets/guide.md#guide)\n"
         "[api](_generated/api/index.md)\n"
         "[gone](packages/core/absent.md)\n"
+        "[group](packages/extensions/guide.md)\n"
     )
     # A page the build writes under the root docs is not authored.
     (docs / "tasks").mkdir()
     (docs / "tasks" / "index.md").write_text("[nothing](nowhere.md)\n")
     assert link_problems(tmp_path) == [
-        "docs/index.md: packages/core/absent.md does not exist"
+        "docs/index.md: packages/core/absent.md does not exist",
+        "docs/index.md: packages/extensions/guide.md does not exist",
     ]
 
 

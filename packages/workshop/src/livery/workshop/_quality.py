@@ -26,7 +26,7 @@ from livery.workshop import _steps
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
-from livery.workshop._phases import PhaseContext, run_phase
+from livery.workshop._phases import PhaseContext, walk_steps
 
 # Re-exported by name: the drift step's body looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -99,7 +99,7 @@ def walk(
 
     Every gate comes here, the whole one, CI's narrowed legs and a
     machine's narrowed step alike, and runs the registry's steps
-    through the one walk ([livery.workshop._phases.run_phase][]). Each
+    through the one walk ([livery.workshop._phases.walk_steps][]). Each
     step an extension registered is named first. Under ``--fix`` every
     fixer that applies runs, one at a time in the rewriters' order,
     before any judge reads the tree, and a step that rewrote is not
@@ -122,13 +122,13 @@ def walk(
         return names if only is None else tuple(n for n in names if n in only)
 
     for name in _steps.with_files(chosen(_steps.rewriters(ctx)), ctx):
-        run_phase(ctx, (_steps.step_for(name),), inputs=inputs, fixing=True)
+        walk_steps(ctx, (_steps.step_for(name),), inputs=inputs, fixing=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
     names = _steps.with_files(chosen(_steps.judges(ctx)), ctx)
-    run_phase(ctx, _steps.with_earlier(names), inputs=inputs)
+    walk_steps(ctx, _steps.with_earlier(names), inputs=inputs)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:

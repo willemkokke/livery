@@ -28,7 +28,7 @@ test`` runs the test phase's steps and ``fm test.pytest`` the one;
 the gate runs the steps of the phases that declare themselves gated.
 
 The gate runs the registered steps through the one walk
-([livery.workshop._phases.run_phase][]), each a footman step: the
+([livery.workshop._phases.walk_steps][]), each a footman step: the
 rewriters one at a time before any judge reads the tree
 ([livery.workshop._steps.rewriters][]), then every judge in one
 block ([livery.workshop._steps.judges][]), each with its own record.
@@ -224,6 +224,11 @@ class StepRecord:
         deletes: The steps of the base or of an extension this one
             requires that it deletes, each ``<owner>:<phase>.<step>``
             with the reason.
+        outputs: The paths the step writes, each relative to the root
+            or ``package/<path>`` for the path in each package. When
+            [livery.workshop.run_phase][] runs the step's phase, an
+            output no running step declares is removed first, so a step
+            that stops running leaves nothing behind wherever it wrote.
 
     """
 
@@ -251,6 +256,7 @@ class StepRecord:
     enabled: bool = True
     replaces: tuple[tuple[str, str], ...] = ()
     deletes: tuple[tuple[str, str], ...] = ()
+    outputs: tuple[str, ...] = ()
 
     @property
     def name(self) -> str:
@@ -987,16 +993,16 @@ def arguments_refusal(verb: str, records: Iterable[StepRecord]) -> str:
 def run_step(name: str, ctx: PhaseContext, *, fix: bool = False) -> None:
     """Run the step *name* over *ctx* through the walk: its judge, or its fix mode.
 
-    One step alone ([livery.workshop._phases.run_phase][]): a workspace
+    One step alone ([livery.workshop._phases.walk_steps][]): a workspace
     step runs once, a package step once per package it judges, and
     a step without a fix mode runs nothing in fix mode. The steps
     named in ``after`` are not run first: a caller running several
     steps by hand orders them itself, and the gate's walk brings them
     in ([livery.workshop._steps.with_earlier][]).
     """
-    from livery.workshop._phases import run_phase
+    from livery.workshop._phases import walk_steps
 
-    run_phase(ctx, (step_for(name),), fixing=fix)
+    walk_steps(ctx, (step_for(name),), fixing=fix)
 
 
 def with_earlier(names: tuple[str, ...]) -> tuple[StepRecord, ...]:

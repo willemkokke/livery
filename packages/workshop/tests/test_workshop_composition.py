@@ -288,6 +288,29 @@ def test_a_name_nothing_declares_orders_nothing() -> None:
     assert order(("a",), lookup, edges=[("a", "zed"), ("zed", "a")]) == ("a",)
 
 
+def test_the_nearest_extensions_are_the_ones_no_other_requires() -> None:
+    from livery.workshop import nearest_extensions
+
+    # The fallbacks first: requires that close a cycle leave none nearest,
+    # and a name nothing declares requires nothing.
+    cycle = _lookup(_declared("a", requires=("b",)), _declared("b", requires=("a",)))
+    assert nearest_extensions(("a", "b"), cycle) == ()
+    assert nearest_extensions(("ghost",), cycle) == ("ghost",)
+    lookup = _lookup(
+        _declared("theme", requires=("brand",)),
+        _declared("brand", requires=("base",)),
+        _declared("base"),
+        _declared("other"),
+    )
+    # A requirement met through another is not nearest; two that neither
+    # requires are both nearest, in the order given, each once.
+    assert nearest_extensions(("base", "theme", "brand"), lookup) == ("theme",)
+    assert nearest_extensions(("other", "base", "theme", "other"), lookup) == (
+        "other",
+        "theme",
+    )
+
+
 def test_a_metadata_line_that_names_no_distribution_is_read_past() -> None:
     from livery.workshop.testing._conformance import (
         _required,  # pyright: ignore[reportPrivateUsage]

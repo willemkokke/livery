@@ -25,9 +25,9 @@ from livery.workshop import (
     Package,
     answer,
     discover_packages,
+    order_topologically,
     read_contract,
 )
-from livery.workshop._graph import order_topologically
 
 #: Where package docs mount inside the site's tree, per package
 #: directory name. Gitignored; rebuilt on every docs verb.

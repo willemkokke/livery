@@ -10,7 +10,7 @@ packages reference its code by, and what its sources reference. A
 question is a query ([livery.workshop._queries.Query][]) the package's
 set answers, the extensions it lists and those they require; a build,
 a stamp, an isolated test, a publish or a verification runs as the
-package's phase ([livery.workshop._phases.run_phase][]), the steps its
+package's phase ([livery.workshop._phases.walk_steps][]), the steps its
 set adds to it. So a caller never names an extension.
 
 A question nothing in the set answers gets the query's empty answer:
@@ -430,16 +430,16 @@ def _run_steps(
     None when no extension of the package's set adds steps to the
     phase. A step an extension of the set deletes is none of them. The
     steps run through the one walk
-    ([livery.workshop._phases.run_phase][]), the context naming the
+    ([livery.workshop._phases.walk_steps][]), the context naming the
     package and the phase.
     """
     steps = _phase_steps(package, phase)
     if not steps:
         return None
-    from livery.workshop._phases import PhaseContext, run_phase
+    from livery.workshop._phases import PhaseContext, walk_steps
 
     ctx = PhaseContext(root=root, packages=(package,), package=package, phase=phase)
-    return run_phase(ctx, steps, inputs={phase: inputs})
+    return walk_steps(ctx, steps, inputs={phase: inputs})
 
 
 def _served(

@@ -55,6 +55,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
         "  wrote .taplo.toml",
         "  wrote .vscode/extensions.json",
         "  wrote .vscode/settings.json",
+        "  wrote overrides/main.html",
         "  wrote tasks.py",
     ]
     ignored = (root / ".gitignore").read_text()
@@ -65,9 +66,13 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     (root / ".gitignore").write_text(edited)
     assert shipped_drift(root) == []
     # The docs extension leaves the list: its lines go, the repository's
-    # line stays, and the file is still the engine's to rewrite.
+    # line stays, and the file is still the engine's to rewrite. The
+    # site's theme override, the extension's own render, goes with it.
     _workspace(root, "[]")
-    assert _composed(deliver(root)) == ["  updated .gitignore"]
+    assert _composed(deliver(root)) == [
+        "  updated .gitignore",
+        "  removed overrides/main.html: no listed extension renders it",
+    ]
     ignored = (root / ".gitignore").read_text()
     assert "site/" not in ignored
     assert "mine/\n# -- workshop: end rules --" in ignored

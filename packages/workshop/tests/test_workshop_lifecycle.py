@@ -405,7 +405,7 @@ def test_a_step_deleted_in_a_set_never_runs_there_and_runs_elsewhere(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop._extensions import declaration
-    from livery.workshop._phases import PhaseContext, run_phase
+    from livery.workshop._phases import PhaseContext, walk_steps
 
     build = (
         '\nmain = "{package}._steps:build"\nreads = ["epoch"]\n'
@@ -446,7 +446,7 @@ def test_a_step_deleted_in_a_set_never_runs_there_and_runs_elsewhere(
     declared = declaration("acme.base")
     assert declared is not None
     ctx = PhaseContext(root=tmp_path, packages=(plain, over), phase="build")
-    run_phase(ctx, declared.phases["build"], inputs={"build": {"epoch": 0}})
+    walk_steps(ctx, declared.phases["build"], inputs={"build": {"epoch": 0}})
     said = capsys.readouterr().out
     assert "base built packages/plain" in said
     assert "base built packages/over" not in said
