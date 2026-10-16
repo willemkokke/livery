@@ -1566,10 +1566,13 @@ def pull_request_runners(ci: dict[str, Any]) -> list[str]:
 
 
 def pull_request_legs(root: Path) -> list[str]:
-    """The check legs a pull request's run produces, ``check-<os>-<python>`` each.
+    """Name the check legs a pull request's run produces, ``check-<os>-<python>`` each.
 
-    ``[ci] pull-request-runners`` by the gate's Pythons; every leg of
-    `check_legs` when the key is absent.
+    One per runner the root contract's ``[ci] pull-request-runners``
+    names and Python the gate runs; every leg
+    [livery.workshop.check_legs][] names when the key is absent. The
+    task fails, naming both lists, when the key names a runner
+    ``[ci] runners`` does not list, and when it is empty.
     """
     from livery.workshop._pythons import gate_pythons
 
@@ -1584,12 +1587,13 @@ def pull_request_legs(root: Path) -> list[str]:
 
 
 def check_legs(root: Path) -> list[str]:
-    """The labels of the check legs the gate produces, ``check-<os>-<python>`` each.
+    """Name the check legs the gate produces, ``check-<os>-<python>`` each.
 
-    One per runner the contract names (``[ci] runners``, ubuntu-latest
-    without it) and Python the gate runs
-    ([livery.workshop._pythons.gate_pythons][]), spelled as `run_point`
-    names a matrix job's leg.
+    One per runner the root contract names (``[ci] runners``,
+    ``ubuntu-latest`` without it) and Python the gate runs: the
+    contract's ``[ci] python-versions``, or the newest Python of the
+    derived matrix. Each label is spelled as the job runner names the
+    leg it runs, the key of the leg's rows on the state store.
     """
     from livery.workshop._pythons import gate_pythons
 

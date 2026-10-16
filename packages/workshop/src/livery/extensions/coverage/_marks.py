@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from livery import git
-from livery.workshop._ci_context import state_store
+from livery.workshop import state_store
 
 #: The marks: one row per write, the newest kept by the window; anyone
 #: may write, since an accept is a person's act, and the ratchet's

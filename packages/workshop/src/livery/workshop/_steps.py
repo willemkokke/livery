@@ -1624,13 +1624,17 @@ def step_enabled(root: Path, name: str) -> bool:
 
 
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The *units* whose suites a registered step of the test phase runs.
+    """Keep the *units* whose suites a registered step of the test phase runs.
 
-    Each by the rule a step judges a unit by (`judges_unit`): a member
-    by its set, and the workspace's own tests by the root's set. A step
+    A step runs a unit's suite while the unit's set holds an extension
+    the step names, and every unit's when it names none: a member holds
+    its own set, and the workspace's own tests
+    ([livery.workshop.WORKSPACE_TESTS][]) hold the root's set. A step
     of package scope runs over one member at a time and never over the
-    workspace's own tests, so a root whose set holds cmake leaves them
-    untested by its ctest step.
+    workspace's own tests.
+
+    Returns:
+        The units of *units* some test step runs, in *units* order.
     """
     from livery.workshop._packages import WORKSPACE_TESTS
 
@@ -1644,22 +1648,6 @@ def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
             for record in tests
         )
     )
-
-
-def tested_suite(root: Path) -> Package | None:
-    """The workspace's own tests at *root*, when a registered test step runs them.
-
-    The unit ([livery.workshop.workspace_suite][]) by the rule
-    [livery.workshop.scoped_suite][] applies to one step, asked of
-    every step of the test phase (`tested`): a step of workspace scope
-    runs it while the root's set holds an extension the step names.
-    None when the workspace has no ``tests`` directory, or when no test
-    step judges the unit.
-    """
-    from livery.workshop._packages import workspace_suite
-
-    unit = workspace_suite(root)
-    return unit if unit is not None and tested((unit,)) else None
 
 
 def _register_builtin() -> None:

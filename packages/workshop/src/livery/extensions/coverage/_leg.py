@@ -20,6 +20,7 @@ from __future__ import annotations
 import gzip
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -33,11 +34,11 @@ from livery.extensions.coverage._format import (
     stored,
 )
 from livery.footman import fail
-from livery.workshop._packages import WORKSPACE_TESTS
+from livery.workshop import WORKSPACE_TESTS
 
 if TYPE_CHECKING:
     from livery.extensions.coverage._record import Unit
-    from livery.workshop import Package, RunContext
+    from livery.workshop import LegScope, Package, RunContext
 
 
 #: The scope a leg's file names when the gate proved the tree or
@@ -65,20 +66,21 @@ def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
 def own_tests(root: Path) -> tuple[Package, ...]:
     """The workspace's own tests, as a unit a test step runs; none otherwise.
 
-    The unit holds the root's set, and a test step runs it while that
-    set holds an extension the step names, the rule the test step
+    The unit ([livery.workshop.workspace_suite][]) holds the root's
+    set, and a test step runs it while that set holds an extension the
+    step names ([livery.workshop.tested][]), the rule the test step
     itself asks ([livery.workshop.scoped_suite][]). A root whose set
     holds no such extension runs none of its own tests, so no leg
     leaves a part for them and no record holds them.
     """
-    from livery.workshop._steps import tested_suite
+    from livery.workshop import tested, workspace_suite
 
-    unit = tested_suite(root)
-    return (unit,) if unit is not None else ()
+    unit = workspace_suite(root)
+    return tested((unit,)) if unit is not None else ()
 
 
 def suites_that_ran(
-    marker: dict[str, Any], root: Path, packages: tuple[Package, ...]
+    marker: LegScope, root: Path, packages: tuple[Package, ...]
 ) -> tuple[Package, ...]:
     """The units the leg ran, by its scope marker.
 
@@ -91,13 +93,11 @@ def suites_that_ran(
     reached leaves no context of its own under a first-hit tracer,
     and still ran.
     """
-    from livery.workshop._verified import AFFECTED, FULL
-
-    scope = marker["scope"]
-    if scope == FULL:
+    scope = marker.scope
+    if scope == "full":
         ran = suites_of(packages)
-    elif scope in (AFFECTED, MEASURED):
-        named = set(marker["packages"])
+    elif scope in ("affected", MEASURED):
+        named = set(marker.packages)
         ran = tuple(package for package in suites_of(packages) if package.path in named)
     else:
         return ()
@@ -199,14 +199,15 @@ def shown_size(count: int) -> str:
     return f"{count / 1_000:.1f} KB"
 
 
-def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> None:
+def _leave_leg(root: Path, marker: LegScope, units: dict[str, Unit]) -> None:
     """Leave the leg's scope and *units* for its one write; red when it cannot.
 
     Outside CI nothing is left and the line says so. Inside CI a leg
     that cannot leave its parts is red: the union would otherwise lack
-    a suite, and a smaller union never passes. The leg's last entry,
-    ``ci.leg``, puts the file on its per-run ref beside its timing row
-    ([livery.workshop._metrics.put_leg][]). The lines name the size as
+    a suite, and a smaller union never passes. The file goes to the
+    leg's spool ([livery.workshop.leave_leg_file][]), and the leg's
+    last entry, ``ci.leg``, puts it on its per-run ref beside its
+    timing row. The lines name the size as
     stored, raw and gzipped: the leg's whole file, its fixed facts each
     once, then each unit's row and the fixed facts it names.
     """
@@ -214,7 +215,7 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
     from livery.workshop import ci_run
 
     run = ci_run()
-    leg = marker["leg"]
+    leg = marker.leg
     if run is None:
         print(
             f"  coverage store: {len(units)} unit(s) measured; outside CI nothing"
@@ -225,8 +226,8 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
         root,
         run,
         leg=leg,
-        scope=marker["scope"],
-        packages=tuple(marker["packages"]),
+        scope=marker.scope,
+        packages=marker.packages,
         units=units,
     )
     if why:
@@ -244,7 +245,7 @@ def _leave_leg(root: Path, marker: dict[str, Any], units: dict[str, Unit]) -> No
     ).encode("utf-8")
     print(
         f"  coverage store: {len(units)} unit(s) for the run's ref of"
-        f" {leg or 'an unlabelled leg'} ({marker['scope']}),"
+        f" {leg or 'an unlabelled leg'} ({marker.scope}),"
         f" {shown_size(len(whole))} raw, {shown_size(_gzipped(whole))} gzipped"
     )
     for path, unit in units.items():
@@ -343,7 +344,7 @@ def gather_leg(
     root: Path,
     packages: tuple[Package, ...],
     *,
-    marker: dict[str, Any] | None = None,
+    marker: LegScope | None = None,
 ) -> None:
     """Gather the parts of every suite the leg ran and leave them for its write.
 
@@ -366,11 +367,10 @@ def gather_leg(
     """
     from livery.extensions.coverage._parts import native
     from livery.extensions.coverage._record import Unit, closure_id
-    from livery.workshop import ci_run
-    from livery.workshop._verified import read_marker
+    from livery.workshop import ci_run, leg_scope
 
-    marker = read_marker(root) if marker is None else marker
-    scope = marker["scope"]
+    marker = leg_scope(root) if marker is None else marker
+    scope = marker.scope
     ran = suites_that_ran(marker, root, packages)
     run = ci_run()
     if not ran:
@@ -528,9 +528,7 @@ def with_unstored_suites(
     return tuple(package for package in packages if package.path in kept | extra) + unit
 
 
-def top_up(
-    root: Path, packages: tuple[Package, ...], marker: dict[str, Any]
-) -> dict[str, Any]:
+def top_up(root: Path, packages: tuple[Package, ...], marker: LegScope) -> LegScope:
     """Run the suites no record can supply on this leg; the scope the leg measured.
 
     Inside CI alone, after the gate: a full gate ran every suite, and a
@@ -548,23 +546,21 @@ def top_up(
     a skipped leg's scope becomes ``measured``, naming them. A leg with
     nothing to run keeps its scope.
     """
-    from livery.workshop import ci_run
-    from livery.workshop._ci_context import state_store
-    from livery.workshop._verified import AFFECTED, NOTHING, VERIFIED
+    from livery.workshop import ci_run, state_store
 
     run = ci_run()
-    scope = marker["scope"]
-    if run is None or scope not in (AFFECTED, NOTHING, VERIFIED):
+    scope = marker.scope
+    if run is None or scope not in ("affected", "nothing", "verified"):
         return marker
     from livery.extensions.coverage._record import record_bases
     from livery.git import remote_snapshot
-    from livery.workshop._steps import tested
+    from livery.workshop import tested
 
-    named = set(marker["packages"])
+    named = set(marker.packages)
     # The verified row and every record a unit may come from: one
     # listing and one fetch.
     with remote_snapshot(state_store(root), fetch=("verified", "coverage/")):
-        if scope == VERIFIED:
+        if scope == "verified":
             units = unrecorded(
                 root,
                 run,
@@ -583,12 +579,12 @@ def top_up(
     from livery.workshop import run_phase_over
 
     names = ", ".join(unit.path for unit in units)
-    proved = "; the gate is proved" if scope == VERIFIED else ""
+    proved = "; the gate is proved" if scope == "verified" else ""
     print(f"  measuring: {names} run for their lines alone{proved}")
     run_phase_over("test", units)
-    if scope == AFFECTED:
-        return {**marker, "packages": [package.path for package in widened]}
-    return {**marker, "scope": MEASURED, "packages": [unit.path for unit in units]}
+    if scope == "affected":
+        return replace(marker, packages=tuple(package.path for package in widened))
+    return replace(marker, scope=MEASURED, packages=tuple(unit.path for unit in units))
 
 
 def _proving_branch(root: Path) -> str:
@@ -597,16 +593,12 @@ def _proving_branch(root: Path) -> str:
     An unreadable row, or a tree git cannot name, says why, and main's
     record alone is read.
     """
-    from livery.workshop._verified import record, tree_id
+    from livery.workshop import verified_branch
 
-    try:
-        row, why = record(root, tree_id(root))
-    except git.GitError as error:
-        print(f"  coverage store: the tree has no id ({error}); main's record alone")
-        return ""
-    if why:
+    proving = verified_branch(root)
+    if proving.reason:
         print(
-            f"  coverage store: the verified row is unread ({why}); main's record alone"
+            f"  coverage store: the verified row is unread ({proving.reason});"
+            " main's record alone"
         )
-        return ""
-    return row.branch if row is not None else ""
+    return proving.branch

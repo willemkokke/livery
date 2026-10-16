@@ -349,12 +349,13 @@ RUNTIME_LANGUAGE = "python"
 
 
 def holds_runtime_language(package: Package) -> bool:
-    """Whether *package* holds the runtime's language, `RUNTIME_LANGUAGE`.
+    """Say whether *package* holds the extension of the workshop's own language.
 
-    A member holds it when it lists it, or when an extension it lists
-    requires it. The workspace's own tests hold it when the root's set
-    does. Discovery asks this of every member, so a member that lists
-    it is answered without reading any extension's declaration.
+    That extension is ``python``. A member holds it when it lists it,
+    or when an extension it lists requires it. The workspace's own
+    tests hold it when the root's set does. Discovery asks this of
+    every member, so a member that lists it is answered without
+    reading any extension's declaration.
     """
     if RUNTIME_LANGUAGE in package.extensions:
         return True

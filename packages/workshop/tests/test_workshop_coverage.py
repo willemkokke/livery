@@ -20,7 +20,7 @@ from livery.extensions.coverage import _union as coverage_union
 from livery.extensions.coverage._format import Merged
 from livery.extensions.python import _backend as _python
 from livery.footman import Failed
-from livery.workshop import _verified
+from livery.workshop import LegScope, _verified
 from livery.workshop._packages import Package
 from workshop_coverage_meter import (
     asked,
@@ -680,16 +680,12 @@ def test_the_units_a_leg_ran_come_from_its_marker(
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
     z = _package(tmp_path, "z")  # no suite of its own
-    full = {"scope": "full", "packages": [], "leg": "check-a"}
-    narrowed = {
-        "scope": "affected",
-        "packages": ["packages/y", "packages/z"],
-        "leg": "a",
-    }
+    full = LegScope("full", leg="check-a")
+    narrowed = LegScope("affected", ("packages/y", "packages/z"), "a")
     assert coverage_leg.suites_that_ran(full, tmp_path, (x, y, z)) == (x, y)
     assert coverage_leg.suites_that_ran(narrowed, tmp_path, (x, y, z)) == (y,)
     for scope in ("verified", "nothing", "unknown"):
-        marker = {"scope": scope, "packages": ["packages/x"], "leg": "a"}
+        marker = LegScope(scope, ("packages/x",), "a")
         assert coverage_leg.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
     _own_tests(tmp_path)
     ran = coverage_leg.suites_that_ran(narrowed, tmp_path, (x, y, z))
@@ -903,7 +899,7 @@ def test_a_root_listing_no_python_measures_its_packages_and_misses_no_part_for_t
     assert "coverage store: tests" not in out
     # Neither the units the leg ran nor the units a record keys name the
     # root's tests, so the union misses no part for them.
-    full = {"scope": "full", "packages": [], "leg": "check-a"}
+    full = LegScope("full", leg="check-a")
     assert coverage_leg.suites_that_ran(full, tmp_path, (x,)) == (x,)
     assert coverage_leg.units_of(tmp_path, (x,)) == (x,)
     _in_ci(monkeypatch, "gate")

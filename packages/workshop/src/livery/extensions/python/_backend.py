@@ -281,7 +281,7 @@ def run_test(
     packages no pytest starts, since one handed no path would collect
     the whole configuration.
     """
-    from livery.workshop._packages import WORKSPACE_TESTS
+    from livery.workshop import WORKSPACE_TESTS
 
     if point:
         pytest_args = (*pytest_args, f"--workshop-point={point}")
