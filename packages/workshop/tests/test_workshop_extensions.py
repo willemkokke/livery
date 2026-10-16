@@ -248,8 +248,8 @@ def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None
 def test_declared_but_unmounted_extensions_teach_the_rerender(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # A tasks.py from before composition moved into it imports the
-    # base and nothing else; the gap teaches instead of silently
+    # A run that has the base's verbs without the workshop's plugin load
+    # mounts no listed extension; the gap teaches instead of silently
     # narrowing the tree.
     from livery.workshop import _extensions
     from livery.workshop._env_tasks import _warn_unmounted_extensions
@@ -260,7 +260,8 @@ def test_declared_but_unmounted_extensions_teach_the_rerender(
     monkeypatch.setattr(_extensions, "MOUNTED", False)
     _warn_unmounted_extensions(tmp_path)
     err = capsys.readouterr().err
-    assert "acme.brand" in err and "sync` to compose it again" in err
+    assert "acme.brand" in err
+    assert "sync` to compose tasks.py and install the environment again" in err
     # Mounted, or an empty list: silence.
     monkeypatch.setattr(_extensions, "MOUNTED", True)
     _warn_unmounted_extensions(tmp_path)
