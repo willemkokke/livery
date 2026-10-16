@@ -48,7 +48,7 @@ check:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
   script:
     - git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_PATH}.git"
-    - source setup.sh
+    - source setup.sh gitlab
     - fm ci.run --point=gate --job=check --os="ubuntu-latest" --python="3.13"
 
 # The one required context. Branch protection points here, so the matrix
@@ -77,7 +77,7 @@ gate:
       if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
   script:
     - git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_PATH}.git"
-    - source setup.sh
+    - source setup.sh gitlab
     - fm ci.run --point=gate --job=gate
 
 # The repository settings reconciled when the merge changed a contract or
@@ -94,7 +94,7 @@ govern:
       when: never
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
   script:
-    - source setup.sh
+    - source setup.sh gitlab
     - fm ci.run --point=merge --job=govern
 
 # A verification checks the tree out at a release tag. A pull request a
@@ -114,7 +114,7 @@ nightly:
     - if: '$FORGE_WORKFLOW == "nightly.yml"'
   script:
     - git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_PATH}.git"
-    - source setup.sh
+    - source setup.sh gitlab
     - fm ci.run --point=nightly --job=nightly --python="3.13"
 
 # The wave: publish the ref, cut the receipt tags after the index confirms
@@ -134,7 +134,7 @@ publish:
     - git checkout --quiet "$ref"
     - git fetch --tags
     - git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/${CI_PROJECT_PATH}.git"
-    - source setup.sh
+    - source setup.sh gitlab
     - fm release.driver --workshop="$workshop"
     - fm ci.run --point=release --job=publish
 

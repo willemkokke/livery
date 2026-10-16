@@ -926,7 +926,7 @@ def _gitlab_job(
     if packages:
         # Root in the container image: no sudo.
         lines.append(f"    - apt-get update -q && apt-get install -y -q {packages}\n")
-    lines.append("    - source setup.sh\n")
+    lines.append("    - source setup.sh gitlab\n")
     driver = _driver_step(prog, point, forge="gitlab")
     if driver:
         lines.append(f"    - {driver.split('run: ', 1)[1]}")
