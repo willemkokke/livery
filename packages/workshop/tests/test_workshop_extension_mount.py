@@ -314,7 +314,7 @@ def test_a_footman_plugin_is_not_offered_as_an_extension() -> None:
     # however many verbs they add.
     offered = {name for name, _ in _extensions.available_extensions(())}
     assert "footman.self" not in offered and "footman.janitor" not in offered
-    assert "coverage" in offered
+    assert "python" in offered
 
 
 def test_the_mount_remembers_what_it_found_undeclared_until_an_install_declares_it(

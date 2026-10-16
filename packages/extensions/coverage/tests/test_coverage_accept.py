@@ -1,4 +1,8 @@
-"""``fm coverage.accept``: every refusal first, then the row it writes."""
+"""The verbs a person runs: every refusal first, then what each does.
+
+``fm coverage.enforce`` judges the floors of the workspace it runs in;
+``fm coverage.accept`` writes the row that lowers a mark.
+"""
 
 from __future__ import annotations
 
@@ -128,3 +132,29 @@ def test_a_lowering_writes_a_reasoned_row_naming_who(
     assert "the mark was not written: push refused" in _refusal(
         lambda: coverage_tasks.coverage_accept("packages/x", 70.0, reason="r")
     )
+
+
+def test_a_verb_outside_a_workspace_refuses_naming_the_missing_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(coverage_tasks, "workspace_root", lambda: None)
+    assert _refusal(coverage_tasks.coverage_enforce) == (
+        "no workspace: no workshop.toml above the working directory"
+    )
+
+
+def test_coverage_enforce_judges_the_packages_of_the_workspace_it_runs_in(
+    rig: tuple[Package, Package], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.coverage import _floors as coverage_floors
+
+    seen: list[tuple[Path, tuple[str, ...]]] = []
+    monkeypatch.setattr(
+        coverage_floors,
+        "enforce_coverage",
+        lambda root, packages: seen.append(
+            (root, tuple(package.path for package in packages))
+        ),
+    )
+    coverage_tasks.coverage_enforce()
+    assert seen == [(tmp_path, ("packages/x", "packages/y"))]

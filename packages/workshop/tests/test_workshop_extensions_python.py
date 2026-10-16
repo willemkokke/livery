@@ -6,6 +6,9 @@ Then the package docs its wheel carries beside the module it ships.
 from __future__ import annotations
 
 import importlib.metadata
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -586,3 +589,54 @@ def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
     assert target is not None
     assert not (target / "stale.md").exists()
     assert (target / "guide.md").read_text() == "# edited\n"
+
+
+# The venv's meter: coverage.py's own startup hook, armed by the runner.
+
+
+def _python_of_the_venv(env: dict[str, str], code: str, cwd: Path) -> str:
+    """Run *code* in a fresh interpreter of this venv; what it printed."""
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=cwd,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout.strip()
+
+
+def _unarmed() -> dict[str, str]:
+    """This process's environment without the variables that arm a meter."""
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+
+
+def test_an_unarmed_python_of_the_venv_imports_no_coverage(tmp_path: Path) -> None:
+    # Every fm start, test worker and subprocess pays for what the
+    # venv's startup hooks import. Coverage's own hook imports coverage
+    # only when the runner arms it; a hook that imported it anyway cost
+    # most of a bare interpreter start.
+    found = _python_of_the_venv(
+        _unarmed(), "import sys; print('coverage' in sys.modules)", tmp_path
+    )
+    assert found == "False"
+
+
+def test_an_armed_python_of_the_venv_meters_through_coverages_own_hook(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("coverage")
+    config = tmp_path / "coverage.ini"
+    config.write_text(
+        f"[run]\nparallel = true\ndata_file = {(tmp_path / '.coverage').as_posix()}\n"
+    )
+    env = {**_unarmed(), "COVERAGE_PROCESS_START": str(config)}
+    _python_of_the_venv(env, "x = 1", tmp_path)
+    assert list(tmp_path.glob(".coverage.*"))

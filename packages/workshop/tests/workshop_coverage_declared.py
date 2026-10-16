@@ -5,7 +5,9 @@ gate job for a workspace that lists coverage, and a test that runs or
 renders the gate point calls the code directly, with no mount before
 it. A test that uses the ``coverage_jobs`` fixture has both, read from
 the extension's own declaration; the contributed jobs are put back as
-they were after it.
+they were after it. The coverage extension is a distribution of its
+own, ``livery-extensions-coverage``, so the test skips while it is not
+installed.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from collections.abc import Iterator
 import pytest
 
 from workshop_docs_declared import jobs_restored
+from workshop_installed import skip_unless_installed
 
 
 @pytest.fixture
@@ -22,6 +25,7 @@ def coverage_jobs() -> Iterator[None]:
     """Add coverage's jobs from its declaration file, for the test alone."""
     from livery.workshop._extensions import declaration, register_jobs
 
+    skip_unless_installed("coverage")
     found = declaration("coverage")
     assert found is not None
     with jobs_restored():

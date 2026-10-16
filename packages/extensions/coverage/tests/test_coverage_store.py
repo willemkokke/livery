@@ -10,14 +10,19 @@ from typing import Any
 
 import pytest
 
+from extensions_coverage_meter import read_parts, stored_unit
+from extensions_coverage_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    seed_copier,
+)
 from livery import git
 from livery.extensions.coverage import _format as fmt
 from livery.extensions.coverage import _record as coverage_record
 from livery.workshop import _ci_context
 from livery.workshop._ci_context import state_store
 from livery.workshop._packages import Edge, Package
-from workshop_coverage_meter import read_parts, stored_unit
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 LEG = "check-linux-3.14"
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main", leg=LEG)
@@ -203,8 +208,8 @@ def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
 def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(
     work: Path, tmp_path: Path
 ) -> None:
+    from extensions_coverage_workspace import counting_spawns
     from livery.workshop._metrics import ROW_FILE, RUNS, put_leg
-    from workshop_spawns import counting_spawns
 
     why = coverage_record.leave_run(
         work, RUN, leg=LEG, scope="full", packages=(), units={}
@@ -222,6 +227,36 @@ def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(
     assert why == "" and row is not None and row.data["total_ms"] == 12.0
     lines, why = series.row(state_store(work), coverage_record.RUN_FILE)
     assert why == "" and lines is not None and lines.data["scope"] == "full"
+
+
+def test_collect_drops_the_legs_measured_lines_with_its_half(
+    work: Path, tmp_path: Path
+) -> None:
+    # The gate job's collect drops a leg's per-run ref once the run's
+    # file landed, and the suites the leg measured go with it.
+    from livery.forge.testing import FakeForge
+    from livery.workshop._metrics import ROW_FILE, collect, put_leg, run_ref
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    why = coverage_record.leave_run(
+        work, RUN, leg=LEG, scope="verified", packages=(), units={}
+    )
+    assert why == ""
+    trace = tmp_path / "fm-profile-check.json"
+    task = {"ph": "X", "cat": "task", "name": "check", "pid": 1, "tid": 1}
+    trace.write_text(json.dumps({"traceEvents": [{**task, "ts": 0, "dur": 12000}]}))
+    _lines, why = put_leg(work, RUN, job="check (a, b)", label=LEG, trace=trace)
+    assert why == ""
+    ref = run_ref(RUN, LEG)
+    held = git.read(state_store(work), ref).files
+    assert held is not None
+    assert set(held) == {ROW_FILE, coverage_record.RUN_FILE}
+    lines = collect(work, repo, RUN, sha="b" * 40)
+    assert f"  {ref}: dropped" in lines
+    assert git.read(state_store(work), ref).files is None
+    assert coverage_record.run_legs(work, RUN) == ([], "")
 
 
 def test_the_puts_refuse_outside_ci(
@@ -454,7 +489,7 @@ def test_the_closure_id_reads_the_tree_in_one_process(
     # that in wall clock on Windows. One in-process read of the tree
     # answers the closure and the pins together, and nothing here may go
     # back to a process per path.
-    from workshop_spawns import counting_spawns
+    from extensions_coverage_workspace import counting_spawns
 
     del monkeypatch
     base, top = _packages(work)

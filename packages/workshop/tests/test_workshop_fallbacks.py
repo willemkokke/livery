@@ -19,10 +19,8 @@ from typing import Any
 import pytest
 
 from livery import git
-from livery.extensions.coverage import _floors as coverage_floors
 from livery.footman import Failed
 from livery.forge.testing import FakeForge
-from livery.workshop._packages import Package
 from livery.workshop._release import prepare_release, verify_release
 from livery.workshop._submit import _arm_verified
 from workshop_links import link_entries as materialise
@@ -267,62 +265,6 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES) as caught:
         prepare_release(root, "packages/thing", "not.a.version")
     assert "is not <major>" in str(caught.value)
-
-
-def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
-    # measured_coverage and enforce_coverage run for real, against a
-    # coverage data file recorded here, not a monkeypatch. coverage.py's
-    # data reaches the figure through the pytest extension's reduction,
-    # a distribution of its own: a run of this wheel alone has none.
-    pytest.importorskip("livery.extensions.pytest")
-    (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["pytest", "coverage"]\n'
-    )
-    package_dir = tmp_path / "packages" / "thing"
-    (package_dir / "src").mkdir(parents=True)
-    (package_dir / "workshop.toml").write_text(
-        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 50\n'
-    )
-    module = package_dir / "src" / "mod.py"
-    module.write_text("def run():\n    return 1\n\nrun()\n")
-    # Scrubbed of the outer gate's coverage variables: pytest-cov and
-    # the subprocess patch re-point any inheriting python at the live
-    # run's data file, and this recording must land in tmp_path.
-    hermetic = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("COVERAGE_", "COV_CORE_"))
-    }
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "coverage",
-            "run",
-            "--source",
-            str(package_dir),
-            str(module),
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=hermetic,
-    )
-    package = Package(
-        directory=package_dir,
-        path="packages/thing",
-        name="livery-thing",
-        depends=(),
-        extensions=("python",),
-    )
-    measured = coverage_floors.measured_coverage(tmp_path, (package,))
-    assert measured["packages/thing"] > 0
-    coverage_floors.enforce_coverage(tmp_path, (package,))  # above its floor
-    (package_dir / "workshop.toml").write_text(
-        'extensions = ["python"]\nname = "livery-thing"\n[coverage]\nfloor = 101\n'
-    )
-    with pytest.raises(_FAILURES):
-        coverage_floors.enforce_coverage(tmp_path, (package,))
 
 
 def test_a_newborn_workspace_has_zero_packages(tmp_path: Path) -> None:

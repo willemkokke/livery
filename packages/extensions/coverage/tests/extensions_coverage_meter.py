@@ -20,11 +20,11 @@ from typing import Any
 
 import pytest
 
+from extensions_coverage_workspace import fake_extensions, fake_steps
 from livery import git
 from livery.extensions.coverage import _format as fmt
 from livery.extensions.coverage._parts import PARTS
 from livery.extensions.coverage._record import Unit
-from workshop_extension_fakes import fake_extensions, fake_steps
 
 #: The fake measurer's declaration.
 METER = """

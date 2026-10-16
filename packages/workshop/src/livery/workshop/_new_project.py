@@ -335,8 +335,8 @@ def new_project(
     # The contract: a birth-time seed the render never touches. The
     # list is the running App's own builtin providers, minus footman's
     # and the base, which is never listed (contract 19): a branded App's
-    # children carry its extensions. Stock fm's carry the site's
-    # extension and coverage's, which ride in the workshop wheel.
+    # children carry its extensions. Stock fm's carry the stock list,
+    # whose distributions the newborn's sync installs.
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
     # runtime accessor is footman#536's family). It is composed before

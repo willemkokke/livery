@@ -32,6 +32,12 @@ path = "packages/forge"
 kind = "test"
 floor = "0.7.0"
 
+# The suite draws the coverage pages with coverage's code.
+[[depends]]
+path = "packages/extensions/coverage"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately. The measured value of the

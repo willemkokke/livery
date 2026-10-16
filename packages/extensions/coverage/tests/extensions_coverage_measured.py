@@ -1,8 +1,8 @@
 """A module whose branches each run one way, measured by coverage.py for real.
 
-The coverage pins share it: the workshop's figure for it must equal
-coverage.py's own total, and its pages must show what coverage.py's
-pages show. Its lines, by number:
+The coverage pins share it: the coverage extension's figure for it
+must equal coverage.py's own total, and its pages must show what
+coverage.py's pages show. Its lines, by number:
 
 - line 6, `if value:` in `Tally.note`, is always true: partial, and
   its jump to the function's exit never ran;
