@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import livery.toolroom.tools as tools
+from livery.extensions import python
 from livery.extensions.nanobind import _container
-from livery.extensions.python import _backend as _python
 from livery.footman import fail
 
 if TYPE_CHECKING:
@@ -184,7 +184,7 @@ def build_wheels(
         env.setdefault("CIBW_ARCHS", "native")
     for key, value in _container.conan_environment(root).items():
         env.setdefault(key, value)
-    with _python.module_docs(package):
+    with python.module_docs(package):
         result = tools.uv.opts(
             cwd=package.directory, env=env, nofail=True, recorded=False
         )(

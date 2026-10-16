@@ -657,7 +657,7 @@ class ReleaseDriver:
             _write_manifest(self._root, plans, mined_at=mined_at)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
-                _lifecycle.build(plan.package, self._root)
+                _lifecycle.build_release(plan.package, self._root)
                 if git.is_clean(root):
                     # Already stamped: a release squash-merged but never
                     # published leaves main carrying exactly these
@@ -886,7 +886,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         bump_set_floors(root, plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
-            _lifecycle.build(plan.package, root)
+            _lifecycle.build_release(plan.package, root)
         release_dirs = _wheel_dists(plans)
         for plan in plans:
             validate_member(root, plan, release_dirs)

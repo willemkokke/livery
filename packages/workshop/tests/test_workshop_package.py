@@ -73,6 +73,7 @@ def test_the_surface_is_declared() -> None:
         "DISTRIBUTIONS",
         "EXECUTABLES",
         "HUMAN",
+        "JOB_BUILT_MEMBERS",
         "MODULE_ROOTS",
         "NONE",
         "PACKAGE",
@@ -95,15 +96,18 @@ def test_the_surface_is_declared() -> None:
         "RegistryTarget",
         "ReleaseNotes",
         "RunContext",
+        "ToolReceipt",
         "VerifiedBranch",
         "__version__",
         "answer",
+        "build_release",
         "category_of",
         "check_legs",
         "ci_changes",
         "ci_run",
         "contributions_for",
         "discover_packages",
+        "discover_release",
         "extension_names",
         "extension_set",
         "fix_files",
@@ -118,6 +122,7 @@ def test_the_surface_is_declared() -> None:
         "nearest_extensions",
         "order_topologically",
         "pull_request_legs",
+        "python_matrix",
         "read_contract",
         "registry",
         "release_notes",
@@ -135,10 +140,12 @@ def test_the_surface_is_declared() -> None:
         "step_enabled",
         "step_extensions",
         "step_option",
+        "store_home",
         "tested",
         "testing",
         "this_forge",
         "this_repository",
+        "tool_receipts",
         "undeployed",
         "verified_branch",
         "verify_workspace",
@@ -162,3 +169,39 @@ def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name
     assert workshop_module.testing is importlib.import_module("livery.workshop.testing")
     with pytest.raises(AttributeError, match="has no attribute 'nothing_here'"):
         workshop_module.nothing_here  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_the_python_and_conan_entry_modules_refuse_a_name_they_do_not_export() -> None:
+    import importlib
+
+    # Each refused name is a function of the module that defines the
+    # exported ones: only the declared names are served.
+    for root, name in (
+        ("livery.extensions.python", "materialise_module_docs"),
+        ("livery.extensions.conan", "restore_cache"),
+    ):
+        module = importlib.import_module(root)
+        with pytest.raises(
+            AttributeError, match=f"module '{root}' has no attribute '{name}'"
+        ):
+            getattr(module, name)
+
+
+def test_an_entry_module_serves_what_the_defining_module_holds_at_each_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import livery.extensions.conan as conan_module
+    import livery.extensions.python as python_module
+    from livery.extensions.conan import _package
+    from livery.extensions.python import _backend
+
+    # A test patches the defining module, and a reader of the entry
+    # module sees the patch.
+    saved, tested = object(), object()
+    monkeypatch.setattr(_package, "save_cache", saved)
+    monkeypatch.setattr(_backend, "run_isolated_test", tested)
+    assert conan_module.save_cache is saved
+    assert python_module.run_isolated_test is tested
+    monkeypatch.undo()
+    assert conan_module.save_cache is _package.save_cache
+    assert python_module.run_isolated_test is _backend.run_isolated_test

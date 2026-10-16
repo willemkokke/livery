@@ -49,7 +49,7 @@ def nanobind_wheels(ctx: Context) -> None:
             directory.
     """
     from livery.extensions.nanobind._ci import host_build
-    from livery.workshop._pythons import python_matrix
+    from livery.workshop import python_matrix
 
     root = workspace_root()
     if root is None:

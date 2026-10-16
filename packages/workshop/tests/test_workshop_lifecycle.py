@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
-from livery.workshop import _lifecycle
+from livery.workshop import _lifecycle, build_release
 from livery.workshop._packages import (
     Edge,
     Package,
@@ -47,7 +47,7 @@ def _package(tmp_path: Path, *extensions: str) -> Package:
 def _release_phase(package: Package, phase: str, root: Path) -> object:
     """Run *phase* of *package*'s release through the lifecycle's entry for it."""
     if phase == "build":
-        return _lifecycle.build(package, root)
+        return build_release(package, root)
     if phase == "stamp":
         return _lifecycle.stamp(package, root, "1.0.0")
     if phase == "publish":
@@ -357,7 +357,7 @@ def test_a_phase_whose_steps_provide_nothing_the_train_reads_refuses(
         match="the build phase's steps provide no dist, which the release train"
         " reads from the phase",
     ):
-        _lifecycle.build(package, tmp_path)
+        build_release(package, tmp_path)
 
 
 def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
@@ -383,7 +383,7 @@ def test_a_package_whose_extensions_add_steps_goes_through_its_phases(
     )
     package = _stepping(tmp_path, monkeypatch, source, phases)
     assert _lifecycle.stamp(package, tmp_path, "2") == ["VERSION=2"]
-    assert _lifecycle.build(package, tmp_path, epoch=5) == Path("dist-5")
+    assert build_release(package, tmp_path, epoch=5) == Path("dist-5")
     target = RegistryTarget(kind="python", url="idx")
     assert _lifecycle.publish(package, tmp_path, version="2", target=target) is True
 
@@ -435,8 +435,8 @@ def test_a_step_deleted_in_a_set_never_runs_there_and_runs_elsewhere(
     over = _member_listing(tmp_path, "over", "acme.over")
     # The release train's build: the set that holds the deleter leaves the
     # deleted step out, and a set that does not runs it.
-    assert _lifecycle.build(over, tmp_path) == Path("dist-over")
-    assert _lifecycle.build(plain, tmp_path) == Path("dist-base")
+    assert _lifecycle.build_release(over, tmp_path) == Path("dist-over")
+    assert _lifecycle.build_release(plain, tmp_path) == Path("dist-base")
     said = capsys.readouterr().out
     assert "over built packages/over" in said
     assert "base built packages/plain" in said

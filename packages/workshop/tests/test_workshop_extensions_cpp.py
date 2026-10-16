@@ -263,7 +263,10 @@ def test_the_conan_steps_stamp_build_and_publish(
 
     # The step calls the extension's own build, which conan create runs.
     monkeypatch.setattr(_package, "build", _build)
-    assert _lifecycle.build(listing, tmp_path, epoch=7) == listing.directory / "build"
+    assert (
+        _lifecycle.build_release(listing, tmp_path, epoch=7)
+        == listing.directory / "build"
+    )
     assert built == ["packages/listing"]
     uploads: list[tuple[str, str, str]] = []
 

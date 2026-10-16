@@ -125,10 +125,18 @@ def gate_pythons(root: Path) -> list[str]:
 def python_matrix(root: Path) -> list[str]:
     """The CI matrix: the contract's declaration, else the floor and the newest minor.
 
-    ``[ci] python-versions`` wins where declared, so a development
-    workspace runs one leg and a production contract keeps the full
-    pair; without it the pair derives, so a new Python reaches every
-    instance through a wheel bump.
+    ``[ci] python-versions`` in the root's ``workshop.toml`` wins where
+    declared, so a development workspace runs one leg and a production
+    contract keeps the full pair. Without it the pair derives: the
+    lower bound of the root ``pyproject.toml``'s ``requires-python``,
+    and the newest minor the workshop tests against, so a new Python
+    reaches every instance through a wheel bump. Each entry is a
+    version such as ``3.14``, or ``3.14t`` for a free-threaded build: in
+    the declared order, or the floor first.
+
+    Raises:
+        Failed: naming the key, when ``[ci] python-versions`` is not a
+            non-empty list of such versions.
     """
     declared = declared_pythons(root)
     if declared is not None:

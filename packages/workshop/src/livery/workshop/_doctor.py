@@ -121,7 +121,7 @@ def host(**facts: Any) -> list[Finding]:
         dormancy,
         extension_names,
     )
-    from livery.workshop._tools import receipts
+    from livery.workshop._tools import tool_receipts
 
     root = workspace_root()
     if root is None:
@@ -142,7 +142,7 @@ def host(**facts: Any) -> list[Finding]:
         )
     hosted = [
         f"{name} ({served_by(receipt)})"
-        for name, receipt in sorted(receipts(root).items())
+        for name, receipt in sorted(tool_receipts(root).items())
         if receipt.source == "host"
     ]
     if hosted:

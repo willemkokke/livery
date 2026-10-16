@@ -15,7 +15,7 @@ from pathlib import Path
 from livery.toolroom.store import LOCK_FILE, Lock, Locked, host_key
 from livery.workshop import _reconcile
 from livery.workshop._fragment_engine import LOCAL_RECEIPT
-from livery.workshop._tools import TYPINGS, Receipt, receipts_dir
+from livery.workshop._tools import TYPINGS, ToolReceipt, receipts_dir
 
 LOCK = "version = 1\n"
 
@@ -52,7 +52,7 @@ def tool_receipt(root: Path, name: str, version: str, *, tool_dir: str = "") -> 
     """A receipt saying *name* is installed at *version*, in *tool_dir* when given."""
     host = host_key(platform.system(), platform.machine())
     receipts_dir(root).mkdir(parents=True, exist_ok=True)
-    receipt = Receipt(
+    receipt = ToolReceipt(
         tool=name,
         version=version,
         host=host,

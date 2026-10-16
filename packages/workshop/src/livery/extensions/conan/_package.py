@@ -309,10 +309,11 @@ def cache_name(name: str, version: str, host: str = "") -> str:
     )
 
 
-#: The conan workspace file at the workspace root.
 #: The recipe a conan member holds, the one file its reference is read from.
 RECIPE_FILE = "conanfile.py"
 
+#: The conan workspace file at the workspace root, which conan reads
+#: from any directory below it.
 WORKSPACE_FILE = "conanws.yml"
 
 
@@ -321,7 +322,7 @@ EXTENSION = "conan"
 
 
 def workspace_file(root: Path, *, absolute: bool = False) -> str:
-    """The `WORKSPACE_FILE` for *root*: each conan member, resolved from its source.
+    """The conan workspace file for *root*: each conan member, from its source.
 
     The fragment this extension declares: the workshop writes it at
     the root while a package's set holds conan and withdraws it with
@@ -343,8 +344,7 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
     A member whose recipe names no reference is left out: conan
     deduces a workspace package's reference from the recipe's ``name``
     and ``version``, and a consumer's recipe, requirements alone, is
-    what conan installs for, never a workspace package
-    ([livery.extensions.conan._package.names_a_reference][]).
+    what conan installs for, never a workspace package.
 
     Args:
         root: The workspace root, whose members the file lists.

@@ -414,7 +414,7 @@ def has_index(root: Path) -> bool:
     return isinstance(declared, str) and bool(declared)
 
 
-def receipt_gap(tool: str, receipt: Receipt, bin_dir: Path) -> str:
+def receipt_gap(tool: str, receipt: ToolReceipt, bin_dir: Path) -> str:
     """Why what *receipt* claims does not hold here; empty when it does.
 
     A receipt is the store's own record of what it installed for this
@@ -457,7 +457,7 @@ def receipt_gap(tool: str, receipt: Receipt, bin_dir: Path) -> str:
     return ""
 
 
-def _entry_point_runs(name: str, receipt: Receipt, bin_dir: Path) -> bool:
+def _entry_point_runs(name: str, receipt: ToolReceipt, bin_dir: Path) -> bool:
     """Whether *name* runs: from the receipt's paths, the venv's bin, or PATH."""
     own = (Path(spelled) / name for spelled in receipt.paths)
     return (
@@ -582,7 +582,12 @@ def _home() -> Home:
 
 
 def store_home() -> Home:
-    """The store's home on this machine: `toolroom` in the runner's data directory."""
+    """The tool store's home on this machine, where every checkout's tools are.
+
+    The ``toolroom`` directory in the runner's data directory, one per
+    machine and shared by every checkout on it, as a
+    [livery.toolroom.store.Home][].
+    """
     from livery.footman import data_dir
     from livery.toolroom.store import Home
 
@@ -803,7 +808,7 @@ def _npm_graph(
     """The runtime's own lockfile for *package*, resolved without installing."""
     if runtime != "node":
         return "", f"a graph of a {runtime} tool is not written yet"
-    held = receipts(root).get("node")
+    held = tool_receipts(root).get("node")
     if held is None:
         return "", "node is not materialised here; the next lock writes it"
     node = Path(held.tool_dir) / "bin" / exe("node")
@@ -1098,18 +1103,24 @@ RECEIPT_SCHEMA = 1
 
 
 @dataclass(frozen=True)
-class Receipt:
+class ToolReceipt:
     """What this checkout installed of one tool, as its file records it.
+
+    `fm sync` writes one receipt per tool under the checkout's
+    ``.workshop/receipts/``; [livery.workshop.tool_receipts][] reads
+    them all.
 
     Attributes:
         tool: The tool's name.
         version: The exact version installed, the lock's.
         host: The host key it was installed for, this machine's.
         kind: The installer kind.
-        mode: How it reached PATH, one of `MODES`.
+        mode: How it reached PATH, one of
+            [livery.toolroom.store.MODES][].
         deployment: The digest of the deployment installed; empty for a
             delegated kind, whose installer resolves the host.
-        tool_dir: Where the tool is, under the machine's store home.
+        tool_dir: Where the tool is, under the machine's store home
+            ([livery.workshop.store_home][]).
         paths: The absolute directories the tool puts on PATH in `path`
             mode; empty otherwise.
         env: The variables the tool sets, resolved against its directory.
@@ -1163,7 +1174,7 @@ class Receipt:
         }
 
     @classmethod
-    def load(cls, path: Path) -> Receipt:
+    def load(cls, path: Path) -> ToolReceipt:
         """The receipt at *path*.
 
         Raises:
@@ -1227,8 +1238,13 @@ def bin_dir(root: Path) -> Path:
     return root / BIN
 
 
-def receipts(root: Path) -> dict[str, Receipt]:
-    """Every receipt the checkout holds, by tool.
+def tool_receipts(root: Path) -> dict[str, ToolReceipt]:
+    """What the checkout at *root* installed of each tool, by the tool's name.
+
+    The receipts the last sync wrote, each a
+    [livery.workshop.ToolReceipt][]: a receipt names the version the
+    lock pins and where the tool is on this machine. Empty for a
+    checkout no sync has supplied.
 
     Raises:
         ValueError: for a file under the receipts directory that is not
@@ -1239,7 +1255,7 @@ def receipts(root: Path) -> dict[str, Receipt]:
         return {}
     found = {}
     for path in sorted(directory.glob("*.json")):
-        receipt = Receipt.load(path)
+        receipt = ToolReceipt.load(path)
         found[receipt.tool] = receipt
     return found
 
@@ -1294,7 +1310,7 @@ class Materialised:
             otherwise.
     """
 
-    receipt: Receipt | None
+    receipt: ToolReceipt | None
     installed: bool
     failure: str = ""
     note: str = ""
@@ -1313,13 +1329,13 @@ def _stamp(found: Path) -> dict[str, str]:
     }
 
 
-def _fresh_host_receipt(root: Path, name: str) -> Receipt | None:
+def _fresh_host_receipt(root: Path, name: str) -> ToolReceipt | None:
     """*name*'s receipt when a host copy served and the same file is still there."""
     path = receipts_dir(root) / f"{name}.json"
     if not path.is_file():
         return None
     try:
-        receipt = Receipt.load(path)
+        receipt = ToolReceipt.load(path)
     except ValueError:
         return None
     if receipt.source != "host" or not receipt.stamp.get("path"):
@@ -1437,7 +1453,7 @@ def materialise(
             )
     floors = site_floors(root)
     done: list[Materialised] = []
-    linked: list[tuple[Receipt, Ensured]] = []
+    linked: list[tuple[ToolReceipt, Ensured]] = []
     wanted = _runtimes_first(wanted, lock, listing)
     runtimes: dict[str, Path] = {}
     for name in wanted:
@@ -1469,7 +1485,7 @@ def materialise(
                 found = served.tool_dir / exe(name)
                 if name in RUNTIMES:
                     runtimes[name] = found
-                receipt = Receipt(
+                receipt = ToolReceipt(
                     name,
                     locked.version,
                     host,
@@ -1526,7 +1542,7 @@ def materialise(
             listed.mode,
             paths=deployment.paths if deployment is not None else (),
         )
-        receipt = Receipt(
+        receipt = ToolReceipt(
             name,
             locked.version,
             host,
@@ -1708,7 +1724,7 @@ STUBS_RECEIPT = ".workshop/state/stubs.json"
 """The receipt naming the lock and the source the last stub write rendered from.
 
 Under `state/` rather than `receipts/`: that directory is the tool
-receipts, which `receipts()` reads as a set and refuses a file of
+receipts, which `tool_receipts()` reads as a set and refuses a file of
 another shape in. Each kind of thing under `.workshop/` keeps its own
 directory, so no walk of one kind can reach another.
 """
@@ -1829,7 +1845,7 @@ def emission(root: Path) -> tuple[tuple[str, ...], dict[str, str]]:
     then each `path` receipt's directories in tool order, then the
     variables, a later receipt's value winning.
     """
-    held = receipts(root)
+    held = tool_receipts(root)
     paths: list[str] = []
     env: dict[str, str] = {}
     if any(r.mode == "link" for r in held.values()):
@@ -1850,7 +1866,7 @@ def drift(root: Path) -> dict[str, str]:
     than the lock, or a deployment the lock has moved under it.
     """
     lock = current_lock(root)
-    held = receipts(root)
+    held = tool_receipts(root)
     found: dict[str, str] = {}
     for name in tool_names(root, this_host()):
         if lock is None or name not in lock.tools:

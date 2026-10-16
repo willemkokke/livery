@@ -11,6 +11,7 @@ from livery.workshop import (
     COMPILE_COMMANDS,
     CURRENT_VERSION,
     EXECUTABLES,
+    JOB_BUILT_MEMBERS,
     PUBLIC_MODULES,
     REQUIREMENTS,
     VERSION_FILES,
@@ -23,7 +24,6 @@ from livery.workshop._declaration import DeclarationError, DeclaredValue
 from livery.workshop._packages import Package
 from livery.workshop._queries import (
     EDITOR_EXTENSIONS,
-    JOB_BUILT_MEMBERS,
     QueryError,
     QuerySpec,
     answers,

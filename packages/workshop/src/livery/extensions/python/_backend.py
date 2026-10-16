@@ -927,10 +927,16 @@ def materialise_module_docs(package: Package) -> Path | None:
 def module_docs(package: Package) -> Generator[Path | None]:
     """The wheel-embedded ``_docs``, in the source tree for one build alone.
 
-    Copied whole on entry, as `materialise_module_docs` copies it, and
-    removed on exit, after a failed build too. A copy left behind puts
-    the docs' example files under the package's source, where every
+    On entry the package's ``docs/`` is copied whole to ``_docs`` in
+    the shallowest of its module roots, the importable package its
+    wheel ships, replacing any older copy. On exit the copy is
+    removed, after a failed build too. A copy left behind puts the
+    docs' example files under the package's source, where every
     checker that walks the tree judges them as the package's own code.
+
+    Yields:
+        The copy's path; None when the package has no module to carry
+        it, or no ``docs/`` to copy.
     """
     target = materialise_module_docs(package)
     try:
@@ -1237,7 +1243,7 @@ def isolated_test(
 ) -> dict[str, str]:
     """Test *package*'s built wheel in a fresh venv at *resolution*; what it got.
 
-    [livery.extensions.python._backend.run_isolated_test][] runs it.
+    [livery.extensions.python.run_isolated_test][] runs it.
     """
     return run_isolated_test(
         package, root, release_dirs=release_dirs, resolution=resolution
@@ -1268,8 +1274,7 @@ def run_isolated_test(
 ) -> dict[str, str]:
     """Install the built wheel into a fresh venv and test the installed copy.
 
-    One leg of the release's isolated test, at *resolution*
-    ([livery.extensions.python._backend.RESOLUTIONS][]): ``floor``
+    One leg of the release's isolated test, at *resolution*: ``floor``
     puts every direct dependency at its declared floor, so a floor
     lying about compatibility fails here; ``latest`` resolves the
     newest, the world a fresh consumer gets; ``head`` installs at the
@@ -1292,18 +1297,26 @@ def run_isolated_test(
     toolchain pin that overlaps a floored dependency would silently
     undo the starvation. Movement is a taught refusal.
 
-    *wheels_dir* names where the wheel to install is, for a leg that
-    built one outside the collected ``dist/``; the package's own
-    ``dist/`` otherwise.
+    Args:
+        package: The member whose wheel is installed and tested.
+        root: The workspace root, whose lock and indexes the install
+            reads.
+        release_dirs: The co-released set's ``dist/`` directories, the
+            only places a wheel resolves from beside the indexes.
+        resolution: ``floor``, ``latest`` or ``head``.
+        wheels_dir: Where the wheel to install is, for a leg that built
+            one outside the collected ``dist/``; None takes the
+            package's own ``dist/``.
 
-    Returns the resolved version per distribution, the report's raw
-    material ("floor leg: livery-forge 0.1.0").
+    Returns:
+        The resolved version per distribution, the report's raw
+        material ("floor leg: livery-forge 0.1.0").
 
     Raises:
-        Failed: when *resolution* is none of the three, when the head
-            leg finds no lock, when an install fails, when the
-            toolchain install moves a direct dependency the leg
-            resolved, and when the tests fail.
+        Failed: when *resolution* is none of the three, when no wheel
+            is there to install, when the head leg finds no lock, when
+            an install fails, when the toolchain install moves a direct
+            dependency the leg resolved, and when the tests fail.
     """
     import json
     import tempfile

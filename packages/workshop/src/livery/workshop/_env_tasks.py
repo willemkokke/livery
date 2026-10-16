@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import MutableMapping
 
     from livery.workshop._packages import Package
-    from livery.workshop._tools import Receipt
+    from livery.workshop._tools import ToolReceipt
 
 #: Names never emitted for an agent: the PATH family is composed per
 #: shell, not copied between sessions.
@@ -804,7 +804,7 @@ def tool_profile(root: Path) -> tuple[str, ...]:
     return tool_names(root, this_host())
 
 
-def served_by(receipt: Receipt) -> str:
+def served_by(receipt: ToolReceipt) -> str:
     """Who serves *receipt*'s tool: the host at the version it printed, or the store."""
     if receipt.source == "host":
         return f"host {receipt.answered}".rstrip()
@@ -892,9 +892,9 @@ def env_check() -> int:
         current_lock,
         has_index,
         receipt_gap,
-        receipts,
         store_cannot_supply,
         stubs_present,
+        tool_receipts,
     )
     from livery.workshop._tools import drift as receipt_drift
 
@@ -902,7 +902,7 @@ def env_check() -> int:
     problems: list[str] = []
     bin_dir = venv_bin(root)
     said = receipt_drift(root)
-    written = receipts(root)
+    written = tool_receipts(root)
     for tool in tool_profile(root):
         verdict = said.get(tool, "")
         receipt = written.get(tool)

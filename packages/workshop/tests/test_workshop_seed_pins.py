@@ -1010,7 +1010,7 @@ def test_a_nanobind_member_s_lifecycle_runs_these_bodies(
             lambda: _lifecycle.declare_requirement(native, echo, "0.1.0"),
         ),
     }
-    bodies.entry("build", lambda: _lifecycle.build(native, root, epoch=0))
+    bodies.entry("build", lambda: _lifecycle.build_release(native, root, epoch=0))
     target = RegistryTarget(
         kind="python",
         url="https://idx.example/simple",

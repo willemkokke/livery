@@ -109,6 +109,19 @@ workshop's own language is [livery.workshop.holds_runtime_language][],
 and what a path is to its package, a [livery.workshop.Category][], is
 [livery.workshop.category_of][].
 
+An extension that builds a release's artifacts in a CI job of its own
+reaches the release through the names the release train uses. The
+members a release squash releases, each with its version, are what
+[livery.workshop.discover_release][] reads at a commit, and
+[livery.workshop.build_release][] builds one of them as the release
+train does, into its ``dist/``. The members a job of the release point
+builds before the wave are the workspace's answer to
+[livery.workshop.JOB_BUILT_MEMBERS][]. The interpreters the CI matrix
+runs are [livery.workshop.python_matrix][]. What the checkout
+installed of each tool is [livery.workshop.tool_receipts][], a
+[livery.workshop.ToolReceipt][] per tool, and the tool store's home on
+this machine is [livery.workshop.store_home][].
+
 An extension adds steps to a package's lifecycle phases under
 ``[phases.<phase>.<step>]``, with the keys every step takes;
 each runs once per package whose set holds the extension and
@@ -150,6 +163,7 @@ if TYPE_CHECKING:
     from livery.workshop._graph import order_topologically as order_topologically
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
+    from livery.workshop._lifecycle import build_release as build_release
     from livery.workshop._metrics import RUNS as RUNS
     from livery.workshop._metrics import leave_leg_file as leave_leg_file
     from livery.workshop._metrics import leave_section as leave_section
@@ -172,6 +186,8 @@ if TYPE_CHECKING:
     from livery.workshop._prose import Prose as Prose
     from livery.workshop._prose import guidance as guidance
     from livery.workshop._provenance import generated_header as generated_header
+    from livery.workshop._publish import discover_release as discover_release
+    from livery.workshop._pythons import python_matrix as python_matrix
     from livery.workshop._quality import ci_changes as ci_changes
     from livery.workshop._quality import fix_files as fix_files
     from livery.workshop._quality import run_phase_over as run_phase_over
@@ -179,6 +195,7 @@ if TYPE_CHECKING:
     from livery.workshop._queries import CURRENT_VERSION as CURRENT_VERSION
     from livery.workshop._queries import DISTRIBUTIONS as DISTRIBUTIONS
     from livery.workshop._queries import EXECUTABLES as EXECUTABLES
+    from livery.workshop._queries import JOB_BUILT_MEMBERS as JOB_BUILT_MEMBERS
     from livery.workshop._queries import MODULE_ROOTS as MODULE_ROOTS
     from livery.workshop._queries import PUBLIC_MODULES as PUBLIC_MODULES
     from livery.workshop._queries import REQUIREMENTS as REQUIREMENTS
@@ -204,6 +221,9 @@ if TYPE_CHECKING:
     from livery.workshop._steps import step_option as step_option
     from livery.workshop._steps import tested as tested
     from livery.workshop._tokens import forge_token as forge_token
+    from livery.workshop._tools import ToolReceipt as ToolReceipt
+    from livery.workshop._tools import store_home as store_home
+    from livery.workshop._tools import tool_receipts as tool_receipts
     from livery.workshop._tools import undeployed as undeployed
     from livery.workshop._verified import LegScope as LegScope
     from livery.workshop._verified import VerifiedBranch as VerifiedBranch
@@ -219,6 +239,7 @@ __all__ = [
     "DISTRIBUTIONS",
     "EXECUTABLES",
     "HUMAN",
+    "JOB_BUILT_MEMBERS",
     "MODULE_ROOTS",
     "NONE",
     "PACKAGE",
@@ -241,15 +262,18 @@ __all__ = [
     "RegistryTarget",
     "ReleaseNotes",
     "RunContext",
+    "ToolReceipt",
     "VerifiedBranch",
     "__version__",
     "answer",
+    "build_release",
     "category_of",
     "check_legs",
     "ci_changes",
     "ci_run",
     "contributions_for",
     "discover_packages",
+    "discover_release",
     "extension_names",
     "extension_set",
     "fix_files",
@@ -264,6 +288,7 @@ __all__ = [
     "nearest_extensions",
     "order_topologically",
     "pull_request_legs",
+    "python_matrix",
     "read_contract",
     "registry",
     "release_notes",
@@ -281,10 +306,12 @@ __all__ = [
     "step_enabled",
     "step_extensions",
     "step_option",
+    "store_home",
     "tested",
     "testing",
     "this_forge",
     "this_repository",
+    "tool_receipts",
     "undeployed",
     "verified_branch",
     "verify_workspace",
@@ -302,6 +329,13 @@ _EXPORTS: dict[str, str] = {
     "PUBLIC_MODULES": "livery.workshop._queries",
     "REQUIREMENTS": "livery.workshop._queries",
     "VERSION_FILES": "livery.workshop._queries",
+    "JOB_BUILT_MEMBERS": "livery.workshop._queries",
+    "ToolReceipt": "livery.workshop._tools",
+    "build_release": "livery.workshop._lifecycle",
+    "discover_release": "livery.workshop._publish",
+    "python_matrix": "livery.workshop._pythons",
+    "store_home": "livery.workshop._tools",
+    "tool_receipts": "livery.workshop._tools",
     "RUNS": "livery.workshop._metrics",
     "WORKSPACE_TESTS": "livery.workshop._packages",
     "Category": "livery.workshop._categories",

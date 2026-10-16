@@ -24,7 +24,7 @@ from livery.footman import fail
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from livery.workshop._tools import Receipt
+    from livery.workshop import ToolReceipt
 
 
 def conan_environment(root: Path) -> dict[str, str]:
@@ -58,7 +58,7 @@ def conan_environment(root: Path) -> dict[str, str]:
         Failed: when the provider or conan is in neither place; the
             message names `fm sync`, which supplies both.
     """
-    from livery.workshop._tools import store_home
+    from livery.workshop import store_home
 
     home = store_home()
     provider, conan, gap = conan_tools(root)
@@ -96,9 +96,9 @@ def conan_version(root: Path, conan: str) -> str:
     Raises:
         Failed: when neither a receipt nor the binary names a version.
     """
-    from livery.workshop._tools import receipts
+    from livery.workshop import tool_receipts
 
-    held = receipts(root).get("conan")
+    held = tool_receipts(root).get("conan")
     if held is not None and held.version:
         return held.version
     why = "a Linux build container installs conan at the host's version"
@@ -202,13 +202,13 @@ def container_workspace(root: Path) -> Path | None:
     as in a release leg that set it aside so a sibling resolves from
     the package the leg created.
     """
-    from livery.extensions.conan import _package as _conan
+    from livery.extensions import conan
 
-    if not (root / _conan.WORKSPACE_FILE).is_file():
+    if not (root / conan.WORKSPACE_FILE).is_file():
         return None
-    path = root / ".workshop" / ".cache" / "conan" / _conan.WORKSPACE_FILE
+    path = root / ".workshop" / ".cache" / "conan" / conan.WORKSPACE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_conan.workspace_file(root, absolute=True), encoding="utf-8")
+    path.write_text(conan.workspace_file(root, absolute=True), encoding="utf-8")
     return path
 
 
@@ -229,7 +229,7 @@ def container_mounts(paths: Sequence[Path]) -> str:
     return " ".join(f"-v {path}:{path}" for path in kept)
 
 
-def _receipted_env(held: Mapping[str, Receipt], name: str, variable: str) -> str:
+def _receipted_env(held: Mapping[str, ToolReceipt], name: str, variable: str) -> str:
     """The value *name*'s receipt records for *variable*, or empty.
 
     A tool that sets a variable declares it in its record, so this
@@ -261,9 +261,9 @@ def conan_tools(root: Path) -> tuple[str, str, str]:
         when one of them is missing. The reason is empty when both are
         there, and names only what is missing.
     """
-    from livery.workshop._tools import receipts
+    from livery.workshop import tool_receipts
 
-    held = receipts(root)
+    held = tool_receipts(root)
     # The provider's path is the cmake-conan record's own env entry,
     # so nothing here spells the file name: a record that moves it
     # moves this too.
@@ -293,7 +293,7 @@ def _resolved_dir(name: str) -> str:
     return str(Path(found).parent) if found else ""
 
 
-def _receipted_path(held: Mapping[str, Receipt], name: str) -> str:
+def _receipted_path(held: Mapping[str, ToolReceipt], name: str) -> str:
     """The directory *name*'s receipt puts on PATH, or empty.
 
     Empty for a tool this checkout never materialised, and for one

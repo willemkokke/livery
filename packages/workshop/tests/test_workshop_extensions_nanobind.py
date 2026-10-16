@@ -112,7 +112,7 @@ def _leg(
         del root, ref
         return released
 
-    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _build)
     monkeypatch.setattr(_conan, "save_cache", _save)
     monkeypatch.setattr(_ci, "floor_legs", _floors)
     monkeypatch.setattr("livery.workshop._publish.discover_release", _discover)
@@ -356,7 +356,7 @@ def test_a_package_listing_nanobind_releases_through_its_set(
     assert _lifecycle.version_files(package) == (directory / "pyproject.toml",)
     assert _lifecycle.stamp(package, tmp_path, "0.2.0") == ["pyproject.toml"]
     assert _lifecycle.current_version(package) == "0.2.0"
-    assert _lifecycle.build(package, tmp_path, epoch=7) == directory / "dist"
+    assert _lifecycle.build_release(package, tmp_path, epoch=7) == directory / "dist"
     assert built == [7]
     target = RegistryTarget(kind="python", url="https://idx.example/simple")
     assert _lifecycle.publish(package, tmp_path, version="0.2.0", target=target)
