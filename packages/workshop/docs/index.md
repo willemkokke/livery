@@ -1398,6 +1398,14 @@ absence.
   the pytest extension's `pytest.toml`), so two packages may share a
   test file's name; a helper module in a package's `tests/` carries
   the package's name, and the session refuses to start otherwise.
+- Every job on a GitHub or Gitea runner keeps conan's home in its own
+  temporary directory, `conan` under `RUNNER_TEMP`, whatever
+  `CONAN_HOME` the runner sets for its jobs. Conan's cache takes one
+  process at a time, and a runner that takes several jobs at once
+  would otherwise have two of them write one cache. `setup.sh github`
+  places the home before its sync builds a native member, and refuses
+  a job whose runner sets no `RUNNER_TEMP` or names a directory that
+  does not exist.
 - `fm start`: open the work. An issue number assigns and branches
   `<kind>/<number>-<slug>`, a quoted title files the issue first, and
   `<kind>/<slug>` starts a branch that belongs to no issue, whose

@@ -304,6 +304,7 @@ def test_the_github_emission_persists_the_moved_temp(
     monkeypatch.setattr(sys, "platform", "win32")
     env_file = tmp_path / "env"
     runner_temp = tmp_path / "_temp"
+    runner_temp.mkdir()
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_ENV", str(env_file))
     monkeypatch.delenv("GITHUB_PATH", raising=False)
@@ -334,8 +335,12 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_ENV", str(env_file))
     monkeypatch.setenv("GITHUB_PATH", str(path_file))
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    # A home the runner sets for all its jobs is not the one persisted.
+    monkeypatch.setenv("CONAN_HOME", "/rig/runner/conan")
     out = _env_tasks.env_emit("posix", github=True)
     assert env_file.is_file() and path_file.is_file()
+    assert f"CONAN_HOME={tmp_path}/conan" in env_file.read_text().splitlines()
     assert "export " in out and "PATH+" not in out
     for line in path_file.read_text().splitlines():
         assert line in out
@@ -1054,23 +1059,71 @@ def test_env_set_ci_writes_through_the_protocol(
         env_set("KEY", "value", scope="ci")
 
 
-def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner() -> (
-    None
-):
+def test_a_job_whose_runner_names_no_temp_directory_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A job keeps conan's home in its own temp: without one there is no
+    # home that is the job's alone, and the emission persists nothing.
+    with pytest.raises(_FAILURES) as caught:
+        runner_placements({"GITHUB_ACTIONS": "true"})
+    assert "this job's runner sets no RUNNER_TEMP" in str(caught.value)
+    missing = tmp_path / "gone" / "_temp"
+    with pytest.raises(_FAILURES) as caught:
+        runner_placements({"GITHUB_ACTIONS": "true", "RUNNER_TEMP": str(missing)})
+    assert f"RUNNER_TEMP names {missing}, which is not a directory" in str(caught.value)
+    from livery.workshop import _env_tasks
+
+    root = _contract(tmp_path, "github")
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    env_file = tmp_path / "env"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.setenv("RUNNER_TEMP", str(missing))
+    with pytest.raises(_FAILURES) as caught:
+        _env_tasks.env_emit(github=True)
+    assert str(missing) in str(caught.value)
+    assert not env_file.exists()
+
+
+def test_two_jobs_on_one_runner_get_two_conan_homes_whatever_the_runner_sets(
+    tmp_path: Path,
+) -> None:
+    # A runner that takes several jobs at once and sets one CONAN_HOME
+    # for all of them: each job's home is its own temp's, and uv's cache,
+    # which takes many processes at once, stays the runner's.
+    runner = {"GITHUB_ACTIONS": "true", "CONAN_HOME": "/rig/runner/conan"}
+    runner["UV_CACHE_DIR"] = "/rig/cache/uv"
+    first, second = tmp_path / "job-1" / "tmp", tmp_path / "job-2" / "tmp"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    one = runner_placements({**runner, "RUNNER_TEMP": str(first)})
+    other = runner_placements({**runner, "RUNNER_TEMP": str(second)})
+    assert one["CONAN_HOME"] == f"{first}/conan"
+    assert other["CONAN_HOME"] == f"{second}/conan"
+    assert one["UV_CACHE_DIR"] == other["UV_CACHE_DIR"] == "/rig/cache/uv"
+
+
+def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner(
+    tmp_path: Path,
+) -> None:
     # Off a runner nothing is placed and the delta is untouched; on one
-    # both paths are under the runner's temp, the same ones the entry
+    # every path is under the runner's temp, the same ones the entry
     # script exports, the store's the one the workflow restores.
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     delta = EnvDelta(values={"PLAIN": "1"}, paths=("/w/.venv/bin",))
     assert runner_placements({}) == {}
     assert with_runner_placements(delta, {}) == delta
-    placed = with_runner_placements(delta, {"RUNNER_TEMP": "/r/_temp"})
+    temp = str(tmp_path)
+    placed = with_runner_placements(delta, {"RUNNER_TEMP": temp})
     assert placed.values == {
         "PLAIN": "1",
-        "UV_CACHE_DIR": "/r/_temp/uv-cache",
-        "CONAN_HOME": "/r/_temp/conan",
-        _paths.env_var("DATA_DIR"): "/r/_temp/footman",
+        "UV_CACHE_DIR": f"{temp}/uv-cache",
+        "CONAN_HOME": f"{temp}/conan",
+        _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }
     assert placed.paths == delta.paths
 
@@ -1123,10 +1176,13 @@ def test_a_placement_the_job_already_sets_is_persisted_as_it_is(
     own sync and then asks for the emission: a key it set must reach
     the steps after it, with the value it set. A runner with persistent
     caches sets them for every step, and persisting the same value
-    changes nothing for it. An empty value is unset.
+    changes nothing for it. An empty value is unset. Conan's home is
+    the exception, always the temp's
+    (`test_two_jobs_on_one_runner_get_two_conan_homes_whatever_the_runner_sets`).
     """
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
+    (tmp_path / "_temp").mkdir()
     temp = str(tmp_path / "_temp")
     placed = runner_placements({"RUNNER_TEMP": temp})
     assert placed == {

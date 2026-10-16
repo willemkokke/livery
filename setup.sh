@@ -20,11 +20,34 @@ _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # before the sync and the materialise, and persisted by the emission
 # below for every later step. A placement the job already carries
 # stands: a runner that keeps its caches across jobs sets them in its
-# own environment, and the temp is only where nothing is set.
-if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
+# own environment, and the temp is only where nothing is set. Conan's
+# home is always the job's own, under its temp: conan's cache takes one
+# process at a time, and a runner may run several jobs at once, so a
+# home the runner sets for every job is not used. The native members
+# build through conan in `fm sync --locked` below, so the home is
+# placed before it, and a job without a temp of its own stops here.
+if [ "${1:-}" = github ]; then
+    if [ -z "${RUNNER_TEMP:-}" ]; then
+        echo "setup: this job's runner sets no RUNNER_TEMP; a job keeps" \
+            "conan's home in its own temporary directory, so run it on a" \
+            "runner that sets one" >&2
+        return 1 2>/dev/null || exit 1
+    fi
+    if [ ! -d "$RUNNER_TEMP" ]; then
+        echo "setup: RUNNER_TEMP names $RUNNER_TEMP, which is not a directory;" \
+            "a job keeps conan's home in it, so its runner must create it" \
+            "first" >&2
+        return 1 2>/dev/null || exit 1
+    fi
     UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
     FOOTMAN_DATA_DIR="${FOOTMAN_DATA_DIR:-$RUNNER_TEMP/footman}"
-    export UV_CACHE_DIR FOOTMAN_DATA_DIR
+    if [ -n "${CONAN_HOME:-}" ] && [ "$CONAN_HOME" != "$RUNNER_TEMP/conan" ]; then
+        echo "setup: conan's home is $RUNNER_TEMP/conan, this job's own; the" \
+            "runner's CONAN_HOME, $CONAN_HOME, is not used, since conan's" \
+            "cache takes one process at a time" >&2
+    fi
+    CONAN_HOME="$RUNNER_TEMP/conan"
+    export UV_CACHE_DIR FOOTMAN_DATA_DIR CONAN_HOME
 fi
 # uv at the lock's pin, the version the venv carries: every sync in
 # this job, this script's and fm's own, runs the same uv and

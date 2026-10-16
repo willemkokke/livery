@@ -75,11 +75,13 @@ def test_down_and_rm_refuse_or_say_nothing_for_an_absent_environment(
 def test_a_part_this_user_may_not_remove_stops_rm_before_anything_stops(
     rig: Path, machine: Machine
 ) -> None:
-    # What a build container that runs as root leaves in a runner's conan
-    # home: a directory whose files this user may not remove.
+    # What a build container that runs as root leaves in a job's conan
+    # home, under the job's temp in the runner's working directory: a
+    # directory whose files this user may not remove.
     _devenv.devenv_up("dev")
     env = _devenv.environment("dev")
-    held = env.runner_conan_home(1) / "p" / "fmt80a1ffe0392cb" / "s"
+    job_home = env.runner_dir(1) / "work" / "6f23629797144927" / "tmp" / "conan"
+    held = job_home / "p" / "fmt80a1ffe0392cb" / "s"
     held.mkdir(parents=True)
     (held / "build.gradle").write_text("written by root\n")
     held.chmod(0o555)
@@ -95,7 +97,7 @@ def test_a_part_this_user_may_not_remove_stops_rm_before_anything_stops(
         assert env.env_file.is_file() and env.app_ini.is_file()
         # A directory this user may not list is named the same way.
         held.chmod(0o755)
-        unlisted = env.runner_conan_home(1) / "p" / "unlisted"
+        unlisted = job_home / "p" / "unlisted"
         unlisted.mkdir()
         unlisted.chmod(0o333)
         with pytest.raises(
@@ -116,7 +118,8 @@ def test_a_removal_refused_part_way_names_what_stayed_and_the_name_holds_nothing
     # held open. Everything else goes, the env file with it.
     _devenv.devenv_up("dev")
     env = _devenv.environment("dev")
-    held = env.runner_conan_home(1) / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
+    job_home = env.runner_dir(1) / "work" / "6f23629797144927" / "tmp" / "conan"
+    held = job_home / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
     held.parent.mkdir(parents=True)
     held.write_text("held\n")
     monkeypatch.setattr(_devenv, "UNLINK", _refusing(held))
@@ -234,11 +237,11 @@ def test_host_mode_starts_gitea_seeds_it_and_registers_each_runner_once(
     assert "cache:\n  enabled: true" in config
     assert str(_devenv.cache_dir() / "uv") in config
     assert str(env.runner_dir(1) / "work") in config
-    # Conan's home is each runner's own, inside the environment: a release
-    # writes a remote there that names this environment's forge.
-    assert f"CONAN_HOME: {env.runner_dir(1) / 'conan'}\n" in config
+    # Conan's home is set for no runner's jobs: each job's is its own,
+    # under its temp, and a runner takes several jobs at once.
     second = (env.runner_dir(2) / "config.yaml").read_text()
-    assert f"CONAN_HOME: {env.runner_dir(2) / 'conan'}\n" in second
+    assert "CONAN_HOME" not in config and "CONAN_HOME" not in second
+    assert "  capacity: 4\n" in config
     # The caches every environment shares exist, beside the environments,
     # and conan's home is not one of them.
     assert (rig / "cache" / "footman").is_dir() and (rig / "cache" / "uv").is_dir()
