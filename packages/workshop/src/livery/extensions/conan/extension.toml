@@ -52,8 +52,8 @@ isolated = true
 provides = { dist = "path" }
 
 # A package a job of the run built (prebuilt) is restored into this
-# job's conan cache from the file collected for this host before the
-# upload reads the cache.
+# job's conan cache from every host's file the run collected before the
+# upload reads the cache, so the upload sends every host's binary.
 [phases.publish.conan]
 main = "livery.extensions.conan._steps:publish"
 reads = ["version", "registry-target", "prebuilt"]

@@ -42,8 +42,9 @@ def publish(ctx: PhaseContext) -> None:
     """Upload the package to the registry target the engine resolved.
 
     A package a job of the run built, which the engine gives as
-    ``prebuilt``, is restored into this job's conan cache from the file
-    the run collected for this host before the upload reads it.
+    ``prebuilt``, is restored into this job's conan cache from every
+    host's file the run collected before the upload reads it, so the
+    upload sends every host's binary.
     """
     from livery.workshop._registries import target_from_table
 

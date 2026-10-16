@@ -167,31 +167,25 @@ def test_the_publish_seam_hands_the_targets_token_to_the_upload(
     assert seen == ["lane"]
 
 
-# A member a job of the run built: the publish job restores the saved
-# cache the run collected for its host before the upload reads conan's
-# cache. The refusal and the cases that restore nothing come first.
+# A member a job of the run built: the publish job restores every
+# host's saved cache the run collected before the upload reads conan's
+# cache. The refusals and the cases that restore nothing come first.
+
+#: Three hosts, in the order their saved caches' names sort.
+_HOSTS = ("linux-x64", "macos-arm", "windows-x64")
 
 
-def _another_host() -> str:
-    """A host key that is not this machine's."""
-    mine = _conan.cache_name("acme-lib", "0.1.0")
-    for host in ("linux-arm", "windows-x64", "macos-x64"):
-        if _conan.cache_name("acme-lib", "0.1.0", host) != mine:
-            return host
-    raise AssertionError("every host key matched this machine's")
-
-
-def _collected(package: Package, *hosts: str) -> list[Path]:
+def _collected(package: Package, *hosts: str, version: str = "0.1.0") -> list[Path]:
     """One saved cache per host in *package*'s dist/, as the run collects them.
 
-    An empty host is this machine's. Returns the files, in *hosts* order.
+    Returns the files, in *hosts* order.
     """
     dist = package.directory / "dist"
     dist.mkdir(parents=True, exist_ok=True)
     files = []
     for host in hosts:
-        archive = dist / _conan.cache_name(package.name, "0.1.0", host)
-        archive.write_bytes(f"saved on {host or 'this host'}".encode())
+        archive = dist / _conan.cache_name(package.name, version, host)
+        archive.write_bytes(f"{version} saved on {host}".encode())
         files.append(archive)
     return files
 
@@ -201,19 +195,29 @@ def _restored(calls: list[tuple[tuple[str, ...], dict[str, str]]]) -> list[str]:
     return [args[2] for args, _env in calls if args[:2] == ("cache", "restore")]
 
 
-def test_a_prebuilt_member_without_this_hosts_cache_refuses_naming_the_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "held", [("0.2.0",), ()], ids=["another-version-collected", "nothing-collected"]
+)
+def test_a_prebuilt_member_without_a_cache_for_the_version_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, held: tuple[str, ...]
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    _collected(package, _another_host())
+    others = [
+        archive
+        for version in held
+        for archive in _collected(package, "linux-x64", version=version)
+    ]
     target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
     with pytest.raises(_FAILURES) as refused:
         _conan.publish_artifact(
             package, tmp_path, version="0.1.0", target=target, prebuilt=True
         )
-    assert "acme-lib:" in str(refused.value)
-    assert _conan.cache_name("acme-lib", "0.1.0") in str(refused.value)
+    # The member, the version, and every file dist/ holds.
+    message = str(refused.value)
+    assert message.startswith("acme-lib: ")
+    assert "0.1.0" in message
+    assert all(archive.name in message for archive in others)
     # Nothing restored, and nothing uploaded.
     assert calls == []
 
@@ -223,19 +227,23 @@ def test_a_restore_conan_refuses_stops_the_publish_before_the_upload(
 ) -> None:
     calls: list[tuple[str, ...]] = []
 
-    class _Refused:
-        code = 1
-        stdout = ""
-        stderr = "ERROR: the archive is damaged"
+    class _Result:
+        def __init__(self, code: int, stderr: str = "") -> None:
+            self.code = code
+            self.stdout = ""
+            self.stderr = stderr
 
-    def _fake(cwd: Path, *args: str, env: dict[str, str] | None = None) -> _Refused:
+    def _fake(cwd: Path, *args: str, env: dict[str, str] | None = None) -> _Result:
         del cwd, env
         calls.append(args)
-        return _Refused()
+        # The first restore lands, the second is refused.
+        if len(calls) == 1:
+            return _Result(0)
+        return _Result(1, "ERROR: the archive is damaged")
 
     monkeypatch.setattr(_conan, "_conan", _fake)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    (mine,) = _collected(package, "")
+    first, second = _collected(package, "linux-x64", "macos-arm")
     target = RegistryTarget(kind="conan", url=_REMOTE)
     with pytest.raises(_FAILURES) as refused:
         _conan.publish_artifact(
@@ -243,20 +251,46 @@ def test_a_restore_conan_refuses_stops_the_publish_before_the_upload(
         )
     # Conan's own words carry, and nothing uploads after the refusal.
     assert "the archive is damaged" in str(refused.value)
-    assert calls == [("cache", "restore", str(mine))]
+    assert calls == [
+        ("cache", "restore", str(first)),
+        ("cache", "restore", str(second)),
+    ]
 
 
-def test_a_prebuilt_member_restores_this_hosts_cache_alone(
+def test_a_saved_cache_for_another_version_is_not_restored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    mine, _theirs = _collected(package, "", _another_host())
+    (wanted,) = _collected(package, "linux-x64")
+    _collected(package, "linux-x64", version="0.2.0")
+    # A version whose own text goes on after the one released, as a
+    # pre-release's does.
+    _collected(package, "linux-x64", version="0.1.0-rc1")
     target = RegistryTarget(kind="conan", url=_REMOTE)
     assert _conan.publish_artifact(
         package, tmp_path, version="0.1.0", target=target, prebuilt=True
     )
-    assert _restored(calls) == [str(mine)]
+    assert _restored(calls) == [str(wanted)]
+
+
+def test_every_host_s_saved_cache_is_restored_before_the_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    collected = _collected(package, *reversed(_HOSTS))
+    target = RegistryTarget(kind="conan", url=_REMOTE)
+    assert _conan.publish_artifact(
+        package, tmp_path, version="0.1.0", target=target, prebuilt=True
+    )
+    # Every host's file, in name order, and each of them before the upload.
+    assert _restored(calls) == sorted(str(archive) for archive in collected)
+    assert [args[:2] for args, _env in calls] == [
+        *[("cache", "restore")] * len(_HOSTS),
+        ("remote", "add"),
+        ("upload", "acme-lib/0.1.0"),
+    ]
 
 
 def test_a_member_this_job_built_restores_nothing(
@@ -265,7 +299,7 @@ def test_a_member_this_job_built_restores_nothing(
     """The build put the package in this job's cache; a file in dist/ stays there."""
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    _collected(package, "")
+    _collected(package, *_HOSTS)
     target = RegistryTarget(kind="conan", url=_REMOTE)
     assert _conan.publish_artifact(package, tmp_path, version="0.1.0", target=target)
     assert _restored(calls) == []
@@ -286,7 +320,7 @@ def test_the_releases_route_attaches_a_prebuilt_member_s_files_and_restores_noth
 
     monkeypatch.setattr(_conan, "publish_to_releases", _attach)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    _collected(package, _another_host())
+    _collected(package, *_HOSTS)
     target = RegistryTarget(kind="conan", url="fake://acme/ws", releases=True)
     assert _conan.publish_artifact(
         package, tmp_path, version="0.1.0", target=target, prebuilt=True
@@ -296,12 +330,12 @@ def test_the_releases_route_attaches_a_prebuilt_member_s_files_and_restores_noth
 
 
 @pytest.mark.parametrize("route", ["remote", "folder"])
-def test_a_prebuilt_member_s_cache_is_restored_and_then_uploaded(
+def test_a_prebuilt_member_s_caches_are_restored_and_then_uploaded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str
 ) -> None:
     calls = _recorded_conan(monkeypatch)
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    (mine,) = _collected(package, "")
+    collected = _collected(package, "linux-x64", "macos-arm")
     if route == "remote":
         target = RegistryTarget(kind="conan", url=_REMOTE)
         uploads = [("remote", "add"), ("upload", "acme-lib/0.1.0")]
@@ -311,8 +345,12 @@ def test_a_prebuilt_member_s_cache_is_restored_and_then_uploaded(
     assert _conan.publish_artifact(
         package, tmp_path, version="0.1.0", target=target, prebuilt=True
     )
-    assert [args[:2] for args, _env in calls] == [("cache", "restore"), *uploads]
-    assert _restored(calls) == [str(mine)]
+    assert [args[:2] for args, _env in calls] == [
+        ("cache", "restore"),
+        ("cache", "restore"),
+        *uploads,
+    ]
+    assert _restored(calls) == [str(archive) for archive in collected]
 
 
 # The wave across kinds, seams stubbed.
@@ -741,7 +779,7 @@ def test_prebuilt_publishes_what_the_run_collected_without_building(
     root = cross_train
     order: list[str] = []
     registry_for = _serving_wave(monkeypatch, order)
-    saved = _conan.cache_name("acme-geometry", "0.3.0")
+    saved = _conan.cache_name("acme-geometry", "0.3.0", "linux-x64")
     for member, collected in (
         ("geometry", saved),
         ("ext", "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl"),
@@ -983,3 +1021,55 @@ def test_the_rig_conan_registry_round_trips(
         text=True,
     )
     assert installed.returncode == 0, f"{installed.stdout}\n{installed.stderr}"
+
+
+@needs_conan
+def test_two_saved_caches_holding_one_package_restore_and_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two hosts' files can hold one package, and both restore into one cache.
+
+    A header library's package id is the same on every host, so each
+    leg saves the same package. The publish job restores every file
+    into a fresh cache, so the second restore finds the package there
+    already; the folder target then saves it from that cache.
+    """
+    skip_unless_installed("cmake")
+    import json
+
+    package = _render_library(tmp_path, monkeypatch)
+    saved = _conan.save_cache(package, "0.0.0", package.directory / "dist")
+    other = next(
+        host
+        for host in _HOSTS
+        if _conan.cache_name("acme-geometry", "0.0.0", host) != saved.name
+    )
+    shutil.copyfile(
+        saved, saved.with_name(_conan.cache_name("acme-geometry", "0.0.0", other))
+    )
+    assert len(_conan.collected_caches(package, "0.0.0")) == 2
+    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "publish-home"))
+    share = tmp_path / "share"
+    target = RegistryTarget(kind="conan", url=str(share), local=True)
+    assert _conan.publish_artifact(
+        package, tmp_path, version="0.0.0", target=target, prebuilt=True
+    )
+    # A clean home restores the one package from the folder target alone.
+    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "consumer-home"))
+    restored = subprocess.run(
+        ["conan", "cache", "restore", str(share / "acme-geometry-0.0.0.tgz")],
+        capture_output=True,
+        text=True,
+    )
+    assert restored.returncode == 0, restored.stderr
+    listed = subprocess.run(
+        ["conan", "list", "acme-geometry/0.0.0:*", "--format=json"],
+        capture_output=True,
+        text=True,
+    )
+    assert listed.returncode == 0, listed.stderr
+    revisions = json.loads(listed.stdout)["Local Cache"]["acme-geometry/0.0.0"][
+        "revisions"
+    ]
+    packages = [pid for rev in revisions.values() for pid in rev.get("packages", {})]
+    assert len(packages) == 1
