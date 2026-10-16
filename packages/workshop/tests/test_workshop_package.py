@@ -102,6 +102,7 @@ def test_the_surface_is_declared() -> None:
         "Query",
         "RegistryTarget",
         "ReleaseNotes",
+        "RequirementWriter",
         "RunContext",
         "ToolReceipt",
         "VerifiedBranch",

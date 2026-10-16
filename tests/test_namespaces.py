@@ -444,6 +444,7 @@ EXPORTS: dict[str, list[str]] = {
         "RUNS",
         "RegistryTarget",
         "ReleaseNotes",
+        "RequirementWriter",
         "RunContext",
         "ToolReceipt",
         "VERSION_FILES",

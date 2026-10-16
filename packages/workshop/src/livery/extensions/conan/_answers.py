@@ -10,8 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from livery.workshop import Package
-    from livery.workshop._queries import RequirementWriter
+    from livery.workshop import Package, RequirementWriter
 
 
 def current_version(package: Package) -> str:
@@ -76,7 +75,6 @@ def registry(package: Package) -> _package.ConanRegistry | None:
     if not _package.names_a_reference(package):
         return None
     from livery.workshop import registry as resolved
-    from livery.workshop._packages import root_of
 
-    root = root_of(package)
+    root = package.root
     return _package.ConanRegistry(resolved(root, ECOSYSTEM), root=root)

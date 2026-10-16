@@ -271,3 +271,76 @@ def test_an_unreachable_forge_is_a_silent_rung_not_a_failure(
     target = resolve_registry(root, "python")
     assert target.url == "https://pypi.org/simple"
     assert "did not answer" in capsys.readouterr().out
+
+
+# The publish phase's registry-target table: the refusals first, then
+# the table the engine writes read back.
+
+
+@pytest.mark.parametrize(
+    ("table", "refusal"),
+    [
+        (
+            {"url": "https://index.example"},
+            "not a registry target: the table has no kind, which every"
+            " registry target holds",
+        ),
+        (
+            {"kind": "python"},
+            "not a registry target: the table has no url, which every"
+            " registry target holds",
+        ),
+        (
+            {"kind": "python", "url": 8080},
+            "not a registry target: url takes a str, and the table's url is"
+            " of type int",
+        ),
+        (
+            {"kind": "conan", "url": "/srv/conan", "local": "yes"},
+            "not a registry target: local takes a bool, and the table's local"
+            " is of type str",
+        ),
+        (
+            {"kind": "python", "url": "https://index.example", "publish-url": "x"},
+            "not a registry target: the table holds publish-url; a registry"
+            " target holds kind, url, publish_url, local, token, releases",
+        ),
+    ],
+    ids=["no-kind", "no-url", "url-not-str", "local-not-bool", "unknown-key"],
+)
+def test_a_table_that_is_not_a_registry_target_refuses_naming_what_it_takes(
+    table: dict[str, object], refusal: str
+) -> None:
+    from livery.workshop import RegistryTarget as PublicTarget
+
+    with pytest.raises(ValueError) as refused:
+        PublicTarget.from_table(table)
+    assert str(refused.value) == refusal
+
+
+def test_a_refused_token_names_its_type_and_never_its_value() -> None:
+    table: dict[str, object] = {"kind": "python", "url": "u", "token": b"s3cret"}
+    with pytest.raises(ValueError) as refused:
+        RegistryTarget.from_table(table)
+    assert "token takes a str" in str(refused.value)
+    assert "s3cret" not in str(refused.value)
+
+
+def test_the_table_the_engine_writes_reads_back_as_its_target() -> None:
+    from livery.workshop import RegistryTarget as PublicTarget
+    from livery.workshop._registries import target_table
+
+    assert PublicTarget is RegistryTarget
+    target = RegistryTarget(
+        kind="conan",
+        url="https://forge.example/acme/ws",
+        publish_url="https://upload.example",
+        local=True,
+        token="lane",
+        releases=True,
+    )
+    assert RegistryTarget.from_table(target_table(target)) == target
+    # A field the table leaves out takes its default.
+    assert RegistryTarget.from_table({"kind": "python", "url": "u"}) == (
+        RegistryTarget(kind="python", url="u")
+    )

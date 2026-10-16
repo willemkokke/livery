@@ -18,9 +18,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.forge import Registry
-    from livery.workshop import Package
+    from livery.workshop import Package, RequirementWriter
     from livery.workshop._packages import SourceReferences
-    from livery.workshop._queries import RequirementWriter
 
 
 def current_version(package: Package) -> str:
@@ -97,9 +96,8 @@ def registry(package: Package) -> Registry:
     """
     from livery.forge import SimpleRegistry
     from livery.workshop import registry as resolved
-    from livery.workshop._packages import root_of
 
-    target = resolved(root_of(package), ECOSYSTEM)
+    target = resolved(package.root, ECOSYSTEM)
     return SimpleRegistry(target.url, token=target.token)
 
 

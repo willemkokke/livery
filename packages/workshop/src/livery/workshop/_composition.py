@@ -103,9 +103,8 @@ def extension_set(package: Package) -> tuple[str, ...]:
 
     if package.path == WORKSPACE_TESTS:
         from livery.workshop._extensions import root_set
-        from livery.workshop._packages import root_of
 
-        return root_set(root_of(package))
+        return root_set(package.root)
     listed = package.extensions
     if not listed:
         return ()

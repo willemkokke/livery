@@ -418,7 +418,7 @@ or a value of another type, refuses before any step runs:
 | `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
 | `build` | `isolated` (`bool`), the side; `configuration` (`str`), the preset: the train builds isolated in `release`, `fm check` on the tree in `instrumented`, and `fm run` on the tree in `debug`. `epoch` (`int`), the build's source date, from the train; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
 | `test` | `isolated` (`bool`), true on the train's legs; `resolution` (`str`), `floor`, `latest` or `head`; `release-dirs` (`paths`), the co-released set's `dist/` directories. `fm check` gives none of them, which is the tree side | `resolved` (`table`), each distribution the leg installed, to its version |
-| `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields; `prebuilt` (`bool`), true when a job of the run built the package and the run collected it into `dist/` | `published` (`bool`), whether anything uploaded |
+| `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields, which `RegistryTarget.from_table` reads back; `prebuilt` (`bool`), true when a job of the run built the package and the run collected it into `dist/` | `published` (`bool`), whether anything uploaded |
 | `verify` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the verification's |
 | `run` | `executable` (`str`), the executable to start. The words after `--` are the context's `arguments`, as they are for every step, and the step that starts the executable records its exit code with `exit` | |
 
@@ -484,7 +484,7 @@ or the rule's answer over nothing. The base declares:
 | `version-files` | package | the files `stamp` may write a version into | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
-| `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
+| `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each a `RequirementWriter` called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `test-requirements` | package | each distribution the tests require beyond the requirements, to its constraint; a package whose set answers it has a home for its test edges | the union; a name valued twice refuses |
 | `test-requirement-writers` | package | the functions that write a test requirement on a sibling into the manifests, called as the requirement writers are | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
 | `distributions` | package | each released distribution's ecosystem and name | the union |

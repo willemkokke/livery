@@ -624,12 +624,12 @@ def _extra_siblings(package: Package) -> tuple[Neighbours, frozenset[str]]:
     package that declares no extra, which then reads no other member.
     """
     from livery.workshop import discover_packages
-    from livery.workshop._packages import neighbours, root_of
+    from livery.workshop._packages import neighbours
 
     extras = _extra_distributions(package)
     if not extras:
         return Neighbours(owners={}, by_path={}), frozenset()
-    around = neighbours(discover_packages(root_of(package)))
+    around = neighbours(discover_packages(package.root))
     named = frozenset(
         path
         for path, member in around.by_path.items()

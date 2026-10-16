@@ -102,6 +102,32 @@ class Package:
         """
         return self.path.removeprefix(f"{PACKAGES_DIR}/")
 
+    @property
+    def root(self) -> Path:
+        """The root of the workspace the package is a member of.
+
+        The package's directory with its path's parts taken off, read
+        from the two fields alone, without touching the disk: the root
+        is two directories above ``packages/forge``, three above
+        ``packages/extensions/widgets``, and one above the workspace's
+        own tests ([livery.workshop.workspace_suite][]). A package whose
+        path is ``.`` is at the root, so its directory is the root.
+
+        Raises:
+            ValueError: when the directory does not end with the path,
+                naming both.
+        """
+        parts = PurePosixPath(self.path).parts
+        if not parts:
+            return self.directory
+        if self.directory.parts[-len(parts) :] != parts:
+            raise ValueError(
+                f"{self.directory} does not end with the package's path"
+                f" {self.path}, so it names no workspace root: a package's"
+                " directory is its path under the root"
+            )
+        return self.directory.parents[len(parts) - 1]
+
 
 #: The directory every package lives under, relative to the root.
 PACKAGES_DIR = "packages"
@@ -292,16 +318,6 @@ def member_of(relative: str, members: Iterable[str]) -> str:
         ):
             found = member
     return found
-
-
-def root_of(package: Package) -> Path:
-    """The root of the workspace *package* is a member of.
-
-    The package's directory with its path's parts taken off: the root
-    is two directories above ``packages/forge``, and three above
-    ``packages/extensions/widgets``.
-    """
-    return package.directory.parents[len(PurePosixPath(package.path).parts) - 1]
 
 
 #: The workspace's own test directory, a unit of the gate like a
