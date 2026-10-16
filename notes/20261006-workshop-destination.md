@@ -494,6 +494,7 @@ consumer. Each rule is set now and set back at alpha.
 
 Ruling 5 puts every root's public names in its `__init__.py`. So a
 name below lives in `livery.workshop`, `livery.extensions.docs`,
+`livery.extensions.python`, `livery.extensions.conan`,
 `livery.footman` or `livery.toolroom.tools`, or in a public module the
 entry module declares.
 
@@ -686,7 +687,8 @@ extension calls, stay public.
 | `contributions_for` | the `[for.<target>]` tables grafted for a target, and the top-level tables of the extensions that require it | docs (phase 11) | `livery.workshop` |
 | `generated_header` | the provenance header for a file an extension writes outside the engine | docs (private today) | `livery.workshop` |
 | `ci_run`, `RunContext` | the CI run's context, or None at a desk | docs (`run_context` today) | `livery.workshop` |
-| `check_option` | a package's value of an option the check declares | pytest | `livery.workshop` |
+| `step_option` | a package's value of an option the step declares | mkdocstrings, pytest | `livery.workshop` |
+| `shipped_content` | where each listed extension's shipped files live | claude, docs | `livery.workshop` |
 | `slot` | a slot's composed value | docs (`_slots` today), the base's `pyproject.toml` template | `livery.workshop` |
 | `testing` | the conformance kit: `Subject`, `Clause`, `CLAUSES`, `Violation`, `judge`, `builtin_subject` | every extension's suite | `livery.workshop.testing`, declared in `livery.workshop` |
 
@@ -701,6 +703,12 @@ need none of these once they are words).
 | `selected_files` | the changed files a workspace check with `inputs` judges this run | docs (`_checks.selected_files` today) | `livery.workshop` |
 | `Changes` | what changed, handed to a check's `widen` reference | docs (`_influence` today) | `livery.workshop` |
 | `run_batched` | the fewest tool calls under the command-line limit | a check in code that calls a tool | `livery.workshop` |
+| `step_extensions`, `extension_set` | the extensions a step judges packages by, and a package's set: its list and every extension they require | mkdocstrings; conan, nanobind, python | `livery.workshop` |
+| `step_enabled` | whether the root contract turned on a step declared `enabled = false` | mkdocstrings | `livery.workshop` |
+| `undeployed` | the refusal of a step whose tool of the store is not on `PATH`, naming the tool and the sync that deploys it | cmake, conan | `livery.workshop` |
+| `workspace_suite`, `scoped_suite` | the workspace's own tests as a unit, and that unit while a test step runs it beside the packages it judges | coverage, pytest | `livery.workshop` |
+| `tested`, `WORKSPACE_TESTS` | of a set of units, those a test step runs, and the unit of the workspace's own tests | cmake, coverage, python | `livery.workshop` |
+| `fix_files` | the gate's fixers over named files | claude | `livery.workshop` |
 
 **Package extensions** (phase 11 brings every user).
 
@@ -726,6 +734,32 @@ need none of these once they are words).
 | `release_tag` | the member path and version a release tag names | docs (the release view) | `livery.workshop` |
 | `run_phase` | runs an ungated phase's registered steps over the workspace, first removing the outputs no running step declares any more | docs (the docs and deploy phases) | `livery.workshop` |
 | `nearest_extensions` | of some extensions, the ones no other of them requires, for a combine function handed the lookup | docs (the `docs.theme` combine) | `livery.workshop` |
+| `this_forge`, `this_repository`, `forge_token` | the workspace's forge, its repository there, and the everyday token | changelog, conan | `livery.workshop` |
+| `run_phase_over` | a phase's steps over named packages | coverage | `livery.workshop` |
+
+**Extensions that keep records of a CI run** (coverage, step 8's P4a).
+
+| Name | Purpose | Users | Lives in |
+| --- | --- | --- | --- |
+| `state_store`, `RUNS` | the checkout's state store, and the series that keeps each check leg's files for one run until the gate job collects them | coverage | `livery.workshop` |
+| `leave_leg_file`, `leave_section` | a check leg's one write, and the gate job's section of the run's row | coverage | `livery.workshop` |
+| `leg_scope`, `LegScope` | what the gate ran on a leg | coverage | `livery.workshop` |
+| `verified_branch`, `VerifiedBranch` | the branch whose run proved the checkout's tree, or why nothing could be read | coverage | `livery.workshop` |
+| `check_legs`, `pull_request_legs` | the check legs the gate produces, and those a pull request's run produces | coverage | `livery.workshop` |
+| `holds_runtime_language` | whether a package holds the extension of the workshop's own language | coverage | `livery.workshop` |
+| `category_of`, `Category` | what a path is to its package | coverage | `livery.workshop` |
+
+**Extensions that build a release's artifacts in a CI job of their
+own** (nanobind, step 8's P5a).
+
+| Name | Purpose | Users | Lives in |
+| --- | --- | --- | --- |
+| `discover_release` | the members a release squash releases, each with its version, at a commit | nanobind | `livery.workshop` |
+| `build_release` | builds one member as the release train does, into its `dist/` | nanobind | `livery.workshop` |
+| `JOB_BUILT_MEMBERS` | the workspace query: each member a job of the release point builds before the wave, and that job | nanobind | `livery.workshop` |
+| `python_matrix` | the interpreters the CI matrix runs | nanobind | `livery.workshop` |
+| `tool_receipts`, `ToolReceipt` | what the checkout installed of each tool | nanobind | `livery.workshop` |
+| `store_home` | the tool store's home on this machine | nanobind | `livery.workshop` |
 
 **The docs extension's own public API**, `livery.extensions.docs`,
 for generator extensions alone, since nobody imports an extension but
@@ -740,6 +774,19 @@ it; mkdocstrings needed these (step 8's P2a):
 | `MEMBERS`, `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the `docs.members` query and its policy's values | mkdocstrings |
 | `SITE_TREES` | the site's trees a generator places pages under | mkdocstrings |
 | `TASK_REFERENCE`, `advertised_providers`, `task_page` | the task reference step's name, the providers it documents, a task's page | mkdocstrings |
+
+**The python and conan extensions' own public API**,
+`livery.extensions.python` and `livery.extensions.conan`, for
+nanobind, which requires both (step 8's P5a). conan's names stay
+until conan's per-host artifact replaces the saved cache (phase 13).
+
+| Name | Purpose | Users |
+| --- | --- | --- |
+| `module_docs` | the wheel-embedded `_docs` in the source tree, for one build | nanobind |
+| `run_isolated_test` | installs a built wheel into a fresh environment and tests the installed copy | nanobind |
+| `WORKSPACE_FILE`, `workspace_file` | the conan workspace file at the root, each conan member from its source | nanobind |
+| `workspace_aside` | hides the conan workspace for a block, so members resolve from the cache | nanobind |
+| `save_cache`, `restore_from_releases` | saves this host's built package out of the conan cache, and restores a member's from its release | nanobind |
 
 ### What leaves the public surface, and the break each causes
 
