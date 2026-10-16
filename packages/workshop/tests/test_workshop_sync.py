@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 
+from livery.workshop._packages import Package
 from livery.workshop._sync import sync_workspace
 from workshop_links import link_entries as materialise
 
@@ -317,7 +318,6 @@ def test_the_sync_phase_runs_a_step_once_or_for_each_package_holding_its_extensi
     from livery.workshop import _lifecycle
     from livery.workshop import _steps as registry
     from livery.workshop._extensions import declaration, register_declared
-    from livery.workshop._packages import Package
     from workshop_extension_fakes import fake_extensions, fake_steps
 
     fake_extensions(
@@ -389,6 +389,85 @@ def test_the_sync_phase_runs_a_step_once_or_for_each_package_holding_its_extensi
         "prof.main for packages/listed",
         "prof.main for packages/over",
     ]
+
+
+@pytest.fixture
+def conan_profiles(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Path]]:
+    """Conan's steps registered as the mount registers them; each profile call's root.
+
+    The profile call is faked where conan's sync step reads it, so no
+    conan starts.
+    """
+    from livery.workshop import _steps as registry
+    from livery.workshop._extensions import declaration, register_declared
+
+    made: list[Path] = []
+
+    def _made(cwd: Path) -> list[str]:
+        made.append(cwd)
+        return []
+
+    monkeypatch.setattr("livery.extensions.conan._steps._package.ensure_profile", _made)
+    found = declaration("conan")
+    assert found is not None
+    state = registry.snapshot()
+    register_declared("conan", found.additions)
+    yield made
+    registry.restore(state)
+
+
+def _member(root: Path, name: str, *extensions: str) -> Package:
+    return Package(
+        directory=root / "packages" / name,
+        path=f"packages/{name}",
+        name=name,
+        depends=(),
+        extensions=extensions,
+    )
+
+
+# conan's profile step names conan: a sync over packages holding none
+# makes no profile, and one over any number holding it makes it once.
+
+
+def test_a_sync_over_packages_holding_no_conan_makes_no_profile(
+    tmp_path: Path, conan_profiles: list[Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _lifecycle
+
+    _lifecycle.sync((), tmp_path)
+    _lifecycle.sync(
+        (_member(tmp_path, "plain"), _member(tmp_path, "tool", "python")), tmp_path
+    )
+    assert conan_profiles == []
+    said = capsys.readouterr().out.splitlines()
+    assert said.count("  sync.conan: no package holds conan; not run") == 2
+
+
+def test_a_sync_over_two_packages_holding_conan_makes_the_profile_once(
+    tmp_path: Path, conan_profiles: list[Path]
+) -> None:
+    from livery.workshop import _lifecycle
+
+    # One lists conan, and nanobind's set holds conan through its
+    # requirement.
+    everyone = (
+        _member(tmp_path, "cpp", "conan"),
+        _member(tmp_path, "native", "nanobind"),
+        _member(tmp_path, "tool", "python"),
+    )
+    _lifecycle.sync(everyone, tmp_path)
+    assert conan_profiles == [tmp_path]
+
+
+def test_a_sync_over_one_package_holding_conan_makes_the_profile_once(
+    tmp_path: Path, conan_profiles: list[Path]
+) -> None:
+    from livery.workshop import _lifecycle
+
+    everyone = (_member(tmp_path, "cpp", "conan"), _member(tmp_path, "tool", "python"))
+    _lifecycle.sync(everyone, tmp_path)
+    assert conan_profiles == [tmp_path]
 
 
 def test_sync_runs_where_git_has_no_history(

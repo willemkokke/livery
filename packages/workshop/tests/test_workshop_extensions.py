@@ -132,7 +132,11 @@ def test_a_branded_builtin_extension_is_the_apps_to_mount(
 
 
 def test_this_workspace_lists_its_extensions_and_never_the_base() -> None:
+    from workshop_installed import skip_unless_installed
+
     assert workspace_root(ROOT / "packages") == ROOT
+    # docs is in the set through mkdocstrings' declaration.
+    skip_unless_installed("mkdocstrings")
     # The installed set, in composition order: the root's set, docs
     # through mkdocstrings among it, and python, which the packages' sets
     # hold.

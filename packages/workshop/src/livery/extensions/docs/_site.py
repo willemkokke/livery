@@ -44,7 +44,11 @@ from typing import Annotated
 import livery.toolroom.tools as tools
 from livery import git
 from livery.extensions.docs._config import Scope, joined
-from livery.extensions.docs._contract import docs_table, publish_seam
+from livery.extensions.docs._contract import (
+    docs_table,
+    generator_outputs,
+    publish_seam,
+)
 from livery.extensions.docs._navblocks import (
     GENERATED,
     GENERATED_DIR,
@@ -65,14 +69,14 @@ from livery.footman import doc, fail, group
 from livery.workshop import (
     HUMAN,
     Package,
-    PhaseContext,
     answer,
     discover_packages,
     guidance,
     read_contract,
+    release_tag,
+    run_phase,
     shipped_content,
 )
-from livery.workshop._packages import release_tag
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
 SITE_CONFIG = "zensical.toml"
@@ -774,7 +778,13 @@ def _extension_block(root: Path, *, relative_to: str = ".") -> list[str]:
 
 
 def overrides_template(root: Path) -> str:
-    """The rendered theme override: link-preview tags, instance facts.
+    """The site's theme override: link-preview tags, instance facts.
+
+    The extension's ``[fragments]`` render for ``overrides/main.html``,
+    so ``fm sync`` writes the file at the root while docs is listed,
+    and the drift check keeps it matching. It opens with the
+    provenance header every generated file carries, in Jinja's comment
+    form.
 
     The brand leads on the home page, because that is the URL that
     gets posted and a feed truncates from the right; elsewhere the
@@ -783,6 +793,14 @@ def overrides_template(root: Path) -> str:
     a preview is fetched by someone else's server, which has no page to
     resolve a relative path against.
     """
+    # Imported here: the module that serves the header registers the
+    # base's provenance verbs, which the docs plugin's tasks must not carry.
+    from livery.workshop import generated_header
+
+    header = "".join(
+        "  " + line.removeprefix("# ") + "\n"
+        for line in generated_header("#").splitlines()
+    )
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
     description = str(table.get("description", ""))
@@ -804,8 +822,12 @@ def overrides_template(root: Path) -> str:
         .replace("__CARD__", card)
     )
     return (
-        (
-            """{% extends "base.html" %}
+        "{#\n"
+        + header
+        + "#}\n"
+        + (
+            (
+                """{% extends "base.html" %}
 
 {% block extrahead %}
   {% set page_title = page.meta.title
@@ -829,9 +851,10 @@ def overrides_template(root: Path) -> str:
   <meta name="twitter:description" content="{{ description }}">__IMAGE__
 {% endblock %}
 """
+            )
+            .replace("__IMAGE__", image_block)
+            .replace("__CARD__", "summary_large_image" if card else "summary")
         )
-        .replace("__IMAGE__", image_block)
-        .replace("__CARD__", "summary_large_image" if card else "summary")
     )
 
 
@@ -1564,12 +1587,15 @@ def run_site_phase(root: Path, phase: str) -> None:
     ``[for.docs]`` table, each registered while it applies. A failing
     step turns the verb red once every step ran, the step named in the
     walk's lines. A phase with no registered step runs nothing.
-    """
-    from livery.workshop._phases import run_registered
 
-    run_registered(
-        PhaseContext(root=root, packages=discover_packages(root), phase=phase)
-    )
+    Before the steps run, what a step that stopped running wrote
+    outside the generated trees goes, wherever it wrote: each step
+    declares those paths under ``outputs``, and in the docs phase each
+    generator a package lists under ``[docs] generators`` declares its
+    own (`generator_outputs`).
+    """
+    outputs = generator_outputs(root) if phase == DOCS_PHASE else ()
+    run_phase(root, phase, outputs=outputs)
 
 
 docs_group = group("docs", help="The workspace's documentation site")

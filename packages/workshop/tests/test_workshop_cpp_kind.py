@@ -199,6 +199,53 @@ def test_a_profile_conan_cannot_show_is_named_and_kept(
     assert _FORCE not in calls
 
 
+def test_two_calls_at_once_detect_the_profile_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two conan builds side by side each make the profile first. The
+    # second call waits for the first, finds the profile it made, and
+    # starts no conan: two detections against one conan home race.
+    import threading
+
+    home = tmp_path / "conan-home"
+    monkeypatch.setenv("CONAN_HOME", str(home))
+    profile = home / "profiles" / "default"
+    first = threading.current_thread()
+    calls: list[tuple[str, ...]] = []
+    reached = threading.Event()
+    second: list[threading.Thread] = []
+    answered: list[list[str]] = []
+
+    def _second_call() -> None:
+        answered.append(_conan.ensure_profile(tmp_path))
+
+    def _fake(cwd: Path, *args: str, env: object = None) -> _Said:
+        del cwd, env
+        calls.append(args)
+        if threading.current_thread() is not first:
+            reached.set()
+        if args == _SHOW:
+            return _Said(stdout=json.dumps({"host": {"settings": _DETECTED}}))
+        assert args == _EXIST_OK
+        if not second:
+            # The second call starts while the first detects, and has
+            # long enough to reach conan, were it let through.
+            thread = threading.Thread(target=_second_call)
+            second.append(thread)
+            thread.start()
+            reached.wait(0.2)
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text("[settings]\ncompiler=apple-clang\ncompiler.version=21\n")
+        return _Said()
+
+    monkeypatch.setattr(_conan, "_conan", _fake)
+    assert _conan.ensure_profile(tmp_path) == []
+    second[0].join()
+    assert not reached.is_set()
+    assert answered == [[]]
+    assert calls == [_EXIST_OK, _SHOW]
+
+
 def test_a_profile_that_names_no_compiler_is_detected_again_and_said(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

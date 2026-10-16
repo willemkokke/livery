@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from extensions_mkdocstrings_workspace import fake_extensions
 from livery.extensions.mkdocstrings._refs import (
     Reference,
     docrefs_run,
@@ -14,8 +15,7 @@ from livery.extensions.mkdocstrings._refs import (
     reference_problems,
 )
 from livery.footman import Failed
-from livery.workshop._phases import PhaseContext
-from workshop_extension_fakes import fake_extensions
+from livery.workshop import PhaseContext
 
 IMPL = '''"""The widget's home."""
 

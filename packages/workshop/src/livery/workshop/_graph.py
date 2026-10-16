@@ -53,7 +53,7 @@ def dependencies_closure(
     """*seeds* (package paths) plus everything they depend on, transitively.
 
     Follows the ``[[depends]]`` edges to a fixed point, and answers in
-    discovery order; [livery.workshop._graph.order_topologically][]
+    discovery order; [livery.workshop.order_topologically][]
     puts each dependency before its dependents.
     """
     by_path = {package.path: package for package in packages}
@@ -354,7 +354,7 @@ def graph_affected(base: str = "main") -> None:
 
 
 def order_topologically(packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """*packages* with every dependency before its dependents.
+    """*packages* in release order: every dependency before its dependents.
 
     Kahn's walk over the ``[[depends]]`` edges restricted to the given
     set; ties keep the input order so the result is deterministic. A

@@ -273,6 +273,29 @@ def test_a_name_nothing_declares_orders_nothing() -> None:
     assert order(("a",), lookup, edges=[("a", "zed"), ("zed", "a")]) == ("a",)
 
 
+def test_the_nearest_extensions_are_the_ones_no_other_requires() -> None:
+    from livery.workshop import nearest_extensions
+
+    # The fallbacks first: requires that close a cycle leave none nearest,
+    # and a name nothing declares requires nothing.
+    cycle = _lookup(_declared("a", requires=("b",)), _declared("b", requires=("a",)))
+    assert nearest_extensions(("a", "b"), cycle) == ()
+    assert nearest_extensions(("ghost",), cycle) == ("ghost",)
+    lookup = _lookup(
+        _declared("theme", requires=("brand",)),
+        _declared("brand", requires=("base",)),
+        _declared("base"),
+        _declared("other"),
+    )
+    # A requirement met through another is not nearest; two that neither
+    # requires are both nearest, in the order given, each once.
+    assert nearest_extensions(("base", "theme", "brand"), lookup) == ("theme",)
+    assert nearest_extensions(("other", "base", "theme", "other"), lookup) == (
+        "other",
+        "theme",
+    )
+
+
 def test_a_metadata_line_that_names_no_distribution_is_read_past() -> None:
     from livery.workshop.testing._conformance import (
         _required,  # pyright: ignore[reportPrivateUsage]
@@ -399,6 +422,27 @@ def test_the_mount_and_answers_follow_composition_order_whatever_the_list_order(
         "  acme.native",
         "    packages: packages/core",
     ]
+
+
+def test_a_package_s_set_is_in_composition_order_whatever_its_list_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import discover_packages, extension_set
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        native=_composing("native", PACKAGE + 'requires = ["acme.zulu"]\n'),
+        zulu=_composing("zulu"),
+        alpha=_composing("alpha"),
+    )
+    root_contract(tmp_path, "[]")
+    for listed in ('["acme.native", "acme.alpha"]', '["acme.alpha", "acme.native"]'):
+        package_contract(tmp_path, "core", listed)
+        (core,) = discover_packages(tmp_path)
+        # Each after what it requires, ties alphabetical: alpha first, and
+        # zulu before native, which requires it.
+        assert extension_set(core) == ("acme.alpha", "acme.zulu", "acme.native")
 
 
 def test_outside_a_workspace_the_stack_is_the_base_alone(

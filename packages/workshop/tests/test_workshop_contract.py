@@ -118,6 +118,33 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
     assert _contract.load_contract(member)["docs"] == {"extra-css": []}
 
 
+def test_a_key_of_an_installed_extension_loads_while_a_listed_one_is_not_installed(
+    tmp_path: Path,
+) -> None:
+    # The refusal first: every listed extension installed, and docs
+    # among none of their sets.
+    path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
+    assert "docs is a key of docs" in _refusal(lambda: _contract.load_contract(path))
+    # A listed extension no installed distribution declares may require
+    # docs, which is unknown until it is installed: neither the root's
+    # table nor a package's refuses meanwhile.
+    member = _workspace(
+        tmp_path, "", 'extensions = ["python"]\nname = "m"\n[docs]\nextra-css = []\n'
+    )
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.absent"]\n\n[docs]\ntitle = "Site"\n'
+    )
+    assert _contract.load_contract(path)["docs"] == {"title": "Site"}
+    assert _contract.load_contract(member)["docs"] == {"extra-css": []}
+    # A key no installed extension declares still refuses.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.absent"]\n\n[site]\ntitle = "Site"\n'
+    )
+    assert "the top level has no key 'site'" in _refusal(
+        lambda: _contract.load_contract(path)
+    )
+
+
 def test_a_wrong_type_refuses_naming_the_allowed_values(tmp_path: Path) -> None:
     path = _workspace(
         tmp_path,

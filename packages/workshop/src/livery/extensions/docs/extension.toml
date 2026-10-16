@@ -52,9 +52,10 @@ doc = "the verbs that write the package's pages: a verb's name, or a table with 
 
 [contract.package.docs."generators[]"]
 types = ["str", "table"]
-doc = "one generator: a verb's name, or a table with the verb and the system packages it needs"
+doc = "one generator: a verb's name, or a table with the verb, the system packages it needs and the paths it writes"
 verb = { types = ["str"], doc = "the verb, a task the package ships" }
 requires = { types = ["strs"], doc = "the system packages the verb needs on a docs machine" }
+outputs = { types = ["strs"], doc = "the paths the verb writes outside the generated trees, each relative to the root, a directory ending in /, or package/<path> for the path in each package; a build after no listed generator declares one removes it; none when absent" }
 
 # Where the package sits in the site's Packages tree.
 [contract.package.docs.name]
@@ -100,7 +101,10 @@ inputs = { reads = ["docs/**/*.md", "packages/**/docs/**/*.md"], on-removal = tr
 # and any other in its [for.docs] table. The gate never runs it, and it
 # has no verb of its own. Before it runs, the verb removes every
 # generated tree, docs/_generated/ at the root and in each package, so
-# a step that no longer runs leaves no page and no nav block behind.
+# a step that no longer runs leaves no page and no nav block behind. A
+# step that writes elsewhere names those paths under outputs, and a
+# generator in its [docs] generators entry; the phase's run removes
+# each one no running step or listed generator declares any more.
 [phases.docs]
 level = "workspace"
 gated = false
@@ -108,10 +112,13 @@ verb = false
 
 # The task reference of every package that advertises footman.tasks
 # entry points. Off unless the root contract turns it on with
-# [phases.docs.task-reference] enabled = true.
+# [phases.docs.task-reference] enabled = true. Its pages go into each
+# package's generated tree, and the redirect page of each task's
+# uniform address into the root's docs/tasks/.
 [phases.docs.task-reference]
 main = "livery.extensions.docs._taskref:task_reference_run"
 enabled = false
+outputs = ["docs/tasks/"]
 
 # The verbs each package names under [docs] generators, run at the root
 # in the packages' order, each verb once.
@@ -127,6 +134,11 @@ main = "livery.extensions.docs._steps:generators_run"
 level = "workspace"
 gated = false
 verb = false
+
+# The site's theme override at the root, the link-preview tags and the
+# instance's facts, written while docs is listed.
+[fragments."overrides/main.html"]
+render = "livery.extensions.docs._site:overrides_template"
 
 # The strict site build: the gate point's verdict waits for it. The
 # tags are fetched so the release view renders from the receipts; a

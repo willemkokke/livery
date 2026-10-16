@@ -319,6 +319,7 @@ def test_the_checked_in_records_build_and_the_bench_declares_the_generator():
     site's generator runs, so it must succeed on the checkout as it is.
     """
     import tempfile
+    import tomllib
 
     from livery.toolroom.bench import _tasks as tools
 
@@ -326,9 +327,12 @@ def test_the_checked_in_records_build_and_the_bench_declares_the_generator():
     if not records.is_dir():
         pytest.skip("the checked-in records are a checkout fact")
     contract = records.parent / "packages" / "toolroom-bench" / "workshop.toml"
-    assert 'generators = ["toolroom.index.build"]' in contract.read_text(
-        encoding="utf-8"
-    )
+    declared = tomllib.loads(contract.read_text(encoding="utf-8"))["docs"]
+    # The index lands under the root's docs/tools/, which the generator
+    # declares, so the site's build removes it once nothing lists it.
+    assert declared["generators"] == [
+        {"verb": "toolroom.index.build", "outputs": ["docs/tools/"]}
+    ]
     with tempfile.TemporaryDirectory() as scratch:
         built = _index.build(records, pathlib.Path(scratch) / "index")
     assert len(built.rebuilt) >= 31

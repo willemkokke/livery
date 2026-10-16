@@ -148,11 +148,10 @@ def _nearest(answers: Mapping[str, Any], lookup: Lookup) -> Any:
     Its answer is the nearest: it builds on the others. None when no
     extension answers with a value.
     """
-    from livery.workshop._composition import implied
+    from livery.workshop._composition import nearest_extensions
 
     named = {name: value for name, value in answers.items() if value is not None}
-    required = implied(named, lookup)
-    nearest = [name for name in named if name not in required]
+    nearest = nearest_extensions(named, lookup)
     if len(nearest) > 1:
         raise QueryError(
             f"{' and '.join(nearest)} both answer, and neither requires the other;"

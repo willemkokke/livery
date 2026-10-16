@@ -9,7 +9,7 @@ configuration, and skips each member whose files and dependencies are
 unchanged since its last good build in this checkout; the record of
 those builds lives under ``.workshop/.cache/run/``. Then it runs the
 ``run`` phase through the one walk
-([livery.workshop._phases.run_phase][]): every step the
+([livery.workshop._phases.walk_steps][]): every step the
 package's set adds to it, except that of the extensions answering
 ``executables`` only the owner's steps run. The engine gives the phase
 the executable under ``executable``, which a step reads as it reads
@@ -105,7 +105,12 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
     from livery.workshop._composition import closure
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._packages import discover_packages
-    from livery.workshop._phases import PhaseContext, PhaseError, phase_steps, run_phase
+    from livery.workshop._phases import (
+        PhaseContext,
+        PhaseError,
+        phase_steps,
+        walk_steps,
+    )
     from livery.workshop._queries import EXECUTABLES, QueryError, answer, answers
 
     packages = discover_packages(root)
@@ -147,7 +152,7 @@ def start(root: Path, target: str, arguments: tuple[str, ...], cwd: Path) -> int
         arguments=arguments,
     )
     try:
-        ctx = run_phase(ctx, steps, inputs={"run": {"executable": executable}})
+        ctx = walk_steps(ctx, steps, inputs={"run": {"executable": executable}})
     except PhaseError as error:
         fail(str(error))
     return ctx.exit_code
@@ -273,11 +278,11 @@ def _build(root: Path, member: Package, steps: tuple[StepRecord, ...]) -> None:
         Failed: when the steps cannot run as declared, with the walk's
             reason.
     """
-    from livery.workshop._phases import PhaseContext, PhaseError, run_phase
+    from livery.workshop._phases import PhaseContext, PhaseError, walk_steps
 
     ctx = PhaseContext(root=root, packages=(member,), package=member, phase="build")
     try:
-        run_phase(ctx, steps, inputs=DEVELOP_INPUTS)
+        walk_steps(ctx, steps, inputs=DEVELOP_INPUTS)
     except PhaseError as error:
         fail(str(error))
 

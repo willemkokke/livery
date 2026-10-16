@@ -258,7 +258,7 @@ class Declaration:
             tables add, by phase, each the one step record whatever
             the phase's level: a package-level phase's run through the
             walk of a package's phase
-            ([livery.workshop._phases.run_phase][]), and those the
+            ([livery.workshop._phases.walk_steps][]), and those the
             mount registers are among ``additions`` too.
         query_specs: The queries it declares, by name.
         queries: The queries it answers, each query's name to the
@@ -895,7 +895,8 @@ class _Reader:
         """The record from a step table's shared keys, its body resolved.
 
         ``scope``, ``claims``, ``extensions``, ``options``, ``fragments``,
-        ``inputs``, ``after``, ``tools``, ``tests-only`` and ``flags``;
+        ``inputs``, ``after``, ``tools``, ``tests-only``, ``flags`` and
+        ``outputs``;
         ``step`` sets the step's own fields after.
         """
         from livery.workshop._fragments import verify
@@ -944,6 +945,7 @@ class _Reader:
             claims=tuple(claims),
             flags=tuple(entry.get("flags", ())),
             inputs=inputs,
+            outputs=self.outputs(entry.get("outputs", ()), (*where, "outputs")),
         )
         for option in record.options:
             if option.kind not in ("bool", "str", "int", "strs"):
@@ -956,6 +958,21 @@ class _Reader:
         except ValueError as error:
             raise self.refuse((*where, "fragments"), f"refuses: {error}") from error
         return record
+
+    def outputs(self, listed: list[str], where: tuple[str, ...]) -> tuple[str, ...]:
+        """The paths a step declares it writes, each below the root and never docs/.
+
+        Refuses an output that leaves the root, names the root or a
+        package itself, or names ``docs/`` itself, which holds the
+        authored pages.
+        """
+        from livery.workshop._phases import output_refusal
+
+        for output in listed:
+            refusal = output_refusal(output)
+            if refusal:
+                raise self.refuse(where, refusal)
+        return tuple(listed)
 
     def step_bodies(
         self, entry: dict[str, Any], where: tuple[str, ...]

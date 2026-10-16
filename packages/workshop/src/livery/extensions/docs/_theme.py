@@ -9,12 +9,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from livery.workshop import Query
+from livery.workshop import Query, nearest_extensions
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
-
-    from livery.workshop._declaration import Declaration
+    from collections.abc import Mapping
 
 #: The query deciding the theme block's values. The base's block is
 #: the default; a theme extension answers with a table of the keys it
@@ -66,16 +64,15 @@ THEME_DEFAULT: dict[str, object] = {
 }
 
 
-def merge_theme(
-    answers: Mapping[str, object], lookup: Callable[[str], Declaration | None]
-) -> dict[str, object]:
+def merge_theme(answers: Mapping[str, object], lookup: object) -> dict[str, object]:
     """The theme's values: the default, each key from the nearest answer setting it.
 
     The ``docs.theme`` query's combine rule, called with the answers by
-    extension. A key one answer sets takes that answer's value. A key
-    several answers set takes the value of the one no other of them
-    requires, which builds on the others, so neither list's order
-    decides it.
+    extension and the lookup it hands on to
+    [livery.workshop.nearest_extensions][]. A key one answer sets takes
+    that answer's value. A key several answers set takes the value of
+    the one no other of them requires, which builds on the others, so
+    neither list's order decides it.
 
     Raises:
         ValueError: when an answer is not a table, names a key outside
@@ -83,8 +80,6 @@ def merge_theme(
             while neither requires the other; the message names the
             extensions, and the query is named by the asker.
     """
-    from livery.workshop._composition import implied
-
     setters: dict[str, dict[str, object]] = {}
     for extension, value in answers.items():
         if not isinstance(value, dict):
@@ -102,8 +97,7 @@ def merge_theme(
             setters.setdefault(key, {})[extension] = setting
     theme: dict[str, object] = dict(THEME_DEFAULT)
     for key, held in setters.items():
-        required = implied(held, lookup)
-        nearest = [name for name in held if name not in required]
+        nearest = nearest_extensions(held, lookup)
         if len(nearest) > 1:
             raise ValueError(
                 f"{' and '.join(nearest)} both set {key}, and neither requires the"

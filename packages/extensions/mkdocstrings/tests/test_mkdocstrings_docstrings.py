@@ -13,9 +13,8 @@ from livery.extensions.mkdocstrings._docstrings import (
     undocumented_exports,
 )
 from livery.footman import Failed
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _steps as registry
-from livery.workshop._packages import Package
-from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import steps_by_name
 
 
@@ -80,6 +79,33 @@ def test_an_undocumented_export_is_named(
         docstrings_run(ctx)
     # A scoped gate judges its subset alone.
     docstrings_run(PhaseContext(root=tmp_path, packages=(package,), subset=()))
+
+
+def test_an_undocumented_export_of_each_root_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A wheel shipping a second root, a package under a namespace beside
+    # the first, publishes the second's exports as well.
+    member = _member(
+        tmp_path, '__all__ = ["bare"]\n\n\ndef bare() -> None:\n    pass\n'
+    )
+    second = member / "src" / "acme" / "extensions" / "site"
+    second.mkdir(parents=True)
+    (second / "__init__.py").write_text(
+        '__all__ = ["bare", "documented"]\n\n\n'
+        'def documented() -> None:\n    """Say something."""\n\n\n'
+        "def bare() -> None:\n    pass\n"
+    )
+    # A package under a root is that root's, never a root of its own.
+    (member / "src" / "acme" / "thing" / "sub").mkdir()
+    (member / "src" / "acme" / "thing" / "sub" / "__init__.py").write_text(
+        '__all__ = ["bare"]\n\n\ndef bare() -> None:\n    pass\n'
+    )
+    monkeypatch.setenv("PYTHONPATH", str(member / "src"))
+    assert undocumented_exports(tmp_path, [member]) == [
+        "acme.thing.bare",
+        "acme.extensions.site.bare",
+    ]
 
 
 def test_a_member_that_does_not_import_refuses_naming_the_error(

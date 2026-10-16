@@ -17,16 +17,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from livery.extensions.docs._config import ALL_MEMBERS, Scope, members_policy
+from livery.extensions.docs import ALL_MEMBERS, MEMBERS, Scope
 from livery.extensions.mkdocstrings._pages import (
     INVENTORIES,
     OPTIONS,
     documented,
     sources,
 )
+from livery.workshop import answer
 
 if TYPE_CHECKING:
-    from livery.extensions.docs._config import Writer
+    from livery.extensions.docs import Writer
 
 #: The mkdocstrings handler the pages' directives are rendered with.
 HANDLER = "python"
@@ -53,7 +54,7 @@ def options(root: Path) -> dict[str, object]:
     extensions answer: ``all`` adds ``filters``, an empty list.
     """
     found = dict(OPTIONS)
-    if members_policy(root) == ALL_MEMBERS:
+    if answer(root, MEMBERS) == ALL_MEMBERS:
         found["filters"] = []
     return found
 

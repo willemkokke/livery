@@ -1,25 +1,20 @@
 """The docs extension's verbs, loaded through the extension's entry point.
 
 Importing this module registers the ``docs`` group under the extension's
-identity, declares the site's override template as a file the CI render
-writes, and registers the ``pre_tasks`` hook that links task names to
-their pages on the site. The extension's steps, queries and CI jobs are
-declared in its ``extension.toml``. The base's plugin never imports it.
+identity and the ``pre_tasks`` hook that links task names to their pages
+on the site. The extension's steps, queries, CI jobs and the site's
+theme override are declared in its ``extension.toml``. The base's
+plugin never imports it.
 """
 
 from __future__ import annotations
 
 import tomllib
 
-from livery.extensions.docs._site import docs_group, overrides_template
+from livery.extensions.docs._site import docs_group
 from livery.extensions.docs._taskref import task_links
 from livery.footman import Invocation, pre_tasks
 from livery.workshop import workspace_root
-from livery.workshop._site_files import register_site_file
-
-EXTENSION = "livery.extensions.docs"
-
-register_site_file("overrides/main.html", overrides_template, extension=EXTENSION)
 
 
 @pre_tasks

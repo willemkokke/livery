@@ -220,12 +220,20 @@ def judge(
     for the editor, in the judge's words
     ([livery.workshop._schema.problems][]).
 
+    A set that holds an extension no installed distribution declares
+    is judged as ``None``: what that extension requires is unknown
+    until it is installed, so no installed owner's key can be called
+    unlisted. A key no installed owner declares still refuses. The
+    mount names the extension, and `fm sync` installs it, or refuses
+    naming it, before it renders anything.
+
     Args:
         data: The parsed contract.
         contract: Which contract it is.
         where: The file, for the caller's message.
-        listed: The extensions the root lists, the base among them;
-            ``None`` takes every installed owner as listed.
+        listed: The extensions the contract's lists and what they
+            require hold, the base among them; ``None`` takes every
+            installed owner as listed.
 
     Returns:
         One line per problem, in the contract's order.
@@ -233,7 +241,18 @@ def judge(
     from livery.workshop._schema import composed, problems
 
     del where
+    if listed is not None and _not_installed(listed):
+        listed = None
     return problems(composed(contract, listed), data)
+
+
+def _not_installed(listed: frozenset[str]) -> bool:
+    """Whether *listed* holds an extension no installed distribution declares."""
+    from livery.workshop._extensions import installed_declaration
+
+    return any(
+        name not in ALWAYS and installed_declaration(name) is None for name in listed
+    )
 
 
 def listed_extensions(root_data: dict[str, Any]) -> frozenset[str]:

@@ -29,12 +29,13 @@ registry = "livery.extensions.conan._answers:registry"
 
 # The steps this extension adds to the phases, one per phase, each
 # named for the extension. The sync step runs before `uv sync` installs
-# a member whose build goes through the cmake-conan provider, once for
-# each package whose set holds conan: conan's default profile names a
-# compiler first, or the provider writes one that names none.
+# a member whose build goes through the cmake-conan provider: conan's
+# default profile names a compiler first, or the provider writes one
+# that names none. The workspace has one conan home and so one default
+# profile, so the step runs once over the workspace while a package's
+# set holds conan, however many do.
 [phases.sync.conan]
 main = "livery.extensions.conan._steps:profile"
-scope = "package"
 extensions = ["conan"]
 
 [phases.stamp.conan]

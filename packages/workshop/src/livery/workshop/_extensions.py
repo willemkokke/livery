@@ -351,6 +351,28 @@ def _declared_steps(found: Declaration) -> list[StepRecord]:
     return records
 
 
+def installed_record(name: str) -> StepRecord | None:
+    """The step *name* as an installed extension declares it; None when none does.
+
+    *name* is ``<phase>.<step>``. The installed extensions are read in
+    name order, each one's top-level tables and its ``[for.<target>]``
+    tables alike, and the first that declares the step answers, its
+    record naming it. A declaration that cannot be read declares
+    nothing here: the mount and ``layering.graph`` name it.
+    """
+    for extension in installed_extensions():
+        try:
+            found = _readable(extension)
+        except DeclarationError:
+            continue
+        if found is None:
+            continue
+        for record in _declared_steps(found):
+            if record.name == name:
+                return replace(record, extension=extension)
+    return None
+
+
 def _named_by_steps() -> frozenset[str]:
     """The extensions a step of an installed extension names in ``extensions``.
 

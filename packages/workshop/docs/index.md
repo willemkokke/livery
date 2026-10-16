@@ -38,7 +38,11 @@ the wrong type and a value outside its allowed set each refuse on
 read, naming the file, the key, what the table takes, and the nearest
 spelling. An extension's keys are taken in the root's contract while
 the installed set holds it, and in a package's contract while the
-root's set or the package's own set holds it. The base declares its
+root's set or the package's own set holds it. While a list names an
+extension no installed distribution declares, what that extension
+requires is unknown, so no installed extension's key refuses as one no
+list takes until `fm sync` installs it; a key no installed extension
+declares still refuses. The base declares its
 own keys the way an extension does, in the `contract.toml` its
 package ships beside its code, the keys of `extension.toml` among
 them.
@@ -334,10 +338,14 @@ The base declares its phases in the `[phases]` section of its
 `typecomplete`, `examples`, `drift`, `provenance`, `layering` and
 `test`, are what `fm check` runs, and each has a verb, `fm <phase>`,
 with a sub-task per step. `fm sync` runs `sync` once over the
-workspace, after it installs the tools and before `uv sync`: a step
-there runs once, and one that declares `scope = "package"` runs once
-for each package whose set holds an extension its `extensions` names.
-So an extension the root lists adds to it as one a package lists does.
+workspace, after it installs the tools and before `uv sync`, and an
+extension the root lists adds steps to it as one a package lists does.
+A step there runs once, and one that declares `scope = "package"` runs
+once for each package whose set holds an extension its `extensions`
+names. A step that runs once and names `extensions` runs while a
+package's set holds one of them, and not at all while none does: conan's
+step makes the one default profile once, however many packages hold
+conan.
 A package-level phase, `clean`, `build`, `stamp`, `publish`, `verify`
 or `run`, runs its steps once per package, and each extension of the
 package's set may add steps to it, as many as it needs:
@@ -668,45 +676,32 @@ the phase runs, the verb removes every generated tree, each package's
 `docs/_generated/` and the root's, which the phase's steps and the
 extension's own passes write again. So a step that no longer runs, its
 extension unlisted or the step turned off, leaves no page and no nav
-block behind.
+block behind. A step that writes elsewhere names those paths under its
+`outputs` key, each relative to the root or `package/<path>` for the
+path in each package, and a generator names its own in its `[docs]
+generators` entry, `{ verb = "...", outputs = ["docs/tools/"] }`. The
+task reference declares the root's `docs/tasks/`, where each task's
+redirect page lives, and coverage's step each package's `htmlcov/`.
+The phase's run removes each such path that no running step or listed
+generator declares any more, the extension behind it uninstalled
+included, and keeps the rest as their writers left them. An output
+that leaves the root, or names `docs/` itself, refuses when the
+extension mounts.
 `fm docs.publish` runs the `deploy` phase on the built site just before
 it publishes it, then puts each declared coverage report's tree into
 the site. A listed extension that requires docs adds its steps to
 either phase at its top level, and any other in its `[for.docs]`
 table, while docs is listed.
 
-The python API reference is an extension inside the workshop wheel,
-`livery.extensions.mkdocstrings`, listed as `mkdocstrings` after docs,
-which it requires. Its `mkdocstrings` step of the docs phase runs once
-for each package whose set holds python and writes the package's
-reference into its generated tree: a page per module of each of its
-roots under `api/`, public modules before private ones at every level,
-each page one directive the handler renders with the module's members,
-and the `api` nav block that lists them. The site places that block
-after the section's other entries, unless the package's `nav.toml`
-places it with a marker pair. A package that declines with
-`[docs] api = false` gets neither. The step's `paths` option names
-further directories, relative to the package, the python handler reads
-modules from after the package's sources, such as stubs a generator
-renders:
-
-```toml
-[phases.docs.mkdocstrings]
-paths = ["docs/_generated/stubs"]
-```
-
-The extension answers `docs.config` with the python handler's tables:
-the search paths of the packages the config covers, the inventories,
-with the published site's own for a preview, and the handler's
-options, with an empty filter list when `docs.members` answers `all`.
-A workspace that does not list it renders no API reference and no
-handler table, and installs no mkdocstrings: the extension answers
-`python.docs-group` with `mkdocstrings-python`, which also brings
-griffe, the library `lint.docrefs` reads the sources with. It also
-holds the two lint steps that judge the docstrings the reference
-publishes: `lint.docrefs`, every cross-reference in a docstring the
-site renders names an anchor the site renders, and `lint.docstrings`,
-every name a python package exports has a docstring.
+The python API reference is an extension of its own,
+`livery-extensions-mkdocstrings`, listed as `mkdocstrings`; it requires
+docs. Its step of the docs phase writes each python package's reference
+into the package's generated tree, a page per module and the `api` nav
+block that lists them, and it answers `docs.config` with the python
+handler's tables. It also holds the two lint steps that judge the
+docstrings the reference publishes, `lint.docrefs` and
+`lint.docstrings`. A workspace that does not list it renders no API
+reference and installs no mkdocstrings.
 
 The coverage extension, `livery.extensions.coverage`, ships in the
 workshop wheel, listed as `coverage`, and adds a step to each of those

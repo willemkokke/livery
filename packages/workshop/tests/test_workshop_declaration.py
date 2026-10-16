@@ -193,6 +193,45 @@ def test_a_claim_without_a_category_and_a_fragment_off_its_shape_refuse(
     )
 
 
+def test_a_declared_output_outside_the_root_or_naming_docs_refuses_at_mount(
+    package: Path,
+) -> None:
+    where = f"{package / 'extension.toml'}: phases.lint.acme.outputs names"
+    below_root = "an output is a path below the root, or package/<path> for the path"
+    for output, refusal in (
+        ("../out/", f"'../out/', which leaves the root; {below_root} in each package"),
+        (
+            "/srv/out",
+            f"'/srv/out', which leaves the root; {below_root} in each package",
+        ),
+        ("C:/out", f"'C:/out', which leaves the root; {below_root} in each package"),
+        (
+            "package/../../x",
+            f"'package/../../x', which leaves the root; {below_root} in each package",
+        ),
+        ("./", "'./', the root itself; an output is a path below it"),
+        ("package/", "'package/', each package itself; an output is a path below it"),
+        (
+            "docs/",
+            "'docs/', the root's docs/ itself, which holds the authored pages;"
+            " an output is a path below it",
+        ),
+        (
+            "package/docs",
+            "'package/docs', each package's docs/ itself, which holds"
+            " the authored pages; an output is a path below it",
+        ),
+    ):
+        refused = _refusal(package, STEP + f"outputs = [{output!r}]\n")
+        assert refused == f"{where} {refusal}", output
+    # A path below the root, or below each package, reads as declared.
+    declared = _declare(
+        package, STEP + 'outputs = ["docs/tasks/", "package/htmlcov/"]\n'
+    )
+    (record,) = declared.additions.steps
+    assert record.outputs == ("docs/tasks/", "package/htmlcov/")
+
+
 def test_a_step_reads_its_body_in_either_shape(package: Path) -> None:
     where = package / "extension.toml"
     # The refusals: no body, a body of the wrong kind for its phase, a

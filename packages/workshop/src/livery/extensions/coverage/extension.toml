@@ -41,10 +41,11 @@ doc = "whether anything judges the package's coverage; true when absent, and fal
 # coverage names an htmlcov report: each file's lines, branches,
 # functions and classes as coverage.py counts them. In the docs phase,
 # before the site builds, they are drawn from the data a gate run left
-# on the machine; a package no data reaches gets no tree, and its page
-# states the absence.
+# on the machine into the package's htmlcov/; a package no data reaches
+# gets no tree, and its page states the absence.
 [for.docs.phases.docs.coverage]
 main = "livery.extensions.coverage._pages:pages_run"
+outputs = ["package/htmlcov/"]
 
 # In the deploy phase, which docs.publish runs on the built site, they
 # are drawn again from main's coverage record, the union main's gate

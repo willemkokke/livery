@@ -131,8 +131,7 @@ def problems(context: RuleContext) -> list[str]:
     A package that holds the python extension is judged, each of its
     sources under ``src`` that the run reaches.
     """
-    from livery.workshop import _lifecycle
-    from livery.workshop._composition import extension_set
+    from livery.workshop import _lifecycle, extension_set
     from livery.workshop._packages import neighbours
 
     around = neighbours(context.packages)

@@ -14,6 +14,12 @@ The handler reads a package's modules from its sources and from the
 directories the step's ``paths`` option names, and its options and
 inventories are the ones the site's config writes
 (the ``docs.config`` answer in this extension's ``_config`` module).
+
+The pages and the block are data the docs extension reads: the
+generated tree is ``docs/_generated/`` in the package, and the block is
+the file ``nav.api.toml`` in it, a ``nav`` list of one-key tables, each
+a label to a page path inside the package's ``docs/``. This extension
+writes both itself.
 """
 
 from __future__ import annotations
@@ -22,26 +28,24 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from livery.extensions.docs._navblocks import (
-    GENERATED,
-    GENERATED_DIR,
-    nav_block_file,
-    write_nav_block,
+from livery.workshop import (
+    extension_set,
+    read_contract,
+    step_extensions,
+    step_option,
 )
-from livery.footman import fail
-from livery.workshop import read_contract
-from livery.workshop._packages import root_marks
 
 if TYPE_CHECKING:
     from livery.workshop import Package, PhaseContext
-    from livery.workshop._steps import StepRecord
-
-#: The extension's name, as a workspace lists it.
-EXTENSION = "mkdocstrings"
 
 #: The extension's step of the docs phase, whose ``paths`` option a
 #: package sets in its contract's ``[phases.docs.mkdocstrings]`` table.
 STEP = "docs.mkdocstrings"
+
+#: The package's generated tree under its ``docs/``, which the docs
+#: extension merges into the package's section on the site, stripping
+#: the tree's name from every link into it.
+GENERATED_DIR = "_generated"
 
 #: Where a package's API pages live in its generated tree, and so in its
 #: section on the site: ``packages/<member>/api/``.
@@ -72,38 +76,15 @@ OPTIONS: dict[str, object] = {
 }
 
 
-def step() -> StepRecord:
-    """The extension's step of the docs phase, as its declaration reads.
-
-    Read from the installed declaration rather than the registered
-    steps, since the site's config asks for a package's paths in a
-    process that may have mounted nothing.
-
-    Raises:
-        Failed: when no installed distribution declares the step,
-            naming it.
-    """
-    from livery.workshop._extensions import installed_declaration
-
-    found = installed_declaration(EXTENSION)
-    for record in found.additions.steps if found is not None else ():
-        if record.name == STEP:
-            return record
-    fail(
-        f"no installed {EXTENSION} extension declares the {STEP} step; install"
-        " the workshop release that ships it"
-    )
-
-
 def documented(package: Package) -> bool:
     """Whether the reference documents *package*, by the extensions its set holds.
 
     A package whose set holds an extension the step names, python, is
-    documented; any other is never asked.
+    documented; any other is never asked. The step is read from the
+    installed declaration in a process that mounted nothing, as the
+    site's config may be.
     """
-    from livery.workshop._composition import extension_set
-
-    return bool(set(step().extensions) & set(extension_set(package)))
+    return bool(set(step_extensions(STEP)) & set(extension_set(package)))
 
 
 def declines_api(package: Package) -> bool:
@@ -132,6 +113,21 @@ def _owned_root(package: Package, src: Path) -> Path | None:
     return None
 
 
+def roots(src: Path) -> list[Path]:
+    """The importable roots under *src*: each topmost directory with an ``__init__.py``.
+
+    Shallowest first, then by path. A directory with no ``__init__.py``
+    is a namespace and marks nothing, so a package under one is a root
+    of its own, and a package under a root is part of that root.
+    """
+    found: list[Path] = []
+    marks = sorted(src.rglob("__init__.py"), key=lambda path: (len(path.parts), path))
+    for mark in marks:
+        if not any(mark.parent.is_relative_to(root) for root in found):
+            found.append(mark.parent)
+    return found
+
+
 def pages(package: Package) -> list[tuple[str, str]]:
     """(page path, dotted import path) per module of each root, public first.
 
@@ -149,18 +145,15 @@ def pages(package: Package) -> list[tuple[str, str]]:
     if declines_api(package):
         return []
     src = package.directory / "src"
-    roots: list[Path] = []
-    if src.is_dir():
-        # Each topmost mark is a root; a mark under one is its package.
-        for mark in root_marks(src):
-            if not any(mark.parent.is_relative_to(root) for root in roots):
-                roots.append(mark.parent)
-    if not roots and src.is_dir():
+    if not src.is_dir():
+        return []
+    marked = roots(src)
+    if not marked:
         # A root with no __init__.py: the first module the package owns.
         owned = _owned_root(package, src)
-        roots = [] if owned is None else [owned]
+        marked = [] if owned is None else [owned]
     found: list[tuple[str, str]] = []
-    for index, root in enumerate(roots):
+    for index, root in enumerate(marked):
         prefix = "" if index == 0 else ".".join(root.relative_to(src).parts) + "/"
         found += [(prefix + page, dotted) for page, dotted in _root_pages(src, root)]
     return found
@@ -198,9 +191,7 @@ def declared_paths(package: Package) -> list[str]:
     package's sources: rendered stubs, for one. A value that is not a
     list of strings refuses naming the contract.
     """
-    from livery.workshop._steps import option_value
-
-    return list(cast("list[str]", option_value(step(), package, "paths")))
+    return list(cast("list[str]", step_option(STEP, package, "paths")))
 
 
 def sources(package: Package) -> list[str]:
@@ -226,10 +217,11 @@ def write_reference(package: Package) -> list[str]:
     """
     generated = package.directory / "docs" / GENERATED_DIR
     base = generated / API_DIR
+    block = generated / f"nav.{NAV_BLOCK}.toml"
     shutil.rmtree(base, ignore_errors=True)
     modules = pages(package)
     if not modules:
-        nav_block_file(generated, NAV_BLOCK).unlink(missing_ok=True)
+        block.unlink(missing_ok=True)
         return []
     for page, dotted in modules:
         target = base / page
@@ -237,11 +229,16 @@ def write_reference(package: Package) -> list[str]:
         target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
     entries = ['{ "API" = [']
     entries += [
-        f'    {{ "{dotted}" = "{GENERATED}{API_DIR}/{page}" }},'
+        f'    {{ "{dotted}" = "{GENERATED_DIR}/{API_DIR}/{page}" }},'
         for page, dotted in modules
     ]
     entries.append("] },")
-    write_nav_block(generated, NAV_BLOCK, entries)
+    body = "\n".join(entries)
+    block.write_text(
+        f"# The {NAV_BLOCK!r} nav block, emitted by its generator; the authored"
+        f" nav.toml places it.\nnav = [\n{body}\n]\n",
+        encoding="utf-8",
+    )
     return [page for page, _dotted in modules]
 
 

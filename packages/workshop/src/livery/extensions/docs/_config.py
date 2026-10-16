@@ -51,10 +51,13 @@ class Scope:
     published: str = ""
 
 
-#: What an answer to ``docs.config`` is: the function that writes an
-#: extension's tables for the config a `Scope` describes, as TOML text,
-#: empty when the extension has nothing to say there.
 Writer = Callable[[Scope], str]
+"""An answer to the ``docs.config`` query.
+
+The function that writes an extension's tables for the config a
+`Scope` describes, as TOML text, empty when the extension has nothing
+to say there.
+"""
 
 #: The query asking the installed extensions for their tables in the
 #: site's config: each answers with a `Writer`, and the answers keep

@@ -28,7 +28,7 @@ test`` runs the test phase's steps and ``fm test.pytest`` the one;
 the gate runs the steps of the phases that declare themselves gated.
 
 The gate runs the registered steps through the one walk
-([livery.workshop._phases.run_phase][]), each a footman step: the
+([livery.workshop._phases.walk_steps][]), each a footman step: the
 rewriters one at a time before any judge reads the tree
 ([livery.workshop._steps.rewriters][]), then every judge in one
 block ([livery.workshop._steps.judges][]), each with its own record.
@@ -157,7 +157,7 @@ class StepRecord:
             step that only judges.
         extensions: The extensions whose packages the step judges: a
             package whose set holds one of them
-            ([livery.workshop._composition.extension_set][]). A package step
+            ([livery.workshop.extension_set][]). A package step
             runs per such member; a workspace step names them so its
             tools and claims reach those packages, or leaves them empty.
         tests_only: Whether a package step still runs when the
@@ -224,6 +224,11 @@ class StepRecord:
         deletes: The steps of the base or of an extension this one
             requires that it deletes, each ``<owner>:<phase>.<step>``
             with the reason.
+        outputs: The paths the step writes, each relative to the root
+            or ``package/<path>`` for the path in each package. When
+            [livery.workshop.run_phase][] runs the step's phase, an
+            output no running step declares is removed first, so a step
+            that stops running leaves nothing behind wherever it wrote.
 
     """
 
@@ -251,6 +256,7 @@ class StepRecord:
     enabled: bool = True
     replaces: tuple[tuple[str, str], ...] = ()
     deletes: tuple[tuple[str, str], ...] = ()
+    outputs: tuple[str, ...] = ()
 
     @property
     def name(self) -> str:
@@ -987,16 +993,16 @@ def arguments_refusal(verb: str, records: Iterable[StepRecord]) -> str:
 def run_step(name: str, ctx: PhaseContext, *, fix: bool = False) -> None:
     """Run the step *name* over *ctx* through the walk: its judge, or its fix mode.
 
-    One step alone ([livery.workshop._phases.run_phase][]): a workspace
+    One step alone ([livery.workshop._phases.walk_steps][]): a workspace
     step runs once, a package step once per package it judges, and
     a step without a fix mode runs nothing in fix mode. The steps
     named in ``after`` are not run first: a caller running several
     steps by hand orders them itself, and the gate's walk brings them
     in ([livery.workshop._steps.with_earlier][]).
     """
-    from livery.workshop._phases import run_phase
+    from livery.workshop._phases import walk_steps
 
-    run_phase(ctx, (step_for(name),), fixing=fix)
+    walk_steps(ctx, (step_for(name),), fixing=fix)
 
 
 def with_earlier(names: tuple[str, ...]) -> tuple[StepRecord, ...]:
@@ -1540,14 +1546,81 @@ def scoped_suite(ctx: PhaseContext, name: str) -> Package | None:
     return None
 
 
+def declared_step(name: str) -> StepRecord:
+    """The step *name*: its registered record, else the installed declaration's.
+
+    A process that mounted nothing holds the base's own steps alone,
+    so an extension's step is read from the installed extension that
+    declares it, the first by name (`installed_record` in the
+    extensions module).
+
+    Raises:
+        Failed: when no installed extension declares the step, naming it.
+    """
+    record = _STEPS.get(name)
+    if record is not None:
+        return record
+    from livery.workshop._extensions import installed_record
+
+    found = installed_record(name)
+    if found is None:
+        fail(
+            f"no installed extension declares the step {name!r}; install the"
+            f" extension that declares it (`{prog()} sync` installs the ones the"
+            " workspace lists), or name a step an installed extension declares"
+        )
+    return found
+
+
 def step_option(name: str, package: Package, option: str) -> object:
     """What *package* sets for the step *name*'s *option*, or the option's default.
 
-    The deepest of the package's tables that sets it wins. Refuses an
-    option the step does not declare and a value of the wrong type,
-    naming the step's options.
+    The deepest of the package's tables that sets it wins. A step the
+    mount registered answers from its registration. A step it did not
+    register, as in a process that mounted nothing, answers from the
+    installed extension that declares it.
+
+    Raises:
+        Failed: when no installed extension declares the step, naming
+            it; when the step declares no *option*, naming its options;
+            or when the package sets a value of the wrong type, naming
+            the table.
     """
-    return option_value(step_for(name), package, option)
+    return option_value(declared_step(name), package, option)
+
+
+def step_extensions(name: str) -> tuple[str, ...]:
+    """The extensions the step *name* names in its ``extensions`` list.
+
+    The step judges a package whose set holds one of them
+    ([livery.workshop.extension_set][]), and every package when it
+    names none. The step is read as [livery.workshop.step_option][]
+    reads it: registered, else installed.
+
+    Raises:
+        Failed: when no installed extension declares the step, naming it.
+    """
+    return declared_step(name).extensions
+
+
+def step_enabled(root: Path, name: str) -> bool:
+    """Whether the step *name* is on in the workspace at *root*.
+
+    A step its extension declares on is always on. A step it declares
+    ``enabled = false`` is on while the root contract turns it on, with
+    ``enabled = true`` in the step's ``[phases.<phase>.<step>]`` table,
+    and registers only then. A package turns a step off for itself
+    with the step's ``enabled`` option, which
+    [livery.workshop.step_option][] reads.
+
+    Raises:
+        Failed: when no installed extension declares the step, naming it.
+    """
+    if declared_step(name).enabled:
+        return True
+    from livery.workshop._extensions import enabled_steps
+
+    return name in enabled_steps(root)
 
 
 def tested(units: tuple[Package, ...]) -> tuple[Package, ...]:
