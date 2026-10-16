@@ -21,7 +21,15 @@ from livery.toolroom.store import (
     Surface,
     _engine,
 )
-from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
+from livery.workshop import (
+    ToolReceipt,
+    _env_tasks,
+    _sync,
+    _tool_tasks,
+    _tools,
+    store_home,
+    tool_receipts,
+)
 from workshop_hosts import (  # noqa: F401
     HOSTS,
     lock_for_this_host,
@@ -171,13 +179,13 @@ def test_a_mode_outside_the_three_and_a_receipt_off_its_shape_refuse(
     receipts.mkdir(parents=True)
     (receipts / "tea.json").write_text("{not json")
     with pytest.raises(ValueError, match=r"tea\.json: not a receipt \("):
-        _tools.receipts(root)
+        tool_receipts(root)
     (receipts / "tea.json").write_text('{"schema": 9}')
     with pytest.raises(ValueError, match=r"not a receipt of schema 1"):
-        _tools.receipts(root)
+        tool_receipts(root)
     (receipts / "tea.json").write_text('{"schema": 1, "tool": "tea"}')
     with pytest.raises(ValueError, match=r"tea\.json: not a receipt \("):
-        _tools.receipts(root)
+        tool_receipts(root)
 
 
 def test_a_store_refusal_and_a_host_the_lock_lacks_refuse_naming_the_tool(
@@ -194,7 +202,7 @@ def test_a_store_refusal_and_a_host_the_lock_lacks_refuse_naming_the_tool(
     lines = _sync.materialise_tools(root)
     assert lines[0] == "  tools: 1 receipt(s), installed tea"
     assert lines[1].startswith("  tools: could not materialise: ruff 0.16.0: `uv tool")
-    assert list(_tools.receipts(root)) == ["tea"]
+    assert list(tool_receipts(root)) == ["tea"]
     # A host the workspace does not support refuses as a host, once.
     monkeypatch.setattr(_engine, "_default_host", lambda: "linux-arm")
     with pytest.raises(
@@ -258,7 +266,7 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     # The stubs follow the bundle: ruff was read, tea only ever downloaded.
     assert lines[1] == "  stubs: 1 in typings/, wrote 1"
     assert lines[2].startswith("  stubs: tea: tea 1.0.0: never read")
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     assert set(held) == {"ruff", "tea"}
     tea = held["tea"]
     assert (tea.version, tea.kind, tea.mode) == ("1.0.0", "download", "path")
@@ -287,15 +295,15 @@ def test_a_tool_that_left_the_lock_takes_its_receipt_with_it(
     root = _workspace(tmp_path, monkeypatch)
     _tools.write_lock(root)
     _tools.materialise(root)
-    assert set(_tools.receipts(root)) == {"ruff", "tea"}
+    assert set(tool_receipts(root)) == {"ruff", "tea"}
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[toolroom]\nindex = "records"\nrequires = ["tea"]\n'
     )
     _tools.write_lock(root)
     _tools.materialise(root, ("tea",))
-    assert set(_tools.receipts(root)) == {"ruff", "tea"}  # narrowed: untouched
+    assert set(tool_receipts(root)) == {"ruff", "tea"}  # narrowed: untouched
     _tools.materialise(root)
-    assert set(_tools.receipts(root)) == {"tea"}
+    assert set(tool_receipts(root)) == {"tea"}
 
 
 def test_the_frozen_sync_supplies_the_bundle_and_writes_the_stubs(
@@ -318,7 +326,7 @@ def test_the_frozen_sync_supplies_the_bundle_and_writes_the_stubs(
     out = capsys.readouterr().out
     assert "tools: 2 receipt(s), installed ruff, tea" in out
     assert "stubs: 1 in typings/" in out
-    assert set(_tools.receipts(root)) == {"ruff", "tea"}
+    assert set(tool_receipts(root)) == {"ruff", "tea"}
 
 
 def test_an_npm_install_is_supplied_after_node_through_its_executable(
@@ -387,7 +395,7 @@ def test_an_npm_install_is_supplied_after_node_through_its_executable(
     done = _tools.materialise(root)
     names = [m.receipt.tool for m in done if m.receipt is not None]
     assert names[0] == "node" and "basedpyright" in names
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     node = held["node"]
     assert Path(node.tool_dir, "bin", "node").is_file()
     argv, env = next(c for c in calls if "--global" in c[0])
@@ -468,7 +476,7 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     done = _tools.materialise(root)
     names = [m.receipt.tool for m in done if m.receipt is not None]
     assert names[0] == "bun" and "cspell" in names
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     bun = held["bun"]
     assert Path(bun.tool_dir, "bun").is_file()
     assert any(Path(bun.tool_dir, n).exists() for n in ("node", "node.exe"))  # the shim
@@ -516,7 +524,7 @@ def test_a_checkout_that_never_synced_has_every_tool_on_path_before_its_first_co
     assert _reconcile.tools_current(root).startswith("no receipt for ")
     lines = materialise_tools(root, offline=True)
     assert lines[0] == "  tools: up to date"
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     assert _tools.emission(root)[0] == (held["ruff"].paths[0], held["tea"].paths[0])
     assert _reconcile.tools_current(root) == ""
 
@@ -531,7 +539,7 @@ def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with
     )
     _tools.write_lock(root)
     _tools.materialise(root)
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     assert held["tea"].mode == "link" and held["tea"].entry_points == ("tea",)
     assert held["tea"].paths == ()
     assert (_tools.bin_dir(root) / "tea").exists()
@@ -551,7 +559,7 @@ def test_path_mode_puts_the_tools_directories_on_path_in_tool_order(
     _tools.write_lock(root)
     _tools.materialise(root)
     paths, _env = _tools.emission(root)
-    held = _tools.receipts(root)
+    held = tool_receipts(root)
     assert paths == (held["ruff"].paths[0], held["tea"].paths[0])
     assert not _tools.bin_dir(root).exists()
 
@@ -566,7 +574,7 @@ def test_add_declares_locks_and_writes_a_receipt_with_no_network(
     _tool_tasks.tools_add("tea")
     out = capsys.readouterr().out
     assert "tea 1.0.0: installed at" in out and "receipt written" in out
-    assert list(_tools.receipts(root)) == ["tea"]
+    assert list(tool_receipts(root)) == ["tea"]
     lock = json.loads((root / "toolroom.lock").read_text())
     assert list(lock["tools"]) == ["tea"]
 
@@ -589,7 +597,7 @@ def test_a_tool_required_on_other_hosts_alone_is_no_requirement_here(
     _tools.write_lock(root)
     assert "ruff" in json.loads((root / "toolroom.lock").read_text())["tools"]
     _tools.materialise(root)
-    assert set(_tools.receipts(root)) == {"tea"}
+    assert set(tool_receipts(root)) == {"tea"}
     assert _tools.drift(root) == {"tea": ""}
     assert _env_tasks.tool_profile(root) == ("tea",)
 
@@ -629,7 +637,7 @@ def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
     _tools.write_lock(root)
     _tools.write_stubs(root)
     _tools.materialise(root)
-    assert _tools.receipts(root)["cliff_tool"].entry_points == ("cliff-tool",)
+    assert tool_receipts(root)["cliff_tool"].entry_points == ("cliff-tool",)
     # Nothing on PATH: every tool resolves through its receipt's paths.
     monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda tool: None)
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
@@ -716,7 +724,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
 def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
     tmp_path: Path,
 ) -> None:
-    receipt = _tools.Receipt(
+    receipt = ToolReceipt(
         "tea",
         "1.0.0",
         "linux-x64",
@@ -730,7 +738,7 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
     )
     path = tmp_path / "tea.json"
     path.write_text(json.dumps(receipt.to_json()))
-    assert _tools.Receipt.load(path) == receipt
+    assert ToolReceipt.load(path) == receipt
     from livery.toolroom.store import default_mode
 
     assert (
@@ -743,6 +751,13 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
         "path",
     )
     assert default_mode("system-check") == "none"
+
+
+def test_the_store_home_is_toolroom_in_the_runner_s_data_directory() -> None:
+    from livery.footman import data_dir
+    from livery.toolroom.store import Home
+
+    assert store_home() == Home(data_dir() / "toolroom")
 
 
 def test_a_records_directory_is_read_once_until_a_record_changes(

@@ -520,10 +520,10 @@ def _receipt(
 ) -> None:
     import json
 
-    from livery.workshop._tools import Receipt, receipts_dir
+    from livery.workshop._tools import ToolReceipt, receipts_dir
 
     receipts_dir(root).mkdir(parents=True, exist_ok=True)
-    receipt = Receipt(
+    receipt = ToolReceipt(
         tool,
         "1.0.0",
         "linux-x64",

@@ -214,13 +214,13 @@ def tools_current(root: Path) -> str:
     import platform
 
     from livery.toolroom.store import LOCK_FILE, Lock, LockError, host_key
-    from livery.workshop._tools import TYPINGS, receipts
+    from livery.workshop._tools import TYPINGS, tool_receipts
 
     if not (root / LOCK_FILE).is_file():
         return ""
     try:
         lock = Lock.load(root / LOCK_FILE)
-        held = receipts(root)
+        held = tool_receipts(root)
     except (LockError, ValueError, OSError):
         # An unreadable lock or receipt is the sync's to name, not
         # the hook's to judge: the sync reads both and refuses by name.

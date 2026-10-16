@@ -155,10 +155,8 @@ def host_build(root: Path) -> None:
     pure release.
     """
     from livery import git
-    from livery.extensions.conan import _package as _conan
-    from livery.workshop import _lifecycle
-    from livery.workshop._publish import discover_release
-    from livery.workshop._queries import JOB_BUILT_MEMBERS
+    from livery.extensions import conan
+    from livery.workshop import JOB_BUILT_MEMBERS, build_release, discover_release
 
     resolved_ref = git.head_sha(root)
     epoch = int(git.run(root, "log", "-1", "--format=%ct", resolved_ref).strip() or "0")
@@ -180,14 +178,14 @@ def host_build(root: Path) -> None:
     # A release leg builds the packages the release ships, so a sibling
     # resolves to the package this leg created, never to its source
     # tree: the conan workspace is set aside for every build.
-    with _conan.workspace_aside(root):
+    with conan.workspace_aside(root):
         for package, version in conan_members:
-            _lifecycle.build(package, root, epoch=epoch)
+            build_release(package, root, epoch=epoch)
             dist = package.directory / "dist"
-            archive = _conan.save_cache(package, version, dist)
+            archive = conan.save_cache(package, version, dist)
             print(f"  {package.name}: {archive.name}")
         for package in native:
-            dist = _lifecycle.build(package, root, epoch=epoch)
+            dist = build_release(package, root, epoch=epoch)
             wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
             print(f"  {package.name}: {wheels}")
         for package in native:
@@ -223,9 +221,8 @@ def floor_legs(
     """
     import shutil
 
-    from livery.extensions.conan import _package as _conan
+    from livery.extensions import conan, python
     from livery.extensions.nanobind import _build
-    from livery.extensions.python import _backend as _python
 
     by_path = {member.path: member for member in discover_packages(root)}
     for edge in package.depends:
@@ -242,9 +239,7 @@ def floor_legs(
                 " above already linked it"
             )
             continue
-        _conan.restore_from_releases(
-            root, dependency.name, floor, cwd=package.directory
-        )
+        conan.restore_from_releases(root, dependency.name, floor, cwd=package.directory)
         dist = package.directory / "build" / "floor"
         shutil.rmtree(dist, ignore_errors=True)
         profile = package.directory / "build" / "floor-profile.txt"
@@ -264,5 +259,5 @@ def floor_legs(
             conan_install_args=pinned,
             one_host_wheel=True,
         )
-        _python.run_isolated_test(package, root, wheels_dir=dist)
+        python.run_isolated_test(package, root, wheels_dir=dist)
         print(f"  {package.name}: floor leg green against {dependency.name} {floor}")

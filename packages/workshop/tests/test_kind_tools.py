@@ -1221,7 +1221,7 @@ def test_a_receipt_is_checked_against_what_it_claims(tmp_path: Path) -> None:
     held = tmp_path / "store" / "tool" / "bin"
     held.mkdir(parents=True)
 
-    def receipt(**fields: object) -> _tools.Receipt:
+    def receipt(**fields: object) -> _tools.ToolReceipt:
         body: dict[str, object] = {
             "tool": "tea",
             "version": "1.0.0",
@@ -1232,7 +1232,7 @@ def test_a_receipt_is_checked_against_what_it_claims(tmp_path: Path) -> None:
             "tool_dir": str(held.parent),
         }
         body.update(fields)
-        return _tools.Receipt(**body)  # type: ignore[arg-type]
+        return _tools.ToolReceipt(**body)  # type: ignore[arg-type]
 
     # The refusals first. A path the receipt claims and the store lost.
     gone = _tools.receipt_gap(
@@ -1623,7 +1623,7 @@ def test_a_satisfying_host_copy_serves_and_a_fresh_receipt_is_reused_without_a_p
     assert receipt.stamp["path"] == str(found) and receipt.stamp["size"] == "10"
     # The store was never asked to install anything.
     assert _Probing.calls == [("tea", "system-check", "")]
-    written = _tools.receipts(root)["tea"]
+    written = _tools.tool_receipts(root)["tea"]
     assert written == receipt
     assert _tools.drift(root).get("tea", "") == ""
     assert _env_tasks.served_by(receipt) == "host 1.2.0"
@@ -1675,10 +1675,10 @@ def test_the_sync_names_the_host_served_tools_and_the_copies_passed_over(
     """The one line per sync says what came from the host, and why a copy did not."""
     from livery.workshop import _env_tasks, _sync
 
-    hosted = _tools.Receipt(
+    hosted = _tools.ToolReceipt(
         "cmake", "4.4.2", HERE, "download", "none", source="host", answered="4.5.0"
     )
-    stored = _tools.Receipt("ninja", "1.13.0", HERE, "download", "path")
+    stored = _tools.ToolReceipt("ninja", "1.13.0", HERE, "download", "path")
     assert _env_tasks.served_by(stored) == "store 1.13.0"
     outcomes = (
         _tools.Materialised(hosted, False),

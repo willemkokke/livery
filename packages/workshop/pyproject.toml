@@ -122,9 +122,11 @@ Repository = "https://github.com/willemkokke/livery"
 [tool.uv.build-backend]
 # The wheel ships the base, livery.workshop, whose entry module is its
 # __init__.py, and the extensions under the PEP 420 namespace livery.
-# The extensions have no public names and no __init__.py. Nothing
-# imports an extension but the workshop's mount and an extension that
-# requires it. The flag lets uv ship a root with no __init__.py.
+# The python and conan extensions' entry modules serve the names an
+# extension that requires them reads; the others have no public names
+# and no __init__.py. Nothing imports an extension but the workshop's
+# mount and an extension that requires it. The flag lets uv ship a root
+# with no __init__.py.
 module-name = [
     "livery.workshop",
     "livery.extensions.conan",

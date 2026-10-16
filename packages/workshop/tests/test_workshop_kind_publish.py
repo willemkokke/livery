@@ -469,7 +469,7 @@ def _handed(
         ledger.serve(package.name, version)
         return True
 
-    monkeypatch.setattr(_lifecycle, "build", _build)
+    monkeypatch.setattr(_lifecycle, "build_release", _build)
     monkeypatch.setattr(_lifecycle, "publish", _upload)
     return handed
 

@@ -191,7 +191,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
                 f"## What's New\n\n{excerpt}\n\n---\n\n{original}",
                 encoding="utf-8",
             )
-        return _lifecycle.build(package, root)
+        return _lifecycle.build_release(package, root)
     finally:
         for path, content in snapshots.items():
             path.write_bytes(content)

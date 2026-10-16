@@ -85,15 +85,28 @@ class Receipt:
 
 
 def discover_release(root: Path, ref: str) -> tuple[tuple[Package, str], ...]:
-    """What the squash at *ref* releases, in topological order.
+    """The members the release squash at *ref* releases, each with its version.
 
     The members and their versions are the release's member list,
-    [livery.workshop._publish.MANIFEST][], as committed at *ref*: the
-    record the release branch writes when it prepares the set. A
-    commit without a readable list is not a release squash and fails
-    teaching the recovery flag. A rider file in the squash changes
-    nothing here, which is what makes hand-editing a release branch
-    safe.
+    ``.release-manifest.json``, as committed at *ref*: the record the
+    release branch writes when it prepares the set. They come in
+    release order, every dependency before its dependents
+    ([livery.workshop.order_topologically][]). A rider file in the
+    squash changes nothing here, which is what makes hand-editing a
+    release branch safe.
+
+    Args:
+        root: The workspace root.
+        ref: The commit whose member list is read, as git names it.
+
+    Returns:
+        Each released member and the version the list states for it.
+
+    Raises:
+        Failed: when the commit carries no readable member list, since
+            it is then no release squash, naming the flag that points
+            the publish at the squash; and when the list names a member
+            the workspace does not hold.
     """
     from livery.workshop._graph import order_topologically
 
@@ -403,7 +416,7 @@ def publish_release(
         """Build the member, or trust what the job that builds it collected."""
         job = built.get(package.path)
         if job is None:
-            _lifecycle.build(package, root, epoch=epoch)
+            _lifecycle.build_release(package, root, epoch=epoch)
             return
         # The job built this member on each of its legs and the run
         # collected what every leg made; a build here would replace

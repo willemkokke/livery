@@ -15,11 +15,10 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.workshop import _lifecycle
+from livery.workshop import _lifecycle, discover_release
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (
     Receipt,
-    discover_release,
     floor_probe,
     movement_check,
     probe_until_served,
@@ -160,7 +159,7 @@ def train(seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         spans[name] = (starts[name], time.monotonic())
         return True
 
-    monkeypatch.setattr("livery.workshop._lifecycle.build", _fake_build)
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _fake_build)
     monkeypatch.setattr("livery.workshop._lifecycle.publish", _fake_publish)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     return root, registry, spans
@@ -809,7 +808,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
     )
     (native / "CHANGELOG.md").write_text("# Changelog\n")
     built: list[str] = []
-    python_build = _lifecycle.build
+    python_build = _lifecycle.build_release
 
     def _fake_create(package: Package, root: Path, *, epoch: int = 0) -> Path:
         if "conan" not in package.extensions:
@@ -817,7 +816,7 @@ def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
         built.append(package.name)
         return package.directory
 
-    monkeypatch.setattr("livery.workshop._lifecycle.build", _fake_create)
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _fake_create)
     sha = _squash(root, ("base", "native"))
     # No conan registry is declared anywhere: the wave resolves a conan
     # target only for members that publish, so this one asks for none.

@@ -286,7 +286,7 @@ def test_local_release_reports_builds_and_restores(
         lambda _root, plan, dirs: validated.append(plan.package.name),
     )
     monkeypatch.setattr(
-        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
     )
     members = resolve_set(root, ("core", "tool"))
     local_release(root, members)
@@ -311,7 +311,7 @@ def test_a_local_rehearsal_reads_the_receipts_a_wave_cut_since_the_last_fetch(
         lambda _root, plan, dirs: None,
     )
     monkeypatch.setattr(
-        "livery.workshop._lifecycle.build", lambda package, root, **kw: None
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
     )
     origin = subprocess.run(
         ["git", "remote", "get-url", "origin"],
@@ -1064,7 +1064,7 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
     fake.settle(OWNER, NAME, sha)
     events: list[str] = []
     monkeypatch.setattr(
-        "livery.workshop._lifecycle.build",
+        "livery.workshop._lifecycle.build_release",
         lambda package, root, **kw: events.append(f"build:{package.name}"),
     )
 
@@ -1354,7 +1354,7 @@ def test_the_isolated_legs_run_in_the_listed_order_with_the_sets_dist_directorie
 
     for dist in dists:
         dist.rmdir()
-    monkeypatch.setattr("livery.workshop._lifecycle.build", _build)
+    monkeypatch.setattr("livery.workshop._lifecycle.build_release", _build)
     driver = ReleaseDriver(
         root,
         fake.repository(OWNER, NAME),

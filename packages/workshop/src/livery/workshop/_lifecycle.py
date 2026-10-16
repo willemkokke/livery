@@ -60,18 +60,28 @@ def sync(packages: Iterable[Package], root: Path) -> None:
 RELEASE_BUILD: Mapping[str, object] = {"isolated": True, "configuration": "release"}
 
 
-def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+def build_release(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build *package*'s release artifacts into its ``dist/``; that directory.
 
-    The release train's build: the build phase on its isolated side,
-    in the ``release`` configuration
-    ([livery.workshop._lifecycle.RELEASE_BUILD][]). *epoch* is the
-    build's source date, so two builds of one tree are the same bytes;
-    0 takes the build tool's own.
+    The release train's build: the steps *package*'s set adds to the
+    build phase, run on the phase's isolated side in the ``release``
+    configuration. One of them provides the ``dist`` directory it
+    wrote.
+
+    Args:
+        package: The member to build.
+        root: The workspace root *package* is a member of.
+        epoch: The build's source date in seconds, so two builds of one
+            tree are the same bytes; 0 takes the build tool's own.
+
+    Returns:
+        The directory the build phase's steps wrote the artifacts into.
 
     Raises:
         Failed: naming the package, its set and the phase, when no
-            extension of the set adds a step to the build phase.
+            extension of the set adds a step to the build phase; and
+            naming the package, when the steps that ran provide no
+            ``dist`` directory.
     """
     from pathlib import Path
 

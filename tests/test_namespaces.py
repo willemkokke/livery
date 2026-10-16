@@ -428,6 +428,7 @@ EXPORTS: dict[str, list[str]] = {
         "EXECUTABLES",
         "Edge",
         "HUMAN",
+        "JOB_BUILT_MEMBERS",
         "LegScope",
         "MODULE_ROOTS",
         "NONE",
@@ -444,18 +445,21 @@ EXPORTS: dict[str, list[str]] = {
         "RegistryTarget",
         "ReleaseNotes",
         "RunContext",
+        "ToolReceipt",
         "VERSION_FILES",
         "VerifiedBranch",
         "WHOLE",
         "WORKSPACE_TESTS",
         "__version__",
         "answer",
+        "build_release",
         "category_of",
         "check_legs",
         "ci_changes",
         "ci_run",
         "contributions_for",
         "discover_packages",
+        "discover_release",
         "extension_names",
         "extension_set",
         "fix_files",
@@ -470,6 +474,7 @@ EXPORTS: dict[str, list[str]] = {
         "nearest_extensions",
         "order_topologically",
         "pull_request_legs",
+        "python_matrix",
         "read_contract",
         "registry",
         "release_notes",
@@ -487,10 +492,12 @@ EXPORTS: dict[str, list[str]] = {
         "step_enabled",
         "step_extensions",
         "step_option",
+        "store_home",
         "tested",
         "testing",
         "this_forge",
         "this_repository",
+        "tool_receipts",
         "undeployed",
         "verified_branch",
         "verify_workspace",
@@ -508,6 +515,14 @@ EXPORTS: dict[str, list[str]] = {
         "advertised_providers",
         "task_page",
     ],
+    "livery.extensions.python": ["module_docs", "run_isolated_test"],
+    "livery.extensions.conan": [
+        "WORKSPACE_FILE",
+        "restore_from_releases",
+        "save_cache",
+        "workspace_aside",
+        "workspace_file",
+    ],
 }
 
 #: Where each root lives.
@@ -520,6 +535,8 @@ SOURCES = {
     "livery.toolroom.bench": "packages/toolroom-bench/src/livery/toolroom/bench",
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
     "livery.extensions.docs": "packages/extensions/docs/src/livery/extensions/docs",
+    "livery.extensions.python": "packages/workshop/src/livery/extensions/python",
+    "livery.extensions.conan": "packages/workshop/src/livery/extensions/conan",
 }
 
 #: The roots with no public names: a namespace with no __init__.py,
@@ -666,7 +683,7 @@ def test_a_wheel_whose_roots_all_have_entry_modules_lets_none_lose_it() -> None:
     # Without the namespace flag, uv build refuses a module name that has
     # no __init__.py, so no root ships having lost its entry module. A
     # wheel that also ships a root with no public names, as the
-    # workshop's ships the python extension, needs the flag for it.
+    # workshop's ships the cpp extension, needs the flag for it.
     problems: list[str] = []
     members = [*ROOT.glob("packages/*/pyproject.toml")]
     members += ROOT.glob("packages/*/*/pyproject.toml")
