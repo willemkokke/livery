@@ -199,12 +199,13 @@ def apply_entry(root: Path, environ: MutableMapping[str, str]) -> tuple[str, ...
 
 
 def _warn_unmounted_extensions(root: Path) -> None:
-    """Teach when declared extensions never mounted this process.
+    """Teach when the contract lists extensions this process never mounted.
 
-    Extensions mount from the rendered ``tasks.py``; a workspace whose
-    file predates that shape imports the base extension and nothing
-    else, and every further extension's tasks silently vanish. Loud,
-    once per command, with the repair named.
+    The workshop mounts the extensions its contract lists when footman
+    loads it as a plugin of a project that depends on it. A process that
+    has the base's verbs without that load mounts none of them, and
+    every listed extension's tasks are missing. Loud, once per command,
+    with the repair named.
     """
     import sys
 
@@ -219,11 +220,12 @@ def _warn_unmounted_extensions(root: Path) -> None:
         return
     import livery.footman as footman
 
+    prog = footman.prog()
     sys.stderr.write(
-        f"{footman.prog()}: the contract declares extensions"
-        f" ({', '.join(declared)}) that this run never mounted; extensions"
-        f" mount from tasks.py now, so run `{footman.prog()}"
-        " sync` to compose it again\n"
+        f"{prog}: the contract lists extensions ({', '.join(declared)}) that"
+        " this run never mounted: the workshop mounts them when footman loads"
+        " it as a plugin of a project that depends on it. Run"
+        f" `{prog} sync` to compose tasks.py and install the environment again\n"
     )
 
 
