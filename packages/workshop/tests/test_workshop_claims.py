@@ -212,6 +212,7 @@ def test_two_steps_claiming_one_category_under_different_rules_share_one_entry(
     # cpp's test patterns name C++ files a python claim never reads, so
     # they render no ignore; its tests directory does, in the one entry
     # python's shares.
+    skip_unless_installed("cpp")
     native = per_file_ignores([("cmake", "cpp", "conan")])
     assert not any(pattern.endswith(".cpp") for pattern, _ in native)
     assert dict(native)["packages/**/tests/**"] == ("D1",)

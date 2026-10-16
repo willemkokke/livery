@@ -6,6 +6,7 @@
 /packages/extensions/cmake/ @willemkokke
 /packages/extensions/conan/ @willemkokke
 /packages/extensions/coverage/ @willemkokke
+/packages/extensions/cpp/ @willemkokke
 /packages/extensions/docs/ @willemkokke
 /packages/extensions/lfs/ @willemkokke
 /packages/extensions/mkdocstrings/ @willemkokke

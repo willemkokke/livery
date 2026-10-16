@@ -43,3 +43,9 @@ floor = "0.0.0"
 path = "packages/extensions/conan"
 kind = "test"
 floor = "0.0.0"
+
+# The suite judges packages whose sets hold cpp.
+[[depends]]
+path = "packages/extensions/cpp"
+kind = "test"
+floor = "0.0.0"

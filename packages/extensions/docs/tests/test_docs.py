@@ -2139,6 +2139,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/cmake": "workshop.extensions.cmake",
         "extensions/conan": "workshop.extensions.conan",
         "extensions/coverage": "workshop.extensions.coverage",
+        "extensions/cpp": "workshop.extensions.cpp",
         "extensions/docs": "workshop.extensions.docs",
         "extensions/lfs": "workshop.extensions.lfs",
         "extensions/mkdocstrings": "workshop.extensions.mkdocstrings",

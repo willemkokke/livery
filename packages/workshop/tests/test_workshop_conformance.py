@@ -979,13 +979,13 @@ def test_the_builtin_steps_pass_every_clause() -> None:
 
     subject = builtin_subject()
     # A package that lists nothing, and one listing each installed
-    # extension that composes something in a package: those the
+    # extension that composes something in a package: python, which the
     # workshop's wheel ships, and those of their own distributions
-    # installed here, such as cmake, conan and nanobind.
+    # installed here, such as cmake, conan, cpp and nanobind.
     composing = {
         (name,) for name in installed_extensions() if composes_per_package(name)
     }
-    assert composing >= {("cpp",), ("python",)}
+    assert composing >= {("python",)}
     assert set(subject.sets) == {(), *composing}
     assert {record.name for record in subject.steps} == {
         "drift.check",

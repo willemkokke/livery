@@ -223,12 +223,14 @@ def test_its_own_distribution_ships_conan_and_the_workshop_wheel_none() -> None:
     ] == []
     shipped = shipping_distribution("livery.extensions.conan")
     assert shipped is not None and shipped.name == "livery-extensions-conan"
-    # The extension it requires, cpp, ships in the workshop's wheel,
-    # which this one requires.
+    # The extension it requires, cpp, ships in a distribution of its
+    # own, which this wheel requires beside the workshop's.
     required = importlib.metadata.requires("livery-extensions-conan") or []
-    assert [line for line in required if line.startswith("livery-workshop")] == [
-        "livery-workshop>=0.10.0"
-    ]
+    assert [
+        line
+        for line in required
+        if line.startswith(("livery-workshop", "livery-extensions-cpp"))
+    ] == ["livery-extensions-cpp>=0.0.0", "livery-workshop>=0.10.0"]
     declared = declaration("conan")
     assert declared is not None
     # conan packages C and C++.
@@ -236,7 +238,7 @@ def test_its_own_distribution_ships_conan_and_the_workshop_wheel_none() -> None:
     assert {
         name: getattr(shipping_distribution(f"livery.extensions.{name}"), "name", "")
         for name in declared.requires
-    } == {"cpp": "livery-workshop"}
+    } == {"cpp": "livery-extensions-cpp"}
 
 
 def test_the_entry_module_refuses_a_name_it_does_not_export() -> None:

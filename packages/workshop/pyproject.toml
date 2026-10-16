@@ -57,11 +57,10 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
 
-# The workshop extensions this wheel ships, by the name a workspace
-# lists: each maps to the package beside its extension.toml, which the
+# The workshop extension this wheel ships, by the name a workspace
+# lists: it maps to the package beside its extension.toml, which the
 # mount and the contract judge read without importing the extension.
 [project.entry-points."workshop.extensions"]
-cpp = "livery.extensions.cpp"
 python = "livery.extensions.python"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
@@ -108,16 +107,13 @@ livery-workshop-layout = "livery.workshop._pytest_layout"
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# The wheel ships the base, livery.workshop, whose entry module is its
-# __init__.py, and the extensions under the PEP 420 namespace livery.
-# The python extension's entry module serves the names an extension
-# that requires it reads; cpp has no public names and no __init__.py.
-# Nothing imports an extension but the workshop's mount and an
-# extension that requires it. The flag lets uv ship a root with no
-# __init__.py.
+# The wheel ships the base, livery.workshop, and the python extension,
+# livery.extensions.python, each with its entry module as its
+# __init__.py, under the PEP 420 namespace livery. The python
+# extension's entry module serves the names an extension that requires
+# it reads. Nothing imports an extension but the workshop's mount and
+# an extension that requires it.
 module-name = [
     "livery.workshop",
-    "livery.extensions.cpp",
     "livery.extensions.python",
 ]
-namespace = true

@@ -65,6 +65,14 @@ key; every key the base and the listed extensions declare carries one. The
 schema says what shape a contract has; a rule a schema cannot say
 stays with the code that reads the key.
 
+The workshop's wheel, `livery-workshop`, ships the base and one
+extension, python. Every other extension of the livery distributions
+ships in a distribution of its own, named `livery-extensions-<name>`:
+cpp, the C and C++ languages, ships in `livery-extensions-cpp`. The
+conan and nanobind distributions require it, so a workspace whose
+lists hold either holds cpp too, and `fm sync` installs
+`livery-extensions-cpp` with them.
+
 An extension is declared by an entry point in the `workshop.extensions`
 group, mapping the name a contract lists to the package that ships it.
 Beside that package sits its `extension.toml`, which the mount and the

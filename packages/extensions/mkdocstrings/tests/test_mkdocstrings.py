@@ -749,6 +749,7 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
                 "packages/extensions/cmake/src",
                 "packages/extensions/conan/src",
                 "packages/extensions/coverage/src",
+                "packages/extensions/cpp/src",
                 "packages/extensions/docs/src",
                 "packages/extensions/lfs/src",
                 "packages/extensions/mkdocstrings/src",
