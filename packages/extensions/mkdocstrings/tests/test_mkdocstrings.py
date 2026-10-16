@@ -751,6 +751,7 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
                 "packages/extensions/docs/src",
                 "packages/extensions/lfs/src",
                 "packages/extensions/mkdocstrings/src",
+                "packages/extensions/nanobind/src",
                 "packages/extensions/pytest/src",
                 "packages/forge/src",
                 "packages/git/src",

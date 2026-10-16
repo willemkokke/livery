@@ -15,8 +15,8 @@ def test_an_extension_that_composes_nothing_in_a_package_names_the_root_s_list()
 
 
 def test_an_extension_that_composes_a_package_names_both_lists() -> None:
-    assert unlisted("nanobind", "livery-workshop", per_package=True) == (
-        "extensions: nanobind (livery-workshop) is installed and not listed; it"
-        " does nothing until [workspace] extensions or a package's extensions"
-        " names it"
+    assert unlisted("nanobind", "livery-extensions-nanobind", per_package=True) == (
+        "extensions: nanobind (livery-extensions-nanobind) is installed and not"
+        " listed; it does nothing until [workspace] extensions or a package's"
+        " extensions names it"
     )

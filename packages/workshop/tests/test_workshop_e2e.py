@@ -468,6 +468,7 @@ def test_the_loop_probes_each_member_through_its_extensions(
     on either. Each probe is built once, at the target the loop's
     workspace resolves, and polled through the wave's wait.
     """
+    skip_unless_installed("nanobind")
     import livery.forge as forge_package
     from livery.extensions.conan import _package as conan_package
     from livery.workshop._registries import RegistryTarget
@@ -694,7 +695,7 @@ def test_an_extension_with_no_step_refuses(monkeypatch: pytest.MonkeyPatch) -> N
 def test_the_list_is_the_extension_under_test_and_what_its_members_need(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     # Its set takes in what it requires, so the list names beside it only
     # what the members' templates need, as their canonical list: a
     # creation installs nothing, so the root lists them before the
@@ -765,7 +766,7 @@ def test_the_steps_the_extension_under_test_declares_off_are_turned_on(
 def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     _fake_declarations(
         monkeypatch,
         {"typed": _declared("python"), "both": _declared("python", "conan")},
@@ -805,7 +806,7 @@ def test_the_members_are_the_loop_s_whose_sets_hold_what_the_steps_name(
 
 
 def test_each_loop_member_holds_the_set_its_born_contract_lists(tmp_path: Path) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     import tomllib
 
     from livery.workshop._templates import render_member
@@ -2274,7 +2275,7 @@ def test_the_plain_pass_lists_the_stock_but_the_site_and_what_members_need() -> 
     from livery.workshop._new_project import birth_extensions, canonical_extensions
 
     # The site is what mkdocstrings' declaration requires.
-    skip_unless_installed("mkdocstrings")
+    skip_unless_installed("mkdocstrings", "nanobind")
     stock = tuple(birth_extensions([SELF]))
 
     def builds_the_site(name: str) -> bool:

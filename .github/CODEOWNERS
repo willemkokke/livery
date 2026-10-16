@@ -8,6 +8,7 @@
 /packages/extensions/docs/ @willemkokke
 /packages/extensions/lfs/ @willemkokke
 /packages/extensions/mkdocstrings/ @willemkokke
+/packages/extensions/nanobind/ @willemkokke
 /packages/footman/ @willemkokke
 /packages/forge/ @willemkokke
 /packages/git/ @willemkokke

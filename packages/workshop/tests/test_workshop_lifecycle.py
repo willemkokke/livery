@@ -23,6 +23,7 @@ from workshop_extension_fakes import (
     package_contract,
     root_contract,
 )
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -664,6 +665,7 @@ def test_each_member_releases_to_its_set_s_registry(
 ) -> None:
     # The nanobind member consumes conan and releases its python wheel;
     # the C++ library's recipe names a reference and releases it.
+    skip_unless_installed("nanobind")
     built = _declared(tmp_path, monkeypatch)
     core = _releasing(tmp_path, "core", "python")
     native = _releasing(tmp_path, "native", "nanobind", recipe=CONSUMER)

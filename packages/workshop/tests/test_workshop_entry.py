@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from workshop_installed import skip_unless_installed
+
 LOCK = """\
 version = 1
 
@@ -429,6 +431,7 @@ def test_a_gitlab_job_alone_syncs_and_keeps_its_conan_home_in_its_shell(
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 def test_a_native_member_is_left_to_the_workshop_sync(tmp_path: Path) -> None:
     """One uv sync leaves a platform-wheel member out; the workshop sync builds it."""
+    skip_unless_installed("nanobind")
     from livery.workshop._entry import entry_script, native_members
 
     root, bin_dir, env = _script_home(tmp_path)

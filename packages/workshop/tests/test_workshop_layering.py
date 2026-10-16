@@ -544,7 +544,7 @@ def _tree(root: Path) -> dict[str, str]:
 def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     from livery.footman import Failed
     from livery.workshop import _lifecycle
     from livery.workshop._packages import declare_edge
@@ -581,6 +581,7 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
 def test_each_writer_leaves_a_sibling_outside_its_ecosystem_alone(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.extensions.conan import _package as conan
     from livery.extensions.python import _backend as python
 

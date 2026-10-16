@@ -38,6 +38,13 @@ path = "packages/extensions/coverage"
 kind = "test"
 floor = "0.0.0"
 
+# The suite reads the name of every installed extension that composes
+# something in a package, nanobind's among them.
+[[depends]]
+path = "packages/extensions/nanobind"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately. The measured value of the

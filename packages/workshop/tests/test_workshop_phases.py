@@ -651,9 +651,9 @@ def test_an_isolated_only_build_step_registers_no_gate_step(
     assert [(r.name, r.isolated) for r in both.additions.steps] == [
         ("build.both", None)
     ]
-    # The builds the release runs: python's, conan's and nanobind's serve
-    # the isolated side alone, and none reaches the gate.
-    for name in ("python", "conan", "nanobind"):
+    # The builds the release runs: python's and conan's serve the
+    # isolated side alone, and none reaches the gate.
+    for name in ("python", "conan"):
         declared = _extensions.declaration(name)
         assert declared is not None
         assert [r.isolated for r in declared.phases["build"]] == [True]

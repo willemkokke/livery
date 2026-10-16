@@ -261,6 +261,7 @@ def test_an_extensions_declared_categories_answer_for_a_package_listing_it(
 
 
 def test_a_package_takes_the_table_of_each_extension_it_holds() -> None:
+    skip_unless_installed("nanobind")
     from dataclasses import replace
 
     # A nanobind package lists nanobind, which requires python, cpp and

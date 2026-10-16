@@ -6,6 +6,9 @@ code directly, with no mount before it. A test that uses the
 ``nanobind_jobs`` fixture has the wheels job and the publish job's wait
 on it in the release point, read from the extension's own
 declaration; the contributed jobs are put back as they were after it.
+The nanobind extension is a distribution of its own,
+``livery-extensions-nanobind``, so the test skips while it is not
+installed.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from collections.abc import Iterator
 import pytest
 
 from workshop_docs_declared import jobs_restored
+from workshop_installed import skip_unless_installed
 
 
 @pytest.fixture
@@ -22,6 +26,7 @@ def nanobind_jobs() -> Iterator[None]:
     """Add nanobind's jobs from its declaration file, for the test alone."""
     from livery.workshop._extensions import declaration, register_jobs
 
+    skip_unless_installed("nanobind")
     found = declaration("nanobind")
     assert found is not None
     with jobs_restored():

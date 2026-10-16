@@ -61,6 +61,7 @@ dev = [
     "livery-extensions-cmake",
     "livery-extensions-mypy",
     "livery-extensions-pytest",
+    "livery-extensions-nanobind",
     "livery-extensions-ruff",
     # What the listed extensions need in the venv: each line is an
     # extension's answer to the `python.dev-group` query, so an extension

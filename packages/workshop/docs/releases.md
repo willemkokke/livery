@@ -182,40 +182,22 @@ member, the version and the files `dist/` holds. A member the
 publish job built itself is in its cache already, and nothing is
 restored.
 
-A release leg builds the packages the release ships, so it sets the
-workspace's `conanws.yml` aside while it builds: a member's
-`conan create` and an extension's wheel resolve a sibling to the
-package the leg created, never to its source tree. The file comes
-back when the builds end, a failure included.
-
-Every floor a member declares on a conan member is proved in the
-leg that builds it: the floor's cache is restored from its own
-release, one wheel is built for that machine with a conan profile
-replacing the requirement with the floor, and the package's tests
-run against it. A floor equal to the version the wave is releasing
-is the package the main build already linked, and the leg says so
-instead of building twice.
-
-A member that lists the nanobind extension builds its platform wheels
-through cibuildwheel and its sdist through uv, and names the runner
-labels that build them under `[nanobind] wheel-platforms` in its own
-`workshop.toml`; the key refuses in a member that holds no nanobind.
-The extension adds a wheels job to the release workflow: before the
-wave, one leg per label builds that platform's wheels for the
-workspace's python matrix, and the publish job waits for the legs and
-ships the collected set. A workspace whose members hold no nanobind
-has no wheels job.
+A member that lists the nanobind extension, a distribution of its own,
+`livery-extensions-nanobind`, builds its platform wheels in a wheels
+job the extension adds to the release workflow, before the wave: one
+leg per runner label the member names. Each leg also creates and saves
+every conan package of the release, and proves each floor a member
+declares on one. Its page describes the job, the key that names the
+labels, and what each leg builds.
 
 Which members a job builds before the wave is the workspace's
-`job-built-members` answer. nanobind answers it with every member that
-holds nanobind and every member that releases a conan package, which
-each leg creates for its host. In CI the wave publishes what the run
-collected into those members' `dist/` and builds every other member
-itself; a job-built member whose `dist/` holds nothing refuses the
-wave, naming the job. A build refuses a wheel whose tag says the
-wrong thing: python's build refuses a wheel tagged for a platform, and
-nanobind's a pure one, so no wheel reaches the wave with a tag that
-contradicts what built it.
+`job-built-members` answer, which nanobind gives. In CI the wave
+publishes what the run collected into those members' `dist/` and
+builds every other member itself; a job-built member whose `dist/`
+holds nothing refuses the wave, naming the job. A build refuses a
+wheel whose tag says the wrong thing: python's build refuses a wheel
+tagged for a platform, and nanobind's a pure one, so no wheel reaches
+the wave with a tag that contradicts what built it.
 
 Not covered today: attestation or signing of the built wheels, a
 non-PyPI index for the github kind, and publishing anywhere but the

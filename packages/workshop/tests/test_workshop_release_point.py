@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._publish import MANIFEST
+from workshop_installed import skip_unless_installed
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -82,6 +83,7 @@ def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_the_wave_builds_unless_ci_collected_what_a_job_built(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._release_driver import collected_wheels
 
     root = _workspace(tmp_path)
