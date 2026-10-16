@@ -347,7 +347,7 @@ def publish_release(
     before the wave (the workspace's ``job-built-members`` answer) is
     not built here: the wave publishes what the run collected into its
     ``dist/``, and refuses one whose ``dist/`` holds nothing, naming
-    the job.
+    the job. Such a member's publish phase gets ``prebuilt`` true.
     """
     from livery.workshop._queries import JOB_BUILT_MEMBERS, answer
     from livery.workshop._release import verify_release
@@ -423,7 +423,13 @@ def publish_release(
                 f" new project in this wave ({refused_new[0]})"
             )
         try:
-            return _lifecycle.publish(package, root, version=version, target=target)
+            return _lifecycle.publish(
+                package,
+                root,
+                version=version,
+                target=target,
+                prebuilt=package.path in built,
+            )
         except BaseException as exc:
             if NEW_PROJECT_LIMIT not in str(exc):
                 raise
@@ -514,7 +520,11 @@ def publish_release(
                         published = _first_upload(package, version, target)
                 else:
                     published = _lifecycle.publish(
-                        package, root, version=version, target=target
+                        package,
+                        root,
+                        version=version,
+                        target=target,
+                        prebuilt=package.path in built,
                     )
             probe_until_served(
                 registry_for(package),

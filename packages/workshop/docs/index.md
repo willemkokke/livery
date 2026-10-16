@@ -416,7 +416,7 @@ or a value of another type, refuses before any step runs:
 | `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
 | `build` | `isolated` (`bool`), the side; `configuration` (`str`), the preset: the train builds isolated in `release`, `fm check` on the tree in `instrumented`, and `fm run` on the tree in `debug`. `epoch` (`int`), the build's source date, from the train; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
 | `test` | `isolated` (`bool`), true on the train's legs; `resolution` (`str`), `floor`, `latest` or `head`; `release-dirs` (`paths`), the co-released set's `dist/` directories. `fm check` gives none of them, which is the tree side | `resolved` (`table`), each distribution the leg installed, to its version |
-| `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields | `published` (`bool`), whether anything uploaded |
+| `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields; `prebuilt` (`bool`), true when a job of the run built the package and the run collected it into `dist/` | `published` (`bool`), whether anything uploaded |
 | `verify` | `version` (`str`), the released version; `tree` (`path`), checked out at its receipt tag; `interpreter`, `index` and `extras` (`str`) | `exit-code` (`int`), the verification's |
 | `run` | `executable` (`str`), the executable to start. The words after `--` are the context's `arguments`, as they are for every step, and the step that starts the executable records its exit code with `exit` | |
 
