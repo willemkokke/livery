@@ -158,7 +158,7 @@ def test_a_consumer_recipe_answers_no_distribution_and_no_registry(
     with pytest.raises(Failed) as refused:
         _lifecycle.registry(consumer)
     assert str(refused.value) == (
-        "packages/consumer: its extensions (cmake, conan, cpp) answer no registry:"
+        "packages/consumer: its extensions (cmake, cpp, conan) answer no registry:"
         " none of them releases a distribution of it, so the release train has"
         " nowhere to publish it. List the extension that releases it, or set"
         " [release] publish = false to version and tag it without an upload"

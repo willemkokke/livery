@@ -88,7 +88,7 @@ def test_a_missing_conan_requirement_refuses_naming_the_sibling_s_set(
     assert (
         "packages/ext: the build edge on packages/geometry is not declared in the"
         " package's manifests (acme-geometry missing; packages/geometry holds"
-        " cmake, conan, cpp)"
+        " cmake, cpp, conan)"
     ) in str(caught.value)
 
 

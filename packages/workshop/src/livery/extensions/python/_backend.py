@@ -708,7 +708,7 @@ def declare_requirement(
     """
     import re as _re
 
-    from livery.workshop._composition import extension_set
+    from livery.workshop import extension_set
 
     if EXTENSION not in extension_set(dependency):
         return None
@@ -780,7 +780,7 @@ def declare_test_requirement(
             its test extra is spelled in a form the edit does not take,
             naming the manifest.
     """
-    from livery.workshop._composition import extension_set
+    from livery.workshop import extension_set
 
     if EXTENSION not in extension_set(dependency):
         return None

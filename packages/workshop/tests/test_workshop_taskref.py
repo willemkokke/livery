@@ -274,7 +274,7 @@ def test_the_task_reference_renders_nothing_until_the_root_turns_it_on(
     # and no package's tasks are rendered.
     with registry.capture():
         mount_extensions(root)
-    assert _taskref.STEP not in steps_by_name()
+    assert _taskref.TASK_REFERENCE not in steps_by_name()
     run_site_phase(root, DOCS_PHASE)
     assert not pages.exists()
     assert not (root / "docs" / "tasks").exists()
@@ -286,7 +286,7 @@ def test_the_task_reference_renders_nothing_until_the_root_turns_it_on(
     )
     with registry.capture():
         mount_extensions(root)
-    assert _taskref.STEP in steps_by_name()
+    assert _taskref.TASK_REFERENCE in steps_by_name()
     run_site_phase(root, DOCS_PHASE)
     assert (pages / "sync.md").is_file()
     assert (root / "docs" / "tasks" / "sync.md").is_file()

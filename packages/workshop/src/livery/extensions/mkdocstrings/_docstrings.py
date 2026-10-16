@@ -1,11 +1,12 @@
 """Every name a python package exports has a docstring, which the reference publishes.
 
-`lint.docstrings` imports each python package's top package in a child
-process and refuses a name in its ``__all__`` whose object has no
-docstring, nor a string literal under its assignment: a type alias
-carries no runtime ``__doc__``, and the API pages read the source. The
-packages are the ones a run reaches whose set holds python, less those
-that turn the step off in their contract.
+`lint.docstrings` imports each root of each python package, every
+topmost package with an ``__init__.py`` as the API reference documents
+them, in a child process and refuses a name in a root's ``__all__``
+whose object has no docstring, nor a string literal under its
+assignment: a type alias carries no runtime ``__doc__``, and the API
+pages read the source. The packages are the ones a run reaches whose
+set holds python, less those that turn the step off in their contract.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from livery.extensions.mkdocstrings._pages import roots
 from livery.footman import fail
 from livery.workshop import scoped_packages
 
@@ -75,27 +77,26 @@ print(json.dumps({"missing": missing, "absent": absent}))
 """
 
 
-def _top_package(src: Path) -> str:
-    """The dotted name of the shallowest package under *src*, or empty."""
-    inits = sorted(src.rglob("__init__.py"), key=lambda path: len(path.parts))
-    return ".".join(inits[0].parent.relative_to(src).parts) if inits else ""
-
-
 def undocumented_exports(root: Path, members: list[Path]) -> list[str]:
     """The exports of *members* that carry no docstring, as dotted names.
 
-    Each member's top package is imported in one child process of the
-    interpreter running this one, which is the workspace's own, so a
-    package's import-time effects stay out of the gate's process.
+    Each root of each member (`roots`) is imported in one child process
+    of the interpreter running this one, which is the workspace's own,
+    so a package's import-time effects stay out of the gate's process.
     """
     import livery.footman as footman
 
     targets: list[tuple[str, list[str]]] = []
     for member in members:
         src = member / "src"
-        dotted = _top_package(src) if src.is_dir() else ""
-        if dotted:
-            targets.append((dotted, sorted(assignment_docstrings(src))))
+        if not src.is_dir():
+            continue
+        documented = sorted(assignment_docstrings(src))
+        targets += [
+            (".".join(root.relative_to(src).parts), documented)
+            for root in roots(src)
+            if root != src
+        ]
     if not targets:
         return []
     result = footman.run(

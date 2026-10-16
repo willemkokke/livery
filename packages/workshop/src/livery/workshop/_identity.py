@@ -77,8 +77,7 @@ def roster(root: Path) -> list[dict[str, Any]]:
     `dev`, the dev-group entry with its `dev-extras`; any other carries
     none and stays out of the uv workspace.
     """
-    from livery.workshop._composition import extension_set, order_or_sorted
-    from livery.workshop._extensions import installed_declaration
+    from livery.workshop._composition import extension_set
     from livery.workshop._packages import discover_packages, holds_runtime_language
 
     if not (root / "packages").is_dir():
@@ -88,9 +87,7 @@ def roster(root: Path) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {
             "dir": package.member,
             "name": package.name,
-            "extensions": list(
-                order_or_sorted(extension_set(package), installed_declaration)
-            ),
+            "extensions": list(extension_set(package)),
         }
         if holds_runtime_language(package):
             contract = load_contract(package.directory / "workshop.toml")

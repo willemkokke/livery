@@ -438,7 +438,7 @@ def render_compositions(root: Path, audience: str | None) -> str:
     the gate phases that judge a package holding it. A package holding
     no extension is listed under ``none``.
     """
-    from livery.workshop._composition import extension_set, implied, order_or_sorted
+    from livery.workshop._composition import extension_set, implied
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._packages import discover_packages
     from livery.workshop._phases import declared_phases
@@ -447,7 +447,7 @@ def render_compositions(root: Path, audience: str | None) -> str:
     gated = {name for name, spec in declared_phases().items() if spec.gated}
     members: dict[tuple[str, ...], list[str]] = {}
     for package in discover_packages(root):
-        held = order_or_sorted(extension_set(package), installed_declaration)
+        held = extension_set(package)
         members.setdefault(held, []).append(package.path)
     if not members:
         return ""

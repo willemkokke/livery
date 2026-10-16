@@ -3210,8 +3210,8 @@ def write_tools_nav(generated: Path, keys: list[str]) -> Path:
 
     The block is data the docs site reads: `nav.tools.toml` beside the
     pages, a `nav` list of one-key tables, each a label to its page. The
-    bench writes the file itself, since nobody imports an extension but
-    the workshop that mounts it.
+    bench writes the file itself, since only an extension that requires
+    another imports it, and the bench is no extension.
     """
     entries = "".join(f'{{ "{k}" = "_generated/tools/{k}.md" }},\n' for k in keys)
     generated.mkdir(parents=True, exist_ok=True)

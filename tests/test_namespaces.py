@@ -4,11 +4,12 @@ Our convention, not the workshop's: every distribution root with public
 names is a regular package whose __init__.py declares them, imports
 what need not load under TYPE_CHECKING and serves it on first use. The
 shared namespaces, livery, livery.toolroom and livery.extensions, carry
-no __init__.py, nor does a root with no public names, an extension's:
-nobody imports an extension but the workshop, which mounts it.
-A public package under a root keeps its own path and its root declares
-it, and testing is a name no module takes anywhere but directly under
-a root.
+no __init__.py, nor does a root with no public names, as most
+extensions' are: the workshop mounts an extension through its entry
+point, and only an extension that requires another imports it, through
+the names its entry module declares. A public package under a root
+keeps its own path and its root declares it, and testing is a name no
+module takes anywhere but directly under a root.
 """
 
 from __future__ import annotations
@@ -449,6 +450,7 @@ EXPORTS: dict[str, list[str]] = {
         "contributions_for",
         "discover_packages",
         "extension_names",
+        "extension_set",
         "fix_files",
         "forge_repository",
         "forge_token",
@@ -465,6 +467,8 @@ EXPORTS: dict[str, list[str]] = {
         "scoped_suite",
         "selected_files",
         "shipped_content",
+        "step_enabled",
+        "step_extensions",
         "step_option",
         "testing",
         "this_forge",
@@ -473,6 +477,17 @@ EXPORTS: dict[str, list[str]] = {
         "verify_workspace",
         "workspace_root",
         "workspace_suite",
+    ],
+    "livery.extensions.docs": [
+        "ALL_MEMBERS",
+        "MEMBERS",
+        "PUBLIC_MEMBERS",
+        "SITE_TREES",
+        "Scope",
+        "TASK_REFERENCE",
+        "Writer",
+        "advertised_providers",
+        "task_page",
     ],
 }
 
@@ -485,12 +500,12 @@ SOURCES = {
     "livery.toolroom.store": "packages/toolroom-store/src/livery/toolroom/store",
     "livery.toolroom.bench": "packages/toolroom-bench/src/livery/toolroom/bench",
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
+    "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
 }
 
 #: The roots with no public names: a namespace with no __init__.py,
 #: reached through an entry point alone.
 BARE = {
-    "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
     "livery.extensions.basedpyright": (
         "packages/extensions/basedpyright/src/livery/extensions/basedpyright"
     ),
@@ -632,7 +647,7 @@ def test_a_wheel_whose_roots_all_have_entry_modules_lets_none_lose_it() -> None:
     # Without the namespace flag, uv build refuses a module name that has
     # no __init__.py, so no root ships having lost its entry module. A
     # wheel that also ships a root with no public names, as the
-    # workshop's ships the docs extension, needs the flag for it.
+    # workshop's ships the python extension, needs the flag for it.
     problems: list[str] = []
     members = [*ROOT.glob("packages/*/pyproject.toml")]
     members += ROOT.glob("packages/*/*/pyproject.toml")

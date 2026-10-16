@@ -13,9 +13,8 @@ and the authored ``docs/nav.toml`` places the block with a marker pair,
 renders the block where the markers sit. The block is data: a file
 ``docs/_generated/nav.<name>.toml`` holding a ``nav`` list of one-key
 tables, each a label to a page path inside the package's ``docs/``. A
-generator in any package writes that file itself and imports nothing
-of this extension, since nobody imports an extension but the
-workshop that mounts it.
+generator in any package writes that file itself: the file is what this
+extension reads, and it serves no code for writing one.
 """
 
 from __future__ import annotations

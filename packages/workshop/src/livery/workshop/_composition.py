@@ -18,9 +18,9 @@ order. A combination is a set, named by its canonical list joined with
 Every function here but `extension_set` reads declarations through a
 lookup and imports nothing: [livery.workshop._extensions][] answers the
 lookup from what is installed, and a test from what it declares.
-[livery.workshop._composition.extension_set][] is a package's set as
-the installed declarations compose it, which the base's readers and the
-extensions ask.
+[livery.workshop.extension_set][] is a package's set as the installed
+declarations compose it, which the base's readers and the extensions
+ask.
 """
 
 from __future__ import annotations
@@ -84,17 +84,20 @@ _SETS: dict[tuple[str, ...], tuple[object, tuple[str, ...]]] = {}
 
 
 def extension_set(package: Package) -> tuple[str, ...]:
-    """The extensions *package* holds, which its steps match.
+    """The extensions *package* holds: its list and every extension the list requires.
 
-    Its set: the extensions it lists and every one they require, as the
-    installed declarations compose them
-    ([livery.workshop._composition.closure][]). Empty for a package that
-    lists none. The workspace's own tests
-    ([livery.workshop.workspace_suite][]) hold the root's set, the
-    extensions ``[workspace] extensions`` lists and every one they
-    require, read from the root's contract on each call. Each distinct
-    list is composed once for each scan of the installed extensions, so
-    a scan taken after an install composes it again.
+    In composition order, as the installed declarations declare it:
+    each extension after the ones it requires, ties alphabetical, and
+    alphabetical while the declared order has no start. The list's own
+    order means nothing. Empty for a package that lists none. The
+    workspace's own tests ([livery.workshop.workspace_suite][]) hold the
+    root's set: the extensions ``[workspace] extensions`` lists and
+    every one they require, read from the root's contract on each call.
+    A step that names extensions judges a package whose set holds one
+    of them.
+
+    A list is composed once for each scan of the installed extensions,
+    so a scan taken after an install composes it again.
     """
     from livery.workshop._packages import WORKSPACE_TESTS
 
@@ -113,7 +116,9 @@ def extension_set(package: Package) -> tuple[str, ...]:
     held = _SETS.get(listed)
     if held is not None and held[0] is scan:
         return held[1]
-    found = closure(listed, installed_declaration)
+    found = order_or_sorted(
+        closure(listed, installed_declaration), installed_declaration
+    )
     _SETS[listed] = (scan, found)
     return found
 

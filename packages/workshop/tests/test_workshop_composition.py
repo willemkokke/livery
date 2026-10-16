@@ -416,6 +416,27 @@ def test_the_mount_and_answers_follow_composition_order_whatever_the_list_order(
     ]
 
 
+def test_a_package_s_set_is_in_composition_order_whatever_its_list_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import discover_packages, extension_set
+
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        native=_composing("native", PACKAGE + 'requires = ["acme.zulu"]\n'),
+        zulu=_composing("zulu"),
+        alpha=_composing("alpha"),
+    )
+    root_contract(tmp_path, "[]")
+    for listed in ('["acme.native", "acme.alpha"]', '["acme.alpha", "acme.native"]'):
+        package_contract(tmp_path, "core", listed)
+        (core,) = discover_packages(tmp_path)
+        # Each after what it requires, ties alphabetical: alpha first, and
+        # zulu before native, which requires it.
+        assert extension_set(core) == ("acme.alpha", "acme.zulu", "acme.native")
+
+
 def test_outside_a_workspace_the_stack_is_the_base_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

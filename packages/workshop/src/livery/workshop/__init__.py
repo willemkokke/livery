@@ -30,9 +30,15 @@ the whole workspace in every scope, and asks
 touched, with the context its run was handed; its ``widen``
 reference receives the run's [livery.workshop.Changes][]. A step
 declares the options a package may set on it under its ``options``
-and reads a package's value with [livery.workshop.step_option][]; a
-step declared ``enabled = false`` registers once the root contract
-turns it on at the step's address. A step asks a package's extensions
+and reads a package's value with [livery.workshop.step_option][],
+which answers from the installed declaration in a process that
+mounted nothing. A step names the extensions it judges packages by,
+[livery.workshop.step_extensions][], and judges a package whose set
+holds one of them: the extensions it lists and every one they
+require, [livery.workshop.extension_set][]. A step declared
+``enabled = false`` registers once the root contract turns it on at
+the step's address, which [livery.workshop.step_enabled][] answers.
+A step asks a package's extensions
 what it needs of the package with [livery.workshop.answer][]: the
 modules a type-completeness step verifies,
 [livery.workshop.PUBLIC_MODULES][], or where the package's build
@@ -96,6 +102,7 @@ if TYPE_CHECKING:
     from livery.workshop import testing as testing
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
+    from livery.workshop._composition import extension_set as extension_set
     from livery.workshop._contract import read_contract as read_contract
     from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
@@ -144,6 +151,8 @@ if TYPE_CHECKING:
     from livery.workshop._steps import scoped_paths as scoped_paths
     from livery.workshop._steps import scoped_suite as scoped_suite
     from livery.workshop._steps import selected_files as selected_files
+    from livery.workshop._steps import step_enabled as step_enabled
+    from livery.workshop._steps import step_extensions as step_extensions
     from livery.workshop._steps import step_option as step_option
     from livery.workshop._tokens import forge_token as forge_token
     from livery.workshop._tools import undeployed as undeployed
@@ -182,6 +191,7 @@ __all__ = [
     "contributions_for",
     "discover_packages",
     "extension_names",
+    "extension_set",
     "fix_files",
     "forge_repository",
     "forge_token",
@@ -198,6 +208,8 @@ __all__ = [
     "scoped_suite",
     "selected_files",
     "shipped_content",
+    "step_enabled",
+    "step_extensions",
     "step_option",
     "testing",
     "this_forge",
@@ -240,6 +252,7 @@ _EXPORTS: dict[str, str] = {
     "contributions_for": "livery.workshop._extensions",
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
+    "extension_set": "livery.workshop._composition",
     "forge_repository": "livery.workshop._forge_lane",
     "this_forge": "livery.workshop._forge_lane",
     "this_repository": "livery.workshop._forge_lane",
@@ -258,6 +271,8 @@ _EXPORTS: dict[str, str] = {
     "scoped_paths": "livery.workshop._steps",
     "scoped_suite": "livery.workshop._steps",
     "selected_files": "livery.workshop._steps",
+    "step_enabled": "livery.workshop._steps",
+    "step_extensions": "livery.workshop._steps",
     "step_option": "livery.workshop._steps",
     "undeployed": "livery.workshop._tools",
     "verify_workspace": "livery.workshop._packages",
