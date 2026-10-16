@@ -906,6 +906,19 @@ def bind(
             continue
 
         cli = registry.cli_name(param.name)
+        chosen = seg.values.get(cli)
+        if isinstance(chosen, dict):
+            # The options a positional's value declares (`options_of()`),
+            # which the splitter read and checked: each is coerced by its own
+            # entry and keyed by its parameter's name.
+            supplied.add(param.name)
+            kwargs[param.name] = {
+                str(seg.chosen[name].get("key", name)): _chosen_value(
+                    raw, seg.chosen[name]
+                )
+                for name, raw in chosen.items()
+            }
+            continue
         if cli in seg.bare:
             # Named without a value: the mention *is* the content. The ladder
             # below still runs, so the value is whatever absence would have
@@ -1093,6 +1106,26 @@ def bind(
     # `--` passthrough always has a home now: a task's *args, and/or the run
     # context (`passthrough()` / `ctx.passthrough`). So it is never an error.
     return [*pos, *var_args], kwargs, frozenset(supplied)
+
+
+def _chosen_value(raw: Any, spec: dict[str, Any]) -> Any:
+    """One option a positional's value declares, as the body receives it.
+
+    The splitter checked the text against the option's entry already, so
+    this only turns it into the entry's type. A flag arrives as a bool, and
+    a bare mention as the declared default, both as they are.
+    """
+    tags = spec.get("types")
+
+    def one(token: Any) -> Any:
+        if not isinstance(token, str) or not tags:
+            return token
+        ok, value = _coerce.coerce_scalar(token, list(tags))
+        return value if ok else token
+
+    if isinstance(raw, list):
+        return [one(token) for token in raw]
+    return one(raw)
 
 
 def forward_map(

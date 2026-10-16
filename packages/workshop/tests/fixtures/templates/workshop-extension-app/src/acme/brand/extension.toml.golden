@@ -1,0 +1,14 @@
+# Seeded from the workshop-extension template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+#
+# What the workshop mounts acme.brand from, read at every mount
+# without importing the extension.
+
+[extension]
+# What the extension does, in a sentence or two: the agent's guidance
+# and the site's development pages open its block with it.
+description = "acme-brand: a package of the acme workspace."
+api-version = 1
+# The footman plugin that carries this extension's verbs.
+plugin = "acme.brand"

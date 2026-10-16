@@ -61,15 +61,17 @@ provides = { published = "bool" }
 [fragments."conanws.yml"]
 render = "livery.extensions.conan._package:workspace_file"
 
-# The templates fm new.package creates a C++ package from, built with
-# CMake and packaged by conan: a library, and an executable whose
-# recipe says application. Their files live under
-# content/templates/<name>/ beside this file.
-[templates.cpp-library]
-doc = "a C++ library built with CMake and packaged by conan"
+# The template fm new.package creates a C++ package from, built with
+# CMake and packaged by conan. Its files live under
+# content/templates/cpp-package/ beside this file.
+[templates.cpp-package]
+doc = "a C++ package built with CMake and packaged by conan: a library, or with --package-type another of conan's package types"
 extensions = ["cmake", "conan"]
 
-[templates.cpp-executable]
-doc = "a C++ executable built with CMake and packaged by conan as an application"
-extensions = ["cmake", "conan"]
-extends = "cpp-library"
+# The answer is the recipe's package_type, and it decides the CMake
+# target: a library, an interface library for header-library, or a
+# program with the library its tests link for application.
+[templates.cpp-package.options.package-type]
+doc = "conan's package type, which the recipe's package_type and the CMake target follow"
+choices = ["library", "application", "header-library", "static-library", "shared-library"]
+default = "library"

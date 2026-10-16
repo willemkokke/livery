@@ -9,9 +9,13 @@
 [project.entry-points."workshop.extensions"]
 "{{ import_path }}" = "{{ import_path }}"
 
-# The branded App: the workshop surface under this extension's name.
+{%- if app %}
+
+# The branded App: the workshop under the name {{ app }}, with this
+# extension's verbs.
 [project.scripts]
-{{ project_slug }} = "{{ import_path }}._app:main"
+{{ app }} = "{{ import_path }}._app:main"
+{%- endif %}
 
 [build-system]
 requires = ["uv_build>=0.11,<0.13"]
@@ -32,8 +36,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
 ]
-# An extension is the workshop, extended: its plugin and its App stand on
-# the base extension's wheel, and its App imports the runner, footman.
+# An extension is the workshop, extended: its plugin stands on the base
+# extension's wheel and imports the runner, footman{% if app %}, as its App does{% endif %}.
 dependencies = ["livery-workshop", "livery-footman"]
 
 [project.urls]

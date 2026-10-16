@@ -58,7 +58,7 @@ def test_an_edit_of_a_member_with_no_module_refuses(tmp_path: Path) -> None:
 
 def test_a_fixture_with_no_python_member_has_no_leaf() -> None:
     with pytest.raises(_FAILURES, match="no python member to edit"):
-        _scale.leaf([("scale-c000", "cpp-library")])
+        _scale.leaf([("scale-c000", "cpp-package")])
 
 
 def test_outside_ci_nothing_is_recorded(
@@ -114,10 +114,10 @@ def test_the_fixture_fails_naming_every_verb_that_exited_non_zero(
 
 
 def test_members_are_named_by_template_tag_and_index() -> None:
-    assert _scale.member_names({"python-library": 2, "cpp-library": 1}) == [
+    assert _scale.member_names({"python-library": 2, "cpp-package": 1}) == [
         ("scale-p000", "python-library"),
         ("scale-p001", "python-library"),
-        ("scale-c000", "cpp-library"),
+        ("scale-c000", "cpp-package"),
     ]
 
 
@@ -134,7 +134,7 @@ def test_generate_renders_each_member_then_the_project_once(
 ) -> None:
     from livery.workshop import _templates
 
-    # cpp-library lists cmake, which the root's canonical list orders.
+    # cpp-package lists cmake, which the root's canonical list orders.
     skip_unless_installed("cmake")
     rendered: list[tuple[str, str]] = []
     applied: list[Path] = []
@@ -153,11 +153,11 @@ def test_generate_renders_each_member_then_the_project_once(
     )
     contract = tmp_path / "workshop.toml"
     contract.write_text('[workspace]\nextensions = ["python"]\n')
-    members = _scale.generate(tmp_path, {"python-library": 3, "cpp-library": 1})
+    members = _scale.generate(tmp_path, {"python-library": 3, "cpp-package": 1})
     assert rendered == members and len(members) == 4
     assert applied == [tmp_path]
     assert committed == ["chore: 4 generated members"]
-    # The root lists what cpp-library needs before the members are
+    # The root lists what cpp-package needs before the members are
     # created, as its canonical list: a creation installs nothing.
     assert contract.read_text() == (
         '[workspace]\nextensions = ["cmake", "conan", "python"]\n'
@@ -271,10 +271,10 @@ def test_the_row_reads_back_as_ci_timings_metrics() -> None:
         _scale.Timing(name="sync cold", ms=1500.0, code=0),
         _scale.Timing(name="check warm", ms=500.0, code=1),
     ]
-    members = [("scale-p000", "python-library"), ("scale-c000", "cpp-library")]
+    members = [("scale-p000", "python-library"), ("scale-c000", "cpp-package")]
     row = _scale.row(timings, members)
     assert row["codes"] == {"sync cold": 0, "check warm": 1}
-    assert row["members"] == {"cpp-library": 1, "python-library": 1}
+    assert row["members"] == {"cpp-package": 1, "python-library": 1}
     entry: dict[str, Any] = {"jobs": {"scale": row}}
     assert _metrics(entry)["scale"] == {
         "total_ms": 2000.0,

@@ -1,0 +1,19 @@
+# Seeded from the cpp-package template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project(archive CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(archive STATIC src/archive.cpp)
+target_include_directories(archive PUBLIC src)
+
+install(TARGETS archive)
+install(FILES src/archive.hpp DESTINATION include)
+
+enable_testing()
+add_executable(test_archive tests/test_archive.cpp)
+target_link_libraries(test_archive PRIVATE archive)
+add_test(NAME test_archive COMMAND test_archive)

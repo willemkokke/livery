@@ -154,10 +154,12 @@ reason = { types = ["str"], doc = "why the reach stays, and the public seam that
 # The templates fm new.package creates a python package from; their
 # files live under content/templates/<name>/ beside this file.
 [templates.python-library]
-doc = "a python library: a typed module, its tests, and a pyproject.toml uv builds"
+doc = "a python library: a typed module, its tests, a pyproject.toml uv builds, and with --command a script on PATH"
 extensions = ["python"]
 
-[templates.python-cli]
-doc = "a python command line: a python library whose script on PATH runs its main()"
-extensions = ["python"]
-extends = "python-library"
+# The answer names the console script the package's installation puts
+# on PATH, which runs the main() of its __main__ module.
+[templates.python-library.options.command]
+doc = "the name of a script on PATH that runs the package's main(); none by default"
+type = "str"
+default = ""

@@ -57,14 +57,14 @@ from livery.workshop._ci_tasks import ci
 #: The members a fixture holds by default, per template.
 DEFAULT_COUNTS: dict[str, int] = {
     "python-library": 240,
-    "cpp-library": 40,
+    "cpp-package": 40,
     "nanobind-module": 20,
 }
 
 #: The short tag a generated member's name carries, per template.
 _TAGS = {
     "python-library": "p",
-    "cpp-library": "c",
+    "cpp-package": "c",
     "nanobind-module": "n",
 }
 
@@ -362,7 +362,7 @@ def _counts(python: int, cpp: int, nanobind: int) -> dict[str, int]:
         template: count
         for template, count in (
             ("python-library", python),
-            ("cpp-library", cpp),
+            ("cpp-package", cpp),
             ("nanobind-module", nanobind),
         )
         if count > 0
@@ -375,8 +375,8 @@ def ci_scale(
     python: Annotated[int, doc("members born from python-library")] = DEFAULT_COUNTS[
         "python-library"
     ],
-    cpp: Annotated[int, doc("members born from cpp-library")] = DEFAULT_COUNTS[
-        "cpp-library"
+    cpp: Annotated[int, doc("members born from cpp-package")] = DEFAULT_COUNTS[
+        "cpp-package"
     ],
     nanobind: Annotated[int, doc("members born from nanobind-module")] = DEFAULT_COUNTS[
         "nanobind-module"

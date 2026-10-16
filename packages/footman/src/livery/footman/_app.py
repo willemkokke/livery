@@ -748,6 +748,42 @@ def _choices_resolver(reg: registry.Group) -> _split.ChoicesFor:
     return resolve
 
 
+def _options_resolver(reg: registry.Group) -> _split.OptionsFor:
+    """Answer the options a positional's value declares, live, from the registry.
+
+    The function a parameter marked `options_of()` names runs here, once per
+    value an invocation gives, and only for a line that gives one: the
+    manifest carries no options, since they follow a value. A `fail()` in it
+    is the refusal of the line.
+    """
+    seen: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+
+    def resolve(address: str, param: str, value: str) -> list[dict[str, Any]]:
+        key = (address, param, value)
+        if key in seen:
+            return seen[key]
+        found: list[dict[str, Any]] = []
+        try:
+            fn = _executor.resolve(reg, address.split("."))
+        except (KeyError, IndexError):
+            fn = None
+        if fn is not None:
+            for declared in _manifest.resolved_signature(fn).parameters.values():
+                if registry.cli_name(declared.name) != param:
+                    continue
+                chooser = _coerce.peel(declared.annotation).chooser
+                if chooser is not None:
+                    try:
+                        found = _manifest.chosen_options(chooser, value)
+                    except context.Failed as exc:
+                        raise _split.ChainError(f"{address}: {exc.reason}") from exc
+                break
+        seen[key] = found
+        return found
+
+    return resolve
+
+
 def _print_task_help(
     tree: dict[str, Any],
     path: list[str],
@@ -781,7 +817,7 @@ def _print_task_help(
     if task.get("disabled"):
         print(_describe.dim(f"\n  unavailable here: {task['disabled']}", on))
     positionals = [p for p in shown if p["kind"] in ("positional", "variadic")]
-    options = [p for p in shown if p["kind"] in ("flag", "option")]
+    options = [p for p in shown if p["kind"] in ("flag", "option", "chosen")]
     _print_param_rows(positionals, "positionals")
     _print_param_rows(options, "options")
     returned = task.get("returned")
@@ -866,7 +902,7 @@ def _print_group_help(
     )
     for spec in params:  # the default's own options, and only those
         _split.live_choices(f"{dotted}.default", spec, choices_for)
-    options = [p for p in params if p["kind"] in ("flag", "option")]
+    options = [p for p in params if p["kind"] in ("flag", "option", "chosen")]
     _print_param_rows(options, "options")
     _print_docs_line(dotted, on)
 
@@ -2614,7 +2650,9 @@ def _run_tree_body(
         return _describe_contract(tree, describe, after < len(argv))
 
     try:
-        globals_, segments = _split.split_chain(tree, argv, live)
+        globals_, segments = _split.split_chain(
+            tree, argv, live, _options_resolver(reg)
+        )
     except _split.ChainError as exc:
         return _refuse(json_mode, str(exc))
     except _manifest.CompleterError as exc:

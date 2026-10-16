@@ -1,0 +1,46 @@
+# Seeded from the workshop-extension template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+[project.entry-points."footman.tasks"]
+"acme.brand" = "acme.brand._tasks"
+
+# The workshop extension this package is, by the name a workspace
+# lists: the package beside its extension.toml.
+[project.entry-points."workshop.extensions"]
+"acme.brand" = "acme.brand"
+
+# The branded App: the workshop under the name brand, with this
+# extension's verbs.
+[project.scripts]
+brand = "acme.brand._app:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "acme-brand"
+version = "0.0.0"
+description = "acme-brand: a package of the acme workspace."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "A", email = "a@example.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+# An extension is the workshop, extended: its plugin stands on the base
+# extension's wheel and imports the runner, footman, as its App does.
+dependencies = ["livery-workshop", "livery-footman"]
+
+[project.urls]
+Repository = "https://github.com/acme/acme"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is acme.brand and
+# there is no acme/__init__.py anywhere in this repository.
+module-name = "acme.brand"

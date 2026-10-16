@@ -264,8 +264,8 @@ def new_project(
     extension: Annotated[
         str,
         doc(
-            "also scaffold this named extension package and self-host it:"
-            " the workspace becomes the extension's home"
+            "also scaffold this named extension package, with its branded App,"
+            " and self-host it: the workspace becomes the extension's home"
         ),
     ] = "",
     local: Annotated[
@@ -563,7 +563,8 @@ def _add_extension(root: Path, extension: str) -> None:
     """Scaffold *extension* and self-host it: the workspace becomes its home.
 
     The extension package is born from the ``workshop-extension``
-    template, and the contract's list gains its import path, written
+    template with its branded App, a script named after the extension's
+    directory, and the contract's list gains its import path, written
     again as its canonical list, so the home composes with its own
     extension at HEAD from the first commit. Idempotent: an
     already-listed extension walks past.
@@ -574,7 +575,8 @@ def _add_extension(root: Path, extension: str) -> None:
     if (root / "packages" / extension).exists():
         print(f"  extension: packages/{extension} already scaffolded")
         return
-    import_path = render_member(root, extension, "workshop-extension")
+    app = extension.rsplit("/", 1)[-1]
+    import_path = render_member(root, extension, "workshop-extension", {"app": app})
     # Wired in the birth's own process: the template needs python, which
     # the root's list holds, so this process mounted it already, and a
     # list without python refused the render above.

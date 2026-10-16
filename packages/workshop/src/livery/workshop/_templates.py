@@ -5,19 +5,22 @@ The listed extensions' files are composed by the fragment engine
 are generated from the contract. `drift_check` judges both against the
 repository as the gate's `fm drift.check`; `apply_project` writes both,
 and `fm sync` runs it, which is the recovery for drift. ``fm
-new.package <name> <template>`` writes a member born from an installed
-template into ``packages/<name>`` (`livery.workshop._seeds`), and a
-fresh runner adds it to the project files.
+new.package <name> <template> --<option>=<answer>`` writes a member born
+from an installed template into ``packages/<name>``
+(`livery.workshop._seeds`), and a fresh runner adds it to the project
+files.
 """
 
 from __future__ import annotations
 
+import inspect
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman as footman
-from livery.footman import Arg, doc, fail, group, hidden, suggest
+from livery.footman import Arg, doc, fail, group, hidden, options_of, suggest
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
     stack_entries,
@@ -37,7 +40,7 @@ REMOVED_TREES = {
     "package-python": "python-library",
     "package-extension": "workshop-extension",
     "package-python-nanobind": "nanobind-module",
-    "package-cpp-conan": "cpp-library",
+    "package-cpp-conan": "cpp-package",
 }
 
 
@@ -341,6 +344,22 @@ def template_names() -> list[str]:
     return list(installed_templates())
 
 
+def template_options(template: str) -> list[inspect.Parameter]:
+    """The creation options of *template*, which ``fm new.package`` takes after it.
+
+    Read from the installed declarations: the options the template and
+    those it extends declare, less the answers its chain fixes. Completion
+    lists these for the template a line names.
+
+    Raises:
+        Failed: as a birth from *template* refuses for a template no
+            installed extension declares, or an ``extends`` cycle.
+    """
+    from livery.workshop._seeds import option_parameters, resolved_chain
+
+    return option_parameters(resolved_chain(_root(), template))
+
+
 def _installed(root: Path) -> str:
     """The templates *root* offers, each on a line with its doc, for a refusal."""
     from livery.workshop._seeds import described, installed_templates
@@ -358,6 +377,11 @@ def new_package(
     ] = "",
     kind: Annotated[str, hidden] = "",
     resume: Annotated[bool, hidden] = False,
+    answers: Annotated[
+        dict[str, object] | None,
+        options_of("template", template_options),
+        doc("answers to the template's creation options"),
+    ] = None,
 ) -> None:
     """Create a package from an installed template and wire it into the workspace.
 
@@ -369,6 +393,14 @@ def new_package(
     the extensions the workspace's installed set holds: the root list's
     set and every package's. Without a template it refuses, naming
     each installed one with its doc.
+
+    The words after the template answer its creation options, each
+    ``--<option>=<answer>``: the options it and the templates it extends
+    declare, less those its chain fixes. Each answer is checked before
+    anything is written. An option the template does not take is an
+    unknown option, a required one without an answer is named, and an
+    answer outside an option's choices or type is refused naming them.
+    The answers render the files and are not stored.
 
     A creation installs nothing. A template needs its own
     ``extensions``, those of each template it extends, and the
@@ -410,7 +442,7 @@ def new_package(
             f" `{prog} new.package {name} <template>`; the installed templates"
             f" are:\n{_installed(root)}"
         )
-    render_member(root, name, template)
+    render_member(root, name, template, answers)
     runner = runner_script(root / ".venv")
     if not runner.is_file():
         fail(
@@ -464,18 +496,25 @@ def _check_member_name(name: str) -> None:
         )
 
 
-def render_member(root: Path, name: str, template: str) -> str:
+def render_member(
+    root: Path,
+    name: str,
+    template: str,
+    answers: Mapping[str, object] | None = None,
+) -> str:
     """Write a member born from *template* into ``packages/<name>``; the import path.
 
     Writes the ``package-base`` seeds and the files of the template's
-    chain (`livery.workshop._seeds.create_package`), and the files the
-    records compose for the member. The member's own contract is one of
-    the template's files, and discovery finds the member through it,
-    so the roster needs no write. The project files, the lock and the
-    install are the caller's: `wire_member` runs them for one member,
-    and a caller adding many members runs them once after the last.
-    Refuses an existing directory, naming it, and a template the birth
-    cannot take, before anything is written.
+    chain (`livery.workshop._seeds.create_package`), rendered with
+    *answers*, each answer to one of the chain's options by its variable,
+    and the files the records compose for the member. The member's own
+    contract is one of the template's files, and discovery finds the
+    member through it, so the roster needs no write. The project files,
+    the lock and the install are the caller's: `wire_member` runs them
+    for one member, and a caller adding many members runs them once
+    after the last. Refuses an existing directory, naming it, a template
+    the birth cannot take, and an answer the template's options refuse,
+    before anything is written.
     """
     _check_member_name(name)
     destination = root / "packages" / name
@@ -503,7 +542,7 @@ def render_member(root: Path, name: str, template: str) -> str:
     from livery.workshop._seeds import create_package, derived
 
     data.update(derived(data))
-    create_package(root, destination, template, data)
+    create_package(root, destination, template, data, answers)
     from livery.workshop._shipped_files import deliver
 
     deliver(root)

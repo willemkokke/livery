@@ -874,6 +874,41 @@ doc = "the template whose files the birth writes first, this one's file winning 
 types = ["strs"]
 doc = "the extensions a package born from the template lists, written into its contract in their canonical form; required, [] for none"
 
+[contract.extension.templates."*".fixes]
+types = ["table"]
+doc = "each option of a template this one extends, to the answer a package born from this one takes for it; a birth from this one takes no answer for it"
+
+[contract.extension.templates."*".fixes."*"]
+types = ["str", "int", "bool"]
+doc = "the answer the option takes"
+
+[contract.extension.templates."*".options]
+types = ["table"]
+doc = "the template's creation options, each answered as fm new.package <name> <template> --<option>=<answer>; a template extending this one takes them too"
+
+# An option, by the name --<option> spells: lower-case letters, digits
+# and hyphens. Its answer renders the template's files as a variable,
+# the name with its hyphens as underscores.
+[contract.extension.templates."*".options."*"]
+types = ["table"]
+
+[contract.extension.templates."*".options."*".choices]
+types = ["strs"]
+doc = "the answers the option takes; required unless type is given"
+
+[contract.extension.templates."*".options."*".default]
+types = ["str", "int", "bool"]
+doc = "the answer when the command line gives none; the option is required when absent"
+
+[contract.extension.templates."*".options."*".doc]
+types = ["str"]
+doc = "one line saying what the answer decides, which fm new.package's help and completion show; required"
+
+[contract.extension.templates."*".options."*".type]
+types = ["str"]
+values = ["str", "int", "bool"]
+doc = "the type of the answer; required unless choices is given"
+
 
 # The base's phases, in the grammar of [contract.extension.phases."*"]:
 # the keys the engine running the phase gives its steps, each to its
@@ -1172,6 +1207,17 @@ combine = "livery.workshop._ci_generate:checkout_inputs"
 # content/templates/<name>/ beside this file. The extension format is
 # the base's, and so is the template of a package that is an extension.
 [templates.workshop-extension]
-doc = "a workshop extension: a python package with its extension.toml, its content, its verbs and a branded App"
+doc = "a workshop extension: a python package with its extension.toml, its content and its verbs, and with --app a branded App"
 extensions = ["python"]
 extends = "python-library"
+# The extension's pyproject.toml is its own, and its one script is the
+# App's, so it takes no --command.
+fixes = { command = "" }
+
+# The answer names the branded App: a script that runs the workshop
+# under that name, with this extension's verbs. Without one the package
+# puts nothing on PATH.
+[templates.workshop-extension.options.app]
+doc = "the name of a branded App, a script on PATH that runs the workshop with this extension's verbs; none by default"
+type = "str"
+default = ""

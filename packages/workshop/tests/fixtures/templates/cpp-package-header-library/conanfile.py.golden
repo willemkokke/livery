@@ -1,0 +1,54 @@
+# Seeded from the cpp-package template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+"""The conan recipe for acme-headers."""
+
+from conan import ConanFile
+from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
+
+
+class HeadersConan(ConanFile):
+    """Build, test, and package the library through CMake."""
+
+    name = "acme-headers"
+    version = "0.0.0"
+    package_type = "header-library"
+    settings = "os", "compiler", "build_type", "arch"
+    exports_sources = "CMakeLists.txt", "src/*", "tests/*"
+    # The build reads the headers where they are: nothing copies them
+    # into the build folder first.
+    no_copy_source = True
+
+    def layout(self):
+        """Use conan's standard cmake layout under build/; headers live in src/.
+
+        The source include directory is what a consumer sees while
+        the workspace's conanws.yml resolves this package from its
+        source, so it names src/ where the headers are, not conan's
+        default include/.
+        """
+        cmake_layout(self)
+        self.cpp.source.includedirs = ["src"]
+
+    def generate(self):
+        """Write the CMake toolchain file for the active profile."""
+        CMakeToolchain(self).generate()
+
+    def build(self):
+        """Configure and build with CMake."""
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        """Install the built targets into the conan package."""
+        CMake(self).install()
+
+    def package_id(self):
+        """One package for every configuration: the headers are the same."""
+        self.info.clear()
+
+    def package_info(self):
+        """Name what consumers get: the headers, no library or program."""
+        self.cpp_info.bindirs = []
+        self.cpp_info.libdirs = []

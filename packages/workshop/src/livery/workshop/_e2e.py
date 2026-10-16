@@ -636,7 +636,7 @@ class LoopMember:
 LOOP_MEMBERS: tuple[LoopMember, ...] = (
     LoopMember("loop-echo", "python-library"),
     LoopMember("loop-native", "nanobind-module"),
-    LoopMember("loop-cpp", "cpp-library"),
+    LoopMember("loop-cpp", "cpp-package"),
 )
 
 

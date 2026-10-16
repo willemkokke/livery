@@ -133,6 +133,7 @@ def carry():
 | `prompt()`, `confirm()`, `select()` | mid-task questions — only inside an `interactive=True` task; `prompt(type=…)` coerces and re-asks like a flag |
 | `.opts(**policy)`            | per-use policy override (`keep_going`, `atomic`, …) on a task or group |
 | `Annotated[T, suggest(fn)]`  | dynamic completion for a parameter                   |
+| `options_of("p", fn)`        | on a `dict` parameter: the options the value of positional `p` declares, as `--option=value`; see [Typing](typing.md#options-a-positionals-value-declares) |
 | `exists`, `isfile`, `isdir`  | require a `Path` value to exist on disk              |
 | `between(lo, hi)`            | inclusive numeric bounds (a bare `range` works too)  |
 | `env("VAR")`                 | fall back to an environment variable (CLI > env > default) |

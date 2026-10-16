@@ -96,3 +96,6 @@ needs = ["wheels"]
 doc = "a python package whose extension module is C++, bound through nanobind and built into platform wheels"
 extensions = ["nanobind"]
 extends = "python-library"
+# Its pyproject.toml is its own and declares no script, so it takes no
+# --command.
+fixes = { command = "" }

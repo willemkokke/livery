@@ -330,7 +330,7 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
     assert (root / "conanws.yml").is_file()
     assert not (root / "packages").exists()
     for name, template in (
-        ("geometry", "cpp-library"),
+        ("geometry", "cpp-package"),
         ("ext", "nanobind-module"),
     ):
         made = subprocess.run(

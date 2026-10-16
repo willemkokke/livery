@@ -411,6 +411,15 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
         doc = "an acme app"
         extensions = []
 
+        [templates.acme-app.options.flavour]
+        doc = "the app's flavour"
+        choices = ["sweet", "sour"]
+        default = "sweet"
+
+        [templates.acme-app.options.size]
+        doc = "how many screens it starts with"
+        type = "int"
+
         [for."acme.pages"]
 
         [for."acme.site"]
@@ -450,6 +459,10 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
         "- `fm acme.serve`: Serve acme.\n"
         "- `fm lint.acme`: Run the lint.acme step alone.\n"
         "- template `acme-app`, `fm new.package <name> acme-app`: an acme app\n"
+        "- option `--flavour` of the template `acme-app`, one of sweet|sour,"
+        ' default "sweet": the app\'s flavour\n'
+        "- option `--size` of the template `acme-app`, int, required: how many"
+        " screens it starts with\n"
         "- `[acme]` in the root contract: acme's settings\n"
         "- `[acme] depth` in a package contract: how deep acme reads\n"
         "- `[phases.lint.acme] strict` in a package contract, bool, default"
@@ -464,6 +477,10 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
     human = render_verbs(root, HUMAN)
     assert "| `fm acme.serve` | verb | Serve acme. |\n" in human
     assert "| `acme-app` | template | an acme app |\n" in human
+    assert (
+        '| `acme-app --flavour` | template option, one of sweet\\|sour, default "sweet"'
+        " | the app's flavour |\n"
+    ) in human
     assert "| `[acme] depth` | package contract key | how deep acme reads |\n" in human
     assert (
         "| `[phases.lint.acme] strict` | package step option, bool, default false"

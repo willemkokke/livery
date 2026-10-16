@@ -523,3 +523,74 @@ cannot disagree. <kbd>Tab</kbd> offers what `shares()` returned; <kbd>Tab</kbd>
 again walks the menu.
 
 ![Animated: fm mount TAB offers main, scratch, archive from the suggest completer; TAB again moves the selection](_generated/shots/pwsh-suggest-cast.svg)
+
+## Options a positional's value declares
+
+Some options depend on a value the line gives. A command that creates a site
+from a kind takes the kind's own options: a blog has a title, a shop a
+currency. `options_of(param, fn)` marks a `dict` parameter that receives
+them, and `fn(value)` returns the options the value of *param* declares:
+
+```python
+import inspect
+from typing import Annotated, Literal
+
+from livery.footman import doc, options_of, task
+
+KINDS = {
+    "blog": [
+        inspect.Parameter(
+            "title",
+            inspect.Parameter.KEYWORD_ONLY,
+            annotation=Annotated[str, doc("the blog's title")],
+        )
+    ],
+    "shop": [
+        inspect.Parameter(
+            "currency",
+            inspect.Parameter.KEYWORD_ONLY,
+            default="EUR",
+            annotation=Annotated[Literal["EUR", "USD"], doc("the prices' currency")],
+        )
+    ],
+}
+
+
+def kind_options(kind: str) -> list[inspect.Parameter]:
+    return KINDS.get(kind, [])
+
+
+@task
+def create(
+    name: str,
+    kind: str,
+    answers: Annotated[
+        dict[str, object] | None, options_of("kind", kind_options)
+    ] = None,
+):
+    """Create a site of a kind."""
+```
+
+`fm create web blog --title=Notes` calls `create("web", "blog",
+answers={"title": "Notes"})`. Each option is a keyword-only
+`inspect.Parameter`, declared the way the task declares its own: the
+annotation gives its type or its choices, `doc()` its help line, and one
+without a default is required. The line spells them as it spells any option,
+anywhere after the task's name, and each is checked before anything runs:
+
+- an option the value does not declare is an unknown option
+  (`fm create web blog --currency=USD` names the options blog takes);
+- a required one the line does not give is named
+  (`fm create web blog` is missing `--title`);
+- a value outside the choices or the type is refused, naming them.
+
+The body receives the options the line gave, coerced, keyed by each
+parameter's name. One the line does not give is absent, so applying its
+default is the body's job. A call from Python passes the mapping as it is.
+
+`fn` runs only for a line that gives the value: once when footman splits the
+line, and in a short-lived subprocess when <kbd>Tab</kbd> completes the
+options or their choices, as a [dynamic completer](#dynamic-completion) does.
+For a value it does not know, it may `fail()`, and the message is the
+refusal. `--help` names the marked parameter as `<kind>'s options`, since the
+options themselves follow a value only a line gives.

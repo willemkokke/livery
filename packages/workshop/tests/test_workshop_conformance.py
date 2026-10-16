@@ -605,10 +605,8 @@ def test_every_template_here_composes() -> None:
     )
     templates = available_templates()
     assert set(templates) >= {
-        "cpp-executable",
-        "cpp-library",
+        "cpp-package",
         "nanobind-module",
-        "python-cli",
         "python-library",
         "workshop-extension",
     }

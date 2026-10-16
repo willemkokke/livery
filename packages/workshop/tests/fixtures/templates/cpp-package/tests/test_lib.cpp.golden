@@ -1,0 +1,13 @@
+// Seeded from the cpp-package template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+// The ctest suite: plain asserts, zero dependencies.
+#include <cassert>
+#include <cstring>
+
+#include "lib.hpp"
+
+int main() {
+    assert(std::strlen(lib::version()) > 0);
+    return 0;
+}

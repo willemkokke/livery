@@ -123,7 +123,7 @@ def _listing_coverage(root: Path) -> None:
 
 
 #: The workspace a birth's seeds are written from: its identity, and the
-#: extensions conan's ``cpp-library`` template needs, which its root
+#: extensions conan's ``cpp-package`` template needs, which its root
 #: lists before the creation, since a creation installs nothing.
 _IDENTITY = """\
 [workspace]
@@ -152,7 +152,7 @@ _FACTS = {
 
 
 def _render_cpp(tmp_path: Path) -> Package:
-    """A cpp-conan package, straight from conan's ``cpp-library`` template."""
+    """A cpp-conan package, straight from conan's ``cpp-package`` template."""
     from livery.workshop._composition import closure
     from livery.workshop._extensions import installed_declaration
     from livery.workshop._seeds import create_package, derived
@@ -167,7 +167,7 @@ def _render_cpp(tmp_path: Path) -> Package:
     data.update(derived(data))
     with tempfile.TemporaryDirectory() as scratch:
         (Path(scratch) / "workshop.toml").write_text(_IDENTITY, encoding="utf-8")
-        create_package(Path(scratch), destination, "cpp-library", data)
+        create_package(Path(scratch), destination, "cpp-package", data)
     # The native configs come from the step records, as they do at a
     # birth: the template ships none.
     settle_package(destination, closure(("cmake", "conan"), installed_declaration))

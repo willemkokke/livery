@@ -3,7 +3,8 @@
 The verbs fragment, ``verbs.extensions.md``, gives each extension of
 the installed set a block of its own, in composition order: what the
 extension does, its verbs with the first line of each one's help, the
-templates ``fm new.package`` creates a package from, the contract keys
+templates ``fm new.package`` creates a package from with their creation
+options, the contract keys
 it reads and the step options a package may set, each with its doc and
 where it is written, the steps it declares off with the switch that
 turns each on, and the installed extensions it contributes to and
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
 #: The kinds of line a block holds, in the order a block lists them.
 VERB = "verb"
 TEMPLATE = "template"
+TEMPLATE_OPTION = "template option"
 KEY = "key"
 OPTION = "option"
 SWITCH = "switch"
@@ -58,14 +60,15 @@ class Item:
     """One line of a block: a verb, a template, a key, an option or a switch.
 
     Attributes:
-        kind: What it is: ``verb``, ``template``, ``key``, ``option`` or
-            ``switch``.
+        kind: What it is: ``verb``, ``template``, ``template option``,
+            ``key``, ``option`` or ``switch``.
         name: How a reader writes it: ``docs.build``, ``python-library``,
-            ``[coverage] floor``, ``[phases.test.pytest] parallel``.
+            ``python-library --command``, ``[coverage] floor``,
+            ``[phases.test.pytest] parallel``.
         where: The contract it is written in, ``root`` or ``package``;
-            empty for a verb and a template.
-        detail: An option's type and default, ``bool, default true``;
-            empty for every other kind.
+            empty for a verb, a template and a template's option.
+        detail: An option's type or choices and its default, ``bool,
+            default true``; empty for every other kind.
         doc: Its doc line: a verb's first line of help, the doc of a
             template, a key or an option, what a switch does.
     """
@@ -253,13 +256,21 @@ def _step_owners(steps: Mapping[str, Sequence[StepRecord]]) -> dict[str, str]:
 
 
 def _items(found: Declaration, steps: Sequence[StepRecord]) -> list[Item]:
-    """*found*'s templates, contract keys, step options and switches, in that order."""
+    """*found*'s templates with their options, keys, step options and switches."""
     from livery.workshop._declaration import contract_keys, template_declarations
 
-    items = [
-        Item(TEMPLATE, template.name, doc=template.doc)
-        for template in template_declarations(found.extension, found.package)
-    ]
+    items: list[Item] = []
+    for template in template_declarations(found.extension, found.package):
+        items.append(Item(TEMPLATE, template.name, doc=template.doc))
+        items += [
+            Item(
+                TEMPLATE_OPTION,
+                f"{template.name} --{option.name}",
+                detail=_answers(option.choices, option.type, option.default),
+                doc=option.doc,
+            )
+            for option in template.options
+        ]
     items += [
         Item(KEY, _key_name(key.path), key.contract, doc=key.doc)
         for key in contract_keys(found.package)
@@ -315,7 +326,8 @@ def render_block(block: Block, audience: str | None) -> list[str]:
         if block.items:
             lines += ["| item | kind | what it does |", "| --- | --- | --- |"]
             lines += [
-                f"| `{_written(item, prog)}` | {_kind(item)} | {_cell(item.doc)} |"
+                f"| `{_written(item, prog)}` | {_cell(_kind(item))}"
+                f" | {_cell(item.doc)} |"
                 for item in block.items
             ]
             lines.append("")
@@ -344,6 +356,14 @@ def _written(item: Item, prog: str) -> str:
     return f"{prog} {item.name}" if item.kind == VERB else item.name
 
 
+def _answers(choices: Sequence[str], kind: str, default: object) -> str:
+    """What a template's option answers: its choices or its type, and its default."""
+    takes = f"one of {'|'.join(choices)}" if choices else kind
+    if default is None:
+        return f"{takes}, required"
+    return f"{takes}, default {json.dumps(default)}"
+
+
 def _agent_line(item: Item, prog: str) -> str:
     """*item* as one line of the agent's list, without its bullet."""
     doc = f": {item.doc}" if item.doc else ""
@@ -351,6 +371,9 @@ def _agent_line(item: Item, prog: str) -> str:
         return f"`{prog} {item.name}`{doc}"
     if item.kind == TEMPLATE:
         return f"template `{item.name}`, `{prog} new.package <name> {item.name}`{doc}"
+    if item.kind == TEMPLATE_OPTION:
+        template, _, option = item.name.partition(" ")
+        return f"option `{option}` of the template `{template}`, {item.detail}{doc}"
     where = "the root contract" if item.where == "root" else "a package contract"
     detail = f", {item.detail}" if item.detail else ""
     return f"`{item.name}` in {where}{detail}{doc}"
@@ -360,6 +383,8 @@ def _kind(item: Item) -> str:
     """*item*'s kind as a table cell for a reader of the site."""
     if item.kind in (VERB, TEMPLATE):
         return item.kind
+    if item.kind == TEMPLATE_OPTION:
+        return f"template option, {item.detail}"
     if item.kind == OPTION:
         return f"package step option, {item.detail}"
     noun = "switch" if item.kind == SWITCH else "key"

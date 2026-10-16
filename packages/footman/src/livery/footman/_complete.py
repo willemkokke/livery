@@ -86,11 +86,15 @@ _EXIT_BROKEN = 103
 
 
 _DYNAMIC = "\x00dynamic"  # internal sentinel: a dynamic completer, recompute fresh
+# Internal sentinel: the options a positional's value declares (`options_of()`)
+# are asked fresh. The word after it is a JSON context; the rest are the
+# candidates the manifest answered on its own, served beside them.
+_CHOSEN = "\x00chosen"
 # Mirror of manifest.SCHEMA_VERSION — the hot path can't import manifest.py.
 # A cache written by a different footman gets rebuilt, never walked: the first
 # TAB after an upgrade serves correct candidates instead of a traceback.
 # `test_completion_schema_mirrors_manifest` keeps the two from drifting.
-_SCHEMA = 11
+_SCHEMA = 12
 _DYNAMIC_TIMEOUT = 2.0  # seconds to wait for a fresh dynamic completer subprocess
 # Seconds to wait for a first-time cwd manifest build. A cold build measures
 # ~100-150 ms — footman's own fat tasks.py included — so this is roughly
@@ -251,8 +255,15 @@ class _Segment:
         self.rest: dict[str, Any] | None = None
         self.filled = 0
         self.used: set[str] = set()  # options already given in this segment
+        # Each filled positional's word, by name: the value a parameter
+        # marked `options_of()` reads its options from.
+        self.given: dict[str, str] = {}
+        # The option words the task does not declare: a value's options.
+        self.other: set[str] = set()
+        self.chosen: dict[str, Any] | None = None
         if task is not None:
             params = task["params"]
+            self.chosen = next((p for p in params if p["kind"] == "chosen"), None)
             self.opts = {
                 "--" + p["name"]: p for p in params if p["kind"] in ("flag", "option")
             }
@@ -568,11 +579,13 @@ def complete(tree: dict[str, Any], words: list[str]) -> list[str]:
             seg.used.add("--" + name[len("--no-") :])
             continue
         if word.startswith("-"):
+            seg.other.add(name)
             continue
         # A bare word: a required positional, then the trailing consumer,
         # then — arity satisfied — the start of the next segment (chains
         # always resolve from the root).
         if seg.filled < len(seg.fixed):
+            seg.given[seg.fixed[seg.filled]["name"]] = word
             seg.filled += 1
             continue
         if seg.rest is not None:
@@ -628,11 +641,16 @@ def complete(tree: dict[str, Any], words: list[str]) -> list[str]:
     # completer recomputes fresh, its emission prefix chosen by the shell's
     # word shape; choices likewise come back bare (bash completes the value
     # word) or as full `--opt=choice` tokens (whole-token shells).
+    # The value of the positional a parameter marked `options_of()` follows:
+    # its options are asked fresh, since they follow a value.
+    chooser = seg.given.get(seg.chosen["of"], "") if seg.chosen is not None else ""
     if partial.startswith("-") and "=" in partial:
         optname, _, valpart = partial.partition("=")
         opt = seg.opts.get(optname)
         if opt is not None and opt["kind"] == "option":
             return _attached_value(opt, optname, valpart, bash_split, path)
+        if opt is None and chooser:
+            return [_chosen_context(seg, chooser, partial, bash_split, path)]
 
     # A path-typed positional (or trailing consumer): once the partial is a
     # value being typed rather than an option, hand it to native file
@@ -694,7 +712,62 @@ def complete(tree: dict[str, Any], words: list[str]) -> list[str]:
     # holds a comma), and the non-empty csv head says exactly that.
     if rows and consuming is not None and _csv_head(consuming, partial)[0]:
         return [_MORE, *rows, *next_heads]
+    if chooser and (not partial or partial.startswith("-")):
+        return [
+            _chosen_context(seg, chooser, partial, bash_split, path),
+            *rows,
+            *next_heads,
+        ]
     return rows + next_heads
+
+
+def _chosen_context(
+    seg: _Segment, value: str, partial: str, bash_split: bool, path: list[str]
+) -> str:
+    """The sentinel and JSON context that ask for a value's options fresh.
+
+    Carries what `complete_cli` needs to turn the options into candidates
+    once the subprocess answers: the partial, the shell's word shape, the
+    marked parameter and the value, the segment path, and the option words
+    the line gave already.
+    """
+    assert seg.chosen is not None
+    context = {
+        "partial": partial,
+        "bash": bash_split,
+        "param": seg.chosen["name"],
+        "value": value,
+        "path": path,
+        "used": sorted(seg.other),
+    }
+    return f"{_CHOSEN}\t{json.dumps(context)}"
+
+
+def _chosen_rows(specs: list[dict[str, Any]], context: dict[str, Any]) -> list[str]:
+    """The candidates the options *specs* give for the line in *context*.
+
+    For an attached `--opt=value` partial, the option's choices; otherwise
+    each option's spellings that start with the partial, minus those the
+    line gave already.
+    """
+    partial = str(context["partial"])
+    if "=" in partial:
+        optname, _, valpart = partial.partition("=")
+        spec = next((s for s in specs if "--" + str(s["name"]) == optname), None)
+        if spec is None or spec.get("kind") != "option":
+            return []
+        choices = [
+            str(c) for c in spec.get("choices", ()) if str(c).startswith(valpart)
+        ]
+        return choices if context["bash"] else [f"{optname}={c}" for c in choices]
+    used = set(context["used"])
+    rows: list[str] = []
+    for spec in specs:
+        name = "--" + str(spec["name"])
+        if not name.startswith(partial) or name in used:
+            continue
+        rows += [_cand(t, d) for t, d in _opt_rows(name, spec, spec.get("doc", ""))]
+    return rows
 
 
 def _load_manifest(path: str) -> dict[str, Any] | None:
@@ -980,6 +1053,60 @@ def _fresh_dynamic(param: str, path: list[str], args: list[str]) -> list[str] | 
     return [v for v in proc.stdout.splitlines() if v]
 
 
+def _fresh_chosen(
+    context: dict[str, Any], args: list[str]
+) -> list[dict[str, Any]] | None:
+    """Ask a subprocess for the options a value declares; None on failure.
+
+    The same isolation `_fresh_dynamic` gives a completer: the child imports
+    the framework and the user's code, runs the function the parameter
+    marked `options_of()` names, and prints each option's entry as one line
+    of JSON.
+    """
+    from livery.footman import _paths
+
+    where = _paths.child_args()
+    cmd = [
+        sys.executable,
+        "-P",
+        "-m",
+        "livery.footman._suggest",
+        "--where",
+        str(len(where)),
+        *where,
+        "--chosen",
+        str(context["param"]),
+        "--value",
+        str(context["value"]),
+    ]
+    for name in context["path"]:
+        cmd += ["--path", str(name)]
+    prior = args[:-1]
+    if (tf := _leading_global_value(prior, ("-f", "--tasks-file"))) is not None:
+        cmd += ["--tasks-file", tf]
+    if (cf := _leading_global_value(prior, ("--config",))) is not None:
+        cmd += ["--config", cf]
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=_DYNAMIC_TIMEOUT
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    specs: list[dict[str, Any]] = []
+    for line in proc.stdout.splitlines():
+        try:
+            spec = json.loads(line)
+        except ValueError:
+            return None
+        if isinstance(spec, dict) and isinstance(spec.get("name"), str):
+            specs.append(spec)
+    return specs
+
+
 def complete_cli(args: list[str]) -> int:
     """Entry for `footman --complete` and the standalone resolver."""
     manifest = None
@@ -1147,6 +1274,14 @@ def complete_cli(args: list[str]) -> int:
             sys.stdout.write(glob + "\n")
         _maybe_refresh(manifest, data, spawn_in)
         return _EXIT_FILES_CSV if csv else _EXIT_FILES
+    if out and out[0].startswith(_CHOSEN + "\t"):
+        # A value's options: asked fresh, then served beside the candidates
+        # the manifest answered on its own. A failed ask serves those alone.
+        context = json.loads(out[0].split("\t", 1)[1])
+        specs = _fresh_chosen(context, args)
+        _emit([*(_chosen_rows(specs, context) if specs else []), *out[1:]])
+        _maybe_refresh(manifest, data, spawn_in)
+        return 0
     if out and out[0] == _DYNAMIC:
         # A dynamic completer: recompute it fresh in a subprocess rather than
         # serve the manifest's baked snapshot — a build-critical answer must not

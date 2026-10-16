@@ -40,8 +40,11 @@ workspace requires while the table applies.
 
 A ``[templates.<name>]`` table declares a template ``fm new.package``
 creates a package from: its ``doc``, the ``extensions`` such a package
-lists, and ``extends``, the template whose files come first
-(``DeclaredTemplate``). The base declares its own in the same grammar,
+lists, ``extends``, the template whose files come first, its creation
+options under ``[templates.<name>.options.<option>]``
+(``TemplateOption``), and ``fixes``, the answers it gives options of the
+templates it extends (``DeclaredTemplate``). The base declares its own in
+the same grammar,
 and a ``[for.<target>]`` table declares none: a template names the
 extensions it needs in its own ``extensions``, and a workspace offers
 it while its installed set holds the extension that declares it.
@@ -86,6 +89,7 @@ import ast
 import difflib
 import importlib
 import importlib.util
+import keyword
 import re
 import sys
 import tomllib
@@ -1616,7 +1620,67 @@ def query_declarations(extension: str, package: str) -> tuple[QuerySpec, ...]:
 _TEMPLATE_NAME = re.compile(r"[a-z][a-z0-9-]*")
 
 #: The keys a ``[templates.<name>]`` table takes.
-_TEMPLATE_KEYS = ("doc", "extensions", "extends")
+_TEMPLATE_KEYS = ("doc", "extensions", "extends", "options", "fixes")
+
+#: The keys a ``[templates.<name>.options.<option>]`` table takes.
+_OPTION_KEYS = ("doc", "choices", "type", "default")
+
+#: The types a template's option takes in place of choices, each to the
+#: Python type of its answer.
+OPTION_TYPES: dict[str, type] = {"str": str, "int": int, "bool": bool}
+
+Answer = str | int | bool
+"""The answer to a template's option: a string, an integer or a boolean."""
+
+
+@dataclass(frozen=True)
+class TemplateOption:
+    """A creation option: a ``[templates.<name>.options.<option>]`` table.
+
+    ``fm new.package <name> <template> --<option>=<answer>`` answers it,
+    and the answer renders the template's files as the variable
+    `variable`. A template that extends this one's template takes the
+    option too, unless it fixes the answer under ``fixes``.
+
+    Attributes:
+        name: The option's name on the command line, in kebab-case.
+        doc: One line saying what the answer decides.
+        choices: The answers it takes; empty for an option with a type.
+        type: The type of its answer, ``str``, ``int`` or ``bool``;
+            ``str`` for an option with choices.
+        default: The answer when the command line gives none; None for
+            a required option.
+    """
+
+    name: str
+    doc: str
+    choices: tuple[str, ...]
+    type: str
+    default: Answer | None
+
+    @property
+    def variable(self) -> str:
+        """The template variable the answer renders as: the name, snake-cased."""
+        return self.name.replace("-", "_")
+
+    @property
+    def required(self) -> bool:
+        """Whether a birth needs an answer: an option without a default does."""
+        return self.default is None
+
+    def refusal(self, answer: object) -> str:
+        """Why *answer* does not answer this option; empty when it does."""
+        if self.choices:
+            if answer in self.choices:
+                return ""
+            return (
+                f"--{self.name} is {answer!r}, which is not one of its choices:"
+                f" {', '.join(self.choices)}"
+            )
+        wanted = OPTION_TYPES[self.type]
+        if isinstance(answer, wanted) and (wanted is bool or type(answer) is not bool):
+            return ""
+        return f"--{self.name} is {answer!r}, which is no {self.type}"
 
 
 @dataclass(frozen=True)
@@ -1635,6 +1699,11 @@ class DeclaredTemplate:
         extends: The template whose files a birth writes first; empty
             for none.
         path: The file that declares it.
+        options: The creation options it declares beside those of the
+            templates it extends.
+        fixes: Each option of a template it extends to the answer it
+            gives it, in declaration order: a birth from this template
+            takes no answer for it.
     """
 
     name: str
@@ -1643,6 +1712,134 @@ class DeclaredTemplate:
     extensions: tuple[str, ...]
     extends: str
     path: Path
+    options: tuple[TemplateOption, ...] = ()
+    fixes: tuple[tuple[str, Answer], ...] = ()
+
+
+def _option_specs(
+    reader: _Reader, where: tuple[str, ...], table: object
+) -> tuple[TemplateOption, ...]:
+    """The options a template's ``options`` table declares, judged.
+
+    Raises:
+        DeclarationError: for an option off its shape: a name that is not
+            kebab-case, or that is a Python keyword as a variable, a key it
+            does not take, a missing or blank ``doc``, ``choices`` and
+            ``type`` both or neither, choices that are not distinct
+            strings, a type outside ``OPTION_TYPES``, and a ``default``
+            that does not answer the option.
+    """
+    if table is None:
+        return ()
+    if not isinstance(table, dict):
+        raise reader.refuse(
+            (*where, "options"),
+            "is a table of the template's creation options, each"
+            " [templates.<name>.options.<option>]",
+        )
+    found: list[TemplateOption] = []
+    for name, spec in cast("dict[str, Any]", table).items():
+        at = (*where, "options", name)
+        if not _TEMPLATE_NAME.fullmatch(name):
+            raise reader.refuse(
+                at,
+                "is no option name: lower-case letters, digits and hyphens,"
+                " starting with a letter, as --<option> spells it",
+            )
+        if keyword.iskeyword(name.replace("-", "_")):
+            raise reader.refuse(
+                at,
+                "is a Python keyword once its hyphens are underscores, which"
+                " the template variable it renders as cannot be",
+            )
+        if not isinstance(spec, dict):
+            raise reader.refuse(at, "is a table: doc, choices or type, and default")
+        entry = cast("dict[str, Any]", spec)
+        for key in entry:
+            if key not in _OPTION_KEYS:
+                raise reader.refuse(
+                    (*at, key),
+                    "is not a key of a template's option: it takes doc, choices,"
+                    " type and default",
+                )
+        doc = entry.get("doc")
+        if not isinstance(doc, str) or not doc.strip():
+            raise reader.refuse(
+                (*at, "doc"),
+                "is one line of text saying what the answer decides, which"
+                " fm new.package's help and completion show",
+            )
+        choices = entry.get("choices")
+        kind = entry.get("type")
+        if (choices is None) == (kind is None):
+            raise reader.refuse(
+                at,
+                "takes choices, the answers it takes, or type, one of"
+                f" {', '.join(OPTION_TYPES)}: one of the two",
+            )
+        answer_type = "str"
+        if choices is not None:
+            listed = cast("list[object]", choices) if isinstance(choices, list) else []
+            if (
+                not listed
+                or not all(isinstance(item, str) and item for item in listed)
+                or len(set(map(str, listed))) != len(listed)
+            ):
+                raise reader.refuse(
+                    (*at, "choices"), "is a list of the answers it takes, each once"
+                )
+        elif isinstance(kind, str) and kind in OPTION_TYPES:
+            answer_type = kind
+        else:
+            raise reader.refuse((*at, "type"), f"is one of {', '.join(OPTION_TYPES)}")
+        option = TemplateOption(
+            name,
+            doc.strip(),
+            tuple(cast("list[str]", choices or [])),
+            answer_type,
+            None,
+        )
+        if "default" in entry:
+            default: object = entry["default"]
+            if refusal := option.refusal(default):
+                raise reader.refuse((*at, "default"), f"does not answer it: {refusal}")
+            option = TemplateOption(
+                option.name,
+                option.doc,
+                option.choices,
+                option.type,
+                cast("Answer", default),
+            )
+        found.append(option)
+    return tuple(found)
+
+
+def _fix_specs(
+    reader: _Reader, where: tuple[str, ...], table: object
+) -> tuple[tuple[str, Answer], ...]:
+    """The answers a template's ``fixes`` table gives, judged.
+
+    Raises:
+        DeclarationError: for a ``fixes`` that is not a table of option
+            names to answers.
+    """
+    if table is None:
+        return ()
+    if not isinstance(table, dict):
+        raise reader.refuse(
+            (*where, "fixes"),
+            "is a table: each option of a template this one extends, to the"
+            " answer a package born from this one takes",
+        )
+    found: list[tuple[str, Answer]] = []
+    for name, answer in cast("dict[str, Any]", table).items():
+        if not isinstance(answer, str | int | bool):
+            raise reader.refuse(
+                (*where, "fixes", name),
+                "is an answer: a string, an integer or a boolean",
+            )
+        found.append((name, answer))
+    return tuple(found)
 
 
 def template_specs_of(
@@ -1652,14 +1849,14 @@ def template_specs_of(
 
     The same reader serves the base's contract file and an extension's
     declaration file, *extension* naming the declarer. ``doc`` and
-    ``extensions`` are required, ``extends`` is optional, and a table
-    takes nothing else.
+    ``extensions`` are required; ``extends``, ``options`` and ``fixes``
+    are optional, and a table takes nothing else.
 
     Raises:
         DeclarationError: when a template is off its shape: a name that
             is not lower-case letters, digits and hyphens, a key it does
-            not take, a missing ``doc`` or ``extensions``, or a value of
-            the wrong type.
+            not take, a missing ``doc`` or ``extensions``, a value of the
+            wrong type, or an option or a fixed answer off its shape.
     """
     reader = _Reader(extension, extension, path)
     found: dict[str, DeclaredTemplate] = {}
@@ -1679,13 +1876,16 @@ def template_specs_of(
                 " starting with a letter, the word fm new.package takes",
             )
         if not isinstance(table, dict):
-            raise reader.refuse(where, "is a table: doc, extensions and extends")
+            raise reader.refuse(
+                where, "is a table: doc, extensions, extends, options and fixes"
+            )
         entry = cast("dict[str, Any]", table)
         for key in entry:
             if key not in _TEMPLATE_KEYS:
                 raise reader.refuse(
                     (*where, key),
-                    "is not a key of a template: it takes doc, extensions and extends",
+                    "is not a key of a template: it takes doc, extensions,"
+                    " extends, options and fixes",
                 )
         doc = entry.get("doc")
         if doc is None:
@@ -1720,6 +1920,8 @@ def template_specs_of(
             tuple(cast("list[str]", listed)),
             extends,
             path,
+            _option_specs(reader, where, entry.get("options")),
+            _fix_specs(reader, where, entry.get("fixes")),
         )
     return found
 

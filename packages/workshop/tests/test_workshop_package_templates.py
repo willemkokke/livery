@@ -1,8 +1,11 @@
 """Templates: what an extension declares `fm new.package` creates, refusals first.
 
 An installed extension, or the base, declares ``[templates.<name>]``
-with a ``doc``, the ``extensions`` a package born from it lists, and
-``extends``, the template whose files come first. A workspace offers
+with a ``doc``, the ``extensions`` a package born from it lists,
+``extends``, the template whose files come first, its creation options,
+and the answers it fixes for the options of the templates it extends;
+``fm new.package <name> <template> --<option>=<answer>`` answers the
+options, each checked before anything is written. A workspace offers
 the base's templates and those of the extensions its installed set
 holds, and a birth needs every extension the chain names held and
 installed: a creation installs nothing. The birth writes the base's
@@ -170,7 +173,7 @@ def test_a_template_no_available_extension_declares_refuses_listing_the_installe
     # workspace's lists do not hold it.
     assert "\n  python-library: a python library" in text
     assert "\n  workshop-extension: " in text
-    assert "cpp-library" not in text
+    assert "cpp-package" not in text
     assert not (root / "packages" / "thing").exists()
 
 
@@ -191,11 +194,11 @@ def test_a_template_whose_declarer_is_not_installed_refuses_naming_it_its_distri
         " lists do not hold: list it in [workspace] extensions and run `fm sync`,"
         " then create the package again"
     )
-    # conan declares cpp-library, which lists cmake and conan.
+    # conan declares cpp-package, which lists cmake and conan.
     with pytest.raises(_FAILURES) as caught:
-        render_member(root, "geometry", "cpp-library")
+        render_member(root, "geometry", "cpp-package")
     assert str(caught.value) == (
-        f"the template cpp-library needs cmake ({distribution_of('cmake')}) and"
+        f"the template cpp-package needs cmake ({distribution_of('cmake')}) and"
         f" conan ({distribution_of('conan')}), which the workspace's lists do not"
         " hold: list them in [workspace] extensions and run `fm sync`, then create"
         " the package again"
@@ -240,9 +243,9 @@ def test_a_template_needing_an_extension_listed_and_not_installed_refuses_naming
     withheld(monkeypatch, "cmake")
     before = _files(root)
     with pytest.raises(_FAILURES) as caught:
-        render_member(root, "geometry", "cpp-library")
+        render_member(root, "geometry", "cpp-package")
     assert str(caught.value) == (
-        f"the template cpp-library needs cmake ({distribution_of('cmake')}), which"
+        f"the template cpp-package needs cmake ({distribution_of('cmake')}), which"
         " no installed distribution declares yet: run `fm sync`, which installs"
         " it, then create the package again"
     )
@@ -274,13 +277,13 @@ def test_a_creation_runs_no_lock_or_sync_before_it_renders(
     handed = wired_here(monkeypatch, root)
     # The refusal first: nothing is locked, synced or handed on.
     with pytest.raises(_FAILURES, match="list them in \\[workspace\\] extensions"):
-        new_package("geometry", "cpp-library")
+        new_package("geometry", "cpp-package")
     assert (calls, handed) == ([], [])
     assert not member.exists()
     # Listed and installed: the template renders, and the one lock and
     # sync are the wiring's, after the member exists.
     _workspace_lists(root, "cmake", "conan")
-    new_package("geometry", "cpp-library")
+    new_package("geometry", "cpp-package")
     assert [argv[1:] for argv in handed] == [["new.package", "geometry", "--resume"]]
     assert calls == [("uv lock", True), ("uv sync", True), ("tools", True)]
     assert (member / "CMakeLists.txt").is_file()
@@ -306,7 +309,6 @@ def test_the_listed_templates_are_the_bases_and_the_installed_sets(
     assert list(installed_templates(root)) == ["workshop-extension"]
     _workspace_lists(root, "python")
     assert list(installed_templates(root)) == [
-        "python-cli",
         "python-library",
         "workshop-extension",
     ]
@@ -510,7 +512,7 @@ def test_new_package_without_a_template_refuses_naming_the_installed_templates(
 ) -> None:
     from livery.workshop._templates import new_package
 
-    # cmake and nanobind take in every extension the six templates need.
+    # cmake and nanobind take in every extension the four templates need.
     root = _workspace(tmp_path / "acme", "cmake", "nanobind")
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
@@ -523,10 +525,8 @@ def test_new_package_without_a_template_refuses_naming_the_installed_templates(
         " `fm new.package thing <template>`; the installed templates are:"
     ) in text
     for line in (
-        "  cpp-executable: ",
-        "  cpp-library: ",
+        "  cpp-package: ",
         "  nanobind-module: ",
-        "  python-cli: ",
         "  python-library: ",
         "  workshop-extension: ",
     ):
@@ -538,7 +538,7 @@ def test_new_package_without_a_template_refuses_naming_the_installed_templates(
     ("kind", "written"),
     [
         ("package-python", "`fm new.package thing python-library`"),
-        ("package-cpp-conan", "`fm new.package thing cpp-library`"),
+        ("package-cpp-conan", "`fm new.package thing cpp-package`"),
         ("package-python-nanobind", "`fm new.package thing nanobind-module`"),
         ("package-extension", "`fm new.package thing workshop-extension`"),
         ("package-lua", "`fm new.package thing <template>`"),
@@ -582,18 +582,407 @@ def test_a_contract_writing_template_refuses(tmp_path: Path) -> None:
     ) in str(caught.value)
 
 
+# Creation options: the refusals first, each before anything is written.
+
+#: A lua module whose flavour is required, its rocks counted, and a lua
+#: app that extends it, fixes the count, and adds a switch of its own.
+_OPTIONS = (
+    '[templates.lua-module]\ndoc = "a lua module"\nextensions = []\n\n'
+    "[templates.lua-module.options.flavour]\n"
+    'doc = "the lua the module targets"\n'
+    'choices = ["lua", "luajit"]\n\n'
+    "[templates.lua-module.options.rock-count]\n"
+    'doc = "how many rocks it starts with"\ntype = "int"\ndefault = 1\n\n'
+    '[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n'
+    'extends = "lua-module"\nfixes = { rock-count = 0 }\n\n'
+    "[templates.lua-app.options.daemon]\n"
+    'doc = "whether the app runs in the background"\ntype = "bool"\n'
+    "default = false\n"
+)
+
+
+def _lua(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str = _OPTIONS
+) -> Path:
+    """A workspace listing acme.lua, which declares *table*; its root."""
+    root = _workspace(tmp_path / "acme", "acme.lua")
+    _declaring(tmp_path, monkeypatch, lua=table)
+    return root
+
+
+#: Where an option off its shape is named, before what is wrong with it.
+_FLAVOUR = "templates.lua-module.options.flavour"
+
+
+@pytest.mark.parametrize(
+    ("option", "refusal"),
+    [
+        (
+            'type = "str"\n',
+            f"{_FLAVOUR}.doc is one line of text saying what the answer decides,"
+            " which fm new.package's help and completion show",
+        ),
+        (
+            'doc = "the lua"\n',
+            f"{_FLAVOUR} takes choices, the answers it takes, or type, one of str,"
+            " int, bool: one of the two",
+        ),
+        (
+            'doc = "the lua"\nchoices = ["lua"]\ntype = "str"\n',
+            f"{_FLAVOUR} takes choices, the answers it takes, or type",
+        ),
+        (
+            'doc = "the lua"\nchoices = ["lua", "lua"]\n',
+            f"{_FLAVOUR}.choices is a list of the answers it takes, each once",
+        ),
+        (
+            'doc = "the lua"\ntype = "float"\n',
+            f"{_FLAVOUR}.type is 'float'; it takes one of str, int, bool",
+        ),
+        (
+            'doc = "the lua"\nchoices = ["lua"]\ndefault = "luajit"\n',
+            f"{_FLAVOUR}.default does not answer it: --flavour is 'luajit', which"
+            " is not one of its choices: lua",
+        ),
+        (
+            'doc = "the lua"\ntype = "int"\ndefault = true\n',
+            f"{_FLAVOUR}.default does not answer it: --flavour is True, which is"
+            " no int",
+        ),
+        (
+            'doc = "the lua"\ntype = "str"\nhelp = "x"\n',
+            f"[{_FLAVOUR}] has no key 'help': it takes choices, default, doc, type",
+        ),
+    ],
+)
+def test_an_option_off_its_shape_refuses_naming_the_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, option: str, refusal: str
+) -> None:
+    table = (
+        '[templates.lua-module]\ndoc = "a lua module"\nextensions = []\n\n'
+        f"[templates.lua-module.options.flavour]\n{option}"
+    )
+    root = _lua(tmp_path, monkeypatch, table)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module")
+    assert refusal in str(caught.value)
+    assert not (root / "packages").exists()
+
+
+@pytest.mark.parametrize(
+    ("table", "refusal"),
+    [
+        (
+            '[templates.lua-module.options.Flavour]\ndoc = "x"\ntype = "str"\n',
+            "options.Flavour is no option name: lower-case letters, digits and"
+            " hyphens, starting with a letter, as --<option> spells it",
+        ),
+        (
+            '[templates.lua-module.options.class]\ndoc = "x"\ntype = "str"\n',
+            "options.class is a Python keyword once its hyphens are underscores,"
+            " which the template variable it renders as cannot be",
+        ),
+        (
+            '[templates.lua-module.fixes]\nflavour = ["lua"]\n',
+            "fixes.flavour is a list (['lua']); it takes a string or an integer or"
+            " true or false",
+        ),
+    ],
+)
+def test_an_option_name_or_a_fix_off_its_shape_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str, refusal: str
+) -> None:
+    root = _lua(
+        tmp_path,
+        monkeypatch,
+        '[templates.lua-module]\ndoc = "a lua module"\nextensions = []\n\n' + table,
+    )
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module")
+    assert f"templates.lua-module.{refusal}" in str(caught.value)
+
+
+def test_a_missing_required_answer_refuses_naming_the_option_and_its_choices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _lua(tmp_path, monkeypatch)
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module")
+    assert str(caught.value) == (
+        "the template lua-module needs --flavour, the lua the module targets:"
+        " give `--flavour=<answer>`, one of lua, luajit"
+    )
+    # Through the template that extends it too.
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-app")
+    assert str(caught.value).startswith("the template lua-app needs --flavour,")
+    assert _files(root) == before
+
+
+def test_an_answer_outside_the_choices_or_the_type_refuses_naming_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _lua(tmp_path, monkeypatch)
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module", {"flavour": "moon"})
+    assert str(caught.value) == (
+        "the template lua-module takes no such answer: --flavour is 'moon', which"
+        " is not one of its choices: lua, luajit"
+    )
+    with pytest.raises(_FAILURES) as caught:
+        render_member(
+            root, "thing", "lua-module", {"flavour": "lua", "rock_count": "two"}
+        )
+    assert str(caught.value) == (
+        "the template lua-module takes no such answer: --rock-count is 'two',"
+        " which is no int"
+    )
+    assert _files(root) == before
+
+
+def test_an_answer_to_an_option_the_template_does_not_take_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _lua(tmp_path, monkeypatch)
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module", {"flavour": "lua", "daemon": True})
+    assert str(caught.value) == (
+        "the template lua-module takes no option --daemon; it takes: --flavour,"
+        " --rock-count"
+    )
+    # An option the template it extends declares and it fixes is not one
+    # it takes: the fixed answer cannot be overridden.
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-app", {"flavour": "lua", "rock_count": 3})
+    assert str(caught.value) == (
+        "the template lua-app takes no option --rock-count; it takes: --flavour,"
+        " --daemon"
+    )
+    assert _files(root) == before
+
+
+@pytest.mark.parametrize(
+    ("app", "refusal"),
+    [
+        (
+            '[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n'
+            'extends = "lua-module"\nfixes = { colour = "red" }\n',
+            "the template lua-app fixes colour, which no template it extends"
+            " declares as an option; it fixes only those",
+        ),
+        (
+            '[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n'
+            'extends = "lua-module"\nfixes = { flavour = "moon" }\n',
+            "the template lua-app fixes an answer the option refuses: --flavour is"
+            " 'moon', which is not one of its choices: lua, luajit",
+        ),
+        (
+            '[templates.lua-app]\ndoc = "a lua app"\nextensions = []\n'
+            'extends = "lua-module"\n\n[templates.lua-app.options.flavour]\n'
+            'doc = "the lua"\ntype = "str"\n',
+            "the template lua-app declares the option flavour, which lua-module"
+            " declares; a template takes the options of the one it extends, and"
+            " fixes an answer with fixes",
+        ),
+    ],
+)
+def test_a_chain_whose_options_disagree_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, app: str, refusal: str
+) -> None:
+    table = _OPTIONS.split("[templates.lua-app]")[0] + app
+    root = _lua(tmp_path, monkeypatch, table)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-app", {"flavour": "lua"})
+    assert str(caught.value) == refusal
+    assert not (root / "packages").exists()
+
+
+def test_an_option_whose_variable_every_birth_sets_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _lua(
+        tmp_path,
+        monkeypatch,
+        '[templates.lua-module]\ndoc = "a lua module"\nextensions = []\n\n'
+        '[templates.lua-module.options.package-name]\ndoc = "x"\ntype = "str"\n'
+        'default = ""\n',
+    )
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "thing", "lua-module")
+    assert str(caught.value) == (
+        "the template lua-module has an option whose variable is package_name,"
+        " which every birth sets already; the extension that declares it renames"
+        " the option"
+    )
+
+
+# What the answers render.
+
+
+def test_the_answers_render_as_variables_and_an_empty_file_is_not_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._seeds import create_package
+
+    root = _lua(tmp_path, monkeypatch)
+    site = tmp_path / "site" / "acme" / "lua" / "content" / "templates"
+    (site / "lua-module" / "module.txt.jinja").write_text(
+        "{{ flavour }} with {{ rock_count }} rocks\n", "utf-8"
+    )
+    # A file whose whole body depends on an answer.
+    (site / "lua-app" / "daemon.txt.jinja").write_text(
+        "{% if daemon %}runs in the background\n{% endif %}", "utf-8"
+    )
+    data = {"package_name": "acme-thing", "package_description": "A thing."}
+
+    def born(name: str, template: str, answers: dict[str, object]) -> Path:
+        create_package(root, root / "packages" / name, template, data, answers)
+        return root / "packages" / name
+
+    lib = born("lib", "lua-module", {"flavour": "luajit", "rock_count": 3})
+    assert (lib / "module.txt").read_text() == "luajit with 3 rocks\n"
+    # The extended template's options and the fixed answer render too.
+    app = born("app", "lua-app", {"flavour": "lua"})
+    assert (app / "module.txt").read_text() == "lua with 0 rocks\n"
+    assert not (app / "daemon.txt").exists()
+    background = born("bg", "lua-app", {"flavour": "lua", "daemon": True})
+    assert (background / "daemon.txt").read_text() == "runs in the background\n"
+
+
+def test_the_template_s_options_are_the_parameters_fm_new_package_takes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import inspect
+    import typing
+
+    from livery.workshop._templates import template_options
+
+    root = _lua(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    # A fixed option is none of the template's.
+    assert [p.name for p in template_options("lua-app")] == ["flavour", "daemon"]
+    flavour, rocks = template_options("lua-module")
+    assert flavour.kind is inspect.Parameter.KEYWORD_ONLY
+    assert flavour.default is inspect.Parameter.empty
+    literal, marker = typing.get_args(flavour.annotation)
+    assert typing.get_args(literal) == ("lua", "luajit")
+    assert marker.text == "the lua the module targets"
+    assert (rocks.name, rocks.default) == ("rock_count", 1)
+    assert typing.get_args(rocks.annotation)[0] is int
+    with pytest.raises(_FAILURES) as caught:
+        template_options("lua-rock")
+    assert str(caught.value).startswith("no installed template is named lua-rock;")
+
+
+#: A tasks file that mounts the ``new`` verbs alone.
+_NEW = (
+    "from livery.footman import include\n"
+    "from livery.workshop._templates import new\n\n"
+    "include(new)\n"
+)
+
+
+def test_fm_new_package_takes_the_template_s_options_on_the_command_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.footman.testing import Runner
+
+    root = _lua(tmp_path, monkeypatch)
+    tasks = tmp_path / "tasks.py"
+    tasks.write_text(_NEW, "utf-8")
+
+    def refused(line: str) -> str:
+        result = Runner().invoke(line, tasks=tasks, cwd=root)
+        assert result.exit_code == 64, result.stderr
+        return result.stderr.strip()
+
+    assert refused("new.package thing lua-module --flavor=lua") == (
+        "fm: new.package: unknown option --flavor — did you mean '--flavour'?"
+    )
+    assert refused("new.package thing lua-module --flavour=moon") == (
+        "fm: new.package: --flavour must be one of lua|luajit (got 'moon')"
+    )
+    assert refused("new.package thing lua-module") == (
+        "fm: new.package: missing required option(s) of <template> lua-module:"
+        " --flavour"
+    )
+    assert refused("new.package thing lua-app --flavour=lua --rock-count=3") == (
+        "fm: new.package: unknown option --rock-count (<template> lua-app takes"
+        " --flavour, --daemon)"
+    )
+    assert not (root / "packages").exists()
+
+
+def test_completion_lists_the_template_s_options_and_their_choices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    from livery.footman import _complete, _suggest
+
+    root = _lua(tmp_path, monkeypatch)
+    (root / "tasks.py").write_text(_NEW, "utf-8")
+    monkeypatch.chdir(root)
+    specs = [
+        json.loads(line)
+        for line in _suggest._chosen("answers", "lua-app", ["new", "package"], {})
+    ]
+    assert [(spec["name"], spec.get("choices")) for spec in specs] == [
+        ("flavour", ["lua", "luajit"]),
+        ("daemon", None),
+    ]
+    names = {"partial": "--", "bash": False, "used": []}
+    assert _complete._chosen_rows(specs, names) == [
+        "--flavour\tthe lua the module targets",
+        "--flavour=\tthe lua the module targets",
+        "--daemon\twhether the app runs in the background",
+    ]
+    choices = {"partial": "--flavour=", "bash": False, "used": []}
+    assert _complete._chosen_rows(specs, choices) == [
+        "--flavour=lua",
+        "--flavour=luajit",
+    ]
+
+
 # The templates the workshop's wheel declares.
 
 #: Each template the workshop's wheel declares: the extension declaring
 #: it, the list a package born from it writes, and the template it
 #: extends.
 AVAILABLE = {
-    "cpp-executable": ("conan", ("cmake", "conan"), "cpp-library"),
-    "cpp-library": ("conan", ("cmake", "conan"), ""),
+    "cpp-package": ("conan", ("cmake", "conan"), ""),
     "nanobind-module": ("nanobind", ("nanobind",), "python-library"),
-    "python-cli": ("python", ("python",), "python-library"),
     "python-library": ("python", ("python",), ""),
     "workshop-extension": ("livery.workshop", ("python",), "python-library"),
+}
+
+#: Each template's creation options, each with its choices or type and
+#: its default, and the answers its chain fixes.
+OPTIONS = {
+    "cpp-package": (
+        {
+            "package-type": (
+                (
+                    "library",
+                    "application",
+                    "header-library",
+                    "static-library",
+                    "shared-library",
+                ),
+                "str",
+                "library",
+            )
+        },
+        {},
+    ),
+    "nanobind-module": ({}, {"command": ""}),
+    "python-library": ({"command": ((), "str", "")}, {}),
+    "workshop-extension": ({"app": ((), "str", "")}, {"command": ""}),
 }
 
 
@@ -607,6 +996,28 @@ def test_the_available_templates_are_these() -> None:
     assert found == AVAILABLE
     # Each one says what a package born from it is.
     assert all(template.doc for template in available_templates().values())
+
+
+def test_the_available_templates_take_these_options() -> None:
+    from livery.workshop._seeds import (
+        available_templates,
+        chain_options,
+        template_chain,
+    )
+
+    found: dict[str, Any] = {}
+    for name in available_templates():
+        options, fixed = chain_options(template_chain(name))
+        found[name] = (
+            {
+                option.name: (option.choices, option.type, option.default)
+                for option in options.values()
+            },
+            fixed,
+        )
+        # Each option says what its answer decides.
+        assert all(option.doc for option in options.values())
+    assert found == OPTIONS
 
 
 def test_every_template_directory_the_workshop_ships_is_a_declared_template() -> None:
@@ -633,10 +1044,8 @@ def test_the_chain_runs_from_the_template_extended_to_the_one_born() -> None:
         for name in AVAILABLE
     }
     assert chains == {
-        "cpp-executable": ("cpp-library", "cpp-executable"),
-        "cpp-library": ("cpp-library",),
+        "cpp-package": ("cpp-package",),
         "nanobind-module": ("python-library", "nanobind-module"),
-        "python-cli": ("python-library", "python-cli"),
         "python-library": ("python-library",),
         "workshop-extension": ("python-library", "workshop-extension"),
     }
@@ -719,7 +1128,7 @@ def test_python_s_run_step_refuses_a_script_the_environment_lacks(
     from livery.workshop._run import start
 
     root = _workspace(tmp_path / "acme", "python")
-    render_member(root, "tool", "python-cli")
+    render_member(root, "tool", "python-library", {"command": "tool"})
     with pytest.raises(_FAILURES) as caught:
         start(root, "tool", (), root)
     assert (
@@ -728,7 +1137,7 @@ def test_python_s_run_step_refuses_a_script_the_environment_lacks(
     ) in str(caught.value)
 
 
-def test_python_cli_births_a_script_fm_run_starts(
+def test_python_library_with_a_command_births_a_script_fm_run_starts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._pythons import scripts_dir
@@ -736,10 +1145,11 @@ def test_python_cli_births_a_script_fm_run_starts(
     from livery.workshop._run import start
 
     root = _workspace(tmp_path / "acme", "python")
-    render_member(root, "tool", "python-cli")
+    render_member(root, "tool", "python-library", {"command": "tool"})
     tool = _member(root, "tool")
     # The script the package's pyproject.toml declares is its executable.
     assert answer(tool, EXECUTABLES) == ("tool",)
+    assert (tool.directory / "tests" / "test_tool_cli.py").is_file()
     # The born command line runs, as the script and `python -m` run it.
     done = subprocess.run(
         [sys.executable, "-m", "acme.tool", "one", "two"],
@@ -771,7 +1181,7 @@ def test_python_cli_births_a_script_fm_run_starts(
     assert started == [[str(script), "one", "two"]]
 
 
-# The two new templates, each born and run.
+# A C++ package, born for each package type and built.
 
 _TOOLCHAIN = ("cmake", "ninja", "ctest", "c++")
 _MISSING_TOOLS = tuple(tool for tool in _TOOLCHAIN if shutil.which(tool) is None)
@@ -783,16 +1193,21 @@ _MISSING_TOOLS = tuple(tool for tool in _TOOLCHAIN if shutil.which(tool) is None
     if _MISSING_TOOLS
     else "the Windows leg builds with MSVC, which this test does not enter",
 )
-def test_cpp_executable_births_an_executable_that_builds_and_runs(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "package_type",
+    ["library", "application", "header-library", "static-library", "shared-library"],
+)
+def test_cpp_package_builds_and_tests_each_package_type(
+    tmp_path: Path, package_type: str
 ) -> None:
     skip_unless_installed("cmake")
     root = _workspace(tmp_path / "acme", "cmake", "conan")
-    render_member(root, "tool", "cpp-executable")
+    render_member(root, "tool", "cpp-package", {"package_type": package_type})
     tool = root / "packages" / "tool"
     contract = (tool / "workshop.toml").read_text("utf-8")
     assert 'extensions = ["cmake", "conan"]' in contract
-    assert 'package_type = "application"' in (tool / "conanfile.py").read_text()
+    recipe = (tool / "conanfile.py").read_text()
+    assert f'package_type = "{package_type}"' in recipe
     for argv in (
         ["cmake", "--preset", "release"],
         ["cmake", "--build", "--preset", "release"],
@@ -802,6 +1217,9 @@ def test_cpp_executable_births_an_executable_that_builds_and_runs(
             argv, cwd=tool, capture_output=True, text=True, check=False
         )
         assert done.returncode == 0, done.stdout + done.stderr
+    if package_type != "application":
+        assert not (tool / "src" / "main.cpp").exists()
+        return
     ran = subprocess.run(
         [str(tool / "build" / "release" / "tool")],
         capture_output=True,

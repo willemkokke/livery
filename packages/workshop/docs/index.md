@@ -545,14 +545,67 @@ and nothing records the template: an extension that needs to know what
 a package is reads it from the package's own manifests, as python reads
 its scripts. The templates the workshop's wheel declares:
 
-| Template | Declared by | Lists | Extends |
-|---|---|---|---|
-| `python-library` | python | `["python"]` | |
-| `python-cli` | python | `["python"]` | `python-library` |
-| `workshop-extension` | the base | `["python"]` | `python-library` |
-| `nanobind-module` | nanobind | `["nanobind"]` | `python-library` |
-| `cpp-library` | conan | `["cmake", "conan"]` | |
-| `cpp-executable` | conan | `["cmake", "conan"]` | `cpp-library` |
+| Template | Declared by | Lists | Extends | Options |
+|---|---|---|---|---|
+| `python-library` | python | `["python"]` | | `--command` |
+| `workshop-extension` | the base | `["python"]` | `python-library` | `--app`; fixes `--command` to none |
+| `nanobind-module` | nanobind | `["nanobind"]` | `python-library` | fixes `--command` to none |
+| `cpp-package` | conan | `["cmake", "conan"]` | | `--package-type` |
+
+A template declares its creation options, and the words after the
+template's name answer them: `fm new.package <name> <template>
+--<option>=<answer>`. An option is a table under
+`[templates.<name>.options.<option>]` in the file that declares the
+template:
+
+```toml
+[templates.cpp-package.options.package-type]
+doc = "conan's package type, which the recipe's package_type and the CMake target follow"
+choices = ["library", "application", "header-library", "static-library", "shared-library"]
+default = "library"
+```
+
+Its `doc` is required, and `fm new.package --help`, completion and the
+conformance kit's `declaration-documented` clause read it. It takes
+either `choices`, a list of the answers it takes, or a `type`, one of
+`str`, `int` and `bool`; a `bool` option is spelled `--<option>` and
+`--no-<option>`. An option without a `default` is required. A template
+that extends another takes the other's options too, and its `fixes`
+table gives an answer to one of them, which a birth from it then takes
+no answer for: `workshop-extension` writes `fixes = { command = "" }`,
+since its one script is the App's. Declaring an option of a template it
+extends again refuses; fixing one is the way to change it.
+
+Every answer is checked before anything is written. An option the
+template does not take is an unknown option, a required one without an
+answer is named, and an answer outside the option's choices or type is
+refused, naming the option and what it takes. Completion lists the
+options of the template the line names, and the choices of each, read
+from the installed declarations.
+
+Each answer renders the template's files as a variable: the option's
+name with its hyphens as underscores, so `--package-type` is
+`package_type`, and an option without an answer renders its default. A
+`.jinja` file that renders to whitespace alone is not written, so a file
+depends on an answer by wrapping its whole body in
+`{% if command %}` and `{% endif %}`; that is how `python-library`
+writes its `__main__.py` and the test of it only with `--command`. The
+answers are not stored: a step that needs one later reads the file the
+answer wrote, as `fm run` reads the script from `[project.scripts]`.
+
+- `python-library --command=<name>` adds the script `<name>` to
+  `[project.scripts]`, which runs `main()` in the package's
+  `__main__.py`, and a test of it. Without it the package has no script.
+- `workshop-extension --app=<name>` adds the branded App: `_app.py` and
+  the script `<name>`, which runs the workshop with the extension's
+  verbs. Without it the package puts nothing on `PATH`.
+- `cpp-package --package-type=<type>` writes conan's package type into
+  the recipe's `package_type`, and the CMake target that follows from
+  it: a library static or shared as conan's `shared` option says for
+  `library`, `STATIC` or `SHARED` for `static-library` and
+  `shared-library`, an interface library over the header for
+  `header-library`, and a program with the library its tests link for
+  `application`.
 
 A creation installs nothing. A template needs its own `extensions`,
 those of each template it extends, and the extension that declares each
@@ -575,7 +628,7 @@ writes anything, in this order:
 
 So a workspace whose root lists the stock list creates a
 `python-library` at once, and lists `cmake` and `conan` before it
-creates a `cpp-library`.
+creates a `cpp-package`.
 Two extensions declaring one template refuse every birth, naming both.
 A package's contract that writes `template` refuses: the template is
 read at the birth alone.
@@ -806,8 +859,8 @@ sources; every category a step's claims name is one the workshop
 knows, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
 an `extension.toml` carries an `[extension] description`, and every
-verb its plugin defines and every contract key, template and step
-option it declares carries its doc line, each one missing named
+verb its plugin defines and every contract key, template, template
+option and step option it declares carries its doc line, each one missing named
 (`declaration-documented`); every extension a template lists composes something in a package, unless
 another it lists requires it, and the set of the template's list holds
 every extension the template's chain needs (`template-composes`); a step's

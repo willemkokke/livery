@@ -1,9 +1,10 @@
 """Public parameter markers, used inside `Annotated` annotations.
 
-Dynamic completion (`suggest`), one-or-more (`Many`), comma-split opt-out
-(`nosplit`), path requirements (`exists`/`isfile`/`isdir`), numeric bounds
-(`between`, or a bare `range`), environment fallbacks (`env`), custom
-validators (`check`), and per-parameter help (`doc`). Each carries no runtime
+Dynamic completion (`suggest`), the options another parameter's value declares
+(`options_of`), one-or-more (`Many`), comma-split opt-out (`nosplit`), path
+requirements (`exists`/`isfile`/`isdir`), numeric bounds (`between`, or a bare
+`range`), environment fallbacks (`env`), custom validators (`check`), and
+per-parameter help (`doc`). Each carries no runtime
 weight beyond a small marker object; `footman._coerce.peel` reads them all in
 one place.
 """
@@ -84,6 +85,57 @@ class suggest:
     def __init__(self, fn: Callable[[], Any], *, strict: bool = True) -> None:
         self.fn = fn
         self.strict = strict
+
+
+class options_of:
+    """Take the options another parameter's value declares, via `Annotated`:
+
+    ```python
+    def site_options(kind: str) -> list[inspect.Parameter]: ...
+
+    @task
+    def create(
+        name: str,
+        kind: str,
+        answers: Annotated[
+            dict[str, object] | None, options_of("kind", site_options)
+        ] = None,
+    ): ...
+    ```
+
+    `fm create web blog --title=Home` hands `answers={"title": "Home"}` to the
+    body. Beside its own options, the task takes the options `fn` returns for
+    the value *param* was given. Each is a keyword-only `inspect.Parameter`,
+    declared the way a task declares its own option: the annotation gives its
+    type or its choices (a `Literal`), `doc()` its help line, and one without
+    a default is required. The command line spells them as it spells any
+    option (`--title=Home`, a `bool` as `--flag` and `--no-flag`), anywhere
+    after the task's name.
+
+    Each is checked before anything runs, with the refusals every option
+    gets: an option `fn` does not return is an unknown option, a missing
+    required one is named, and a value outside its choices or its type is
+    refused, naming them. The body receives the given ones, coerced, in the
+    marked parameter, keyed by each parameter's name. An option the line does
+    not give is absent, so applying its default is the body's job. A call
+    from Python passes the mapping as it is.
+
+    `fn` runs only when a line gives *param* a value: once when the line is
+    split, and in a short-lived subprocess when <kbd>Tab</kbd> completes the
+    options or their values, as a `suggest()` completer does. For a value it
+    does not know, it may `fail()`: the message is the refusal. The marked
+    parameter is a `dict` with a default, and has no spelling of its own on
+    the command line.
+    """
+
+    __slots__ = ("fn", "param")
+
+    param: str
+    fn: Callable[[str], Any]
+
+    def __init__(self, param: str, fn: Callable[[str], Any]) -> None:
+        self.param = param
+        self.fn = fn
 
 
 def _takes_an_argument(fn: Callable[..., Any]) -> bool:

@@ -16,10 +16,21 @@ requires-python = ">={{ python_floor }}"
 authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
+{%- if command %}
+    "Environment :: Console",
+{%- endif %}
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
 ]
+
+{%- if command %}
+
+# The command line: installing the package puts {{ command }} on PATH,
+# and `fm run` starts it from the workspace's environment.
+[project.scripts]
+{{ command }} = "{{ import_path }}.__main__:main"
+{%- endif %}
 
 [project.urls]
 {%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}

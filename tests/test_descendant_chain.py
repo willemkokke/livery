@@ -662,7 +662,7 @@ def _chain(
         _list_also(child / "workshop.toml", *TEMPLATED)
         _run([str(brand_cli), "sync"], child, _hermetic(env, tool))
         for member_name, template in (
-            ("geometry", "cpp-library"),
+            ("geometry", "cpp-package"),
             ("ext", "nanobind-module"),
         ):
             _run(
@@ -694,7 +694,7 @@ def _chain(
         # The wiring is idempotent by refusal: the resumed pass
         # names the existing directory and changes nothing.
         again = _run(
-            [str(brand_cli), "new.package", "geometry", "cpp-library"],
+            [str(brand_cli), "new.package", "geometry", "cpp-package"],
             child,
             _hermetic(env, tool),
             check=False,

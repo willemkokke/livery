@@ -5,8 +5,8 @@ Python distributions: each package's version stamped, its wheel and sdist built,
 - `fm layering.declared-imports`: Run the layering.declared-imports step alone, over the named paths or the workspace.
 - `fm layering.private-reaches`: Run the layering.private-reaches step alone, over the named paths or the workspace.
 - `fm layering.runner-terminal`: Run the layering.runner-terminal step alone, over the named paths or the workspace.
-- template `python-library`, `fm new.package <name> python-library`: a python library: a typed module, its tests, and a pyproject.toml uv builds
-- template `python-cli`, `fm new.package <name> python-cli`: a python command line: a python library whose script on PATH runs its main()
+- template `python-library`, `fm new.package <name> python-library`: a python library: a typed module, its tests, a pyproject.toml uv builds, and with --command a script on PATH
+- option `--command` of the template `python-library`, str, default "": the name of a script on PATH that runs the package's main(); none by default
 - `[python]` in the root contract: the python extension's settings for the workspace
 - `[python] private-reaches` in the root contract: each reach into another distribution's private name the private-reaches rule allows, with its reason; an entry no source uses any more refuses
 - `[python] private-reaches[]` in the root contract: one allowed reach: the distribution that reaches, the private it reaches, and why

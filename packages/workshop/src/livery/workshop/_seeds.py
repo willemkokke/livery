@@ -13,7 +13,21 @@ extension's ``extension.toml``, or by the base's ``contract.toml``: its
 ``doc``, the ``extensions`` a package born from it lists, and
 ``extends``, the template whose files the birth writes first. Its files
 live under ``content/templates/<name>/`` beside the file that declares
-it. A workspace offers the base's templates and those of the extensions
+it.
+
+A template declares creation options under
+``[templates.<name>.options.<option>]``: a ``doc``, either ``choices`` or
+a ``type``, and a ``default``; one without a default is required. A
+template that extends another takes the other's options too, and its
+``fixes`` table gives an answer to an option of a template it extends,
+which a birth from it then takes no answer for. ``fm new.package <name>
+<template> --<option>=<answer>`` answers them, and every answer is
+checked before anything is written (`answered`). Each answer renders the
+files as a template variable, the option's name with its hyphens as
+underscores (``--package-type`` is ``package_type``). Nothing stores the
+answers: a later step that needs one reads the file the answer wrote.
+
+A workspace offers the base's templates and those of the extensions
 its installed set holds. A birth needs every extension the template's
 chain names in the installed set and installed, and it refuses
 otherwise, naming what to list or that ``fm sync`` installs it: a
@@ -24,9 +38,11 @@ birth alone: nothing records which one a package came from.
 
 `create` writes a ``.jinja`` file rendered with minijinja, its suffix
 dropped, and any other file byte for byte; path names render too
-(``src/{{ source_path }}/...``). A file that exists is never touched,
-and nothing is receipted: once written, a file belongs to the
-workspace, and no step judges it.
+(``src/{{ source_path }}/...``). A ``.jinja`` file that renders to
+whitespace alone is not written, so a file depends on an answer by
+wrapping its whole body in ``{% if <variable> %}`` and ``{% endif %}``.
+A file that exists is never touched, and nothing is receipted: once
+written, a file belongs to the workspace, and no step judges it.
 
 For one path, a template's file wins over the seeds and over the files
 of the template it extends. Two extensions seeding one path of a tree
@@ -39,16 +55,17 @@ engine keeps the composed files current; this module writes these once.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from livery.footman import fail, prog
+from livery.footman import doc, fail, prog
 from livery.workshop._extensions import extension_content, stack_names
 from livery.workshop._fragment_engine import Fragment
 
 if TYPE_CHECKING:
-    from livery.workshop._declaration import DeclaredTemplate
+    from livery.workshop._declaration import Answer, DeclaredTemplate, TemplateOption
 
 SEEDS = "seeds"
 """The `content/` subdirectory an extension's seeds live under."""
@@ -253,6 +270,173 @@ def chain_needs(chain: Sequence[DeclaredTemplate]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def chain_options(
+    chain: Sequence[DeclaredTemplate],
+) -> tuple[dict[str, TemplateOption], dict[str, Answer]]:
+    """The options a birth from *chain* takes, and the answers its templates fix.
+
+    Each template of the chain, the one extended first, adds the options
+    it declares and fixes the answers its ``fixes`` names: a fixed option
+    is no longer one the birth takes.
+
+    Returns:
+        The options by name, in declaration order, and the fixed answers
+        by option name.
+
+    Raises:
+        Failed: for a template that fixes an option no template it
+            extends declares, a fixed answer that does not answer the
+            option, and an option a template of the chain declares again.
+    """
+    options: dict[str, TemplateOption] = {}
+    owners: dict[str, str] = {}
+    fixed: dict[str, Answer] = {}
+    for template in chain:
+        for name, answer in template.fixes:
+            option = options.pop(name, None)
+            if option is None:
+                fail(
+                    f"the template {template.name} fixes {name}, which no template"
+                    f" it extends declares as an option; it fixes only those"
+                )
+            if refusal := option.refusal(answer):
+                fail(
+                    f"the template {template.name} fixes an answer the option"
+                    f" refuses: {refusal}"
+                )
+            fixed[name] = answer
+        for option in template.options:
+            owner = owners.get(option.name)
+            if owner is not None:
+                fail(
+                    f"the template {template.name} declares the option"
+                    f" {option.name}, which {owner} declares; a template takes"
+                    " the options of the one it extends, and fixes an answer"
+                    " with fixes"
+                )
+            options[option.name] = option
+            owners[option.name] = template.name
+    return options, fixed
+
+
+def described_options(options: Mapping[str, TemplateOption]) -> str:
+    """Each of *options* as ``--<option>``, for a refusal; ``none`` for none."""
+    return ", ".join(f"--{name}" for name in options) or "none"
+
+
+def answered(
+    chain: Sequence[DeclaredTemplate], answers: Mapping[str, object]
+) -> dict[str, Answer]:
+    """The template variables a birth from *chain* renders with, each answer checked.
+
+    *answers* holds an answer by each option's variable (`package_type`
+    for ``--package-type``), as ``fm new.package`` passes them. An option
+    without an answer takes its default, and a fixed option the answer
+    its template fixes.
+
+    Raises:
+        Failed: for an answer to an option the born template does not
+            take, a required option without an answer, and an answer
+            outside an option's choices or of the wrong type; each
+            refusal names the option and what it takes.
+    """
+    options, fixed = chain_options(chain)
+    born = chain[-1].name
+    by_variable = {option.variable: option for option in options.values()}
+    for key in answers:
+        if key not in by_variable:
+            fail(
+                f"the template {born} takes no option --{key.replace('_', '-')};"
+                f" it takes: {described_options(options)}"
+            )
+    variables: dict[str, Answer] = {}
+    for option in options.values():
+        if option.variable not in answers:
+            if option.default is None:
+                takes = (
+                    f"one of {', '.join(option.choices)}"
+                    if option.choices
+                    else f"a {option.type}"
+                )
+                fail(
+                    f"the template {born} needs --{option.name}, {option.doc}:"
+                    f" give `--{option.name}=<answer>`, {takes}"
+                )
+            variables[option.variable] = option.default
+            continue
+        answer = answers[option.variable]
+        if refusal := option.refusal(answer):
+            fail(f"the template {born} takes no such answer: {refusal}")
+        variables[option.variable] = cast("Answer", answer)
+    for name, answer in fixed.items():
+        variables[name.replace("-", "_")] = answer
+    return variables
+
+
+def option_parameters(chain: Sequence[DeclaredTemplate]) -> list[inspect.Parameter]:
+    """The options a birth from *chain* takes, as ``fm new.package`` declares them.
+
+    Each is a keyword-only parameter named by its variable: its annotation
+    is a `Literal` of its choices or its type, with its doc, and an option
+    without a default has none.
+    """
+    from livery.workshop._declaration import OPTION_TYPES
+
+    found: list[inspect.Parameter] = []
+    for option in chain_options(chain)[0].values():
+        answer: Any = OPTION_TYPES[option.type]
+        if option.choices:
+            # The choices are data, so the Literal is built at run time.
+            answer = cast("Any", Literal)[option.choices]
+        found.append(
+            inspect.Parameter(
+                option.variable,
+                inspect.Parameter.KEYWORD_ONLY,
+                default=inspect.Parameter.empty
+                if option.default is None
+                else option.default,
+                annotation=cast("Any", Annotated)[answer, doc(option.doc)],
+            )
+        )
+    return found
+
+
+def resolved_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
+    """The chain of *name* in the workspace at *root*, from the installed declarations.
+
+    Refuses as `birth_chain` does for a template no installed extension
+    declares, and for a chain that does not resolve; the extensions the
+    chain needs are `birth_chain`'s to judge.
+
+    Raises:
+        Failed: for a template, or a template it extends, that no
+            installed extension declares, naming ``fm sync`` while the
+            installed set holds an extension no installed distribution
+            declares yet and the installed templates otherwise, and for an
+            ``extends`` cycle.
+    """
+    from livery.workshop._extensions import installed_extensions, installed_set
+
+    available = available_templates()
+    unknown = _first_unknown(name, available)
+    present = set(installed_extensions())
+    waiting = [
+        extension for extension in installed_set(root) if extension not in present
+    ]
+    if unknown and waiting:
+        what = (
+            f"no installed extension declares the template {name}"
+            if unknown == name
+            else f"the template {name} extends {unknown}, which no installed"
+            " extension declares"
+        )
+        fail(
+            f"{what}, and the workspace's lists hold {_with_distributions(waiting)},"
+            f" which no installed distribution declares yet: {_sync(waiting)}"
+        )
+    return template_chain(name, available, offered=installed_templates(root))
+
+
 def birth_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
     """The chain a birth from *name* writes in the workspace at *root*, once judged.
 
@@ -282,24 +466,9 @@ def birth_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
         installed_set,
     )
 
-    available = available_templates()
+    chain = resolved_chain(root, name)
     held = installed_set(root)
-    offered = installed_templates(root)
     present = set(installed_extensions())
-    unknown = _first_unknown(name, available)
-    waiting = [extension for extension in held if extension not in present]
-    if unknown and waiting:
-        what = (
-            f"no installed extension declares the template {name}"
-            if unknown == name
-            else f"the template {name} extends {unknown}, which no installed"
-            " extension declares"
-        )
-        fail(
-            f"{what}, and the workspace's lists hold {_with_distributions(waiting)},"
-            f" which no installed distribution declares yet: {_sync(waiting)}"
-        )
-    chain = template_chain(name, available, offered=offered)
     needs = chain_needs(chain)
     outside = [extension for extension in needs if extension not in held]
     if outside:
@@ -500,7 +669,8 @@ def create(
 
     Returns:
         The paths written, relative to *destination*. A path that
-        already exists is left alone and is not listed.
+        already exists is left alone and is not listed, and so is a
+        ``.jinja`` file that renders to whitespace alone.
     """
     from livery.workshop._fragment_engine import (
         _render,  # pyright: ignore[reportPrivateUsage]
@@ -511,18 +681,26 @@ def create(
         target = destination / path
         if target.exists():
             continue
-        target.parent.mkdir(parents=True, exist_ok=True)
         source = fragment.source
         if source is not None and not source.name.endswith(TEMPLATE):
-            target.write_bytes(source.read_bytes())
+            body = source.read_bytes()
         else:
-            target.write_bytes(_render(fragment, data).encode("utf-8"))
+            text = _render(fragment, data)
+            if not text.strip():
+                continue  # the file depends on an answer that rendered it away
+            body = text.encode("utf-8")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(body)
         written.append(path)
     return written
 
 
 def create_package(
-    root: Path, destination: Path, template: str, data: Mapping[str, Any]
+    root: Path,
+    destination: Path,
+    template: str,
+    data: Mapping[str, Any],
+    answers: Mapping[str, object] | None = None,
 ) -> list[str]:
     """Write a package born from *template* into *destination*; the paths written.
 
@@ -530,21 +708,33 @@ def create_package(
     template of the chain, the one extended first and *template* last
     (`template_chain`). The files read the born template's
     ``extensions``, in their canonical form, as ``package_extensions``,
-    spelled as a contract spells the list: the contract writes it.
-    Nothing is written until every template of the chain is judged,
-    and nothing is installed: the workspace at *root* holds and has
-    installed every extension the chain needs (`birth_chain`).
+    spelled as a contract spells the list: the contract writes it. They
+    read the answers to the chain's options as variables, *answers*
+    holding each by its variable (`answered`). Nothing is written until
+    every template of the chain and every answer is judged, and nothing
+    is installed: the workspace at *root* holds and has installed every
+    extension the chain needs (`birth_chain`).
 
     Raises:
         Failed: for a template the workspace cannot take
             (`birth_chain`), a template whose files are missing, a born
-            template whose list's requirements order no start, and a
+            template whose list's requirements order no start, a
             template of the chain listing an extension that composes
-            nothing in a package; each refusal names what to change.
+            nothing in a package, an answer the chain's options refuse
+            (`answered`), and an option whose variable *data* holds
+            already; each refusal names what to change.
     """
     from livery.workshop._contract import spelled_list
 
     chain = birth_chain(root, template)
     listed = _judged(chain)
-    full = {**data, "package_extensions": spelled_list(listed)}
+    variables = answered(chain, answers or {})
+    for variable in variables:
+        if variable in data or variable == "package_extensions":
+            fail(
+                f"the template {template} has an option whose variable is"
+                f" {variable}, which every birth sets already; the extension"
+                " that declares it renames the option"
+            )
+    full = {**data, **variables, "package_extensions": spelled_list(listed)}
     return create(root, destination, PACKAGE_BASE, full, templates=chain)

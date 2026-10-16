@@ -735,6 +735,14 @@ def _declaration_documented(subject: Subject) -> list[Violation]:
         for name, table in _table(data.get("templates")).items()
         if not _documented(_table(table).get("doc"))
     ]
+    reasons += [
+        f"declares the option {option} of the template {name} with no doc;"
+        " fm new.package's help and completion, the agent's guidance and the"
+        " site show an option by its doc"
+        for name, table in _table(data.get("templates")).items()
+        for option, spec in _table(_table(table).get("options")).items()
+        if not _documented(_table(spec).get("doc"))
+    ]
     for prefix, held in _step_holders(data):
         for phase, table in _table(held.get("phases")).items():
             for step, body in _step_tables(_table(table)).items():
@@ -1299,8 +1307,8 @@ CLAUSES: tuple[Clause, ...] = (
     Clause(
         DECLARATION_DOCUMENTED,
         "An extension's extension.toml carries an [extension] description, and"
-        " every verb its plugin defines, every contract key, template and step"
-        " option it declares carries its doc line.",
+        " every verb its plugin defines, every contract key, template,"
+        " template option and step option it declares carries its doc line.",
         _declaration_documented,
     ),
     Clause(

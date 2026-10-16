@@ -116,6 +116,7 @@ if TYPE_CHECKING:
     from livery.footman._params import isfile as isfile
     from livery.footman._params import matching as matching
     from livery.footman._params import nosplit as nosplit
+    from livery.footman._params import options_of as options_of
     from livery.footman._params import stdin as stdin
     from livery.footman._params import stdout as stdout
     from livery.footman._params import suggest as suggest
@@ -245,6 +246,7 @@ __all__ = [
     "markdown",
     "matching",
     "nosplit",
+    "options_of",
     "parallel",
     "passthrough",
     "plugin",
@@ -449,6 +451,7 @@ def __getattr__(name: str) -> object:
     if name in (
         "Arg",
         "suggest",
+        "options_of",
         "Many",
         "nosplit",
         "exists",

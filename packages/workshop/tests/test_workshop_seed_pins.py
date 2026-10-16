@@ -1,9 +1,10 @@
 """What each package template births, composes and runs, pinned as data.
 
-The installed templates birth a member: python's library and command
-line, nanobind's module (a python package whose extension module is
-C++), conan's C++ library and executable, and the base's workshop
-extension. Each test states one thing the workshop does with such a
+The installed templates birth a member: python's library, with and
+without a command, nanobind's module (a python package whose extension
+module is C++), conan's C++ package of each package type, and the
+base's workshop extension, with and without its App. Each test states
+one thing the workshop does with such a
 member: the files its birth writes, the extensions
 it holds, the files a sync composes for a workspace of one python, one
 nanobind and one C++ member, the tools a workspace requires, the members
@@ -47,20 +48,40 @@ _T = TypeVar("_T")
 #: The suffix every golden here carries, which no tool reads.
 GOLDEN = ".golden"
 
-#: The templates a member is born from, each to its member's directory
-#: here: the three the composing workspace holds, the base's extension
-#: package, then the two that extend another.
+#: Each birth here, by the name its goldens live under: the template it
+#: is born from and the answers it is given. A name with no answers is
+#: its template's.
+BIRTHS: dict[str, tuple[str, dict[str, object]]] = {
+    "python-library": ("python-library", {}),
+    "nanobind-module": ("nanobind-module", {}),
+    "cpp-package": ("cpp-package", {}),
+    "workshop-extension": ("workshop-extension", {}),
+    "python-library-command": ("python-library", {"command": "cli"}),
+    "cpp-package-application": ("cpp-package", {"package_type": "application"}),
+    "cpp-package-header-library": ("cpp-package", {"package_type": "header-library"}),
+    "cpp-package-static-library": ("cpp-package", {"package_type": "static-library"}),
+    "cpp-package-shared-library": ("cpp-package", {"package_type": "shared-library"}),
+    "workshop-extension-app": ("workshop-extension", {"app": "brand"}),
+}
+
+#: Each birth to its member's directory here: the three the composing
+#: workspace holds, the base's extension package, then the births with
+#: answers.
 TREES = {
     "python-library": "echo",
     "nanobind-module": "native",
-    "cpp-library": "lib",
+    "cpp-package": "lib",
     "workshop-extension": "plugin",
-    "python-cli": "cli",
-    "cpp-executable": "tool",
+    "python-library-command": "cli",
+    "cpp-package-application": "tool",
+    "cpp-package-header-library": "headers",
+    "cpp-package-static-library": "archive",
+    "cpp-package-shared-library": "dylib",
+    "workshop-extension-app": "brand",
 }
 
 #: The three templates whose members one workspace composes.
-THREE = ("python-library", "nanobind-module", "cpp-library")
+THREE = ("python-library", "nanobind-module", "cpp-package")
 
 #: What the composing workspace lists, as its canonical list: two type
 #: checkers, the C and C++ formatter and linter, the test runner, and
@@ -121,25 +142,30 @@ def _lists_also(root: Path, *names: str) -> None:
     list_in_root(root, names)
 
 
-def _born(root: Path, *templates: str) -> dict[str, Package]:
-    """Birth one member of each of *templates* in *root*, as ``fm new.package`` does.
+def _born(root: Path, *births: str) -> dict[str, Package]:
+    """Birth one member of each of *births* in *root*, as ``fm new.package`` does.
 
     The root lists what each template needs first, as a person does
     before the creation: a creation installs nothing. The members
-    discovered, each by its template. The test skips while an extension
-    a member holds is not installed.
+    discovered, each by its birth's name. The test skips while an
+    extension a member holds is not installed.
     """
     from livery.workshop._seeds import chain_needs, template_chain
 
-    skip_unless_installed(*(name for template in templates for name in HELD[template]))
+    skip_unless_installed(*(name for birth in births for name in HELD[birth]))
     _lists_also(
         root,
-        *(needed for name in templates for needed in chain_needs(template_chain(name))),
+        *(
+            needed
+            for birth in births
+            for needed in chain_needs(template_chain(BIRTHS[birth][0]))
+        ),
     )
-    for template in templates:
-        render_member(root, TREES[template], template)
+    for birth in births:
+        template, answers = BIRTHS[birth]
+        render_member(root, TREES[birth], template, answers)
     found = {package.member: package for package in discover_packages(root)}
-    return {template: found[TREES[template]] for template in templates}
+    return {birth: found[TREES[birth]] for birth in births}
 
 
 def _mounted(root: Path) -> tuple[str, ...]:
@@ -167,10 +193,14 @@ def _files(directory: Path) -> dict[str, str]:
 HELD = {
     "python-library": ("python",),
     "nanobind-module": ("cpp", "conan", "python", "nanobind"),
-    "cpp-library": ("cmake", "cpp", "conan"),
+    "cpp-package": ("cmake", "cpp", "conan"),
     "workshop-extension": ("python",),
-    "python-cli": ("python",),
-    "cpp-executable": ("cmake", "cpp", "conan"),
+    "python-library-command": ("python",),
+    "cpp-package-application": ("cmake", "cpp", "conan"),
+    "cpp-package-header-library": ("cmake", "cpp", "conan"),
+    "cpp-package-static-library": ("cmake", "cpp", "conan"),
+    "cpp-package-shared-library": ("cmake", "cpp", "conan"),
+    "workshop-extension-app": ("python",),
 }
 
 
@@ -195,10 +225,14 @@ def test_each_seed_s_member_holds_its_set(tmp_path: Path) -> None:
 IDENTIFYING = {
     "python-library": {"extensions": '["python"]'},
     "nanobind-module": {"extensions": '["nanobind"]'},
-    "cpp-library": {"extensions": '["cmake", "conan"]'},
+    "cpp-package": {"extensions": '["cmake", "conan"]'},
     "workshop-extension": {"extensions": '["python"]'},
-    "python-cli": {"extensions": '["python"]'},
-    "cpp-executable": {"extensions": '["cmake", "conan"]'},
+    "python-library-command": {"extensions": '["python"]'},
+    "cpp-package-application": {"extensions": '["cmake", "conan"]'},
+    "cpp-package-header-library": {"extensions": '["cmake", "conan"]'},
+    "cpp-package-static-library": {"extensions": '["cmake", "conan"]'},
+    "cpp-package-shared-library": {"extensions": '["cmake", "conan"]'},
+    "workshop-extension-app": {"extensions": '["python"]'},
 }
 
 _IDENTIFYING_LINE = re.compile(r"^(kind|extensions|template) = (.*)$", re.MULTILINE)
@@ -344,7 +378,7 @@ REQUIRED = {
         ("conan", "extension nanobind"),
         ("cmake_conan", "extension nanobind"),
     ),
-    "cpp-library": (
+    "cpp-package": (
         ("uv", "the base"),
         ("cmake", "step build.configure"),
         ("cmake", "step build.compile"),
@@ -364,7 +398,7 @@ HOST_TOOLS = {
     "no member": (),
     "python-library": (),
     "nanobind-module": ("c++", "cc"),
-    "cpp-library": ("c++", "cc"),
+    "cpp-package": ("c++", "cc"),
 }
 
 
@@ -396,7 +430,7 @@ def test_each_seed_s_member_requires_these_tools(
 PYTHON_ROOT = tuple(sorted((*STACK, "python")))
 
 #: The root's set once a C++ library is born in a workspace listing
-#: `STACK`: the root lists what cpp-library needs first, cmake and
+#: `STACK`: the root lists what cpp-package needs first, cmake and
 #: conan, and conan requires cpp. No python among it.
 NATIVE_ROOT_SET = (
     "basedpyright",
@@ -473,7 +507,7 @@ def _with_a_library(root: Path) -> tuple[Package, Package]:
     """A C++ library and the workspace's own tests in *root*, mounted."""
     from livery.workshop._packages import workspace_suite
 
-    lib = _born(root, "cpp-library")["cpp-library"]
+    lib = _born(root, "cpp-package")["cpp-package"]
     (root / "tests").mkdir()
     (root / "tests" / "test_workspace.py").write_text(
         "def test_the_workspace() -> None:\n    pass\n", "utf-8"
@@ -682,8 +716,8 @@ def test_the_sibling_requirement_lands_in_its_ecosystem_s_manifest(
         ("echo", "python-library"),
         ("core", "python-library"),
         ("native", "nanobind-module"),
-        ("lib", "cpp-library"),
-        ("geometry", "cpp-library"),
+        ("lib", "cpp-package"),
+        ("geometry", "cpp-package"),
     ):
         render_member(root, name, template)
     packages = {package.member: package for package in discover_packages(root)}
