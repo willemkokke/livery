@@ -169,6 +169,19 @@ digest the forge reports, and restores the cache into its conan
 home; a forge that reports no digest says so rather than passing
 silently.
 
+The two other routes, a conan remote and a folder, upload from the
+publish job's conan cache, and every CI job has a conan home of its
+own, so that cache starts without the package. When the wave
+publishes what the run collected, the conan publish step first
+restores every host's file for the version from `dist/`, in name
+order (`conan cache restore`), and then uploads. The upload sends
+every host's binary the run collected, the same hosts the releases
+route attaches. A file for another version is not restored. A
+`dist/` without a saved cache for the version refuses, naming the
+member, the version and the files `dist/` holds. A member the
+publish job built itself is in its cache already, and nothing is
+restored.
+
 A release leg builds the packages the release ships, so it sets the
 workspace's `conanws.yml` aside while it builds: a member's
 `conan create` and an extension's wheel resolve a sibling to the

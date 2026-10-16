@@ -154,7 +154,10 @@ def test_the_lifecycle_engines_inputs_are_the_keys_their_phases_declare(
             "test",
             {"isolated": True, "resolution": "floor", "release-dirs": [Path("dist")]},
         ),
-        ("publish", {"version": "1.2.3", "registry-target": {"url": "x"}}),
+        (
+            "publish",
+            {"version": "1.2.3", "registry-target": {"url": "x"}, "prebuilt": True},
+        ),
         (
             "verify",
             {
@@ -788,7 +791,7 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
         "build": {"isolated": "bool", "configuration": "str", "epoch": "int"},
         "test": {"isolated": "bool", "resolution": "str", "release-dirs": "paths"},
         "stamp": {"version": "str"},
-        "publish": {"version": "str", "registry-target": "table"},
+        "publish": {"version": "str", "registry-target": "table", "prebuilt": "bool"},
         "verify": {
             "version": "str",
             "tree": "path",
