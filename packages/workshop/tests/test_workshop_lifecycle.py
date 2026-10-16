@@ -65,13 +65,19 @@ def _release_phase(package: Package, phase: str, root: Path) -> object:
     )
 
 
+def _quiet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
+    """``packages/thing`` listing a fake extension that adds no step, answering none."""
+    fake_package_extensions(tmp_path, monkeypatch, quiet="[extension]\n")
+    return _package(tmp_path, "acme.quiet")
+
+
 def test_a_package_whose_set_serves_no_build_step_refuses_the_release_naming_the_phase(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # cpp names a package's files and adds no step to any phase, and a
-    # package that lists nothing holds nothing.
+    # An extension that adds no step to any phase, and a package that
+    # lists nothing and so holds nothing.
     for package, held in (
-        (_package(tmp_path, "cpp"), "cpp"),
+        (_quiet(tmp_path, monkeypatch), "acme.quiet"),
         (_package(tmp_path), "none"),
     ):
         for phase in ("build", "stamp", "publish", "verify"):
@@ -85,10 +91,10 @@ def test_a_package_whose_set_serves_no_build_step_refuses_the_release_naming_the
 
 
 def test_a_package_nothing_answers_the_version_for_refuses_naming_the_query(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     for package, held in (
-        (_package(tmp_path, "cpp"), "cpp"),
+        (_quiet(tmp_path, monkeypatch), "acme.quiet"),
         (_package(tmp_path), "none"),
     ):
         with pytest.raises(Failed) as refused:
@@ -102,11 +108,11 @@ def test_a_package_nothing_answers_the_version_for_refuses_naming_the_query(
 
 
 def test_a_package_whose_set_answers_nothing_takes_each_empty_answer(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._queries import COMPILE_COMMANDS, PUBLIC_MODULES, answer
 
-    for package in (_package(tmp_path, "cpp"), _package(tmp_path)):
+    for package in (_quiet(tmp_path, monkeypatch), _package(tmp_path)):
         assert _lifecycle.version_files(package) == ()
         assert _lifecycle.declared_requirements(package) == {}
         assert answer(package, PUBLIC_MODULES) == ()
@@ -114,8 +120,7 @@ def test_a_package_whose_set_answers_nothing_takes_each_empty_answer(
         assert _lifecycle.references(package) == ()
         assert _lifecycle.distributions(package) == ()
         assert _lifecycle.has_isolated_test(package) is False
-    # cpp's own answers: a C or C++ package names no module.
-    assert _lifecycle.module_roots(_package(tmp_path, "cpp")) == ()
+        assert _lifecycle.module_roots(package) == ()
 
 
 def test_layering_graph_names_each_edge_of_a_package_whose_set_reads_no_manifest(

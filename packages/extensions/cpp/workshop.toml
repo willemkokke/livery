@@ -1,0 +1,32 @@
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+# The extensions this package is composed of.
+extensions = ["python"]
+name = "livery-extensions-cpp"
+description = "C and C++ as languages, as an extension of the livery workshop: which of a package's files are sources, tests and test support, and the compilers the host must provide."
+
+[[depends]]
+path = "packages/workshop"
+kind = "runtime"
+floor = "0.10.0"
+
+# The suite reads footman's refusals and mounts into its task tree.
+[[depends]]
+path = "packages/footman"
+kind = "test"
+floor = "0.60.0"
+
+[coverage]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+floor = 100
+
+[docs]
+# Inside the workshop's entry of the site's Packages tree.
+name = "workshop.extensions.cpp"
+
+# Who reviews this package; the codeowners file renders from
+# these declarations.
+[owners]
+users = ["willemkokke"]

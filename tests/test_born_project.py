@@ -30,15 +30,16 @@ ROOT = Path(__file__).resolve().parents[1]
 _END_TABLES = "# -- workshop: end tables --"
 
 #: What conan's cpp-package template needs, which the root lists before
-#: the C++ member is created. cmake and conan each ship as a distribution
-#: of their own, which the newborn's region sources from this checkout,
-#: so the sync that installs them takes them from there.
+#: the C++ member is created. cmake, conan and cpp, which conan requires,
+#: each ship as a distribution of their own, which the newborn's region
+#: sources from this checkout, so the sync that installs them takes them
+#: from there.
 NATIVE = ("cmake", "conan")
 
 #: What nanobind's nanobind-module template needs: nanobind, which
 #: requires python, cpp and conan. It ships as a distribution of its
-#: own, which requires conan's, and the newborn's region sources both
-#: from this checkout too.
+#: own, which requires conan's and cpp's, and the newborn's region
+#: sources all three from this checkout too.
 NANOBIND = ("nanobind",)
 
 #: Each creation the templates' options make, each in a workspace of its
@@ -179,6 +180,7 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     # the extension that declares it, and the environment holds none of
     # conan's distribution, so there is no such verb yet.
     assert not _installed(project, "livery-extensions-conan")
+    assert not _installed(project, "livery-extensions-cpp")
     refused = subprocess.run(
         [fm, "new.package.cpp-package", "geometry"],
         cwd=project,
@@ -197,6 +199,8 @@ def test_a_born_project_is_green(tmp_path: Path) -> None:
     list_in_root(project, NATIVE)
     _run([fm, "sync"], project, env)
     assert _installed(project, "livery-extensions-conan")
+    # conan's distribution requires cpp's, which the sync installs with it.
+    assert _installed(project, "livery-extensions-cpp")
     _run([fm, "new.package.cpp-package", "geometry"], project, env)
     # A package in a group directory: the distribution names the group,
     # and so does the import path.

@@ -24,6 +24,9 @@ dependencies = [
     # module serves the conan workspace and the saved caches a wheels
     # leg reads.
     "livery-extensions-conan>=0.0.0",
+    # The cpp extension nanobind requires, for the extension module's
+    # C++ sources and the compilers the host provides.
+    "livery-extensions-cpp>=0.0.0",
     "livery-footman>=0.60.0",
     # Every git call goes through livery.git: the epoch of the release
     # a wheels leg builds.
@@ -32,8 +35,8 @@ dependencies = [
     # runs cibuildwheel, so the version is the one the checkout's lock
     # pins.
     "livery-toolroom>=0.11.0",
-    # The base, and the python and cpp extensions nanobind requires,
-    # which the workshop's wheel ships.
+    # The base, and the python extension nanobind requires, which the
+    # workshop's wheel ships.
     "livery-workshop>=0.10.0",
 ]
 

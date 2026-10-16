@@ -17,6 +17,7 @@ members = [
     "livery-extensions-cmake",
     "livery-extensions-conan",
     "livery-extensions-coverage",
+    "livery-extensions-cpp",
     "livery-extensions-docs",
     "livery-extensions-lfs",
     "livery-extensions-mkdocstrings",
@@ -815,6 +816,7 @@ dev = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-conan" },
     { name = "livery-extensions-coverage", extra = ["dev"] },
+    { name = "livery-extensions-cpp" },
     { name = "livery-extensions-docs" },
     { name = "livery-extensions-lfs" },
     { name = "livery-extensions-mkdocstrings", extra = ["test"] },
@@ -856,6 +858,7 @@ dev = [
     { name = "livery-extensions-cmake", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-conan", editable = "packages/extensions/conan" },
     { name = "livery-extensions-coverage", extras = ["dev"], editable = "packages/extensions/coverage" },
+    { name = "livery-extensions-cpp", editable = "packages/extensions/cpp" },
     { name = "livery-extensions-docs", editable = "packages/extensions/docs" },
     { name = "livery-extensions-lfs", editable = "packages/extensions/lfs" },
     { name = "livery-extensions-mkdocstrings", extras = ["test"], editable = "packages/extensions/mkdocstrings" },
@@ -952,12 +955,14 @@ dependencies = [
 test = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-cpp" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-cpp", marker = "extra == 'test'", editable = "packages/extensions/cpp" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -978,12 +983,14 @@ dependencies = [
 test = [
     { name = "livery-extensions-cmake" },
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-cpp" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
     { name = "livery-extensions-conan", marker = "extra == 'test'", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-cpp", marker = "extra == 'test'", editable = "packages/extensions/cpp" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -1040,6 +1047,7 @@ name = "livery-extensions-conan"
 version = "0.0.0"
 source = { editable = "packages/extensions/conan" }
 dependencies = [
+    { name = "livery-extensions-cpp" },
     { name = "livery-footman" },
     { name = "livery-forge" },
     { name = "livery-toolroom" },
@@ -1054,6 +1062,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "livery-extensions-cpp", editable = "packages/extensions/cpp" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-git", marker = "extra == 'test'", editable = "packages/git" },
@@ -1094,6 +1103,26 @@ requires-dist = [
     { name = "types-pygments", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev", "test"]
+
+[[package]]
+name = "livery-extensions-cpp"
+version = "0.0.0"
+source = { editable = "packages/extensions/cpp" }
+dependencies = [
+    { name = "livery-workshop" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-docs"
@@ -1189,6 +1218,7 @@ version = "0.0.0"
 source = { editable = "packages/extensions/nanobind" }
 dependencies = [
     { name = "livery-extensions-conan" },
+    { name = "livery-extensions-cpp" },
     { name = "livery-footman" },
     { name = "livery-git" },
     { name = "livery-toolroom" },
@@ -1204,6 +1234,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-conan", editable = "packages/extensions/conan" },
+    { name = "livery-extensions-cpp", editable = "packages/extensions/cpp" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },

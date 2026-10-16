@@ -11,13 +11,14 @@ extensions = ["cmake", "conan"]
 name = "acme-geometry"
 ```
 
-conan requires cpp, which the workshop's wheel ships, so a package that
-lists conan holds both. The recipe, `conanfile.py`, is the package's
-manifest: it declares the version and the requirements. A recipe that
-names a reference, a `name` and a `version`, releases the conan
-package. A consumer's recipe, requirements alone, releases nothing: it
-answers no version, no distribution and no registry, so the set's other
-answers stand.
+conan requires cpp, which ships in `livery-extensions-cpp`, a
+requirement of this distribution, so a package that lists conan holds
+both. The recipe, `conanfile.py`, is the package's manifest: it
+declares the version and the requirements. A recipe that names a
+reference, a `name` and a `version`, releases the conan package. A
+consumer's recipe, requirements alone, releases nothing: it answers no
+version, no distribution and no registry, so the set's other answers
+stand.
 
 ## A new package
 

@@ -248,8 +248,7 @@ def test_validate_member_skips_a_member_with_no_isolated_test(
 ) -> None:
     from livery.workshop._release_driver import validate_member
 
-    # A C++ package: cpp, which the workshop's wheel ships, adds no
-    # isolated test.
+    # A C++ package: cpp adds no isolated test.
     directory = tmp_path / "packages" / "lib"
     directory.mkdir(parents=True)
     package = Package(

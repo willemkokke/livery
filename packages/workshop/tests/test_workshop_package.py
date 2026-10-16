@@ -31,16 +31,16 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
     assert getattr(livery, "__file__", None) is None
 
 
-#: The extensions the workshop's wheel ships beside the base, each by the
-#: name a contract lists to the package it mounts from. Each extension
-#: that leaves the wheel for a distribution of its own leaves this pin.
+#: The extension the workshop's wheel ships beside the base, by the name
+#: a contract lists to the package it mounts from: python alone. Each
+#: extension that leaves the wheel for a distribution of its own leaves
+#: this pin.
 SHIPPED = {
-    "cpp": "livery.extensions.cpp",
     "python": "livery.extensions.python",
 }
 
 
-def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
+def test_the_workshop_wheel_ships_the_base_and_the_python_extension() -> None:
     import tomllib
     from importlib.metadata import distribution
     from pathlib import Path
@@ -51,8 +51,8 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
         if entry.group == "workshop.extensions"
     }
     assert declared == SHIPPED
-    # None of the extensions it ships carries a plugin: the wheel's one
-    # footman plugin is the base's.
+    # The extension it ships carries no plugin: the wheel's one footman
+    # plugin is the base's.
     plugins = [
         entry.name
         for entry in distribution("livery-workshop").entry_points
@@ -67,12 +67,15 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
     assert [
         line for line in required if "griffelib" in line or "pygments" in line
     ] == []
-    # The build ships the base's root and each of theirs, and no other.
+    # The build ships the base's root and python's, and no other.
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")
     )
-    roots = project["tool"]["uv"]["build-backend"]["module-name"]
-    assert roots == ["livery.workshop", *sorted(SHIPPED.values())]
+    backend = project["tool"]["uv"]["build-backend"]
+    assert backend["module-name"] == ["livery.workshop", *sorted(SHIPPED.values())]
+    # Each root has its __init__.py, so the build takes no namespace
+    # flag and refuses a root that lacks one.
+    assert "namespace" not in backend
 
 
 def test_the_surface_is_declared() -> None:
