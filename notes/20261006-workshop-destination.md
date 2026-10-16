@@ -969,7 +969,7 @@ names first, the same way.
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
 | `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
 | `livery-extensions-python`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
-| `livery-extensions-mkdocstrings` | phase 11's step 8, when the extensions leave the workshop wheel |
+| `livery-extensions-mkdocstrings` | step 8's release wave; the package exists since step 8's P2b (#1708) |
 | `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
 | `livery-lodge` | 15 |
 
@@ -1328,7 +1328,10 @@ extension's distribution, is built after N1 and before P1b merges.
    (built, #1708) makes public what mkdocstrings reads: the workshop's
    `extension_set` (in composition order), `step_extensions` and
    `step_enabled`, `step_option` answering from the installed
-   declaration, and the docs extension's entry module.
+   declaration, and the docs extension's entry module. P2b (built,
+   #1708) moves mkdocstrings to `packages/extensions/mkdocstrings`,
+   distribution `livery-extensions-mkdocstrings` 0.0.0, with its tests;
+   `griffelib` is its `test` extra, and the workshop has none.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1675,7 +1678,9 @@ neither needs nor rules out).
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
-| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake) | fixture extensions in the workshop's suite |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings) | fixture extensions in the workshop's suite |
+| `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled` and the docs entry module | the release wave raising the floor within its set (step 8's R1) |
+| mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
 | `livery-extensions-cmake`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `undeployed` | the release wave raising the floor within its set (step 8's R1) |
 | cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
@@ -3508,6 +3513,19 @@ neither needs nor rules out).
   version of a path- or git-sourced extension (for cmake, PyPI's empty
   placeholder). A failed install, or one that still finds no
   declaration, puts the project file, its receipt and `uv.lock` back.
+
+- 2026-10-16, step 8's P2b (#1708), built: mkdocstrings leaves the
+  workshop wheel for `livery-extensions-mkdocstrings`. Decided while
+  building it, recorded for Willem: while a list names an extension no
+  installed distribution declares, the contract judge
+  (`_contract_keys.judge`) takes the keys of every installed extension
+  as listed; a key no installed extension declares still refuses. The
+  root's `[docs]` table belongs to docs, which reaches the root's set
+  only through mkdocstrings, so with mkdocstrings listed and not yet
+  installed every contract read refused, the `fm sync` that installs
+  it included; a consumer upgrading the workshop would meet the same
+  dead end. The workshop's PD record above, which moved `griffelib` to
+  the workshop's `test` extra, is superseded: it is mkdocstrings'.
 
 ## Open
 
