@@ -1448,7 +1448,12 @@ remained after N1.
    conan reach it through a test edge. P7 (built, #1733) moves cpp to
    `packages/extensions/cpp`, distribution `livery-extensions-cpp`
    0.0.0; conan's and nanobind's wheels require it, and the workshop
-   wheel ships the base and the python extension alone.
+   wheel ships the base and the python extension alone. P8a (built,
+   #1734) makes public what python reads (`neighbours`,
+   `SourceReferences`, `graph_changed`, `venv_python`, `is_example`,
+   `speed_marks` and the rest of its table), moves `root_marks` and
+   `publish_wheels` into python, and has the dev act publish through
+   each member's publish phase.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1834,9 +1839,9 @@ neither needs nor rules out).
 | `livery-extensions-nanobind`'s floor `livery-extensions-conan>=0.0.0`, which ships conan's entry module | the release wave raising it with conan's first release (step 8's R2) |
 | `livery-extensions-cpp`'s floor `livery-workshop>=0.10.0`, which admits a workshop whose wheel still ships cpp's files and its `cpp` entry point | the release wave raising the floor within its set (step 8's R1) |
 | `livery-extensions-conan`'s and `livery-extensions-nanobind`'s floor `livery-extensions-cpp>=0.0.0` | the release wave raising it with cpp's first release (step 8's R2) |
-| each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | an extension declaring a tool home the entry places per job (#1731) |
-| the conan home of a development environment, a loop pass and the scale fixture, in the base's `_devenv`, `_e2e` and `_scale` | the same declared tool home, placed per environment (#1731) |
-| the release driver's `conanfile.py` floor bump and its rollback, in `_release_driver` | requirement writers that raise a sibling's existing floor in place and answer the files they wrote (#1731) |
+| each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | conan's declared `[env.CONAN_HOME]`, `{place}/conan` with `always`, placed per job (#1731) |
+| the conan home of a development environment, a loop pass and the scale fixture, in the base's `_devenv`, `_e2e` and `_scale` | the same declaration, placed per environment, loop pass and fixture (#1731) |
+| the release driver's `conanfile.py` floor bump and its rollback, in `_release_driver` | python's and conan's stamp steps raising floors in their own files (#1731) |
 | `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache` and `restore_from_releases` to nanobind | conan's per-host artifact (phase 13) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
@@ -3853,6 +3858,16 @@ neither needs nor rules out).
   (a tool home an extension declares, and requirement writers that
   raise a floor).
 
+- 2026-10-16, step 8's P7 (#1733), built: cpp leaves the workshop
+  wheel for `livery-extensions-cpp`, at a coverage floor of 100, with
+  no names part, since it read no private name. The kit's dependency
+  clause refused conan and nanobind before their wheels named it.
+  The workshop wheel's `module-name` is `livery.workshop` and
+  `livery.extensions.python`, both packages with an `__init__.py`, so
+  its namespace flag goes. claude's suite mounted cpp only because the
+  workshop wheel shipped it; it mounts python instead. The dev act's
+  in-set floors let the four dev wheels resolve together.
+
 - 2026-10-16, step 8's P8a (#1734), built: python reads no private
   name of the workshop; 11 names join `__all__` (85 to 96).
   `root_marks` moved into python; python keeps its own `RuleContext`,
@@ -3865,16 +3880,15 @@ neither needs nor rules out).
   and `SPEED_FILE_VARIABLE` are defined in modules that import no
   pytest, so the names python reads resolve where pytest is not
   installed; the two pytest plugins leave the base with #1736.
-- 2026-10-16, step 8's P7 (#1733), built: cpp leaves the workshop
-  wheel for `livery-extensions-cpp`, at a coverage floor of 100, with
-  no names part, since it read no private name. The kit's dependency
-  clause refused conan and nanobind before their wheels named it.
-  The workshop wheel's `module-name` is `livery.workshop` and
-  `livery.extensions.python`, both packages with an `__init__.py`, so
-  its namespace flag goes. claude's suite mounted cpp only because the
-  workshop wheel shipped it; it mounts python instead. The dev act's
-  in-set floors let the four dev wheels resolve together.
 
+- 2026-10-16, Willem, on the base's last conan code (#1731): an
+  extension declares the environment variables it needs
+  (`[env.<NAME>]`, one `value` in the step words' placeholder grammar,
+  `{place}` its first placeholder, `always` where it must beat the
+  environment), applied through footman's `pre_tasks` hook and read by
+  the CI entry-script generator; and the stamp phase's extension steps
+  raise floors in their own files, as they already stamp versions.
+  Built after step 8.
 
 ## Open
 
