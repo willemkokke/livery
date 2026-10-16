@@ -1349,7 +1349,12 @@ remained after N1.
    removes once nothing running declares them. P3b (built, #1712)
    moves docs to `packages/extensions/docs`, distribution
    `livery-extensions-docs` 0.0.0, with its tests and its footman
-   plugin; mkdocstrings' wheel depends on it.
+   plugin; mkdocstrings' wheel depends on it. P4a (built, #1718) makes
+   public what coverage reads: `state_store`, `RUNS`,
+   `leave_leg_file`, `leave_section`, `check_legs`,
+   `pull_request_legs`, `leg_scope` with `LegScope`, `verified_branch`
+   with `VerifiedBranch`, `tested`, `WORKSPACE_TESTS`,
+   `holds_runtime_language`, and `category_of` with `Category`.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -3614,6 +3619,17 @@ neither needs nor rules out).
   base tests that lived in docs' files stay in the workshop's suite.
   The extension's loop pass met a conan race between two jobs on one
   loop runner, fixed apart (#1715).
+
+- 2026-10-16, step 8's P4a (#1718), built: coverage reads no private
+  name of the workshop; 15 names join `__all__` (62 to 77). The scope a
+  leg ran is `LegScope`, read by `leg_scope`, with its values as
+  documented strings (`full`, `affected`, `nothing`, `verified`,
+  `unknown`), not constants; `verified_branch` returns
+  `VerifiedBranch`, the branch whose run proved HEAD's tree or the
+  reason nothing could be read. `_verified.read_marker` and
+  `_steps.tested_suite` went with their last private readers. On a
+  push whose tree git cannot name, the union prints the reason and
+  reads main's record instead of raising.
 
 ## Open
 
