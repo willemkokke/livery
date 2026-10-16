@@ -4,20 +4,28 @@ The listed extensions' files are composed by the fragment engine
 (`livery.workshop._shipped_files`); the CI files and the codeowners file
 are generated from the contract. `drift_check` judges both against the
 repository as the gate's `fm drift.check`; `apply_project` writes both,
-and `fm sync` runs it, which is the recovery for drift. ``fm
-new.package <name> <template>`` writes a member born from an installed
-template into ``packages/<name>`` (`livery.workshop._seeds`), and a
-fresh runner adds it to the project files.
+and `fm sync` runs it, which is the recovery for drift.
+
+Each installed template is a verb, ``fm new.package.<template> <name>
+--<option>=<answer>``, made from its declaration by
+`generate_template_verbs` when the plugin loads. It writes a member
+born from the template into ``packages/<name>`` through
+`render_member` (`livery.workshop._seeds`), the one function every
+creation calls, and a fresh runner adds the member to the project
+files.
 """
 
 from __future__ import annotations
 
+import inspect
 import re
+import weakref
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 import livery.footman as footman
-from livery.footman import Arg, doc, fail, group, hidden, suggest
+from livery.footman import Group, doc, fail, group
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import (
     stack_entries,
@@ -26,10 +34,17 @@ from livery.workshop._extensions import (
 from livery.workshop._identity import default_description, identity, python_dirs
 from livery.workshop._pythons import python_floor, runner_script
 
-new = group(
-    "new",
-    help="Create a project from the extensions' seeds, or a package from a template",
-)
+if TYPE_CHECKING:
+    from livery.workshop._declaration import DeclaredTemplate, TemplateOption
+
+#: What ``fm new`` does, and what ``fm new.package`` does.
+NEW_HELP = "Create a project from the extensions' seeds, or a package from a template"
+PACKAGE_HELP = "Create a package from an installed template: one task per template"
+
+new = group("new", help=NEW_HELP)
+
+#: The group of the templates' verbs: ``fm new.package.<template>``.
+package = new.group("package", help=PACKAGE_HELP)
 
 
 def _root() -> Path:
@@ -321,88 +336,182 @@ def drift_check(files: frozenset[str] | None = None) -> None:
     )
 
 
-def template_names() -> list[str]:
-    """The names of the templates the workspace offers, which completion offers.
+#: The package's name, which every template's verb takes first. Module
+#: level, where footman reads a task's annotations.
+_Name = Annotated[str, doc("directory name under packages/ (e.g. scratch)")]
 
-    The base's, and those of the extensions the workspace's installed
-    set holds.
-    """
-    from livery.workshop._seeds import installed_templates
-
-    return list(installed_templates())
-
-
-def _installed(root: Path) -> str:
-    """The templates *root* offers, each on a line with its doc, for a refusal."""
-    from livery.workshop._seeds import described, installed_templates
-
-    return described(installed_templates(root))
+#: Each verb the generator made, to what it was made from: the template
+#: and the options its verb offers.
+_MADE: weakref.WeakKeyDictionary[
+    Callable[..., None], tuple[DeclaredTemplate, tuple[TemplateOption, ...]]
+] = weakref.WeakKeyDictionary()
 
 
-@new.task(name="package")
-def new_package(
-    name: Annotated[str, doc("directory name under packages/ (e.g. scratch)")],
-    template: Annotated[
-        Arg[str],
-        doc("the template the package is born from (python-library, ...)"),
-        suggest(template_names, strict=False),
-    ] = "",
-    resume: Annotated[bool, hidden] = False,
+def generate_template_verbs(
+    templates: Mapping[str, DeclaredTemplate], into: Group | None = None
 ) -> None:
-    """Create a package from an installed template and wire it into the workspace.
+    """Make a verb per template, ``fm new.package.<template>``, from *templates*.
 
-    Writes the ``package-base`` seeds, then the files of the template
-    and of each template it extends, the one extended first, into
-    ``packages/<name>``, with the distribution named
-    ``<namespace>-<name>`` and the contract listing the template's
-    extensions. The installed templates are the base's and those of
-    the extensions the workspace's installed set holds: the root list's
-    set and every package's. Without a template it refuses, naming
-    each installed one with its doc.
+    *templates* are the installed ones by name: the base's, and those
+    of each extension of the installed set an installed distribution
+    declares, as the mount read them. Each verb takes the package's
+    name, then each option the template's chain offers as a keyword
+    option (`livery.workshop._seeds.verb_options`): choices as a
+    `Literal`, the doc as its help line, the default as its default,
+    and an option without a default required. Nothing else is read, so
+    the command line, its help and its completion follow from the
+    declarations alone.
 
-    A creation installs nothing. A template needs its own
-    ``extensions``, those of each template it extends, and the
-    extension that declares each template of that chain, the base
-    aside. Before anything is written it refuses, in this order: a
-    template no installed extension declares while the workspace's
-    lists hold an extension that is not installed yet, naming each and
-    ``fm sync``; a template no installed extension declares, naming the
-    installed templates; a template that needs an extension the
-    workspace's lists do not hold, naming each with its distribution,
-    to list in ``[workspace] extensions`` before ``fm sync``; and a
-    template that needs an extension the lists hold and no installed
-    distribution declares yet, naming each and ``fm sync``.
+    Run again after the installed set changed, it makes the verb of a
+    new template, remakes a verb whose template or options changed, and
+    removes the verb of a template that is gone. A task at a template's
+    address that the generator did not make is left alone.
+    """
+    from livery.footman import root_group
+    from livery.workshop._seeds import verb_options
 
-    Then the runner the workspace's environment holds wires the member,
-    run as ``new.package <name> --resume``: it writes the project files
-    again so every per-package list picks the member up, and locks and
-    syncs the environment and the tools. ``--resume`` wires a
-    member that exists, which is also the recovery after a wiring that
-    stopped part way. A member that does not hold python joins the
-    roster without a dev-group entry: there is no distribution to
-    install.
+    parent = _package_group(into if into is not None else root_group)
+    for key, task in list(parent.tasks.items()):
+        if _made(task) is not None and key not in templates:
+            del parent.tasks[key]
+    for name, template in templates.items():
+        options = verb_options(name, templates)
+        existing = parent.tasks.get(name)
+        if existing is not None:
+            made = _made(existing)
+            if made is None or made == (template, options):
+                continue
+            del parent.tasks[name]
+        parent.task(name=name)(_template_verb(template, options))
+
+
+def _package_group(target: Group) -> Group:
+    """The ``new.package`` group under *target*, made when it is missing."""
+    held = target.groups.get("new")
+    if held is None:
+        held = target.group("new", help=NEW_HELP)
+    found = held.groups.get("package")
+    if found is None:
+        found = held.group("package", help=PACKAGE_HELP)
+    return found
+
+
+def _made(
+    task: Callable[..., object],
+) -> tuple[DeclaredTemplate, tuple[TemplateOption, ...]] | None:
+    """What the generator made *task* from; None for a task it did not make."""
+    return _MADE.get(inspect.unwrap(task))
+
+
+def _template_verb(
+    template: DeclaredTemplate, options: Sequence[TemplateOption]
+) -> Callable[..., None]:
+    """The verb that creates a package from *template*, offering *options*."""
+    born = template.name
+
+    def verb(name: str, **answers: object) -> None:
+        _create(born, name, answers)
+
+    parameters = [
+        inspect.Parameter(
+            "name", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=_Name
+        ),
+        *(_parameter(option) for option in options),
+    ]
+    # footman reads a verb's parameters through inspect.signature, which
+    # answers with __signature__ when a function carries one: the options
+    # are data, so the signature is built here.
+    vars(verb)["__signature__"] = inspect.Signature(parameters, return_annotation=None)
+    verb.__doc__ = _verb_doc(template)
+    _MADE[verb] = (template, tuple(options))
+    return verb
+
+
+def _parameter(option: TemplateOption) -> inspect.Parameter:
+    """*option* as a keyword option of its template's verb."""
+    from livery.workshop._declaration import OPTION_TYPES
+
+    answer: Any = OPTION_TYPES[option.type]
+    if option.choices:
+        # The choices are data, so the Literal is built at run time.
+        answer = cast("Any", Literal)[option.choices]
+    return inspect.Parameter(
+        option.variable,
+        inspect.Parameter.KEYWORD_ONLY,
+        default=inspect.Parameter.empty if option.default is None else option.default,
+        annotation=cast("Any", Annotated)[answer, doc(option.doc)],
+    )
+
+
+def _verb_doc(template: DeclaredTemplate) -> str:
+    """The help of *template*'s verb: its doc first, then what a creation does.
+
+    The first line is the summary listings show, so it stays one line;
+    the paragraphs after it are wrapped as a docstring is, since footman
+    prints a verb's help as written.
+    """
+    import textwrap
+
+    extends = (
+        f", after the files of {template.extends} and each template it extends"
+        if template.extends
+        else ""
+    )
+    paragraphs = (
+        "Writes the package-base seeds, then the files of the template"
+        f" {template.name}{extends}, into packages/<name>, with the"
+        " distribution named <namespace>-<name> and the contract listing"
+        " the template's extensions. Each option's answer is checked"
+        " before anything is written, and renders the files; nothing"
+        " stores it.",
+        "A creation installs nothing: a template that needs an extension"
+        " the workspace's lists do not hold, or that no installed"
+        " distribution declares yet, refuses before anything is written,"
+        " naming each. Then the runner the workspace's environment holds"
+        " wires the member, run as `new.wire <name>`: it writes the"
+        " project files again, and locks and syncs the environment and"
+        " the tools.",
+    )
+    wrapped = (
+        textwrap.fill(paragraph, 72, break_on_hyphens=False) for paragraph in paragraphs
+    )
+    return "\n\n".join((f"Create {template.doc}.", *wrapped))
+
+
+def _create(template: str, name: str, answers: Mapping[str, object]) -> None:
+    """Create ``packages/<name>`` from *template* with *answers*, then wire it.
+
+    The body of every template's verb: the render (`render_member`),
+    then the wiring in the runner the workspace's environment holds, a
+    fresh process whose mount holds the member's extensions.
     """
     root = _root()
-    if resume:
-        wire_member(root, name)
-        return
+    render_member(root, name, template, answers)
     prog = footman.prog()
-    if not template:
-        fail(
-            f"name the template packages/{name} is born from:"
-            f" `{prog} new.package {name} <template>`; the installed templates"
-            f" are:\n{_installed(root)}"
-        )
-    render_member(root, name, template)
     runner = runner_script(root / ".venv")
     if not runner.is_file():
         fail(
             f"{runner} is missing: {root}'s environment has no {prog} to wire"
             f" packages/{name} with. `uv sync` in {root} installs it; then run"
-            f" `{prog} new.package {name} --resume` there"
+            f" `{prog} new.wire {name}` there"
         )
     print(f"  packages/{name}: seeded; the wiring continues with {runner}")
-    footman.run([str(runner), "new.package", name, "--resume"], cwd=root, capture=False)
+    footman.run([str(runner), "new.wire", name], cwd=root, capture=False)
+
+
+@new.task(name="wire", hidden=True)
+def new_wire(name: _Name) -> None:
+    """Wire the package under packages/<name> into the workspace.
+
+    Writes the project files again, so every per-package list picks the
+    member up, then locks and syncs the environment and the tools. A
+    template's verb runs it in the runner the workspace's environment
+    holds once the member is written, and it is the recovery after a
+    wiring that stopped part way. A member that does not hold python
+    joins the roster without a dev-group entry: there is no
+    distribution to install.
+    """
+    wire_member(_root(), name)
 
 
 def wire_member(root: Path, name: str) -> None:
@@ -410,8 +519,9 @@ def wire_member(root: Path, name: str) -> None:
 
     Writes the composed and generated files again, so every
     per-package list picks the member up, then locks and syncs the
-    environment and the tools. ``new.package`` runs it in the runner
-    the workspace's environment holds.
+    environment and the tools. ``fm new.wire`` runs it in the runner
+    the workspace's environment holds, after a template's verb wrote the
+    member.
 
     Raises:
         Failed: when *name* breaks the package naming rule, or
@@ -421,7 +531,7 @@ def wire_member(root: Path, name: str) -> None:
     if not (root / "packages" / name / "workshop.toml").is_file():
         fail(
             f"packages/{name} holds no package to wire:"
-            f" `{footman.prog()} new.package {name}` creates one"
+            f" `{footman.prog()} new.package.<template> {name}` creates one"
         )
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
@@ -447,18 +557,27 @@ def _check_member_name(name: str) -> None:
         )
 
 
-def render_member(root: Path, name: str, template: str) -> str:
+def render_member(
+    root: Path,
+    name: str,
+    template: str,
+    answers: Mapping[str, object] | None = None,
+) -> str:
     """Write a member born from *template* into ``packages/<name>``; the import path.
 
-    Writes the ``package-base`` seeds and the files of the template's
-    chain (`livery.workshop._seeds.create_package`), and the files the
-    records compose for the member. The member's own contract is one of
-    the template's files, and discovery finds the member through it,
-    so the roster needs no write. The project files, the lock and the
-    install are the caller's: `wire_member` runs them for one member,
-    and a caller adding many members runs them once after the last.
-    Refuses an existing directory, naming it, and a template the birth
-    cannot take, before anything is written.
+    The one function behind every creation: each template's verb, ``fm
+    ci.scale``, and ``fm new.project --extension`` call it. Writes the
+    ``package-base`` seeds and the files of the template's chain
+    (`livery.workshop._seeds.create_package`), rendered with *answers*,
+    each answer to one of the chain's options by its variable, and the
+    files the records compose for the member. The member's own contract
+    is one of the template's files, and discovery finds the member
+    through it, so the roster needs no write. The project files, the
+    lock and the install are the caller's: `wire_member` runs them for
+    one member, and a caller adding many members runs them once after
+    the last. Refuses an existing directory, naming it, a template the
+    birth cannot take, and an answer the template's options refuse,
+    before anything is written.
     """
     _check_member_name(name)
     destination = root / "packages" / name
@@ -486,7 +605,7 @@ def render_member(root: Path, name: str, template: str) -> str:
     from livery.workshop._seeds import create_package, derived
 
     data.update(derived(data))
-    create_package(root, destination, template, data)
+    create_package(root, destination, template, data, answers)
     from livery.workshop._shipped_files import deliver
 
     deliver(root)

@@ -135,12 +135,10 @@ def base_requirements() -> tuple[Requirement, ...]:
     Raises:
         Failed: when an entry is not a requirement, naming it.
     """
-    import tomllib
-
     from livery.toolroom.store import TABLE
-    from livery.workshop._contract_keys import BASE_FILE
+    from livery.workshop._contract_keys import base_contract
 
-    data = tomllib.loads(BASE_FILE.read_text("utf-8"))
+    data = base_contract()
     return tuple(_requires(dict(data.get(TABLE, {})), site=BASE_SITE))
 
 

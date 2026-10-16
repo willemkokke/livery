@@ -698,7 +698,7 @@ def test_the_list_is_the_extension_under_test_and_what_its_members_need(
     # Its set takes in what it requires, so the list names beside it only
     # what the members' templates need, as their canonical list: a
     # creation installs nothing, so the root lists them before the
-    # members are created. loop-cpp's cpp-library needs cmake and conan.
+    # members are created. loop-cpp's cpp-package needs cmake and conan.
     _fake_declarations(
         monkeypatch,
         {
@@ -2113,7 +2113,7 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
 
     def loop_fm(root: Path, *args: str, **kw: object) -> int:
         calls.append(("fm", *args))
-        if args[0] == "new.package":
+        if args[0].startswith("new.package."):
             member = root / "packages" / args[1]
             member.mkdir(parents=True)
             hosted = '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -2142,8 +2142,8 @@ def test_the_members_land_through_one_pull_request_or_none_when_all_landed(
     assert calls == [
         ("align",),
         ("branch", "feat/members"),
-        ("fm", "new.package", "loop-native", "nanobind-module"),
-        ("fm", "new.package", "loop-cpp", "cpp-library"),
+        ("fm", "new.package.nanobind-module", "loop-native"),
+        ("fm", "new.package.cpp-package", "loop-cpp"),
         ("fm", "drift.check", "--fix"),
         ("commit", "feat: the loop's members"),
         ("fm", "submit", "--force", "--armed"),

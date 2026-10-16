@@ -314,13 +314,10 @@ def base_queries() -> dict[str, QuerySpec]:
         DeclarationError: when a section is off the shape a query's
             declaration has.
     """
-    import tomllib
-
-    from livery.workshop._contract_keys import BASE_FILE
+    from livery.workshop._contract_keys import BASE_FILE, base_contract
     from livery.workshop._declaration import query_specs_of
 
-    data = tomllib.loads(BASE_FILE.read_text("utf-8"))
-    return query_specs_of(data, BASE_FILE, extension=BASE, package=BASE)
+    return query_specs_of(base_contract(), BASE_FILE, extension=BASE, package=BASE)
 
 
 @functools.cache

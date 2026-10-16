@@ -907,7 +907,7 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
     answers = project_facts(ROOT)
     seed_into(
         destination,
-        "cpp-library",
+        "cpp-package",
         {
             "package_name": "acme-geometry",
             "package_description": "acme-geometry: a native library.",

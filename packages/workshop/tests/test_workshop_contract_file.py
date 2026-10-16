@@ -140,6 +140,7 @@ def test_every_base_key_carries_a_doc() -> None:
         ("extension", "phases.*.*.options.*"),
         ("extension", "for.*.phases.*.*.options.*"),
         ("extension", "templates.*"),
+        ("extension", "templates.*.options.*"),
     }
     missing = [
         (item.contract, item.path)

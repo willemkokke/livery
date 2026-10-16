@@ -1292,7 +1292,7 @@ slices, each mergeable alone:
    declares.
 7. **The kinds go** (complete 2026-10-14): the registry, `KindRecord`, `Backend`, the
    `kind` key, a check's `kinds`, the bridge and the base's imports of
-   the python extension; `fm new.package` takes a template an
+   the python extension; a package is born from a template an
    extension declares (ruled 2026-10-14, step 7's P7). With it and phase 13, the
    vocabulary test's allowance names the runtime, and beside it only
    rows that name the later change removing them (#1534, phases 14 and
@@ -1543,15 +1543,23 @@ parts, each mergeable alone:
   from it writes, and the template it extends; its files live in its
   declarer's `content/templates/<name>/` and carry the native settings
   (CMake's target type, conan's `package_type`, `[project.scripts]`).
-  `fm new.package <name> <template>` births a package from one, and
-  refuses without one, listing the installed templates with their
-  `doc`; `--kind` meets the ordinary refusal of an unknown option, and
-  a contract's `template` that of an unknown key. The seed trees
-  became python's `python-library`, the base's `workshop-extension`,
-  nanobind's `nanobind-module` and conan's `cpp-library`; conan adds
-  `cpp-executable` and python `python-cli`, whose scripts python
-  answers as `executables`, so `fm run` starts them. A template is
-  used at birth alone.
+  Each template of an extension in the installed set is its own verb,
+  `fm new.package.<template> <name>`, made from its declaration when
+  the plugin loads, the way the step verbs are made (#1672). A
+  template declares its creation options as
+  `[templates.<name>.options.<option>]` (a `doc`, `choices` or a type,
+  an optional `default`); they are its verb's options, so completion
+  lists them from footman's manifest, and an extending template's verb
+  offers its parent's options less the values it fixes. `fm
+  new.package` alone is a group naming each template's verb. A
+  template whose chain needs an extension no list holds refuses,
+  naming it. The seed trees became python's `python-library`
+  (`--command` writes a script, which python answers as `executables`,
+  so `fm run` starts it), the base's `workshop-extension` (`--app`
+  adds the branded App), nanobind's `nanobind-module` and conan's
+  `cpp-package` (`--package-type`, conan's package types, which the
+  recipe and the CMake target follow). A template is used at birth
+  alone, and its answers are not stored.
 
 Order: P0; then P1a to P1h, P1b before P1a; then P2; P3; P4, P5 and P6;
 P7.
@@ -3639,6 +3647,20 @@ neither needs nor rules out).
   push whose tree git cannot name, the union prints the reason and
   reads main's record instead of raising.
 
+- 2026-10-16, Willem, on templates' creation options (#1672's first
+  part): each template is its own verb, `fm new.package.<template>
+  <name>`, generated from its declaration with its options as the
+  verb's options, not one verb whose options depend on the template a
+  line names. The command line stays derivable from data: footman's
+  manifest lists every template's options and choices, Tab starts no
+  process, and footman gains no API (the `options_of` API the first
+  build added was removed before merge). The verb's address under
+  `new.package`, the hidden `new.wire` hand-off, and verbs only for
+  templates of extensions in the installed set (a stock workspace's
+  `fm new.package.cpp-package` is an unknown task) were the agent's
+  choices, recorded here. `fm ci.scale` still fails as #1647 records,
+  on a conan cache race while the generated workspace syncs its
+  nanobind members.
 - 2026-10-16, step 8's P4b (#1718), built: coverage, its footman
   plugin, Pygments and their stubs leave the workshop wheel for
   `livery-extensions-coverage`. docs' suite imports coverage modules,

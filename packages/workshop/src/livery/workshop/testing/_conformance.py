@@ -747,10 +747,18 @@ def _declaration_documented(subject: Subject) -> list[Violation]:
         if not item.doc
     ]
     reasons += [
-        f"declares the template {name} with no doc; fm new.package, the agent's"
-        " guidance and the site show a template by its doc"
+        f"declares the template {name} with no doc; fm new.package.{name}, the"
+        " agent's guidance and the site show a template by its doc"
         for name, table in _table(data.get("templates")).items()
         if not _documented(_table(table).get("doc"))
+    ]
+    reasons += [
+        f"declares the option {option} of the template {name} with no doc;"
+        f" fm new.package.{name}'s help and completion, the agent's guidance and"
+        " the site show an option by its doc"
+        for name, table in _table(data.get("templates")).items()
+        for option, spec in _table(_table(table).get("options")).items()
+        if not _documented(_table(spec).get("doc"))
     ]
     for prefix, held in _step_holders(data):
         for phase, table in _table(held.get("phases")).items():
@@ -852,7 +860,8 @@ def _template_composes(subject: Subject) -> list[Violation]:
                             TEMPLATE_COMPOSES,
                             where,
                             f"lists {entry}, which composes nothing in a package:"
-                            f" {why}; fm new.package refuses the template",
+                            f" {why}; fm new.package.{name} refuses to create a"
+                            " package from it",
                         )
                     )
         except DeclarationError as error:
@@ -1309,8 +1318,8 @@ CLAUSES: tuple[Clause, ...] = (
     Clause(
         DECLARATION_DOCUMENTED,
         "An extension's extension.toml carries an [extension] description, and"
-        " every verb its plugin defines, every contract key, template and step"
-        " option it declares carries its doc line.",
+        " every verb its plugin defines, every contract key, template,"
+        " template option and step option it declares carries its doc line.",
         _declaration_documented,
     ),
     Clause(

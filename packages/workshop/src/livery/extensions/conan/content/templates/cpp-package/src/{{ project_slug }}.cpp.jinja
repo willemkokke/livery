@@ -1,0 +1,12 @@
+{% if package_type != "header-library" -%}
+// Seeded from the cpp-package template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+#include "{{ project_slug }}.hpp"
+
+namespace {{ project_slug }} {
+
+const char* version() { return "0.0.0"; }
+
+} // namespace {{ project_slug }}
+{% endif -%}

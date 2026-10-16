@@ -1,0 +1,17 @@
+// Seeded from the cpp-package template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+// {{ package_name }}: the public surface.
+#pragma once
+
+namespace {{ project_slug }} {
+
+{% if package_type == "header-library" -%}
+// The library's version, which the header defines.
+inline const char* version() { return "0.0.0"; }
+{%- else -%}
+// The library's version, as the build stamped it.
+const char* version();
+{%- endif %}
+
+} // namespace {{ project_slug }}

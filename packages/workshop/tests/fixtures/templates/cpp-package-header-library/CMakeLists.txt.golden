@@ -1,0 +1,20 @@
+# Seeded from the cpp-package template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project(headers CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# A header-only library: an interface target that carries the include
+# directory, and nothing to compile.
+add_library(headers INTERFACE)
+target_include_directories(headers INTERFACE src)
+
+install(FILES src/headers.hpp DESTINATION include)
+
+enable_testing()
+add_executable(test_headers tests/test_headers.cpp)
+target_link_libraries(test_headers PRIVATE headers)
+add_test(NAME test_headers COMMAND test_headers)

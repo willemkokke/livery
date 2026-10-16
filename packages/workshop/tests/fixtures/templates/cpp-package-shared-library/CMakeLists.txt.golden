@@ -1,0 +1,22 @@
+# Seeded from the cpp-package template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project(dylib CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(dylib SHARED src/dylib.cpp)
+target_include_directories(dylib PUBLIC src)
+# A Windows DLL exports only what is marked for export; this exports
+# every symbol, so the header needs no export macro.
+set_target_properties(dylib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+install(TARGETS dylib)
+install(FILES src/dylib.hpp DESTINATION include)
+
+enable_testing()
+add_executable(test_dylib tests/test_dylib.cpp)
+target_link_libraries(test_dylib PRIVATE dylib)
+add_test(NAME test_dylib COMMAND test_dylib)

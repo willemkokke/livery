@@ -71,7 +71,7 @@ def _render_cpp(tmp_path: Path) -> Package:
 
     seed_into(
         destination,
-        "cpp-library",
+        "cpp-package",
         {
             "package_name": "acme-native",
             "package_description": "acme-native: a native library.",
@@ -461,8 +461,8 @@ def test_the_cpp_template_extends_no_other(cmake_steps: object) -> None:
     # come first, carrying the docs seeds.
     from livery.workshop._seeds import template_chain
 
-    assert [template.name for template in template_chain("cpp-library")] == [
-        "cpp-library"
+    assert [template.name for template in template_chain("cpp-package")] == [
+        "cpp-package"
     ]
     # The build tools come from the [toolroom] tables of the extensions
     # a package born from the seeds holds, cmake's and conan's, and the

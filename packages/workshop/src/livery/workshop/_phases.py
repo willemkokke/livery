@@ -129,13 +129,10 @@ def base_phases() -> dict[str, PhaseSpec]:
         DeclarationError: when a section is off the shape a phase's
             declaration has.
     """
-    import tomllib
-
-    from livery.workshop._contract_keys import BASE_FILE
+    from livery.workshop._contract_keys import BASE_FILE, base_contract
     from livery.workshop._declaration import phase_specs_of
 
-    data = tomllib.loads(BASE_FILE.read_text("utf-8"))
-    return phase_specs_of(data, BASE_FILE, extension=BASE)
+    return phase_specs_of(base_contract(), BASE_FILE, extension=BASE)
 
 
 @functools.cache

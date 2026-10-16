@@ -1,7 +1,0 @@
-<!-- Seeded from the cpp-library template at
-     birth; this file is the workspace's own. Edit it directly:
-     nothing rewrites it.
--->
-# acme-lib
-
-acme-lib: a package of the acme workspace.

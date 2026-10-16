@@ -1,0 +1,12 @@
+// Seeded from the cpp-package template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+// acme-tool: the public surface.
+#pragma once
+
+namespace tool {
+
+// The library's version, as the build stamped it.
+const char* version();
+
+} // namespace tool

@@ -88,7 +88,7 @@ publish job through artifacts, so one release ships the complete set."""
 collects = "wheels"
 needs = ["wheels"]
 
-# The template fm new.package creates a nanobind package from: python's
+# The template fm new.package.nanobind-module creates a package from: python's
 # library with the extension module, its build and the conan recipe
 # that names its C++ requirements. Its files live under
 # content/templates/nanobind-module/ beside this file.
@@ -96,3 +96,6 @@ needs = ["wheels"]
 doc = "a python package whose extension module is C++, bound through nanobind and built into platform wheels"
 extensions = ["nanobind"]
 extends = "python-library"
+# Its pyproject.toml is its own and declares no script, so it takes no
+# --command.
+fixes = { command = "" }

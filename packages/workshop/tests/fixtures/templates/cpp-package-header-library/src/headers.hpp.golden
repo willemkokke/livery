@@ -1,0 +1,12 @@
+// Seeded from the cpp-package template at
+// birth; this file is the workspace's own. Edit it directly:
+// nothing rewrites it.
+// acme-headers: the public surface.
+#pragma once
+
+namespace headers {
+
+// The library's version, which the header defines.
+inline const char* version() { return "0.0.0"; }
+
+} // namespace headers

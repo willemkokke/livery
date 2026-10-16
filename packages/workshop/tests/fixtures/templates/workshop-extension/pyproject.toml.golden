@@ -9,10 +9,6 @@
 [project.entry-points."workshop.extensions"]
 "acme.plugin" = "acme.plugin"
 
-# The branded App: the workshop surface under this extension's name.
-[project.scripts]
-plugin = "acme.plugin._app:main"
-
 [build-system]
 requires = ["uv_build>=0.11,<0.13"]
 build-backend = "uv_build"
@@ -32,8 +28,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
 ]
-# An extension is the workshop, extended: its plugin and its App stand on
-# the base extension's wheel, and its App imports the runner, footman.
+# An extension is the workshop, extended: its plugin stands on the base
+# extension's wheel and imports the runner, footman.
 dependencies = ["livery-workshop", "livery-footman"]
 
 [project.urls]

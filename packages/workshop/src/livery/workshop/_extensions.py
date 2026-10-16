@@ -722,8 +722,15 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     ([livery.workshop._extensions.dormancy][]) registers no step and no
     job, at its top level or in its ``[for.<target>]`` tables, and its
     plugin mounts all the same, so its verbs stay.
+
+    Each template the base or a mounted extension's declaration declares
+    becomes a verb, ``fm new.package.<template>``
+    (`livery.workshop._templates.generate_template_verbs`), read from
+    the declarations this walk read already: a template the installed
+    set's extensions declare is offered, and no other file is read.
     """
     from livery.footman import builtins, plugin
+    from livery.workshop._seeds import base_templates
 
     global MOUNTED, UNDECLARED, STALE
     MOUNTED = True
@@ -745,6 +752,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     grafted: set[tuple[str, str]] = set()
     _graft_contributions(present, declared, active, grafted, enabled, asleep)
     named: dict[str, str] | None = None
+    # The templates each declaration read below declares, the first
+    # declarer of a name kept: a birth from a name two extensions
+    # declare refuses naming both.
+    templates = dict(base_templates())
     for extension, dist in extension_entries(start):
         if extension in builtin:
             # The App mounted it as its own builtin: its plugin is never
@@ -752,6 +763,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
             # registers all the same.
             found = _readable(extension)
             if found is not None:
+                templates = {**found.templates, **templates}
                 check_api_version(extension, found)
                 check_phase_declarers(extension, found)
                 check_replacements(extension, found)
@@ -789,6 +801,7 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
                 f" `{prog()} sync` installs it the way this workspace resolves it"
             )
             continue
+        templates = {**found.templates, **templates}
         check_api_version(extension, found)
         check_phase_declarers(extension, found)
         check_replacements(extension, found)
@@ -815,8 +828,10 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     # An extension's steps registered as it mounted; their verbs join the
     # ones the workshop generated as it loaded.
     from livery.workshop._steps import generate_verbs
+    from livery.workshop._templates import generate_template_verbs
 
     generate_verbs()
+    generate_template_verbs(dict(sorted(templates.items())))
     UNDECLARED = tuple(undeclared)
     STALE = tuple(stale)
     return tuple(mounted)

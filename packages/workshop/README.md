@@ -10,7 +10,7 @@ repository's whole `tasks.py` is `plugin("livery.workshop")`.
   content (guidance fragments, skills, hooks, the managed CLAUDE.md
   stub), and the instance's own files always win.
 - Templates: `fm template.check` keeps rendered files byte-identical
-  to their source, `fm new.package` renders a member.
+  to their source, `fm new.package.<template>` renders a member.
 - The forge lane, on [livery-forge](https://pypi.org/project/livery-forge/):
   `fm submit` gets a branch onto the remote verified (`--armed` lands
   it), with `fm status`, `fm ci.*`, `fm doctor`, and the workflow

@@ -1,0 +1,105 @@
+# Seeded from the cpp-package template at
+# birth; this file is the workspace's own. Edit it directly:
+# nothing rewrites it.
+"""The conan recipe for {{ package_name }}."""
+{% if package_type in ("library", "static-library") %}
+from typing import ClassVar
+{% endif %}
+from conan import ConanFile
+from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
+
+
+class {{ project_slug | capitalize }}Conan(ConanFile):
+    """Build, test, and package the {{ "program" if package_type == "application" else "library" }} through CMake."""
+
+    name = "{{ package_name }}"
+    version = "0.0.0"
+    package_type = "{{ package_type }}"
+    settings = "os", "compiler", "build_type", "arch"
+{%- if package_type == "library" %}
+    # fPIC is on by default: a static library that a python extension
+    # links into its shared module must be position-independent, and
+    # a Linux linker refuses one that is not.
+    options: ClassVar = {"shared": [True, False], "fPIC": [True, False]}
+    default_options: ClassVar = {"shared": False, "fPIC": True}
+{%- elif package_type == "static-library" %}
+    # fPIC is on by default: a static library that a python extension
+    # links into its shared module must be position-independent, and
+    # a Linux linker refuses one that is not.
+    options: ClassVar = {"fPIC": [True, False]}
+    default_options: ClassVar = {"fPIC": True}
+{%- endif %}
+    exports_sources = "CMakeLists.txt", "src/*", "tests/*"
+{%- if package_type == "header-library" %}
+    # The build reads the headers where they are: nothing copies them
+    # into the build folder first.
+    no_copy_source = True
+{%- endif %}
+{%- if package_type in ("library", "static-library") %}
+
+    def config_options(self):
+        """Drop fPIC on Windows, where the option has no meaning."""
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+{%- endif %}
+{%- if package_type == "library" %}
+
+    def configure(self):
+        """A shared library is position-independent by construction."""
+        if self.options.shared:
+            self.options.rm_safe("fPIC")
+{%- endif %}
+{%- if package_type == "application" %}
+
+    def layout(self):
+        """Use conan's standard cmake layout under build/."""
+        cmake_layout(self)
+{%- else %}
+
+    def layout(self):
+        """Use conan's standard cmake layout under build/; headers live in src/.
+
+        The source include directory is what a consumer sees while
+        the workspace's conanws.yml resolves this package from its
+        source, so it names src/ where the headers are, not conan's
+        default include/.
+        """
+        cmake_layout(self)
+        self.cpp.source.includedirs = ["src"]
+{%- endif %}
+
+    def generate(self):
+        """Write the CMake toolchain file for the active profile."""
+        CMakeToolchain(self).generate()
+
+    def build(self):
+        """Configure and build with CMake."""
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        """Install the built {{ "program" if package_type == "application" else "targets" }} into the conan package."""
+        CMake(self).install()
+{%- if package_type == "header-library" %}
+
+    def package_id(self):
+        """One package for every configuration: the headers are the same."""
+        self.info.clear()
+
+    def package_info(self):
+        """Name what consumers get: the headers, no library or program."""
+        self.cpp_info.bindirs = []
+        self.cpp_info.libdirs = []
+{%- elif package_type == "application" %}
+
+    def package_info(self):
+        """Name what consumers get: the program under bin/, no library or header."""
+        self.cpp_info.includedirs = []
+        self.cpp_info.libdirs = []
+{%- else %}
+
+    def package_info(self):
+        """Name the built library for consumers; conan collects nothing on its own."""
+        self.cpp_info.libs = ["{{ project_slug }}"]
+{%- endif %}

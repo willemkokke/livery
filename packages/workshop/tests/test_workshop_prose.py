@@ -411,6 +411,15 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
         doc = "an acme app"
         extensions = []
 
+        [templates.acme-app.options.flavour]
+        doc = "the app's flavour"
+        choices = ["sweet", "sour"]
+        default = "sweet"
+
+        [templates.acme-app.options.size]
+        doc = "how many screens it starts with"
+        type = "int"
+
         [for."acme.pages"]
 
         [for."acme.site"]
@@ -437,19 +446,32 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
                 "mounted_from": "acme.lint",
                 "tasks": {"serve": {"help": "Serve acme."}, "leg": {"hidden": True}},
             },
+            "new": {
+                "mounted_from": "livery.workshop",
+                "groups": {
+                    "package": {
+                        "tasks": {"acme-app": {"help": "Create an acme app."}},
+                    },
+                },
+            },
         },
     }
     monkeypatch.setattr(_prose, "composed_tree", lambda root: tree)
     agent = render_verbs(root, AGENT)
     # The step's verb leaves the base's line for the block of the
-    # extension that declares the step, with its plugin's verbs.
+    # extension that declares the step, with its plugin's verbs, and the
+    # template's verb is its template's line there.
     assert "- livery.workshop: check, lint\n" in agent
     assert (
         "## acme.lint\n\n"
         "Acme's checks.\n\n"
         "- `fm acme.serve`: Serve acme.\n"
         "- `fm lint.acme`: Run the lint.acme step alone.\n"
-        "- template `acme-app`, `fm new.package <name> acme-app`: an acme app\n"
+        "- template `acme-app`, `fm new.package.acme-app <name>`: an acme app\n"
+        "- option `--flavour` of `fm new.package.acme-app`, one of sweet|sour,"
+        ' default "sweet": the app\'s flavour\n'
+        "- option `--size` of `fm new.package.acme-app`, int, required: how many"
+        " screens it starts with\n"
         "- `[acme]` in the root contract: acme's settings\n"
         "- `[acme] depth` in a package contract: how deep acme reads\n"
         "- `[phases.lint.acme] strict` in a package contract, bool, default"
@@ -463,7 +485,11 @@ def test_an_extension_s_block_names_every_item_its_declaration_has(
     assert "acme.leg" not in agent
     human = render_verbs(root, HUMAN)
     assert "| `fm acme.serve` | verb | Serve acme. |\n" in human
-    assert "| `acme-app` | template | an acme app |\n" in human
+    assert "| `fm new.package.acme-app <name>` | template | an acme app |\n" in human
+    assert (
+        "| `fm new.package.acme-app --flavour` | template option, one of"
+        ' sweet\\|sour, default "sweet" | the app\'s flavour |\n'
+    ) in human
     assert "| `[acme] depth` | package contract key | how deep acme reads |\n" in human
     assert (
         "| `[phases.lint.acme] strict` | package step option, bool, default false"
