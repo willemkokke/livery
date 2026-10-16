@@ -44,11 +44,11 @@ def coverage_leg() -> None:
     so a leg that measured is never judged as an empty union.
     """
     from livery.extensions.coverage._leg import gather_leg, top_up
-    from livery.workshop._verified import read_marker
+    from livery.workshop import leg_scope
 
     root = _root()
     packages = discover_packages(root)
-    gather_leg(root, packages, marker=top_up(root, packages, read_marker(root)))
+    gather_leg(root, packages, marker=top_up(root, packages, leg_scope(root)))
 
 
 @coverage_group.task(name="union", hidden=True)
@@ -73,9 +73,7 @@ def coverage_union() -> None:
     from livery.extensions.coverage._floors import enforce_coverage
     from livery.extensions.coverage._union import combine_union
     from livery.git import remote_snapshot
-    from livery.workshop import ci_run
-    from livery.workshop._ci_context import state_store
-    from livery.workshop._metrics import leave_section
+    from livery.workshop import ci_run, leave_section, state_store
 
     root = _root()
     run = ci_run()

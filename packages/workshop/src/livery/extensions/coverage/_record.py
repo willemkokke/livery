@@ -69,9 +69,7 @@ from livery.extensions.coverage._format import (
     numbered,
     numbering,
 )
-from livery.workshop import Package, RunContext
-from livery.workshop._ci_context import state_store
-from livery.workshop._packages import WORKSPACE_TESTS
+from livery.workshop import WORKSPACE_TESTS, Package, RunContext, state_store
 
 #: The rows' shape: 4 holds a unit's parts in the line format's stored
 #: form, a python suite's naming the tests that reached each line. A
@@ -118,7 +116,7 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
     longer produces it. ``None`` when the contract or the remote
     cannot be read, and then nothing is dropped.
     """
-    from livery.workshop._points import check_legs
+    from livery.workshop import check_legs
 
     try:
         legs = check_legs(root)
@@ -552,12 +550,11 @@ def leave_run(
     name, each once, so the gate job reads a leg's whole fact in one
     read and the parts go with the ref when the run's metrics are
     collected. It lands in the leg's spool
-    ([livery.workshop._metrics.LEG_SPOOL][]), and the leg's last
-    entry, ``ci.leg``, puts it on the leg's per-run ref beside the
-    timing row ([livery.workshop._metrics.put_leg][]), so a leg writes
-    its ref once.
+    ([livery.workshop.leave_leg_file][]), and the leg's last entry,
+    ``ci.leg``, puts it on the leg's per-run ref beside the timing row,
+    so a leg writes its ref once.
     """
-    from livery.workshop._metrics import leave_leg_file
+    from livery.workshop import leave_leg_file
 
     if not leg:
         return "refusing: the leg has no label, so its parts have no key"
@@ -582,7 +579,7 @@ def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
     it: a leg that died before its parts, or a file that is not a
     row; the caller decides, and a missing put is red there.
     """
-    from livery.workshop._metrics import RUNS
+    from livery.workshop import RUNS
 
     keys = RUNS.listed(state_store(root), run.run_id)
     if keys is None:

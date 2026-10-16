@@ -130,14 +130,46 @@ def write_marker(
     )
 
 
-def read_marker(root: Path) -> dict[str, Any]:
-    """The leg's scope marker, or ``{"scope": "unknown"}`` when it left none."""
-    unknown: dict[str, Any] = {
-        "scope": "unknown",
-        "packages": [],
-        "leg": "",
-        "base_tree": "",
-    }
+@dataclass(frozen=True)
+class LegScope:
+    """What the gate ran on one check leg, as the marker the leg left says.
+
+    Attributes:
+        scope: What the gate ran. ``full``: the whole gate.
+            ``affected``: the gate narrowed to the packages a change
+            affects. ``nothing``: no package's steps, for a change that
+            affects no package, such as prose alone; the workspace
+            steps whose inputs it changed still run. ``verified``: no
+            step, since the verified record already proves the tree.
+            ``unknown``: the leg left no marker, or one that does not
+            parse.
+        packages: The paths of the suites a narrowed gate ran; empty
+            for every other scope.
+        leg: The label the leg's rows are keyed by
+            (``check-ubuntu-latest-3.14``); empty when the marker names
+            none.
+        base_tree: The tree a narrowed gate measured from; empty for
+            every other scope.
+    """
+
+    scope: str
+    packages: tuple[str, ...] = ()
+    leg: str = ""
+    base_tree: str = ""
+
+
+def leg_scope(root: Path) -> LegScope:
+    """Read what the gate ran on this leg from the marker it left at *root*.
+
+    The gate leaves the marker on a CI run's check leg, so the leg's
+    entries after the gate read it there. A gate outside CI leaves
+    none.
+
+    Returns:
+        The leg's scope; ``unknown`` when there is no marker, or the
+        marker is not a JSON object.
+    """
+    unknown = LegScope("unknown")
     path = root / MARKER
     if not path.is_file():
         return unknown
@@ -147,12 +179,47 @@ def read_marker(root: Path) -> dict[str, Any]:
         return unknown
     if not isinstance(loaded, dict):
         return unknown
-    return {
-        "scope": str(loaded.get("scope", "unknown")),
-        "packages": [str(p) for p in loaded.get("packages", []) or []],
-        "leg": str(loaded.get("leg", "") or ""),
-        "base_tree": str(loaded.get("base_tree", "") or ""),
-    }
+    return LegScope(
+        scope=str(loaded.get("scope", "unknown")),
+        packages=tuple(str(p) for p in loaded.get("packages", []) or []),
+        leg=str(loaded.get("leg", "") or ""),
+        base_tree=str(loaded.get("base_tree", "") or ""),
+    )
+
+
+@dataclass(frozen=True)
+class VerifiedBranch:
+    """The branch whose run proved a tree, or why the record could not say.
+
+    Attributes:
+        branch: The pull request branch whose run proved the tree;
+            empty when no row names the tree, when the row names no
+            branch, as main's own run's does, and when the row could
+            not be read.
+        reason: Why the record decided nothing: the tree has no id, or
+            its row could not be read; empty when the record was read.
+    """
+
+    branch: str
+    reason: str = ""
+
+
+def verified_branch(root: Path) -> VerifiedBranch:
+    """Read which branch's run proved the tree checked out at *root*.
+
+    Main's run after a squash merge reads it to find the branch whose
+    records the tree carries. A row the store cannot read, and a tree
+    git cannot name, decide nothing: the branch is empty and the
+    reason says why, so the caller reads main's records alone.
+    """
+    try:
+        tree = tree_id(root)
+    except git.GitError as error:
+        return VerifiedBranch("", f"the tree has no id ({error})")
+    row, why = record(root, tree)
+    if why:
+        return VerifiedBranch("", why)
+    return VerifiedBranch(row.branch if row is not None else "")
 
 
 def record(root: Path, tree: str) -> tuple[Verified | None, str]:

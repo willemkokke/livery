@@ -43,8 +43,7 @@ from livery.extensions.coverage._parts import (
     reduced,
 )
 from livery.footman import fail
-from livery.workshop import read_contract
-from livery.workshop._packages import WORKSPACE_TESTS
+from livery.workshop import WORKSPACE_TESTS, read_contract
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -197,7 +196,7 @@ def figures(
     package measured with no source file reached is 100. A package not
     measured has no figure.
     """
-    from livery.workshop._categories import category_of
+    from livery.workshop import category_of
 
     held = set(units)
     natives = {package.path for package in packages if native(package)}

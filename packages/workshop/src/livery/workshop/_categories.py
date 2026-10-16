@@ -290,19 +290,29 @@ def _package_rules(package: Package) -> tuple[CategoryRule, ...]:
 
 
 def category_of(package: Package, path: str) -> Category:
-    """What *path*, relative to *package*, is to it.
+    """Say what *path*, relative to *package*'s directory, is to the package.
 
     The package's own ``[categories]`` exception answers first. Then
     the most specific rule of the tables that answer for the package
     wins, and between rules of one specificity the nearer table's: the
     extension later in composition order, the base's table last.
     Nothing matching is configuration, which the base's table also says
-    last.
+    last. The base's table names the documentation's paths (``prose``,
+    ``nav``, ``asset``, ``example``, ``generated``) and everything else
+    ``configuration``; the extensions a package holds name the rest,
+    such as ``source`` and ``test``. The workspace's own tests
+    ([livery.workshop.WORKSPACE_TESTS][]) are answered by one table of
+    the base's alone, in which a file under ``tests/`` is ``test`` or
+    ``test-support``.
+
+    Returns:
+        The category's name, who supplied the rule that answered, and
+        the pattern that matched.
 
     Raises:
-        CategoryError: when two rules of one specificity and one table
-            claim *path* for different categories or from different
-            extensions.
+        CategoryError: a ValueError, when two rules of one specificity
+            and one table claim *path* for different categories or from
+            different extensions.
     """
     for category, patterns in package.categories:
         for pattern in patterns:

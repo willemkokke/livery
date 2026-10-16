@@ -48,14 +48,17 @@ SCHEMA = 1
 #: under a megabyte and a quarter's trend in reach.
 SERIES = git.Series("metrics", window=300, schema=SCHEMA)
 
-#: The per-run family: one series per run and check leg, holding the
-#: leg's half of its timing row, and beside it every file the leg's
-#: entries left for its one write, until the run's gate job collects
-#: the halves and drops the refs, those files included. A half
-#: older than six hours outlived a run that was cancelled or died
-#: before its gate job could collect, and the janitor drops it: no
-#: run lasts that long, and the forge has no run-by-id lookup to ask.
-RUNS = git.Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6))
+#: The per-run family: one series per run and check leg, keyed
+#: ``(run, leg)``, holding the leg's half of its timing row, and beside
+#: it every file the leg's entries left for its one write, until the
+#: run's gate job collects the halves and drops the refs, those files
+#: included. A half older than six hours outlived a run that was
+#: cancelled or died before its gate job could collect, and the janitor
+#: drops it: no run lasts that long, and the forge has no run-by-id
+#: lookup to ask.
+RUNS: git.Keyed = git.Keyed(
+    "run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6)
+)
 
 #: The leg's own file on its per-run ref: the task half of its row.
 ROW_FILE = "row.json"
@@ -80,11 +83,17 @@ def run_ref(run: RunContext, leg: str) -> str:
 
 
 def leave_leg_file(root: Path, name: str, data: Mapping[str, Any]) -> Path:
-    """Leave *data* in the leg's spool as *name*, for the leg's one write; the path.
+    """Leave *data* in the leg's spool as *name*, for the leg's one write.
 
     The leg's last entry, ``ci.leg``, puts every file the spool holds
-    on the leg's per-run ref beside the row
-    ([livery.workshop._metrics.put_leg][]).
+    on the leg's per-run ref, a series of [livery.workshop.RUNS][],
+    beside its timing row and under its own name, where the gate job
+    reads it. That write refuses a file named ``row.json``, the timing
+    row's own name. A file left twice under one name keeps the last
+    *data*.
+
+    Returns:
+        The path of the file left under *root*.
     """
     spool = root / LEG_SPOOL
     spool.mkdir(parents=True, exist_ok=True)
@@ -122,11 +131,17 @@ def leg_files(root: Path) -> tuple[dict[str, dict[str, Any]], str]:
 def leave_section(
     root: Path, name: str, packages: Mapping[str, float], *, unit: str = ""
 ) -> str:
-    """Leave a section of the run's row, a number per package; the line to print.
+    """Leave a section of the run's row, a number per package, for the gate job.
 
-    The gate job's collect folds every section into the run's file
-    ([livery.workshop._metrics.collect][]), and `fm ci.timings` renders
-    each as a trend, the numbers followed by *unit*.
+    The gate job's ``ci.metrics.collect`` entry, before its verdict,
+    folds every section left at *root* into the run's file on the
+    metrics series, and ``fm ci.timings`` renders each as a trend, the
+    numbers followed by *unit*. A section left twice under one *name*
+    keeps the last numbers.
+
+    Returns:
+        The line to print, naming the section and how many packages
+        it holds.
     """
     directory = root / RUN_ROW
     directory.mkdir(parents=True, exist_ok=True)
@@ -322,11 +337,14 @@ def put_leg(
     if row is None:
         lines.append(f"  {job}: {why}; the timing row stays unwritten")
     else:
-        from livery.workshop._verified import read_marker
+        from dataclasses import asdict
+
+        from livery.workshop._verified import leg_scope
 
         # The scope the gate ran, from the marker it left beside the
         # trace: the stamp after the verdict reads it back per leg.
-        row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
+        scope = leg_scope(trace.parent if trace.is_absolute() else root)
+        row["scope"] = {**asdict(scope), "packages": list(scope.packages)}
         files[ROW_FILE] = row
     spooled, why = leg_files(root)
     if why:

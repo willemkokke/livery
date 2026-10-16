@@ -88,6 +88,27 @@ combine function that decides between answers by what each answering
 extension requires hands the lookup it is called with to
 [livery.workshop.nearest_extensions][].
 
+An extension that keeps records of a CI run reaches them through the
+names the gate's own records use. The workshop's series live on the
+checkout's state store, [livery.workshop.state_store][]; on it,
+[livery.workshop.RUNS][] keeps each check leg's files for one run
+until the gate job collects them. A check leg's entry leaves a file
+for the leg's one write with [livery.workshop.leave_leg_file][], and
+reads what the gate ran on the leg, a [livery.workshop.LegScope][],
+from [livery.workshop.leg_scope][]. The gate job's entry leaves a
+section of the run's row with [livery.workshop.leave_section][]. The
+branch whose run proved the checkout's tree, a
+[livery.workshop.VerifiedBranch][], is what
+[livery.workshop.verified_branch][] reads. The check legs the gate produces
+are [livery.workshop.check_legs][], and those a pull request's run
+produces are [livery.workshop.pull_request_legs][]. Of a set of
+units, each a member's suite or the workspace's own tests at
+[livery.workshop.WORKSPACE_TESTS][], [livery.workshop.tested][] keeps
+those a test step runs. Whether a package holds the extension of the
+workshop's own language is [livery.workshop.holds_runtime_language][],
+and what a path is to its package, a [livery.workshop.Category][], is
+[livery.workshop.category_of][].
+
 An extension adds steps to a package's lifecycle phases under
 ``[phases.<phase>.<step>]``, with the keys every step takes;
 each runs once per package whose set holds the extension and
@@ -109,8 +130,11 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.workshop import testing as testing
+    from livery.workshop._categories import Category as Category
+    from livery.workshop._categories import category_of as category_of
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
+    from livery.workshop._ci_context import state_store as state_store
     from livery.workshop._composition import extension_set as extension_set
     from livery.workshop._composition import (
         nearest_extensions as nearest_extensions,
@@ -126,14 +150,23 @@ if TYPE_CHECKING:
     from livery.workshop._graph import order_topologically as order_topologically
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
+    from livery.workshop._metrics import RUNS as RUNS
+    from livery.workshop._metrics import leave_leg_file as leave_leg_file
+    from livery.workshop._metrics import leave_section as leave_section
+    from livery.workshop._packages import WORKSPACE_TESTS as WORKSPACE_TESTS
     from livery.workshop._packages import Edge as Edge
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
+    from livery.workshop._packages import (
+        holds_runtime_language as holds_runtime_language,
+    )
     from livery.workshop._packages import release_tag as release_tag
     from livery.workshop._packages import verify_workspace as verify_workspace
     from livery.workshop._packages import workspace_suite as workspace_suite
     from livery.workshop._phases import PhaseContext as PhaseContext
     from livery.workshop._phases import run_phase as run_phase
+    from livery.workshop._points import check_legs as check_legs
+    from livery.workshop._points import pull_request_legs as pull_request_legs
     from livery.workshop._prose import AGENT as AGENT
     from livery.workshop._prose import HUMAN as HUMAN
     from livery.workshop._prose import Prose as Prose
@@ -169,8 +202,13 @@ if TYPE_CHECKING:
     from livery.workshop._steps import step_enabled as step_enabled
     from livery.workshop._steps import step_extensions as step_extensions
     from livery.workshop._steps import step_option as step_option
+    from livery.workshop._steps import tested as tested
     from livery.workshop._tokens import forge_token as forge_token
     from livery.workshop._tools import undeployed as undeployed
+    from livery.workshop._verified import LegScope as LegScope
+    from livery.workshop._verified import VerifiedBranch as VerifiedBranch
+    from livery.workshop._verified import leg_scope as leg_scope
+    from livery.workshop._verified import verified_branch as verified_branch
 
 __version__ = "0.10.0"
 
@@ -188,10 +226,14 @@ __all__ = [
     "PATHS",
     "PUBLIC_MODULES",
     "REQUIREMENTS",
+    "RUNS",
     "VERSION_FILES",
     "WHOLE",
+    "WORKSPACE_TESTS",
+    "Category",
     "Changes",
     "Edge",
+    "LegScope",
     "Package",
     "PhaseContext",
     "Prose",
@@ -199,8 +241,11 @@ __all__ = [
     "RegistryTarget",
     "ReleaseNotes",
     "RunContext",
+    "VerifiedBranch",
     "__version__",
     "answer",
+    "category_of",
+    "check_legs",
     "ci_changes",
     "ci_run",
     "contributions_for",
@@ -212,8 +257,13 @@ __all__ = [
     "forge_token",
     "generated_header",
     "guidance",
+    "holds_runtime_language",
+    "leave_leg_file",
+    "leave_section",
+    "leg_scope",
     "nearest_extensions",
     "order_topologically",
+    "pull_request_legs",
     "read_contract",
     "registry",
     "release_notes",
@@ -227,13 +277,16 @@ __all__ = [
     "scoped_suite",
     "selected_files",
     "shipped_content",
+    "state_store",
     "step_enabled",
     "step_extensions",
     "step_option",
+    "tested",
     "testing",
     "this_forge",
     "this_repository",
     "undeployed",
+    "verified_branch",
     "verify_workspace",
     "workspace_root",
     "workspace_suite",
@@ -249,6 +302,21 @@ _EXPORTS: dict[str, str] = {
     "PUBLIC_MODULES": "livery.workshop._queries",
     "REQUIREMENTS": "livery.workshop._queries",
     "VERSION_FILES": "livery.workshop._queries",
+    "RUNS": "livery.workshop._metrics",
+    "WORKSPACE_TESTS": "livery.workshop._packages",
+    "Category": "livery.workshop._categories",
+    "LegScope": "livery.workshop._verified",
+    "VerifiedBranch": "livery.workshop._verified",
+    "category_of": "livery.workshop._categories",
+    "check_legs": "livery.workshop._points",
+    "holds_runtime_language": "livery.workshop._packages",
+    "leave_leg_file": "livery.workshop._metrics",
+    "leave_section": "livery.workshop._metrics",
+    "leg_scope": "livery.workshop._verified",
+    "pull_request_legs": "livery.workshop._points",
+    "state_store": "livery.workshop._ci_context",
+    "tested": "livery.workshop._steps",
+    "verified_branch": "livery.workshop._verified",
     "Query": "livery.workshop._queries",
     "answer": "livery.workshop._queries",
     "AGENT": "livery.workshop._prose",

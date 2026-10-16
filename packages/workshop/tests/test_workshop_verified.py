@@ -11,7 +11,16 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.workshop import _ci_context, _metrics, _quality, _verified
+from livery.workshop import (
+    LegScope,
+    VerifiedBranch,
+    _ci_context,
+    _metrics,
+    _quality,
+    _verified,
+    leg_scope,
+    verified_branch,
+)
 from livery.workshop._ci_context import state_store
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -118,6 +127,46 @@ def test_the_stamp_refuses_outside_ci(
     assert "only a CI run writes" in why
 
 
+def test_leg_scope_is_unknown_when_the_leg_left_no_marker(work: Path) -> None:
+    unknown = LegScope("unknown")
+    assert leg_scope(work) == unknown
+    # A marker that does not parse, or holds no object, says nothing either.
+    (work / _verified.MARKER).write_text("junk")
+    assert leg_scope(work) == unknown
+    (work / _verified.MARKER).write_text('["full"]')
+    assert leg_scope(work) == unknown
+
+
+def test_verified_branch_says_why_an_unreadable_row_decided_nothing(
+    work: Path, tmp_path: Path
+) -> None:
+    # A directory git cannot name a tree in.
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    nameless = verified_branch(plain)
+    assert nameless.branch == "" and nameless.reason != ""
+    # A row that is not of the record's schema, then a store that is gone:
+    # the reason is the record's own.
+    tree = _verified.tree_id(work)
+    assert (
+        git.put(
+            state_store(work),
+            _verified.SERIES.ref,
+            {tree: "not json"},
+            message="junk",
+            ci_only=True,
+        )
+        == ""
+    )
+    _, why = _verified.record(work, tree)
+    assert why != ""
+    assert verified_branch(work) == VerifiedBranch("", why)
+    _rmtree(tmp_path / "origin.git")
+    _, why = _verified.record(work, tree)
+    assert why != ""
+    assert verified_branch(work) == VerifiedBranch("", why)
+
+
 def test_a_narrowed_leg_or_a_missing_row_leaves_the_tree_unstamped(work: Path) -> None:
     line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
     assert line == f"  verified: no stamp, run {RUN.run_id} left no row"
@@ -205,22 +254,30 @@ def test_a_full_stamp_is_read_back_and_skips_the_gate(
         lambda root, base, run: pytest.fail("ran"),
     )
     _quality.check()
-    assert _verified.read_marker(work)["scope"] == _verified.VERIFIED
+    assert leg_scope(work).scope == "verified"
+
+
+def test_verified_branch_names_the_branch_whose_run_proved_the_tree(
+    work: Path,
+) -> None:
+    # No row for the tree: the record names no branch, and says no reason.
+    assert verified_branch(work) == VerifiedBranch("")
+    tree = _verified.tree_id(work)
+    stamped = _verified.stamp(
+        work, PULL, tree=tree, sha="a" * 40, legs=("check-a",), branch="feat/x"
+    )
+    assert stamped == ""
+    assert verified_branch(work) == VerifiedBranch("feat/x")
+    # Main's own run names no branch.
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=("check-a",)) == ""
+    assert verified_branch(work) == VerifiedBranch("")
 
 
 def test_the_marker_reaches_the_legs_row(work: Path) -> None:
-    assert _verified.read_marker(work)["scope"] == "unknown"
-    (work / _verified.MARKER).write_text("junk")
-    assert _verified.read_marker(work)["scope"] == "unknown"
-    _verified.write_marker(work, _verified.AFFECTED, ("packages/x",))
-    assert _verified.read_marker(work) == {
-        "scope": "affected",
-        "packages": ["packages/x"],
-        "leg": "",
-        "base_tree": "",
-    }
-    _verified.write_marker(work, _verified.FULL, leg="check-a")
-    assert _verified.read_marker(work)["leg"] == "check-a"
+    _verified.write_marker(work, "affected", ("packages/x",))
+    assert leg_scope(work) == LegScope("affected", ("packages/x",))
+    _verified.write_marker(work, "full", leg="check-a")
+    assert leg_scope(work) == LegScope("full", leg="check-a")
     _verified.write_marker(
         work, _verified.AFFECTED, ("packages/x",), base_tree="b" * 40
     )
