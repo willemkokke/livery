@@ -988,6 +988,7 @@ verb = false
 [phases.publish.keys]
 version = "str"
 registry-target = "table"
+prebuilt = "bool"
 
 [phases.verify]
 level = "package"

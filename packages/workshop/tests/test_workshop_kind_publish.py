@@ -167,6 +167,154 @@ def test_the_publish_seam_hands_the_targets_token_to_the_upload(
     assert seen == ["lane"]
 
 
+# A member a job of the run built: the publish job restores the saved
+# cache the run collected for its host before the upload reads conan's
+# cache. The refusal and the cases that restore nothing come first.
+
+
+def _another_host() -> str:
+    """A host key that is not this machine's."""
+    mine = _conan.cache_name("acme-lib", "0.1.0")
+    for host in ("linux-arm", "windows-x64", "macos-x64"):
+        if _conan.cache_name("acme-lib", "0.1.0", host) != mine:
+            return host
+    raise AssertionError("every host key matched this machine's")
+
+
+def _collected(package: Package, *hosts: str) -> list[Path]:
+    """One saved cache per host in *package*'s dist/, as the run collects them.
+
+    An empty host is this machine's. Returns the files, in *hosts* order.
+    """
+    dist = package.directory / "dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    files = []
+    for host in hosts:
+        archive = dist / _conan.cache_name(package.name, "0.1.0", host)
+        archive.write_bytes(f"saved on {host or 'this host'}".encode())
+        files.append(archive)
+    return files
+
+
+def _restored(calls: list[tuple[tuple[str, ...], dict[str, str]]]) -> list[str]:
+    """The files the recorded conan calls restored, in order."""
+    return [args[2] for args, _env in calls if args[:2] == ("cache", "restore")]
+
+
+def test_a_prebuilt_member_without_this_hosts_cache_refuses_naming_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    _collected(package, _another_host())
+    target = RegistryTarget(kind="conan", url=_REMOTE, token="lane")
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish_artifact(
+            package, tmp_path, version="0.1.0", target=target, prebuilt=True
+        )
+    assert "acme-lib:" in str(refused.value)
+    assert _conan.cache_name("acme-lib", "0.1.0") in str(refused.value)
+    # Nothing restored, and nothing uploaded.
+    assert calls == []
+
+
+def test_a_restore_conan_refuses_stops_the_publish_before_the_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    class _Refused:
+        code = 1
+        stdout = ""
+        stderr = "ERROR: the archive is damaged"
+
+    def _fake(cwd: Path, *args: str, env: dict[str, str] | None = None) -> _Refused:
+        del cwd, env
+        calls.append(args)
+        return _Refused()
+
+    monkeypatch.setattr(_conan, "_conan", _fake)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    (mine,) = _collected(package, "")
+    target = RegistryTarget(kind="conan", url=_REMOTE)
+    with pytest.raises(_FAILURES) as refused:
+        _conan.publish_artifact(
+            package, tmp_path, version="0.1.0", target=target, prebuilt=True
+        )
+    # Conan's own words carry, and nothing uploads after the refusal.
+    assert "the archive is damaged" in str(refused.value)
+    assert calls == [("cache", "restore", str(mine))]
+
+
+def test_a_prebuilt_member_restores_this_hosts_cache_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    mine, _theirs = _collected(package, "", _another_host())
+    target = RegistryTarget(kind="conan", url=_REMOTE)
+    assert _conan.publish_artifact(
+        package, tmp_path, version="0.1.0", target=target, prebuilt=True
+    )
+    assert _restored(calls) == [str(mine)]
+
+
+def test_a_member_this_job_built_restores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The build put the package in this job's cache; a file in dist/ stays there."""
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    _collected(package, "")
+    target = RegistryTarget(kind="conan", url=_REMOTE)
+    assert _conan.publish_artifact(package, tmp_path, version="0.1.0", target=target)
+    assert _restored(calls) == []
+    assert [args[0] for args, _env in calls] == ["remote", "upload"]
+
+
+def test_the_releases_route_attaches_a_prebuilt_member_s_files_and_restores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route uploads the files in dist/, never conan's cache."""
+    calls = _recorded_conan(monkeypatch)
+    attached: list[str] = []
+
+    def _attach(package: Package, root: Path, *, version: str) -> bool:
+        del root
+        attached.append(f"{package.name} {version}")
+        return True
+
+    monkeypatch.setattr(_conan, "publish_to_releases", _attach)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    _collected(package, _another_host())
+    target = RegistryTarget(kind="conan", url="fake://acme/ws", releases=True)
+    assert _conan.publish_artifact(
+        package, tmp_path, version="0.1.0", target=target, prebuilt=True
+    )
+    assert attached == ["acme-lib 0.1.0"]
+    assert calls == []
+
+
+@pytest.mark.parametrize("route", ["remote", "folder"])
+def test_a_prebuilt_member_s_cache_is_restored_and_then_uploaded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str
+) -> None:
+    calls = _recorded_conan(monkeypatch)
+    package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
+    (mine,) = _collected(package, "")
+    if route == "remote":
+        target = RegistryTarget(kind="conan", url=_REMOTE)
+        uploads = [("remote", "add"), ("upload", "acme-lib/0.1.0")]
+    else:
+        target = RegistryTarget(kind="conan", url=str(tmp_path / "share"), local=True)
+        uploads = [("cache", "save")]
+    assert _conan.publish_artifact(
+        package, tmp_path, version="0.1.0", target=target, prebuilt=True
+    )
+    assert [args[:2] for args, _env in calls] == [("cache", "restore"), *uploads]
+    assert _restored(calls) == [str(mine)]
+
+
 # The wave across kinds, seams stubbed.
 
 
@@ -271,8 +419,14 @@ def _handed(
         return package.directory / "dist"
 
     def _upload(
-        package: Package, _root: Path, *, version: str, target: RegistryTarget
+        package: Package,
+        _root: Path,
+        *,
+        version: str,
+        target: RegistryTarget,
+        prebuilt: bool = False,
     ) -> bool:
+        del prebuilt
         handed.append((package.name, target.kind, target.url))
         ledger.serve(package.name, version)
         return True
@@ -518,9 +672,20 @@ def _serving_wave(
         registry.serve(package.name, "0.3.0")
         return True
 
+    class _Done:
+        code = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake_conan(cwd: Path, *args: str, env: dict[str, str] | None = None) -> _Done:
+        del cwd, env
+        order.append(f"conan {' '.join(args[:2])} {Path(args[2]).name}")
+        return _Done()
+
     monkeypatch.setattr(_conan, "build", _no_build)
     monkeypatch.setattr(nb, "build_dist", _no_build)
     monkeypatch.setattr(_conan, "publish", _fake_conan_publish)
+    monkeypatch.setattr(_conan, "_conan", _fake_conan)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
@@ -548,7 +713,13 @@ def test_prebuilt_refuses_a_job_built_member_with_nothing_collected(
     registry_for = _serving_wave(monkeypatch, [])
     dist = root / "packages" / collected / "dist"
     dist.mkdir(parents=True)
-    (dist / "collected.bin").write_bytes(b"")
+    # What the run collects for each: the library's saved cache for this
+    # host, the extension's wheel.
+    saved = {
+        "geometry": _conan.cache_name("acme-geometry", "0.3.0"),
+        "ext": "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl",
+    }
+    (dist / saved[collected]).write_bytes(b"")
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
@@ -570,8 +741,9 @@ def test_prebuilt_publishes_what_the_run_collected_without_building(
     root = cross_train
     order: list[str] = []
     registry_for = _serving_wave(monkeypatch, order)
+    saved = _conan.cache_name("acme-geometry", "0.3.0")
     for member, collected in (
-        ("geometry", _conan.cache_name("acme-geometry", "0.3.0", "linux-x64")),
+        ("geometry", saved),
         ("ext", "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl"),
     ):
         dist = root / "packages" / member / "dist"
@@ -585,7 +757,9 @@ def test_prebuilt_publishes_what_the_run_collected_without_building(
         probe_poll=0.01,
         prebuilt=True,
     )
-    assert order == ["acme-geometry", "acme-ext"]
+    # The library's saved cache goes into this job's conan cache before
+    # its upload reads it.
+    assert order == [f"conan cache restore {saved}", "acme-geometry", "acme-ext"]
     assert [r.tag for r in receipts] == [
         "packages/geometry/v0.3.0",
         "packages/ext/v0.3.0",

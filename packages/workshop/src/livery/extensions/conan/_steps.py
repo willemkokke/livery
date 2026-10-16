@@ -39,7 +39,12 @@ def build(ctx: PhaseContext) -> None:
 
 
 def publish(ctx: PhaseContext) -> None:
-    """Upload the package to the registry target the engine resolved."""
+    """Upload the package to the registry target the engine resolved.
+
+    A package a job of the run built, which the engine gives as
+    ``prebuilt``, is restored into this job's conan cache from the file
+    the run collected for this host before the upload reads it.
+    """
     from livery.workshop._registries import target_from_table
 
     version = cast("str", ctx.read("version"))
@@ -47,6 +52,10 @@ def publish(ctx: PhaseContext) -> None:
         cast("Mapping[str, object]", ctx.read("registry-target"))
     )
     published = _package.publish_artifact(
-        ctx.member, ctx.root, version=version, target=target
+        ctx.member,
+        ctx.root,
+        version=version,
+        target=target,
+        prebuilt=cast("bool", ctx.read("prebuilt")),
     )
     ctx.provide("published", published)

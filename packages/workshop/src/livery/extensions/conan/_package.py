@@ -430,8 +430,63 @@ def save_cache(package: Package, version: str, into: Path) -> Path:
     return archive
 
 
+def restore_cache(archive: Path, *, cwd: Path) -> None:
+    """Restore the package a saved cache file holds into the conan cache.
+
+    ``conan cache restore`` reads *archive*, a file `save_cache` wrote
+    on any machine, and puts its package where a build resolves it and
+    an upload reads it. Conan runs in *cwd*.
+
+    Raises:
+        Failed: when conan refuses the restore; the message carries its
+            output.
+    """
+    result = _conan(cwd, "cache", "restore", str(archive))
+    if result.code != 0:
+        fail(
+            f"conan cache restore ({archive.name}) exited {result.code}:\n"
+            f"{result.stdout[-3000:]}{result.stderr[-2000:]}"
+        )
+
+
+def restore_collected(package: Package, version: str) -> None:
+    """Restore this host's saved cache from *package*'s ``dist/`` into the conan cache.
+
+    A job of the release creates the package on each of its legs and
+    saves it per host (`save_cache`), and the publish job collects every
+    leg's file into ``dist/``. The publish job's conan cache is its own
+    and starts without the package, so the upload, which reads that
+    cache, needs the file restored first. Only the file for this host is
+    restored; the files for the other hosts stay in ``dist/``.
+
+    Raises:
+        Failed: when ``dist/`` holds no saved cache for this host,
+            naming the member and the file, or when conan refuses the
+            restore.
+    """
+    dist = package.directory / "dist"
+    wanted = dist / cache_name(package.name, version)
+    if not wanted.is_file():
+        held = sorted(
+            path.name for path in dist.glob(f"{package.name}-{version}-*.tgz")
+        )
+        fail(
+            f"{package.name}: dist/ holds no saved conan cache for this host:"
+            f" wanted {wanted.name}, it holds {', '.join(held) or 'none'}. The"
+            " upload reads this host's conan cache, so the job that builds"
+            f" {package.name} needs a leg on this host."
+        )
+    restore_cache(wanted, cwd=package.directory)
+    print(f"  conan: {package.name}/{version} restored from dist/{wanted.name}")
+
+
 def publish_artifact(
-    package: Package, root: Path, *, version: str, target: RegistryTarget
+    package: Package,
+    root: Path,
+    *,
+    version: str,
+    target: RegistryTarget,
+    prebuilt: bool = False,
 ) -> bool:
     """Publish the package to the resolved target: conan's publish step calls it.
 
@@ -440,9 +495,17 @@ def publish_artifact(
     logs in with the target's token, the forge lane's token for a
     forge's own registry, unless conan's own variables are set
     (``publish``).
+
+    *prebuilt* says a job of the run built the package and the run
+    collected the saved caches into ``dist/``, so this job built
+    nothing. The folder and remote routes read the conan cache, and
+    restore this host's file into it first (`restore_collected`). The
+    releases route attaches the files themselves and restores nothing.
     """
     if target.releases:
         return publish_to_releases(package, root, version=version)
+    if prebuilt:
+        restore_collected(package, version)
     return publish(
         package, target.url, version=version, local=target.local, token=target.token
     )
@@ -778,12 +841,7 @@ def restore_from_releases(root: Path, name: str, version: str, *, cwd: Path) -> 
     with tempfile.TemporaryDirectory() as scratch:
         archive = Path(scratch) / wanted
         archive.write_bytes(data)
-        result = _conan(cwd, "cache", "restore", str(archive))
-        if result.code != 0:
-            fail(
-                f"conan cache restore ({wanted}) exited {result.code}:\n"
-                f"{result.stdout[-3000:]}{result.stderr[-2000:]}"
-            )
+        restore_cache(archive, cwd=cwd)
     print(f"  conan: {name}/{version} restored from {tag}")
 
 
