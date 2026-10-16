@@ -25,6 +25,7 @@ from livery.workshop._schema import (
     schema_files,
 )
 from workshop_extension_fakes import fake_extensions
+from workshop_installed import skip_unless_installed
 
 #: How a refusal names each declared type, as the judge always has.
 _WORDS = {
@@ -46,6 +47,7 @@ _WORDS = {
 def test_an_unlisted_extensions_key_is_refused_naming_its_owner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     alone = compose("root", frozenset({BASE}))
     # A table the extension owns whole refuses at the table.
     assert problems(alone, {"docs": {"title": "Site"}}) == [
@@ -104,6 +106,7 @@ def test_a_key_the_author_names_is_no_fixed_property() -> None:
 
 
 def test_a_list_of_strings_is_refused_whole_and_a_lists_entries_one_by_one() -> None:
+    skip_unless_installed("docs")
     schema = compose("extension", None)
     assert problems(schema, {"extension": {"requires": ["a", 3]}}) == [
         "extension.requires is a list (['a', 3]); it takes a list of strings"
@@ -194,6 +197,8 @@ def test_the_sync_writes_each_schema_for_this_checkout_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._shipped_files import _schema_outputs, deliver
+
+    skip_unless_installed("docs")
 
     root = tmp_path / "ws"
     root.mkdir()

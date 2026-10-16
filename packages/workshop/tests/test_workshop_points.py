@@ -16,6 +16,7 @@ from workshop_coverage_declared import coverage_jobs  # noqa: F401
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 
 # The wheels job is nanobind's, added as the mount adds it.
 from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
@@ -174,6 +175,8 @@ def test_each_point_names_its_workflow_and_events() -> None:
     from livery.workshop._points import DISPATCHABLE, EVENTS, POINTS, workflow_of
     from livery.workshop._release_driver import RELEASE_WORKFLOW
 
+    skip_unless_installed("docs")
+
     with pytest.raises(_FAILURES) as caught:
         workflow_of("weekly")
     assert "not a point" in str(caught.value)
@@ -205,6 +208,7 @@ def test_each_point_names_its_workflow_and_events() -> None:
 
 
 def test_an_unknown_job_names_the_points_jobs(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     with pytest.raises(
         _FAILURES,
         match="the gate point has no job 'deploy'; its jobs are check, docs, gate",
@@ -350,6 +354,8 @@ def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> N
     # A pull request the refresh opens with the job token starts no
     # workflow; the secret, when present, is what makes it a real one.
     from livery.workshop._ci_generate import generate
+
+    skip_unless_installed("docs")
 
     files = generate(Path(__file__).resolve().parents[3])
     nightly = files[".github/workflows/nightly.yml"]
@@ -611,6 +617,7 @@ def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
 
 
 def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     root = _root(tmp_path)
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     # The merge point inherits the gate's jobs and adds its own.
@@ -662,6 +669,7 @@ def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
 
 
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     root = _root(
         tmp_path,
         '\n[[ci.schedule]]\npoint = "nightly"\ntask = "release.verify"\n'
@@ -687,6 +695,8 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import livery.footman as footman
+
+    skip_unless_installed("docs")
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     root = _root(tmp_path)
@@ -1005,6 +1015,8 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
     """
     from livery.workshop import _traces
 
+    skip_unless_installed("docs")
+
     root = _root(tmp_path)
     boxes: list[str] = []
     pushed: list[tuple[str, str]] = []
@@ -1162,6 +1174,7 @@ def test_a_job_only_an_entry_names_is_emitted_on_one_runner(tmp_path: Path) -> N
 
 
 def test_an_entry_on_a_declared_or_inherited_job_adds_no_job(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     root = _root(
         tmp_path,
         '\n[[ci.schedule]]\npoint = "gate"\njob = "docs"\ntask = "docs.links"\n'

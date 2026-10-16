@@ -29,6 +29,7 @@ from livery.workshop._points import Input, Job, Point
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 
 # The wheels job is nanobind's, added as the mount adds it.
 from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
@@ -85,6 +86,7 @@ def _calls(job: dict[str, Any]) -> list[str]:
 def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     tmp_path: Path, kind: str
 ) -> None:
+    skip_unless_installed("docs")
     doc = _doc(generate(_root(tmp_path, kind))[f".{kind}/workflows/ci.yml"])
     triggers = _triggers(doc)
     assert set(triggers) == {"pull_request", "push", "workflow_dispatch"}
@@ -191,6 +193,7 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
 def test_the_github_gate_grants_the_store_writes_and_the_pages_deploy(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     # The grants are GitHub's words: organisation defaults are
     # read-only, so a job that pushes says so. Starting the wave
     # through the API needs the actions grant on the gate job, which
@@ -230,6 +233,7 @@ def test_the_github_gate_grants_the_store_writes_and_the_pages_deploy(
 def test_the_gitea_gate_carries_no_grant_and_runs_on_the_first_runner(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     doc = _doc(generate(_root(tmp_path, "gitea"))[".gitea/workflows/ci.yml"])
     for name, job in doc["jobs"].items():
         assert "permissions" not in job, name
@@ -482,6 +486,7 @@ def test_wheel_platforms_render_the_wheels_job_before_the_wave(
 
 
 def test_a_gitlab_site_published_elsewhere_runs_no_pages_job(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     # The fallback first: a deploy through another seam keeps its own
     # name and leaves GitLab Pages alone.
     root = _root(tmp_path, "gitlab")
@@ -502,6 +507,7 @@ def test_a_gitlab_site_published_elsewhere_runs_no_pages_job(tmp_path: Path) -> 
 def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     prog = footman.prog()
     text = generate(_root(tmp_path, "gitlab"))[".gitlab-ci.yml"]
     doc = _doc(text)
@@ -677,6 +683,7 @@ def test_an_empty_pull_request_runners_list_refuses(tmp_path: Path) -> None:
 def test_pull_request_runners_narrow_the_check_legs_on_a_pull_request_alone(
     tmp_path: Path, kind: str
 ) -> None:
+    skip_unless_installed("docs")
     root = _root_narrowing(tmp_path, kind, '["ubuntu-latest"]')
     jobs = _doc(generate(root)[f".{kind}/workflows/ci.yml"])["jobs"]
     # A legs job holds both matrices as literals, the event picks one,

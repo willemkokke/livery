@@ -37,6 +37,7 @@ from workshop_extension_fakes import (
     package_contract,
     root_contract,
 )
+from workshop_installed import skip_unless_installed
 
 #: An extension's identity, the start of every package fake.
 PACKAGE = "[extension]\n"
@@ -56,7 +57,7 @@ DECLARES_DEPTH = (
     'default = "shallow"\nvalues = ["shallow", "deep"]\n'
 )
 
-#: The docs extension's members policy, which the workshop wheel declares.
+#: The docs extension's members policy, which the docs extension declares.
 MEMBERS: Query[str] = Query("docs.members")
 
 
@@ -304,6 +305,8 @@ def test_an_answer_to_an_undeclared_query_refuses_naming_the_declared_ones(
 def test_an_answer_the_file_alone_shows_wrong_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared: str, refusal: str
 ) -> None:
+    if "docs" in declared:
+        skip_unless_installed("docs")
     fake_extensions(tmp_path, monkeypatch, odd=declared)
     fake_steps(tmp_path, "odd", "def public_modules(package):\n    return ()\n")
     with pytest.raises(DeclarationError) as raised:
@@ -853,6 +856,7 @@ def test_the_nearest_answer_wins_and_the_default_stands_while_nobody_answers(
 def test_a_literal_answer_reads_as_a_value(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     fake_extensions(
         tmp_path,
         monkeypatch,

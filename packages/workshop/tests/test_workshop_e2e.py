@@ -634,9 +634,9 @@ def test_an_extension_nothing_declares_refuses_naming_the_installed() -> None:
         _FAILURES, match="no installed distribution declares it"
     ) as caught:
         _e2e.extension_under_test("no-such-extension")
-    # The docs extension rides in the workshop's own wheel, so it is
+    # The python extension rides in the workshop's own wheel, so it is
     # installed wherever the workshop is, its release leg included.
-    assert "docs" in str(caught.value)
+    assert "python" in str(caught.value)
 
 
 def _declared(

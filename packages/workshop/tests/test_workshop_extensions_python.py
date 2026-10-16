@@ -1,4 +1,7 @@
-"""The python extension inside the wheel: its load order, its entry point, its level."""
+"""The python extension inside the wheel: its load order, its entry point, its level.
+
+Then the package docs its wheel carries beside the module it ships.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +9,14 @@ import importlib.metadata
 from pathlib import Path
 
 import pytest
+
+from livery.extensions.python._backend import (
+    materialise_module_docs,
+    module_docs,
+    module_docs_dir,
+)
+from livery.workshop._packages import discover_packages
+from workshop_installed import skip_unless_installed
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -74,7 +85,6 @@ def test_the_extension_answers_each_python_package_here_as_its_code_does() -> No
     import livery.workshop
     from livery.extensions.python import _backend
     from livery.workshop._composition import extension_set
-    from livery.workshop._packages import discover_packages
     from livery.workshop._queries import (
         CURRENT_VERSION,
         MODULE_ROOTS,
@@ -116,6 +126,8 @@ def test_python_answers_its_runners_while_pytest_is_listed_and_a_package_holds_i
     from livery.extensions.python import _backend
     from livery.workshop import Query, answer
     from workshop_extension_fakes import package_contract, root_contract
+
+    skip_unless_installed("pytest")
 
     suites: Query[object] = Query("python.test.runner")
     examples: Query[object] = Query("python.examples.runner")
@@ -459,7 +471,6 @@ def test_each_python_package_here_is_categorised_by_python_s_table() -> None:
     import livery.workshop
     from livery.workshop._categories import category_of
     from livery.workshop._composition import extension_set
-    from livery.workshop._packages import discover_packages
 
     if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
         pytest.skip("the categories are read from this checkout's packages")
@@ -482,3 +493,96 @@ def test_each_python_package_here_is_categorised_by_python_s_table() -> None:
         found = {path: category_of(package, path).name for path in expected}
         assert found == expected, package.path
         assert category_of(package, "src/livery/x/mod.py").supplier == "python"
+
+
+# A package's docs/ rides in its wheel: the python extension copies it
+# beside the module it ships. The refusals and fallbacks first.
+
+
+def _docs_workspace(tmp_path: Path) -> Path:
+    """Members core, with pages under docs/, and bare, with none.
+
+    Each member is the package ``acme.<name>``.
+    """
+    root = tmp_path / "ws"
+    for name, pages in (("core", ("index.md", "guide.md")), ("bare", ())):
+        member = root / "packages" / name
+        (member / "src" / "acme" / name).mkdir(parents=True)
+        (member / "src" / "acme" / name / "__init__.py").write_text("")
+        (member / "workshop.toml").write_text(
+            f'extensions = ["python"]\nname = "acme-{name}"\n'
+        )
+        (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
+        if pages:
+            (member / "docs").mkdir()
+            for page in pages:
+                (member / "docs" / page).write_text(f"# {page}\n")
+    (root / "workshop.toml").write_text('[workspace]\nname = "acme"\nextensions = []\n')
+    return root
+
+
+def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
+    tmp_path: Path,
+) -> None:
+    root = _docs_workspace(tmp_path)
+    bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
+    target = module_docs_dir(bare)
+    assert target is not None
+    target.mkdir(parents=True)
+    (target / "stale.md").write_text("stale\n")
+    assert materialise_module_docs(bare) is None
+    assert not target.exists()
+
+
+def test_a_root_with_no_public_names_keeps_its_docs_where_the_wheel_ships(
+    tmp_path: Path,
+) -> None:
+    # No __init__.py marks the root, so nothing is found until the build
+    # names the module it ships.
+    root = _docs_workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    module = core.directory / "src" / "acme" / "core"
+    (module / "__init__.py").unlink()
+    (module / "_extension.py").write_text("API_VERSION = 1\n")
+    assert module_docs_dir(core) is None
+    # With nowhere to go, no copy is made, and a build carries none.
+    assert materialise_module_docs(core) is None
+    with module_docs(core) as copied:
+        assert copied is None
+    assert not list(core.directory.rglob("_docs"))
+    (core.directory / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n\n'
+        '[tool.uv.build-backend]\nmodule-name = "acme.core"\n'
+    )
+    assert module_docs_dir(core) == module / "_docs"
+
+
+def test_a_builds_docs_copy_is_gone_after_the_build_failed_or_not(
+    tmp_path: Path,
+) -> None:
+    # Left in the source tree, the docs' example files read as the
+    # package's own code to every checker that walks it.
+    root = _docs_workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    target = module_docs_dir(core)
+    assert target is not None
+    with pytest.raises(RuntimeError, match="the build failed"), module_docs(core):
+        assert (target / "guide.md").is_file()
+        raise RuntimeError("the build failed")
+    assert not target.exists()
+    with module_docs(core) as copied:
+        assert copied == target and (target / "guide.md").is_file()
+    assert not target.exists()
+
+
+def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
+    root = _docs_workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    target = materialise_module_docs(core)
+    assert target is not None and (target / "guide.md").is_file()
+    (target / "stale.md").write_text("stale\n")
+    (core.directory / "docs" / "guide.md").write_text("# edited\n")
+    target = materialise_module_docs(core)
+    assert target is not None
+    assert not (target / "stale.md").exists()
+    assert (target / "guide.md").read_text() == "# edited\n"

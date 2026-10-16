@@ -25,6 +25,7 @@ from livery.workshop._points import (
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -156,6 +157,8 @@ def test_a_join_of_a_job_the_point_lacks_or_one_that_gates_refuses() -> None:
 def test_a_join_rides_the_point_and_its_entries_run_before_the_jobs_last() -> None:
     from workshop_docs_declared import jobs_restored
 
+    skip_unless_installed("docs")
+
     with jobs_restored():
         contribute_job(
             "merge",
@@ -188,6 +191,7 @@ def test_a_join_rides_the_point_and_its_entries_run_before_the_jobs_last() -> No
 def test_the_docs_extension_declares_the_build_and_joins_the_merge_points_jobs(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     gate = point_by_name(None)["gate"]
     assert [job.name for job in gate.jobs] == ["check", "docs", "gate"]
     assert gate.jobs[-1].needs == ("check", "docs")

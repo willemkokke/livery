@@ -60,8 +60,6 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
-# The docs extension, an extension inside this wheel with a surface of its own.
-"livery.extensions.docs" = "livery.extensions.docs._tasks"
 # The nanobind extension's verb, the one the release's wheels job runs.
 "livery.extensions.nanobind" = "livery.extensions.nanobind._tasks"
 # The coverage extension's verbs: the leg's entry, the union, and the
@@ -75,7 +73,6 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
 conan = "livery.extensions.conan"
 coverage = "livery.extensions.coverage"
 cpp = "livery.extensions.cpp"
-docs = "livery.extensions.docs"
 nanobind = "livery.extensions.nanobind"
 python = "livery.extensions.python"
 
@@ -125,17 +122,14 @@ Repository = "https://github.com/willemkokke/livery"
 [tool.uv.build-backend]
 # The wheel ships the base, livery.workshop, whose entry module is its
 # __init__.py, and the extensions under the PEP 420 namespace livery.
-# The docs extension's entry module serves the names an extension that
-# requires it reads; the others have no public names and no
-# __init__.py. Nothing imports an extension but the workshop's mount
-# and an extension that requires it. The flag lets uv ship a root with
-# no __init__.py.
+# The extensions have no public names and no __init__.py. Nothing
+# imports an extension but the workshop's mount and an extension that
+# requires it. The flag lets uv ship a root with no __init__.py.
 module-name = [
     "livery.workshop",
     "livery.extensions.conan",
     "livery.extensions.coverage",
     "livery.extensions.cpp",
-    "livery.extensions.docs",
     "livery.extensions.nanobind",
     "livery.extensions.python",
 ]

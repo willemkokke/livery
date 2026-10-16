@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import _contract
+from workshop_installed import skip_unless_installed
 
 
 def _refusal(action: Callable[[], object]) -> str:
@@ -96,6 +97,7 @@ def test_read_contract_judges_the_contract_in_a_directory(tmp_path: Path) -> Non
 def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     # The root's [docs] is the extension's whole, so it refuses at the table.
     path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
     assert (
@@ -121,6 +123,7 @@ def test_a_table_of_an_unlisted_extension_refuses_naming_the_extension(
 def test_a_key_of_an_installed_extension_loads_while_a_listed_one_is_not_installed(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     # The refusal first: every listed extension installed, and docs
     # among none of their sets.
     path = _workspace(tmp_path, '\n[docs]\ntitle = "Site"\n')
@@ -258,6 +261,7 @@ def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
 def test_a_docs_table_while_docs_is_unlisted_refuses_naming_the_extension(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("docs")
     # A package's [docs] api is the docs extension's key, as every key
     # of the table is, so the table refuses whole while docs is unlisted.
     member = _workspace(
@@ -315,6 +319,7 @@ def test_two_owners_declaring_one_key_refuse_naming_both(
 
 
 def test_every_contract_of_this_repository_loads() -> None:
+    skip_unless_installed("docs")
     root = Path(__file__).resolve().parents[3]
     for path in _contract.contract_paths(root):
         _contract.load_contract(path)

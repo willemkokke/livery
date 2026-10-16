@@ -338,13 +338,30 @@ def _step_order(subject: Subject) -> list[Violation]:
 # An extension's declaration file.
 
 
+def _listed_name(subject: Subject) -> str:
+    """The name an installed distribution declares the subject's extension under.
+
+    The package's own without one. The kit reads the declaration under
+    it, as the mount does, so a phase the file declares is the
+    extension's own and never another extension's.
+    """
+    from livery.workshop._extensions import extension_package, installed_extensions
+
+    named = [
+        name
+        for name in installed_extensions()
+        if extension_package(name) == subject.extension
+    ]
+    return named[0] if named else subject.extension
+
+
 def _declaration_validates(subject: Subject) -> list[Violation]:
     from livery.workshop._declaration import DeclarationError, declaration_file, read
 
     if declaration_file(subject.extension) is None:
         return []
     try:
-        read(subject.extension, subject.extension)
+        read(_listed_name(subject), subject.extension)
     except DeclarationError as error:
         return [
             Violation(
@@ -368,7 +385,7 @@ def _declared_of(subject: Subject) -> tuple[Path, Declaration] | None:
     if path is None:
         return None
     try:
-        declared = read(subject.extension, subject.extension)
+        declared = read(_listed_name(subject), subject.extension)
     except DeclarationError:
         return None
     return None if declared is None else (path, declared)
@@ -784,20 +801,13 @@ def _own_templates(subject: Subject) -> dict[str, DeclaredTemplate]:
     """
     from livery.workshop._contract_keys import BASE_FILE
     from livery.workshop._declaration import template_declarations, template_specs_of
-    from livery.workshop._extensions import extension_package, installed_extensions
 
     if subject.extension == BASE_EXTENSION:
         data = tomllib.loads(BASE_FILE.read_text("utf-8"))
         return template_specs_of(data, BASE_FILE, extension=BASE_EXTENSION)
     if _declared_of(subject) is None:
         return {}
-    named = [
-        name
-        for name in installed_extensions()
-        if extension_package(name) == subject.extension
-    ]
-    extension = named[0] if named else subject.extension
-    found = template_declarations(extension, subject.extension)
+    found = template_declarations(_listed_name(subject), subject.extension)
     return {template.name: template for template in found}
 
 

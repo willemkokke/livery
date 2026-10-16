@@ -1,0 +1,56 @@
+# The package's own: edit it directly, nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-docs"
+version = "0.0.0"
+description = "The livery workshop's documentation site: its verbs build, serve and publish it from the workspace's docs/ and each package's docs/, and a lint step judges the links in the authored pages."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "livery-footman>=0.60.0",
+    # Every git call goes through livery.git: the dates of the release
+    # tags the site's release pages list.
+    "livery-git>=0.2.0",
+    # The store's zensical, docker and ssh, each through its toolroom
+    # handle, so the version is the one the checkout's lock pins.
+    "livery-toolroom>=0.11.0",
+    "livery-workshop>=0.10.0",
+]
+
+[project.optional-dependencies]
+# The members this package's tests need beyond its dependencies, one
+# for each test edge of its workshop.toml, at the edge's floor.
+test = ["livery-forge>=0.7.0"]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The site's verbs (`fm docs.*`) and the hook that links task names to
+# their pages, which the extension's plugin mounts while a workspace
+# lists it.
+[project.entry-points."footman.tasks"]
+"livery.extensions.docs" = "livery.extensions.docs._tasks"
+
+# The name a workspace lists in [workspace] extensions, and the package
+# whose extension.toml the workshop mounts it from.
+[project.entry-points."workshop.extensions"]
+docs = "livery.extensions.docs"
+
+[tool.uv.build-backend]
+# The importable package is livery.extensions.docs, its entry module the
+# root's __init__.py, which serves the names an extension that requires
+# docs reads; livery and livery.extensions are PEP 420 namespaces with
+# no __init__.py.
+module-name = "livery.extensions.docs"

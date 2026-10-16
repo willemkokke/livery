@@ -8,11 +8,16 @@ name = "livery-extensions-mkdocstrings"
 dev-extras = ["test"]
 description = "The python API reference on the livery workshop's docs site, a page per module, and the lint steps that judge the docstrings it publishes and the cross-references in them."
 
-# The base, and the docs extension, which ships in the workshop's wheel.
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
 floor = "0.10.0"
+
+# The docs extension this one requires.
+[[depends]]
+path = "packages/extensions/docs"
+kind = "runtime"
+floor = "0.0.0"
 
 [[depends]]
 path = "packages/footman"

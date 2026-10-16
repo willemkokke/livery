@@ -504,7 +504,7 @@ SOURCES = {
     "livery.toolroom.store": "packages/toolroom-store/src/livery/toolroom/store",
     "livery.toolroom.bench": "packages/toolroom-bench/src/livery/toolroom/bench",
     "livery.toolroom.tools": "packages/toolroom/src/livery/toolroom/tools",
-    "livery.extensions.docs": "packages/workshop/src/livery/extensions/docs",
+    "livery.extensions.docs": "packages/extensions/docs/src/livery/extensions/docs",
 }
 
 #: The roots with no public names: a namespace with no __init__.py,

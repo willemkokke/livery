@@ -34,7 +34,6 @@ SHIPPED = {
     "conan": "livery.extensions.conan",
     "coverage": "livery.extensions.coverage",
     "cpp": "livery.extensions.cpp",
-    "docs": "livery.extensions.docs",
     "nanobind": "livery.extensions.nanobind",
     "python": "livery.extensions.python",
 }
@@ -133,18 +132,9 @@ def test_the_surface_is_declared() -> None:
 
 def test_the_workshop_serves_no_nav_block_helper() -> None:
     # A generator writes its nav block as data, the file the docs
-    # extension reads; neither the workshop nor the extension serves code
-    # for it.
-    import livery.extensions.docs as docs_module
-
+    # extension reads; the workshop serves no code for it.
     with pytest.raises(AttributeError, match="rewrite_nav_block"):
         workshop_module.rewrite_nav_block  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
-    for name in ("write_nav_block", "nav_block_file", "GENERATED_DIR"):
-        with pytest.raises(
-            AttributeError,
-            match=f"module 'livery.extensions.docs' has no attribute '{name}'",
-        ):
-            getattr(docs_module, name)
 
 
 def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name() -> (

@@ -761,3 +761,25 @@ def test_cpp_executable_births_an_executable_that_builds_and_runs(
         check=False,
     )
     assert (ran.returncode, ran.stdout) == (0, "acme-tool 0.0.0\n")
+
+
+def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
+    # Every package's birth writes package-base first, the one home of
+    # the docs seeds; a copy in a template would shadow the base's and
+    # rot separately.
+    from livery.workshop._seeds import available_templates, template_files
+
+    seeds = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "livery"
+        / "workshop"
+        / "content"
+        / "seeds"
+    )
+    base = seeds / "package-base" / "docs"
+    assert (base / "nav.toml").is_file()
+    assert (base / "index.md.jinja").is_file()
+    assert sorted(tree.name for tree in seeds.iterdir()) == ["package-base", "project"]
+    for template in available_templates().values():
+        assert not (template_files(template) / "docs").exists(), template.name

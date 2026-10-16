@@ -20,6 +20,7 @@ from workshop_composed import IDENTITY, compose_into, seed_into
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -150,6 +151,8 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 
     from livery.workshop._ci_generate import generate
 
+    skip_unless_installed("docs")
+
     answers = project_facts(ROOT)
 
     del answers
@@ -187,6 +190,7 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 
 
 def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     destination = tmp_path / "scratch"
     answers = project_facts(ROOT)
     seed_into(
@@ -281,6 +285,8 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
 
     from livery.workshop._ci_generate import generate
 
+    skip_unless_installed("docs")
+
     files = generate(_contract_root(tmp_path, "gitea"))
     assert set(files) >= {
         ".gitea/workflows/ci.yml",
@@ -359,6 +365,8 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     import yaml
 
     from livery.workshop._ci_generate import generate
+
+    skip_unless_installed("docs")
 
     files = generate(_contract_root(tmp_path, "github"))
     workflow = yaml.safe_load(files[".github/workflows/ci.yml"])
@@ -471,6 +479,8 @@ def test_every_rendered_project_mounts_the_profiler(tmp_path: Path) -> None:
     # the coverage data beside it.
     from importlib.metadata import entry_points
 
+    skip_unless_installed("docs")
+
     rendered = _render_kind(tmp_path, "github")
     assert '"livery-footman' in (rendered / "pyproject.toml").read_text()
     builtins = {entry.name for entry in entry_points(group="footman.builtin")}
@@ -573,6 +583,7 @@ def test_the_rendered_attributes_check_out_lf_whatever_autocrlf_says(
 def test_the_rendered_prose_spells_the_brand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     answers = project_facts(ROOT)
     destination = tmp_path / "branded"
     seed_into(destination, "project", {**answers, "runner_prog": "hse"})
@@ -586,6 +597,7 @@ def test_the_rendered_prose_spells_the_brand(
 def test_the_rendered_answers_never_store_the_brand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     answers = project_facts(ROOT)
     destination = tmp_path / "branded"
     seed_into(destination, "project", {**answers, "runner_prog": "hse"})
@@ -652,6 +664,8 @@ def test_a_write_under_a_brand_rebrands_and_reemits(
     # generated files under the branded CLI: they take the running brand.
     import livery.footman as footman
     from livery.workshop._templates import apply_project
+
+    skip_unless_installed("docs")
 
     instance = seeds("born-instance", _build_instance) / "instance"
     assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
@@ -941,6 +955,8 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     import yaml
 
     from livery.workshop._ci_generate import generate
+
+    skip_unless_installed("docs")
 
     root = _contract_root(tmp_path, "gitea")
     workflow = yaml.safe_load(generate(root)[".gitea/workflows/ci.yml"])

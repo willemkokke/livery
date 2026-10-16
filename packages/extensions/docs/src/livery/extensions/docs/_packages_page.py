@@ -25,7 +25,6 @@ from livery.workshop import (
     Package,
     answer,
     discover_packages,
-    order_topologically,
     read_contract,
 )
 
@@ -133,6 +132,11 @@ def package_tree(packages: tuple[Package, ...]) -> Node:
     Raises:
         Failed: when two packages sit at one place, naming both.
     """
+    # Read here, not at import: the module that serves it registers the
+    # base's graph verbs, which the extension's plugin, loaded alone,
+    # would otherwise carry.
+    from livery.workshop import order_topologically
+
     order = order_topologically(tuple(sorted(packages, key=lambda p: p.path)))
     found = places(order)
     root = Node("Packages")

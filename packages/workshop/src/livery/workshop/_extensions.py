@@ -149,12 +149,23 @@ def _readable(extension: str) -> Declaration | None:
     has one whose package ships no declaration file: the mount names
     it, and the sync installs the one this workspace builds.
     """
-    if extension == SELF:
-        return None
-    entry = _declared().get(extension)
-    if entry is None or declaration_file(entry.value.partition(":")[0]) is None:
+    if extension == SELF or not ships_declaration(extension):
         return None
     return declaration(extension)
+
+
+def ships_declaration(extension: str) -> bool:
+    """Whether an installed distribution declares *extension* and ships its file.
+
+    False for an extension no installed distribution declares, and for
+    one whose entry point names a package without a declaration file,
+    as an install whose files moved away leaves behind.
+    """
+    entry = _declared().get(extension)
+    return (
+        entry is not None
+        and declaration_file(entry.value.partition(":")[0]) is not None
+    )
 
 
 def ships_elsewhere(target: str, distribution: str) -> bool:

@@ -1,9 +1,14 @@
-"""The docs extension inside the wheel: its namespace, entry point and seam."""
+"""The docs extension's own distribution: its namespace, entry points and plugin.
+
+Then the kit on the extension, what a workspace without it installs,
+and the words its sources may use.
+"""
 
 from __future__ import annotations
 
 import ast
 import importlib.metadata
+import json
 import os
 import re
 import subprocess
@@ -11,88 +16,15 @@ import sys
 from pathlib import Path
 from typing import cast
 
-from livery.workshop._packages import (
-    ReferencedName,
-    SourceReferences,
-    extension_imports_in_the_base,
-)
+import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
+from livery.workshop.testing import CLAUSES, Clause
+
+ROOT = Path(__file__).resolve().parents[4]
 
 
-# The refusal first: a base module importing an extension.
-
-
-def _module(dotted: str, imports: tuple[str, ...]) -> SourceReferences:
-    return SourceReferences(
-        path=dotted.replace(".", "/") + ".py",
-        module=dotted,
-        references=tuple(ReferencedName(name) for name in imports),
-    )
-
-
-def test_a_base_module_importing_a_extension_refuses_naming_both() -> None:
-    modules = (
-        _module("livery.workshop._quality", ("livery.extensions.docs._site",)),
-        _module("livery.extensions.docs._site", ("livery.workshop._packages",)),
-        _module("livery.workshop._packages", ("livery.footman",)),
-    )
-    problems = extension_imports_in_the_base(modules)
-    assert len(problems) == 1
-    assert "livery/workshop/_quality.py: the base imports the extension" in problems[0]
-    assert "livery.extensions.docs._site" in problems[0]
-
-
-def test_a_base_module_importing_an_extension_refuses_naming_it() -> None:
-    # No base module is excepted: one that runs a package step's code
-    # by importing the extension refuses as any other does, for each
-    # extension it imports.
-    modules = (
-        _module(
-            "livery.workshop._steps",
-            (
-                "livery.extensions.cmake._build",
-                "livery.extensions.conan._package",
-                "livery.extensions.cpp",
-            ),
-        ),
-    )
-    assert extension_imports_in_the_base(modules) == [
-        f"livery/workshop/_steps.py: the base imports the extension {name}; the"
-        " base reaches an extension through a registry it fills at mount, never"
-        " by import"
-        for name in (
-            "livery.extensions.cmake._build",
-            "livery.extensions.conan._package",
-            "livery.extensions.cpp",
-        )
-    ]
-
-
-def test_a_base_module_s_optional_import_is_left_alone_and_any_other_refuses() -> None:
-    # An import the module runs without is a declaration of its own; one
-    # made lazily or for a type checker still ties the base to the
-    # extension.
-    source = SourceReferences(
-        path="livery/workshop/_quality.py",
-        module="livery.workshop._quality",
-        references=(
-            ReferencedName("livery.extensions.docs._site", optional=True),
-            ReferencedName("livery.extensions.docs._refs", lazy=True),
-            ReferencedName("livery.extensions.docs._llms", type_checking=True),
-        ),
-    )
-    problems = extension_imports_in_the_base((source,))
-    assert [problem.split(";")[0] for problem in problems] == [
-        "livery/workshop/_quality.py: the base imports the extension"
-        " livery.extensions.docs._refs",
-        "livery/workshop/_quality.py: the base imports the extension"
-        " livery.extensions.docs._llms",
-    ]
-
-
-# Then the shape: a second tree's extension joins the namespace, and the
-# docs extension arrives through its own entry point.
+# A second tree's extension joins the namespace, and the docs extension
+# arrives through its own distribution's entry points.
 
 
 def test_a_extension_from_another_tree_joins_the_namespace(tmp_path: Path) -> None:
@@ -138,98 +70,126 @@ def test_the_docs_extension_has_its_own_entry_point_and_the_docs_group() -> None
     assert not {"coverage-pages", "task-reference"} & names
 
 
-def test_the_base_task_module_does_not_import_the_site() -> None:
-    source = (ROOT / "packages/workshop/src/livery/workshop/_tasks.py").read_text()
-    assert "_docs" not in source and "extensions.docs" not in source
+def test_the_entry_module_serves_no_nav_block_helper() -> None:
+    # A generator writes its nav block as data, the file the extension
+    # reads; the extension serves no code for it.
+    import livery.extensions.docs as docs_module
 
-
-def _docs_table_reads(source: str) -> list[int]:
-    """The lines of *source* that read a ``[docs]`` table, by subscript or ``get``."""
-    found: list[int] = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Subscript):
-            key = node.slice
-        elif (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "get"
-            and node.args
+    for name in ("write_nav_block", "nav_block_file", "GENERATED_DIR"):
+        with pytest.raises(
+            AttributeError,
+            match=f"module 'livery.extensions.docs' has no attribute '{name}'",
         ):
-            key = node.args[0]
-        else:
-            continue
-        if isinstance(key, ast.Constant) and key.value == "docs":
-            found.append(node.lineno)
-    return sorted(found)
+            getattr(docs_module, name)
 
 
-def test_a_docs_table_read_is_found_by_its_subscript_and_its_get() -> None:
-    source = (
-        'table = contract.get("docs") or {}\n'
-        'site = contract["docs"]\n'
-        'kinds = ("feat", "docs")\n'
-        'listed = "docs" in names\n'
-    )
-    assert _docs_table_reads(source) == [1, 2]
+def test_its_own_distribution_ships_docs_and_the_workshop_wheel_none() -> None:
+    from importlib.metadata import distribution
 
+    from livery.workshop._extensions import shipping_distribution
 
-def test_the_base_modules_read_no_docs_table() -> None:
-    """No base module reads a ``[docs]`` table, the root's or a package's.
-
-    The table and its keys are the docs extension's. What a docs job
-    installs, where it deploys and what it reads are declared on the
-    job, task names link through the extension's own hook, the
-    extension that writes the API reference reads ``[docs] api``, and
-    the docs a python wheel embeds are the python extension's.
-    """
-    base = ROOT / "packages/workshop/src/livery/workshop"
-    found = [
-        f"{path.relative_to(base).as_posix()}:{line}"
-        for path in sorted(base.rglob("*.py"))
-        for line in _docs_table_reads(path.read_text("utf-8"))
-    ]
-    assert found == []
-
-
-#: The workshop modules whose names the docs extension reads through
-#: the workshop's public ones instead.
-_REPLACED = frozenset(
-    {
-        "_steps",
-        "_contract",
-        "_forge_lane",
-        "_influence",
-        "_prose",
-        "_provenance",
-        "_registries",
-        "_release_notes",
-        "_state",
+    ours = {
+        (entry.group, entry.name, entry.value)
+        for entry in distribution("livery-extensions-docs").entry_points
     }
-)
+    assert ours == {
+        ("workshop.extensions", "docs", "livery.extensions.docs"),
+        ("footman.tasks", "livery.extensions.docs", "livery.extensions.docs._tasks"),
+    }
+    theirs = distribution("livery-workshop").entry_points
+    assert [
+        entry.name
+        for entry in theirs
+        if entry.value.startswith("livery.extensions.docs")
+    ] == []
+    shipped = shipping_distribution("livery.extensions.docs")
+    assert shipped is not None and shipped.name == "livery-extensions-docs"
 
 
-def test_the_docs_extension_reads_the_workspace_through_public_names() -> None:
-    # The reach scan reads the workshop's wheel as one distribution, so
-    # it cannot see the extension reading the base; this holds every read
-    # a public name replaces until the extension ships apart.
-    found: list[str] = []
-    docs = ROOT / "packages/workshop/src/livery/extensions/docs"
-    for path in sorted(docs.glob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
-            if not isinstance(node, ast.ImportFrom) or node.module is None:
-                continue
-            if node.module == "livery.workshop":
-                found += [
-                    f"{path.name}:{node.lineno} livery.workshop.{alias.name}"
-                    for alias in node.names
-                    if alias.name in _REPLACED
-                ]
-            elif (
-                node.module.startswith("livery.workshop.")
-                and node.module.split(".")[2] in _REPLACED
-            ):
-                found.append(f"{path.name}:{node.lineno} {node.module}")
-    assert found == []
+def test_the_plugin_loaded_alone_registers_the_docs_group_alone() -> None:
+    # The task reference renders each provider's tree with nothing else
+    # mounted. A base module that registers the base's verbs when it is
+    # imported is read inside the function that needs it, so the
+    # plugin's tree holds the docs group and no group of the base's.
+    probe = (
+        "import json\n"
+        "import livery.footman as footman\n"
+        "import livery.extensions.docs._tasks\n"
+        "tree = footman.task_tree()\n"
+        "print(json.dumps([sorted(tree['groups']), sorted(tree['tasks'])]))\n"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout) == [["docs"], []]
+
+
+def _workspace(tmp_path: Path, listed: str) -> Path:
+    """A workspace listing *listed*, with the python member core."""
+    root = tmp_path / "ws"
+    member = root / "packages" / "core"
+    (member / "src" / "acme" / "core").mkdir(parents=True)
+    (member / "src" / "acme" / "core" / "__init__.py").write_text("")
+    (member / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-core"\n'
+    )
+    (member / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
+    (root / "workshop.toml").write_text(
+        f'[workspace]\nname = "acme"\nextensions = {listed}\n'
+    )
+    (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
+    return root
+
+
+def _mount(root: Path) -> None:
+    """Mount what *root* lists, so its phases' steps register as a verb finds them."""
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_extensions
+
+    with registry.capture():
+        mount_extensions(root)
+
+
+def test_a_workspace_without_the_docs_extension_installs_none(tmp_path: Path) -> None:
+    # Unlisted, neither the extension's distribution nor the site's
+    # builder reaches the venv: no line of any group the project file
+    # composes names either, and the workshop wheel requires neither.
+    from importlib.metadata import requires
+
+    from extensions_docs_workspace import composed_groups
+
+    root = _workspace(tmp_path, "[]")
+    groups = composed_groups(root)
+    lines = [line for group in groups.values() for line in group]
+    assert groups["docs"] == []
+    assert [
+        line for line in lines if "livery-extensions-docs" in line or "zensical" in line
+    ] == []
+    required = requires("livery-workshop") or []
+    assert [
+        line for line in required if "extensions-docs" in line or "zensical" in line
+    ] == []
+    # Listed, the dev group installs the extension's distribution, and
+    # the docs group the builder.
+    root = _workspace(tmp_path / "listed", '["docs"]')
+    groups = composed_groups(root)
+    assert "livery-extensions-docs" in groups["dev"]
+    assert groups["docs"] == ["zensical>=0.0.50"]
+
+
+@pytest.mark.parametrize("clause", CLAUSES, ids=lambda clause: clause.name)
+def test_docs_conforms(clause: Clause, tmp_path: Path) -> None:
+    from livery.workshop._steps import StepRecord, steps_by_name
+    from livery.workshop.testing import Subject
+
+    _mount(_workspace(tmp_path, '["docs"]'))
+    steps: tuple[StepRecord, ...] = tuple(
+        record for record in steps_by_name().values() if record.extension == "docs"
+    )
+    assert {record.name for record in steps} == {"docs.generators", "lint.doclinks"}
+    subject = Subject("livery.extensions.docs", sets=(("python",),), steps=steps)
+    assert clause.judge(subject) == []
 
 
 def _language_words() -> set[str]:
@@ -353,7 +313,7 @@ def test_the_docs_extension_names_no_language() -> None:
     """
     import tomllib
 
-    docs = ROOT / "packages/workshop/src/livery/extensions/docs"
+    docs = ROOT / "packages/extensions/docs/src/livery/extensions/docs"
     words = _language_words()
     assert {"python", "cpp", "conan", "nanobind"} <= words
     found: list[str] = []

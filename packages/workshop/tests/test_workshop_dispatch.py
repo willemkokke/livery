@@ -13,6 +13,7 @@ from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._publish import MANIFEST
 from livery.workshop._release_driver import await_wave, dispatch_flow
+from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -257,6 +258,8 @@ def test_an_older_squash_is_dispatched_at_itself_with_a_named_driver(
 
 def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
     from livery.workshop._ci_generate import generate
+
+    skip_unless_installed("docs")
 
     release = generate(Path(__file__).resolve().parents[3])[
         ".github/workflows/release.yml"

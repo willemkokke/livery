@@ -157,7 +157,7 @@ def test_mkdocstrings_alone_installs_docs(tmp_path: Path) -> None:
     assert _extensions.closure_problems(root) == []
     assert _extensions.root_set(root) == ("docs", "mkdocstrings")
     entries = _extensions.extension_entries(root)
-    assert ("docs", "livery-workshop") in entries
+    assert ("docs", "livery-extensions-docs") in entries
     assert ("mkdocstrings", "livery-extensions-mkdocstrings") in entries
     _mount(root)
     assert steps_by_name()["docs.mkdocstrings"].extension == "mkdocstrings"
@@ -279,8 +279,8 @@ def test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_bl
 def test_a_workspace_without_mkdocstrings_installs_none(tmp_path: Path) -> None:
     # Unlisted, neither the extension's distribution nor the python
     # handler reaches the venv: no line of any group the project file
-    # composes names either, and the workshop wheel, which the dev group
-    # installs for the base and the docs extension, requires none of it.
+    # composes names either, and neither the workshop wheel nor the docs
+    # extension's, which the dev group installs, requires any of it.
     from importlib.metadata import requires
 
     root = _workspace(tmp_path, listed='["docs"]')
@@ -290,8 +290,9 @@ def test_a_workspace_without_mkdocstrings_installs_none(tmp_path: Path) -> None:
     assert groups["docs"] == ["zensical>=0.0.50"]
     lines = [line for group in groups.values() for line in group]
     assert [line for line in lines if "mkdocstrings" in line] == []
-    required = requires("livery-workshop") or []
-    assert [line for line in required if "mkdocstrings" in line] == []
+    for distribution in ("livery-workshop", "livery-extensions-docs"):
+        required = requires(distribution) or []
+        assert [line for line in required if "mkdocstrings" in line] == []
     # Listed, the dev group installs the extension's distribution, and
     # its handler's line follows the builder's in the docs group.
     contract.write_text('[workspace]\nname = "acme"\nextensions = ["mkdocstrings"]\n')
@@ -336,10 +337,10 @@ def test_its_own_distribution_ships_mkdocstrings() -> None:
     assert shipped is not None and shipped.name == "livery-extensions-mkdocstrings"
     declared = declaration("mkdocstrings")
     assert declared is not None and declared.requires == ("docs",)
-    # It requires docs, which the workshop's wheel ships, so its wheel
-    # requires the workshop's.
+    # It requires docs, which livery-extensions-docs ships, so its wheel
+    # requires that distribution.
     assert any(
-        line.startswith("livery-workshop")
+        line.startswith("livery-extensions-docs")
         for line in requires("livery-extensions-mkdocstrings") or ()
     )
 
@@ -746,6 +747,7 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
                 "packages/extensions/clang-tidy/src",
                 "packages/extensions/claude/src",
                 "packages/extensions/cmake/src",
+                "packages/extensions/docs/src",
                 "packages/extensions/lfs/src",
                 "packages/extensions/mkdocstrings/src",
                 "packages/extensions/pytest/src",
