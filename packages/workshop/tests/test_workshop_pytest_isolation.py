@@ -14,6 +14,7 @@ from typing import cast
 import pytest
 
 from livery.workshop import _pytest_isolation
+from workshop_installed import skip_unless_installed
 
 pytest_plugins = ("pytester",)
 
@@ -167,6 +168,7 @@ def test_a_session_that_never_loads_the_mount_takes_nothing_from_it(
 def test_what_a_mount_registered_is_gone_before_the_next_test(
     pytester: pytest.Pytester,
 ) -> None:
+    skip_unless_installed("docs")
     # A test that mounts the docs extension registers its steps, its CI
     # jobs and the mount's record in the process. A docs step reads git
     # for the changes it is shown, so a later test that judges changes
@@ -203,6 +205,7 @@ def test_what_a_mount_registered_is_gone_before_the_next_test(
 def test_registries_a_test_loaded_itself_go_back_as_a_process_starts(
     pytester: pytest.Pytester,
 ) -> None:
+    skip_unless_installed("docs")
     # In a process of its own, the first test loads the mount and mounts
     # the docs extension; the next finds each registry as a process
     # starts with it: the builtin steps alone, no job, and no mount.

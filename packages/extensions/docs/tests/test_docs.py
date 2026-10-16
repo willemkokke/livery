@@ -1,14 +1,19 @@
-"""The docs toolchain: rendered config, mounts, wheel-side docs."""
+"""The docs toolchain: the rendered config, the mounts, the seams and the pages."""
 
 from __future__ import annotations
 
-import json
 import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from extensions_docs_api_pages import write_api_pages
+from extensions_docs_workspace import (
+    composed_groups,
+    docs_jobs,  # noqa: F401
+    fake_extensions,
+)
 from livery.extensions.docs._navblocks import NAV_BEGIN, NAV_END
 from livery.extensions.docs._packages_page import MOUNT
 from livery.extensions.docs._site import (
@@ -17,25 +22,14 @@ from livery.extensions.docs._site import (
     scoped_config,
     zensical_config,
 )
-from livery.extensions.python._backend import (
-    materialise_module_docs,
-    module_docs,
-    module_docs_dir,
-)
 from livery.footman import Failed
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import discover_packages
-from workshop_api_pages import write_api_pages
-from workshop_composed import composed_groups
-from workshop_coverage_pages import read_page
-from workshop_docs_declared import docs_jobs  # noqa: F401
-from workshop_extension_fakes import fake_extensions
-from workshop_measured import measure
 
 _FAILURES = (SystemExit, Failed)
 
 #: This repository's root, which the tests named for this workspace read.
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
@@ -132,42 +126,6 @@ def test_a_package_without_docs_mounts_nothing(tmp_path: Path) -> None:
     assert not (root / "docs/packages/bare").exists()
 
 
-def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
-    tmp_path: Path,
-) -> None:
-    root = _workspace(tmp_path)
-    bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
-    target = module_docs_dir(bare)
-    assert target is not None
-    target.mkdir(parents=True)
-    (target / "stale.md").write_text("stale\n")
-    assert materialise_module_docs(bare) is None
-    assert not target.exists()
-
-
-def test_a_root_with_no_public_names_keeps_its_docs_where_the_wheel_ships(
-    tmp_path: Path,
-) -> None:
-    # No __init__.py marks the root, so nothing is found until the build
-    # names the module it ships.
-    root = _workspace(tmp_path)
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
-    module = core.directory / "src" / "acme" / "core"
-    (module / "__init__.py").unlink()
-    (module / "_extension.py").write_text("API_VERSION = 1\n")
-    assert module_docs_dir(core) is None
-    # With nowhere to go, no copy is made, and a build carries none.
-    assert materialise_module_docs(core) is None
-    with module_docs(core) as copied:
-        assert copied is None
-    assert not list(core.directory.rglob("_docs"))
-    (core.directory / "pyproject.toml").write_text(
-        '[project]\nname = "acme-core"\n\n'
-        '[tool.uv.build-backend]\nmodule-name = "acme.core"\n'
-    )
-    assert module_docs_dir(core) == module / "_docs"
-
-
 def test_a_member_in_a_group_directory_mounts_and_stays_mounted(tmp_path: Path) -> None:
     import shutil
 
@@ -224,37 +182,6 @@ def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
     # Index first, then the rest sorted, all at the mount path.
     assert core["core"][0] == {"Index": "packages/core/index.md"}
     assert core["core"][1] == {"guide": "packages/core/guide.md"}
-
-
-def test_a_builds_docs_copy_is_gone_after_the_build_failed_or_not(
-    tmp_path: Path,
-) -> None:
-    # Left in the source tree, the docs' example files read as the
-    # package's own code to every checker that walks it.
-    root = _workspace(tmp_path)
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
-    target = module_docs_dir(core)
-    assert target is not None
-    with pytest.raises(RuntimeError, match="the build failed"), module_docs(core):
-        assert (target / "guide.md").is_file()
-        raise RuntimeError("the build failed")
-    assert not target.exists()
-    with module_docs(core) as copied:
-        assert copied == target and (target / "guide.md").is_file()
-    assert not target.exists()
-
-
-def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    core = next(p for p in discover_packages(root) if p.directory.name == "core")
-    target = materialise_module_docs(core)
-    assert target is not None and (target / "guide.md").is_file()
-    (target / "stale.md").write_text("stale\n")
-    (core.directory / "docs" / "guide.md").write_text("# edited\n")
-    target = materialise_module_docs(core)
-    assert target is not None
-    assert not (target / "stale.md").exists()
-    assert (target / "guide.md").read_text() == "# edited\n"
 
 
 def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> None:
@@ -317,7 +244,7 @@ def _writing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **tables: str) -> 
     ``{anchor}`` in a table stands for the scope's path to the root and
     ``{members}`` for the members it covers, as a TOML list.
     """
-    from workshop_extension_fakes import fake_steps
+    from extensions_docs_workspace import fake_steps
 
     fake_extensions(tmp_path, monkeypatch, **dict.fromkeys(tables, _WRITER))
     for name, text in tables.items():
@@ -1019,28 +946,6 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
     assert "sudo" not in pipeline
 
 
-def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
-    # Every package's birth writes package-base first, the one home of
-    # the docs seeds; a copy in a template would shadow the base's and
-    # rot separately.
-    from livery.workshop._seeds import available_templates, template_files
-
-    seeds = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "livery"
-        / "workshop"
-        / "content"
-        / "seeds"
-    )
-    base = seeds / "package-base" / "docs"
-    assert (base / "nav.toml").is_file()
-    assert (base / "index.md.jinja").is_file()
-    assert sorted(tree.name for tree in seeds.iterdir()) == ["package-base", "project"]
-    for template in available_templates().values():
-        assert not (template_files(template) / "docs").exists(), template.name
-
-
 # The config surface and the theme. Refusals first.
 
 
@@ -1136,7 +1041,7 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
 @pytest.fixture
 def extensioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A workspace listing the base and a theme extension whose content is faked."""
-    from livery.extensions.docs import _site
+    from livery.extensions.docs import _overrides
     from livery.workshop import shipped_content as real
 
     root = _workspace(tmp_path, docs_table='extensions = ["acme.theme"]\n')
@@ -1147,25 +1052,28 @@ def extensioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     def faked(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
         return (*real(start), ("acme.theme", content))
 
-    monkeypatch.setattr(_site, "shipped_content", faked)
+    monkeypatch.setattr(_overrides, "shipped_content", faked)
     return root
 
 
 def test_a_extension_without_site_assets_stages_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.docs import _site
-    from livery.extensions.docs._site import extension_assets, stage_extension_assets
+    from livery.extensions.docs import _overrides
+    from livery.extensions.docs._overrides import extension_assets
+    from livery.extensions.docs._site import stage_extension_assets
 
     root = _workspace(tmp_path, docs_table='extensions = ["acme.bare"]\n')
     monkeypatch.setattr(
-        _site, "shipped_content", lambda start=None: (("acme.bare", tmp_path / "none"),)
+        _overrides,
+        "shipped_content",
+        lambda start=None: (("acme.bare", tmp_path / "none"),),
     )
     assert extension_assets(root) == []
     assert stage_extension_assets(root) == []
     assert not (root / "docs" / "_extensions").exists()
     # An uninstalled extension ships nothing either.
-    monkeypatch.setattr(_site, "shipped_content", lambda start=None: ())
+    monkeypatch.setattr(_overrides, "shipped_content", lambda start=None: ())
     assert extension_assets(root) == []
     assert "extra_css" not in zensical_config(root)
 
@@ -1305,7 +1213,7 @@ def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:
 def test_a_workspace_without_docs_renders_no_override_template(tmp_path: Path) -> None:
     import importlib
 
-    from livery.extensions.docs._site import overrides_template
+    from livery.extensions.docs._overrides import overrides_template
     from livery.workshop._shipped_files import computed_outputs, delivery_order
 
     def rendered(root: Path) -> dict[str, str]:
@@ -1331,8 +1239,8 @@ def test_a_workspace_without_docs_renders_no_override_template(tmp_path: Path) -
 def test_the_override_template_follows_the_workspace_card_then_the_shipped_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.docs import _site
-    from livery.extensions.docs._site import overrides_template
+    from livery.extensions.docs import _overrides
+    from livery.extensions.docs._overrides import overrides_template
 
     root = _workspace(
         tmp_path,
@@ -1340,7 +1248,7 @@ def test_the_override_template_follows_the_workspace_card_then_the_shipped_one(
     )
     # The fallback first: no card anywhere, no image tags, and the
     # plain summary card instead of the large one.
-    monkeypatch.setattr(_site, "extension_assets", lambda root: [])
+    monkeypatch.setattr(_overrides, "extension_assets", lambda root: [])
     rendered = overrides_template(root)
     assert "og:image" not in rendered
     assert 'content="summary"' in rendered
@@ -1349,7 +1257,7 @@ def test_the_override_template_follows_the_workspace_card_then_the_shipped_one(
     assets = tmp_path / "shipped"
     assets.mkdir()
     (assets / "og-card.png").write_bytes(b"\x89PNG")
-    monkeypatch.setattr(_site, "extension_assets", lambda root: [("docs", assets)])
+    monkeypatch.setattr(_overrides, "extension_assets", lambda root: [("docs", assets)])
     rendered = overrides_template(root)
     assert 'config.site_url ~ "_extensions/docs/assets/og-card.png"' in rendered
     assert 'content="summary_large_image"' in rendered
@@ -1479,9 +1387,9 @@ _DRAWN = 'extensions = ["docs", "acme.meter", "coverage"]\n'
 def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from extensions_docs_coverage import install_meter, leave_part
     from livery.extensions.docs import _site as _docs
     from livery.workshop._steps import steps_by_name
-    from workshop_coverage_meter import install_meter, leave_part
 
     install_meter(tmp_path, monkeypatch)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
@@ -1520,134 +1428,6 @@ def test_a_workspace_that_lists_no_page_drawer_states_the_absence(
     assert (report / "index.html").is_file()
     assert _docs.generate_coverage_pages(root) == ["core"]
     assert 'src="coverage/python/index.html"' in page.read_text()
-
-
-def test_the_deploy_phase_draws_main_s_record_where_the_legs_left_no_data(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from livery.extensions.coverage import _pages
-    from workshop_coverage_meter import leave_part, stored_unit
-
-    root = _workspace(tmp_path, docs_table='extensions = ["docs", "coverage"]\n')
-    _declare_generators(
-        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
-    )
-    source = root / "packages" / "core" / "src" / "core" / "mod.c"
-    source.parent.mkdir(parents=True, exist_ok=True)
-    source.write_text("int a = 1;\nint b = 2;\n")
-    # The docs phase's step pulls nothing: no data, nothing drawn.
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    assert _pages.draw(root, merged=False) == []
-    # The deploy phase's step draws the store's units in the legs' place:
-    # the parts a leg made, as main's record keeps them.
-    written = leave_part(
-        root, "packages/core", {"packages/core/src/core/mod.c": {1: 1, 2: 0}}
-    )
-    stored = stored_unit("packages/core", (json.loads(written.read_text()),))
-    written.unlink()
-    monkeypatch.setattr(
-        "livery.extensions.coverage._pages._stored",
-        lambda root: (
-            {"check-a": {"packages/core": stored}},
-            ["main/check-b: nothing recorded"],
-        ),
-    )
-    # A declared package the data never touched states the absence.
-    _declare_generators(
-        root, "bare", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
-    )
-    assert _pages.draw(root, merged=True) == ["core"]
-    out = capsys.readouterr().out
-    assert "  coverage: main/check-b: nothing recorded\n" in out
-    assert "bare: no measured data; its page states the absence" in out
-    assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
-    assert not (root / "packages" / "bare" / "htmlcov").exists()
-
-
-def _region_rows(rows: list[dict[str, str]], noun: str) -> list[tuple[str, ...]]:
-    """The rows of a region index for the fixture's file, as a reader reads them.
-
-    Each row: the region, the line its link lands on, then statements,
-    missing, excluded, branches, partial, and the total coverage.
-    """
-    return [
-        (
-            row[noun],
-            row["href"].partition("#")[2],
-            row["statements"],
-            row["missing"],
-            row["excluded"],
-            row["branches"],
-            row["partial"],
-            row["coverage"],
-        )
-        for row in rows
-        if row.get("File", "").endswith("measured.py")
-    ]
-
-
-def test_a_partial_line_s_page_names_the_jump_that_never_ran(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # coverage.py's arcs reach the pages through the pytest extension's
-    # reduction, a distribution of its own: a run of this wheel alone
-    # has none.
-    pytest.importorskip("livery.extensions.pytest")
-    from livery.extensions.coverage import _pages
-
-    root = _workspace(
-        tmp_path, docs_table='extensions = ["docs", "pytest", "coverage"]\n'
-    )
-    _declare_generators(
-        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
-    )
-    measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
-    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
-    assert _pages.draw(root, merged=False) == ["core"]
-    report = root / "packages" / "core" / "htmlcov"
-    # Each function and class has its row, narrowed to its own lines and
-    # linked to its first; the lines outside every one have a row too.
-    functions = read_page(report / "function_index.html").rows
-    assert _region_rows(functions, "function") == [
-        ("Tally.__init__", "t2", "1", "0", "0", "0", "0", "100%"),
-        ("Tally.note", "t5", "2", "0", "0", "2", "1", "75%"),
-        ("total", "t10", "6", "2", "0", "4", "2", "60%"),
-        ("unused", "t19", "0", "0", "1", "0", "0", "100%"),
-        ("(no function)", "", "9", "0", "1", "2", "0", "100%"),
-    ]
-    assert _region_rows(read_page(report / "class_index.html").rows, "class") == [
-        ("Tally", "t1", "3", "0", "0", "2", "1", "80%"),
-        ("(no class)", "", "15", "2", "2", "6", "2", "81%"),
-    ]
-    # The file's page, as the index links it: each partial line carries
-    # the partial category and names its untaken jump, with the sentence
-    # that says why. The line whose untaken jump `# pragma: no branch`
-    # waives is not partial.
-    page = next(row["href"] for row in functions if row.get("function") == "total")
-    lines = read_page(report / page.partition("#")[0]).lines
-    partial = {number: line for number, line in lines.items() if line.category == "par"}
-    assert sorted(partial) == [6, 12, 14]
-    for number, jump, sentence in (
-        (
-            6,
-            "6 ↛ exit",
-            "line 6 didn't return from function 'note' because the condition on"
-            " line 6 was always true",
-        ),
-        (
-            12,
-            "12 ↛ 13",
-            "line 12 didn't jump to line 13 because the loop on line 12 never started",
-        ),
-        (
-            14,
-            "14 ↛ 15",
-            "line 14 didn't jump to line 15 because the condition on line 14 was"
-            " never true",
-        ),
-    ):
-        assert partial[number].jumps == [jump]
-        assert partial[number].whys == [sentence]
 
 
 def test_a_generated_page_at_an_authored_pages_url_refuses_naming_both(
@@ -2357,6 +2137,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/clang-tidy": "workshop.extensions.clang-tidy",
         "extensions/claude": "workshop.extensions.claude",
         "extensions/cmake": "workshop.extensions.cmake",
+        "extensions/docs": "workshop.extensions.docs",
         "extensions/lfs": "workshop.extensions.lfs",
         "extensions/mkdocstrings": "workshop.extensions.mkdocstrings",
         "extensions/mypy": "workshop.extensions.mypy",

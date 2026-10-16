@@ -315,7 +315,7 @@ every kind the check judges"). What changes:
 | coverage pages | coverage's two steps in its `[for.docs]` table: one in the docs phase, which frames the pages in the site build, and one in the `deploy` phase, which `docs.publish` runs and which draws them from main's record; its own renderer draws every language's pages from the parts the record stores, each check leg having reduced its suites through `coverage.measurers`, which pytest answers in `[for.coverage]`, and cmake writing its own parts | as today |
 | coverage: the floors, the ratchet and its marks, the line format and its union across legs, the coverage CI entries and verbs | the coverage extension's `[coverage]` table and pages; the base's `_coverage_store`, `_coverage_lines`, `_coverage_marks`, the python backend's floor policy and leg combine, `_points`' `coverage.leg` and `coverage.union` | the coverage extension; each test tool's extension measures and hands its lines over in a `[for.coverage]` table |
 | the nav block format | `_navblocks`, `rewrite_nav_block` in the api | data: a generator writes `docs/_generated/nav.<name>.toml`, the file the docs extension reads; nothing is imported |
-| the site's override template as a rendered file | the docs extension's `[fragments."overrides/main.html"]` render, `livery.extensions.docs._site:overrides_template`, which `fm sync` writes while docs is listed (step 8's P3a, #1712) | as today |
+| the site's override template as a rendered file | the docs extension's `[fragments."overrides/main.html"]` render, `livery.extensions.docs._overrides:overrides_template`, which `fm sync` writes while docs is listed (step 8's P3a, #1712) | as today |
 | the wheels job: which members build platform wheels and on which runner labels | nanobind's `extension.toml` declares `[ci.jobs.release.wheels]`, a `runners` job whose `labels` reference names `livery.extensions.nanobind._ci:wheel_runners`, which reads `[nanobind] wheel-platforms`; its `nanobind.wheels` task runs the host build in `livery.extensions.nanobind._ci` | nanobind's `[ci.jobs.<point>.<name>]` entry, existing while a package lists it, its runners from the labels its packages declare under a key nanobind owns |
 | the docs tree embedded into a wheel | the python extension's `module_docs`, read by its build and by nanobind's | the python extension's `build` phase; it reads the `prose` category's directory, which is the engine's layout, not generation |
 | whether a package declines its reference, and its module root | mkdocstrings reads `[docs] api` as data; the docs extension places a package at the shallowest of its module roots | `[docs] api` stays the docs extension's key; the handler's search paths are the `paths` option of mkdocstrings' step, set at `[phases.docs.mkdocstrings]`; the module root is the `MODULE_ROOTS` query |
@@ -977,7 +977,8 @@ names first, the same way.
 | `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
 | `livery-extensions-python`, `-conan`, `-cpp`, `-nanobind`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
 | `livery-extensions-mkdocstrings` | step 8's release wave; the package exists since step 8's P2b (#1708) |
-| `livery-extensions-docs`, `-housekeeping`, `-doxygen`, `-coverage` | 12a to 12e |
+| `livery-extensions-docs` | step 8's release wave; the package exists since step 8's P3b (#1712) |
+| `livery-extensions-housekeeping`, `-doxygen`, `-coverage` | 12b to 12e (`-coverage` with step 8's P4) |
 | `livery-lodge` | 15 |
 
 Whether `livery-extensions-housekeeping` publishes at all is decided in
@@ -1172,7 +1173,7 @@ slices, each mergeable alone:
    seam, so they keep pinning the train's behaviour while the later
    slices change only the seam's inside.
 2. **python**, in four parts. `livery.extensions.python` ships in
-   the workshop wheel the way docs does, so the workshop's suite and
+   the workshop wheel, as docs did until step 8's P3b, so the workshop's suite and
    its release leg keep it. Until slice 6 the base imports it: the
    python kind's registration takes the extension's code as its
    backend, and the base modules that code serves (the nanobind kind,
@@ -1345,7 +1346,10 @@ remained after N1.
    override template is docs' `[fragments]` render and `_site_files`
    goes; and a step declares the paths it writes under `outputs`, a
    docs generator in its `[docs] generators` entry, which `run_phase`
-   removes once nothing running declares them.
+   removes once nothing running declares them. P3b (built, #1712)
+   moves docs to `packages/extensions/docs`, distribution
+   `livery-extensions-docs` 0.0.0, with its tests and its footman
+   plugin; mkdocstrings' wheel depends on it.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1544,7 +1548,8 @@ P7.
 ### Phase 12: docs and housekeeping ship apart
 
 **12a, docs.** `livery-extensions-docs`: everything under
-`livery.extensions.docs` leaves the workshop wheel;
+`livery.extensions.docs` has left the workshop wheel (step 8's P3b,
+#1712);
 the override template is a whole-file fragment and `_site_files` is
 gone since step 8's P3a (#1712); the docs build's state and
 zensical's cache move under `.workshop/.cache/docs/` and
@@ -1691,9 +1696,12 @@ neither needs nor rules out).
 | the registry probe python and conan answer, one ecosystem per member | ecosystems as registrations (phase 13) |
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
-| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings) | fixture extensions in the workshop's suite |
-| `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled` and the docs entry module | the release wave raising the floor within its set (step 8's R1) |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs) | fixture extensions in the workshop's suite |
+| `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled`, and on `livery-extensions-docs`, which ships the docs entry module | the release wave raising the floor within its set (step 8's R1) |
 | mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
+| `livery-extensions-docs`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `run_phase`, `order_topologically`, `release_tag` and `nearest_extensions` | the release wave raising the floor within its set (step 8's R1) |
+| `livery-extensions-mkdocstrings`' floor `livery-extensions-docs>=0.0.0` | the release wave raising it with docs' first release (step 8's R2) |
+| docs' coverage floor at its measured 91 | the ratchet back to 100 |
 | `livery-extensions-cmake`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `undeployed` | the release wave raising the floor within its set (step 8's R1) |
 | cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
@@ -3590,6 +3598,22 @@ neither needs nor rules out).
   `run_phase` takes `outputs=`, the paths no step declares (the
   generators'), removed and recorded as a running step's are, and
   refuses a phase the gate runs.
+
+- 2026-10-16, step 8's P3b (#1712), built: the docs extension leaves
+  the workshop wheel for `livery-extensions-docs`, with its tests and
+  its footman plugin; mkdocstrings' wheel depends on it. The move
+  needed four fixes in the base: a `[for.<target>]` table is read only
+  while an installed distribution ships the target's declaration (the
+  base could not mount without docs otherwise); the conformance kit
+  reads a declaration under the name its distribution lists, which
+  judged docs as nothing before; the override fragment's render moved
+  to `_overrides.py`, since `_site` registers the docs group on import
+  and the kit's `references-register-nothing` clause refuses that; and
+  a member named like a tree (`docs`) counts its tests under its own
+  path. docs' plugin no longer carries the base's `graph` group. The
+  base tests that lived in docs' files stay in the workshop's suite.
+  The extension's loop pass met a conan race between two jobs on one
+  loop runner, fixed apart (#1715).
 
 ## Open
 

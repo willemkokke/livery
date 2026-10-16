@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from livery.footman import Failed
+from workshop_installed import skip_unless_installed
 
 
 def _plugin(monkeypatch: pytest.MonkeyPatch, declared: object) -> None:
@@ -48,6 +49,8 @@ def test_a_plugins_tools_come_from_its_data_module(
 
 def test_this_repository_takes_docker_from_the_forge_plugin() -> None:
     from livery.workshop._tools import plugin_tools, requirements
+
+    skip_unless_installed("docs")
 
     root = Path(__file__).resolve().parents[3]
     assert plugin_tools(root)["livery.forge"] == ("docker?",)

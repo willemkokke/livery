@@ -200,10 +200,10 @@ def test_the_listed_extensions_mount_and_the_base_never_does(tmp_path: Path) -> 
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
         assert mount_extensions(tmp_path) == ("coverage",)
-    # With docs beside it, in composition order, whatever the list's.
-    contract.write_text('[workspace]\nextensions = ["docs", "coverage"]\n')
+    # With python beside it, in composition order, whatever the list's.
+    contract.write_text('[workspace]\nextensions = ["python", "coverage"]\n')
     with registry.capture():
-        assert mount_extensions(tmp_path) == ("coverage", "docs")
+        assert mount_extensions(tmp_path) == ("coverage", "python")
 
 
 def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> None:
@@ -213,25 +213,25 @@ def test_entries_are_names_or_tables_with_their_distribution(tmp_path: Path) -> 
         "[workspace]\n"
         "extensions = [\n"
         '  "livery.forge",\n'
-        '  { name = "docs", without = [] },\n'
+        '  { name = "coverage", without = [] },\n'
         "]\n"
     )
     # The distribution is the one whose entry point declares the name,
     # in composition order.
     assert extension_entries(tmp_path) == (
-        ("docs", "livery-workshop"),
+        ("coverage", "livery-workshop"),
         ("livery.forge", "livery-forge"),
     )
     # The stack is the base, then the installed set.
     assert stack_entries(tmp_path)[0] == ("livery.workshop", "livery-workshop")
-    assert extension_names(tmp_path) == ("docs", "livery.forge")
+    assert extension_names(tmp_path) == ("coverage", "livery.forge")
 
 
 def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None:
     from livery.workshop._templates import render_injections
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["livery.forge", "docs"]\n'
+        '[workspace]\nextensions = ["livery.forge", "coverage"]\n'
     )
     answers = {
         "packages": [
@@ -240,11 +240,11 @@ def test_render_injections_deduplicate_member_extensions(tmp_path: Path) -> None
     }
     injections = render_injections(tmp_path, answers)
     # A member rides the roster's spelling, and a wheel shipping two
-    # extensions is one requirement.
+    # extensions, the base and coverage, is one requirement.
     assert injections["extension_requirements"] == ["livery-workshop"]
     assert injections["extension_imports"] == [
         "livery.workshop",
-        "docs",
+        "coverage",
         "livery.forge",
     ]
 

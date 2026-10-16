@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from extensions_docs_api_pages import write_api_pages
 from livery.extensions.docs._llms import (
     first_sentence,
     llms_files,
@@ -18,7 +19,6 @@ from livery.extensions.docs._llms import (
     resolve_snippets,
     write_llms_files,
 )
-from workshop_api_pages import write_api_pages
 
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:

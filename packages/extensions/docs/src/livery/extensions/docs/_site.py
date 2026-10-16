@@ -47,6 +47,7 @@ from livery.extensions.docs._config import Scope, joined
 from livery.extensions.docs._contract import (
     docs_table,
     generator_outputs,
+    project_name,
     publish_seam,
 )
 from livery.extensions.docs._navblocks import (
@@ -56,6 +57,10 @@ from livery.extensions.docs._navblocks import (
     NAV_END,
     NAV_TOML,
     nav_block_file,
+)
+from livery.extensions.docs._overrides import (
+    EXTENSION_ASSETS,
+    extension_assets,
 )
 from livery.extensions.docs._packages_page import (
     LANDING,
@@ -75,7 +80,6 @@ from livery.workshop import (
     read_contract,
     release_tag,
     run_phase,
-    shipped_content,
 )
 
 #: The config the build assembles and zensical reads, at the root; gitignored.
@@ -249,22 +253,6 @@ def _pages(directory: Path) -> list[str]:
         page.relative_to(directory).as_posix() for page in directory.rglob("*.md")
     )
     return sorted(found, key=lambda page: (page != "index.md", page))
-
-
-def _project_name(root: Path) -> str:
-    """The workspace's stable name for the site.
-
-    The root project's name, never the directory's: a worktree's
-    directory name would make the same contract render differently
-    per checkout and turn the drift gate against itself.
-    """
-    pyproject = root / "pyproject.toml"
-    if pyproject.is_file():
-        project = tomllib.loads(pyproject.read_text("utf-8")).get("project") or {}
-        name = str(project.get("name", ""))
-        if name:
-            return name
-    return root.resolve().name
 
 
 def _label(page: str) -> str:
@@ -496,16 +484,6 @@ def _authored_nav_lines(
 #: win over every extension's: a file the workspace adds when it wants
 #: one.
 WORKSPACE_CSS = ("assets/site.css",)
-#: Where the build stages the extensions' site assets, relative to the
-#: docs tree, one directory per extension: machine territory, rebuilt
-#: whole by every build and gitignored.
-EXTENSION_ASSETS = "_extensions"
-#: The directory of an extension's content that holds its site assets.
-CONTENT_ASSETS = "docs/assets"
-#: The workspace's own link-preview card image. Without it the site
-#: uses the card the last extension ships under its site assets, and
-#: without either it emits no image tags.
-CARD_IMAGE = "docs/assets/og-card.png"
 
 
 def abbreviation_files(root: Path) -> list[str]:
@@ -593,41 +571,6 @@ def _js_line(entry: object, prefix: str) -> str:
         if key in entry:
             parts.append(f"{key} = {'true' if entry[key] else 'false'}")
     return "    { " + ", ".join(parts) + " },"
-
-
-def extension_assets(root: Path) -> list[tuple[str, Path]]:
-    """Each mounted extension that ships site assets, with its assets directory.
-
-    In the workspace's extension order. An extension ships site assets under
-    ``content/docs/assets/`` in its wheel; an extension without that
-    directory, or not installed, ships none and is not listed.
-    """
-    found: list[tuple[str, Path]] = []
-    for extension, content in shipped_content(root):
-        assets = content / CONTENT_ASSETS
-        if assets.is_dir():
-            found.append((extension, assets))
-    return found
-
-
-def card_path(root: Path) -> str:
-    """The link-preview card's path in the site, or empty when there is none.
-
-    The workspace's own ``docs/assets/og-card.png`` first, then the card
-    the last extension in the workspace's order ships, at the path the
-    build stages it under.
-    """
-    if (root / CARD_IMAGE).is_file():
-        return "assets/og-card.png"
-    name = Path(CARD_IMAGE).name
-    shipped = [
-        extension
-        for extension, assets in extension_assets(root)
-        if (assets / name).is_file()
-    ]
-    if not shipped:
-        return ""
-    return f"{EXTENSION_ASSETS}/{shipped[-1]}/assets/{name}"
 
 
 def stage_extension_assets(root: Path) -> list[str]:
@@ -777,87 +720,6 @@ def _extension_block(root: Path, *, relative_to: str = ".") -> list[str]:
     return lines
 
 
-def overrides_template(root: Path) -> str:
-    """The site's theme override: link-preview tags, instance facts.
-
-    The extension's ``[fragments]`` render for ``overrides/main.html``,
-    so ``fm sync`` writes the file at the root while docs is listed,
-    and the drift check keeps it matching. It opens with the
-    provenance header every generated file carries, in Jinja's comment
-    form.
-
-    The brand leads on the home page, because that is the URL that
-    gets posted and a feed truncates from the right; elsewhere the
-    page leads. The image tags name the workspace's own card, else the
-    card an extension ships, else are left out. Every URL is absolute:
-    a preview is fetched by someone else's server, which has no page to
-    resolve a relative path against.
-    """
-    # Imported here: the module that serves the header registers the
-    # base's provenance verbs, which the docs plugin's tasks must not carry.
-    from livery.workshop import generated_header
-
-    header = "".join(
-        "  " + line.removeprefix("# ") + "\n"
-        for line in generated_header("#").splitlines()
-    )
-    table = docs_table(root)
-    title = str(table.get("title", "")) or _project_name(root)
-    description = str(table.get("description", ""))
-    card = card_path(root)
-    image_block = (
-        (
-            """
-  {% set image = config.site_url ~ "__CARD__" %}
-  <meta property="og:image" content="{{ image }}">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="__ALT__">
-  <meta name="twitter:image" content="{{ image }}">"""
-            if card
-            else ""
-        )
-        .replace("__ALT__", description or title)
-        .replace("__CARD__", card)
-    )
-    return (
-        "{#\n"
-        + header
-        + "#}\n"
-        + (
-            (
-                """{% extends "base.html" %}
-
-{% block extrahead %}
-  {% set page_title = page.meta.title
-                      if page.meta and page.meta.title
-                      else (page.title | striptags
-                            if page.title else config.site_name) %}
-  {% set title = (config.site_name ~ " - " ~ page_title)
-                 if page.canonical_url == config.site_url
-                 else (page_title ~ " - " ~ config.site_name) %}
-  {% set description = page.meta.description if page.meta and page.meta.description
-                       else config.site_description %}
-
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="{{ config.site_name }}">
-  <meta property="og:title" content="{{ title }}">
-  <meta property="og:description" content="{{ description }}">
-  <meta property="og:url" content="{{
-    page.canonical_url if page.canonical_url else config.site_url }}">
-  <meta name="twitter:card" content="__CARD__">
-  <meta name="twitter:title" content="{{ title }}">
-  <meta name="twitter:description" content="{{ description }}">__IMAGE__
-{% endblock %}
-"""
-            )
-            .replace("__IMAGE__", image_block)
-            .replace("__CARD__", "summary_large_image" if card else "summary")
-        )
-    )
-
-
 def zensical_config(root: Path) -> str:
     """The assembled ``zensical.toml`` body, header excluded.
 
@@ -871,7 +733,7 @@ def zensical_config(root: Path) -> str:
     ``nav.toml`` files.
     """
     table = docs_table(root)
-    title = str(table.get("title", "")) or _project_name(root)
+    title = str(table.get("title", "")) or project_name(root)
     site_url = str(table.get("site-url", ""))
     description = str(table.get("description", ""))
     lines = ["[project]", f'site_name = "{title}"']
@@ -1436,7 +1298,7 @@ def scoped_config(root: Path, package: Package) -> str:
     published site.
     """
     table = docs_table(root)
-    title = str(table.get("title", "")) or _project_name(root)
+    title = str(table.get("title", "")) or project_name(root)
     lines = ["[project]", f'site_name = "{title}"', "nav = ["]
     for page in _root_pages(root):
         label = "Home" if page == "index.md" else _label(page)

@@ -19,10 +19,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    # The docs extension this one requires: its pages and its tables are
+    # the docs extension's site's.
+    "livery-extensions-docs>=0.0.0",
     "livery-footman>=0.60.0",
-    # The base, and the docs extension this one requires, which ships in
-    # the workshop's wheel: its pages and its tables are the docs
-    # extension's site's.
     "livery-workshop>=0.10.0",
 ]
 

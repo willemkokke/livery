@@ -17,6 +17,7 @@ from livery.workshop._declaration import (
     Reference,
     read,
 )
+from workshop_extension_fakes import fake_extensions
 
 BODIES = """\
 def judge(ctx):
@@ -820,15 +821,17 @@ def test_a_declaration_reads_into_records_named_for_the_extension(
 
 
 def test_a_job_reads_into_a_contribution_named_for_the_extension(
-    package: Path,
+    package: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    fake_extensions(tmp_path, monkeypatch, other="[extension]\napi-version = 1\n")
     found = _declare(
         package,
         '[ci.jobs.merge.book]\nentries = ["acme.book.build", "acme.book.publish"]\n'
         'needs = ["gate"]\nfetch = "tags"\ntoken = "job"\n'
         'installs = "acme_declared._steps:judge"\n'
         'deploy = "acme_declared._steps:mend"\nnote = "The book."\n'
-        '[for.other.ci.jobs.gate.prose]\nentries = ["acme.prose"]\ngates = true\n',
+        '[for."acme.other".ci.jobs.gate.prose]\nentries = ["acme.prose"]\n'
+        "gates = true\n",
     )
     (book,) = found.additions.jobs
     assert (book.point, book.job.name, book.gates, book.extension) == (
@@ -849,11 +852,37 @@ def test_a_job_reads_into_a_contribution_named_for_the_extension(
         ("merge", "book", "acme.book.build", "acme"),
         ("merge", "book", "acme.book.publish", "acme"),
     ]
-    (prose,) = found.targets["other"].jobs
+    (prose,) = found.targets["acme.other"].jobs
     assert (prose.point, prose.job.name, prose.gates) == ("gate", "prose", True)
     assert (prose.job.installs, prose.job.deploy) == (None, None)
     # A job without labels runs once, on one runner, and keeps no conan home.
     assert (book.job.matrix, book.job.labels, book.job.conan_cache) == ("", None, False)
+
+
+def test_a_for_table_is_read_while_its_target_is_installed(
+    package: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A [for.<target>] table names the phases its target declares. While
+    # no installed distribution declares the target, nothing reads the
+    # table, and the extension's own tables still read.
+    text = (
+        STEP
+        + '\n[for."acme.site".phases.pages.acme]\n'
+        + 'main = "acme_declared._steps:mend"\n'
+    )
+    found = _declare(package, text)
+    assert [record.name for record in found.additions.steps] == ["lint.acme"]
+    assert "acme.site" not in found.targets
+    # Installed, the target declares the phase, and the table reads.
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        site='[extension]\napi-version = 1\n\n[phases.pages]\nlevel = "workspace"\n'
+        "gated = false\nverb = false\n",
+    )
+    found = _declare(package, text)
+    (record,) = found.targets["acme.site"].steps
+    assert record.name == "pages.acme"
 
 
 def test_a_job_naming_labels_fans_out_over_the_runners_its_function_names(

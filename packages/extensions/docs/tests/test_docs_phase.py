@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
+from extensions_docs_coverage import install_meter, leave_part, stored_unit
+from extensions_docs_workspace import skip_unless_installed
 from livery.extensions.docs import _site as _docs
 from livery.footman import Failed, fail
 from livery.workshop import PhaseContext
 from livery.workshop._packages import discover_packages
 from livery.workshop._phases import walk_steps
 from livery.workshop._steps import StepRecord, register_step, steps_by_name
-from workshop_coverage_meter import install_meter, leave_part, stored_unit
-from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 

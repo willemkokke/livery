@@ -137,20 +137,6 @@ def test_the_workspace_template_wins_over_the_site_whichever_hook_runs_first(
     assert linked.docs_url == "https://acme.example/tasks/{path}/"
 
 
-def test_the_workspace_template_links_without_the_docs_extension(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _workspace(
-        tmp_path,
-        monkeypatch,
-        workspace='docs-url = "https://acme.example/reference/#{slug}"\n',
-        extensions="[]",
-    )
-    inv = Invocation()
-    link_task_names(inv)
-    assert inv.docs_url == "https://acme.example/reference/#{slug}"
-
-
 @pytest.mark.parametrize("site", [SITE, SITE.rstrip("/")])
 def test_the_site_links_each_task_to_its_alias_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, site: str

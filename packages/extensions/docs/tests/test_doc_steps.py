@@ -13,7 +13,7 @@ from livery.workshop import _steps as registry
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import steps_by_name
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 @pytest.fixture(autouse=True)

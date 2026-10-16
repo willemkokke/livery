@@ -3,8 +3,8 @@
 The docs extension places a generator's pages and its nav block as
 data, whichever extension wrote them. A test of that placement writes
 them here, in the shape the mkdocstrings extension's step writes them,
-without importing that extension: it ships in a distribution of its
-own, which the workshop's suite does not depend on.
+without importing that extension: mkdocstrings requires docs, so the
+docs suite cannot depend on it.
 """
 
 from __future__ import annotations

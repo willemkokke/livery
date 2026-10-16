@@ -11,6 +11,7 @@ from livery.footman import Failed
 from livery.workshop import _fragment_engine as engine
 from livery.workshop._fragment_engine import Fragment
 from livery.workshop._shipped_files import deliver, shipped_drift
+from workshop_installed import skip_unless_installed
 
 _REGION = (
     "# -- workshop: region rules, yours to edit; the render keeps it --\n"
@@ -45,6 +46,7 @@ def test_the_repositorys_region_comes_after_every_extensions_lines(
 def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     root = _workspace(tmp_path / "ws", '["docs"]')
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root

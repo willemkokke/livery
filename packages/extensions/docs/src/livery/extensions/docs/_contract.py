@@ -11,6 +11,7 @@ the deploy's ``deploy``, so the CI render asks them and reads no
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import NamedTuple, TypeGuard
 
@@ -30,6 +31,22 @@ def docs_table(root: Path) -> dict[str, object]:
     contract = read_contract(root)
     table = contract.get("docs") or {}
     return dict(table) if isinstance(table, dict) else {}
+
+
+def project_name(root: Path) -> str:
+    """The workspace's stable name for the site.
+
+    The root project's name, never the directory's: a worktree's
+    directory name would make the same contract render differently
+    per checkout and turn the drift gate against itself.
+    """
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        project = tomllib.loads(pyproject.read_text("utf-8")).get("project") or {}
+        name = str(project.get("name", ""))
+        if name:
+            return name
+    return root.resolve().name
 
 
 class Generator(NamedTuple):

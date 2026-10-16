@@ -138,7 +138,7 @@ verb = false
 # The site's theme override at the root, the link-preview tags and the
 # instance's facts, written while docs is listed.
 [fragments."overrides/main.html"]
-render = "livery.extensions.docs._site:overrides_template"
+render = "livery.extensions.docs._overrides:overrides_template"
 
 # The strict site build: the gate point's verdict waits for it. The
 # tags are fetched so the release view renders from the receipts; a

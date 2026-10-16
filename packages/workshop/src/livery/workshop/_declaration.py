@@ -426,31 +426,44 @@ def _parse(path: Path, text: str) -> dict[str, Any]:
     return data
 
 
-_CACHE: dict[tuple[str, str, Path, str], Declaration] = {}
+_CACHE: dict[tuple[str, str, Path, str, frozenset[str]], Declaration] = {}
 
 
 def read(extension: str, package: str) -> Declaration | None:
     """*extension*'s declaration, from the file beside *package*; None without one.
 
-    Judged once per content: the result is kept by the file's text.
+    A ``[for.<target>]`` table is read while an installed distribution
+    ships the target's declaration, since its steps and answers name
+    what the target declares; until then it adds nothing. Judged once
+    per content and per set of targets read: the result is kept by the
+    file's text and those targets.
 
     Raises:
         DeclarationError: when the file does not parse, a key is unknown
             or of the wrong type, or a reference does not resolve.
     """
+    from livery.workshop._extensions import ships_declaration
+
     path = declaration_file(package)
     if path is None:
         return None
     text = path.read_text("utf-8")
-    key = (extension, package, path, text)
+    readable = frozenset(
+        str(target)
+        for target in _parsed(path, text).get("for", {})
+        if ships_declaration(str(target))
+    )
+    key = (extension, package, path, text, readable)
     found = _CACHE.get(key)
     if found is None:
-        found = _read(extension, package, path, text)
+        found = _read(extension, package, path, text, readable)
         _CACHE[key] = found
     return found
 
 
-def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
+def _read(
+    extension: str, package: str, path: Path, text: str, readable: frozenset[str]
+) -> Declaration:
     from livery.workshop._contract_keys import judge
 
     data = _parsed(path, text)
@@ -468,16 +481,23 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
     identity = data.get("extension", {})
     phases = reader.steps(data, ())
     additions = reader.additions(data, (), steps=phases)
-    targets = {
-        str(target): reader.additions(table, ("for", target))
+    # A [for.<target>] table names the phases and queries the target
+    # declares, so it is read while an installed distribution ships the
+    # target's declaration; until then it adds nothing.
+    held = {
+        str(target): table
         for target, table in data.get("for", {}).items()
+        if str(target) in readable
+    }
+    targets = {
+        target: reader.additions(table, ("for", target))
+        for target, table in held.items()
     }
     contract_keys_of(data, path)  # judged here as well, so a mount names it
     template_specs_of(data, path, extension=extension)  # and so are these
     queries = reader.answers(data, ())
     answered = {
-        str(target): reader.answers(table, ("for", str(target)))
-        for target, table in data.get("for", {}).items()
+        target: reader.answers(table, ("for", target)) for target, table in held.items()
     }
     if "executables" in queries and not phases.get("run"):
         raise reader.refuse(

@@ -31,13 +31,22 @@ PACKAGE_TREES = frozenset({"tests", "src", "docs"})
 
 
 def package_of(nodeid: str) -> str:
-    """The workspace package a test node belongs to (``packages/forge``), or ``""``."""
+    """The workspace package a test node belongs to (``packages/forge``), or ``""``.
+
+    A group's member may carry a tree's name: in
+    ``packages/extensions/docs/tests/...`` the tree directly beneath
+    ``docs`` says ``docs`` is the member, so the package is
+    ``packages/extensions/docs``.
+    """
     parts = nodeid.split("::", 1)[0].split("/")
     if len(parts) < 3 or parts[0] != "packages":
         return ""
     for index in range(2, len(parts) - 1):
-        if parts[index] in PACKAGE_TREES:
-            return "/".join(parts[:index])
+        if parts[index] not in PACKAGE_TREES:
+            continue
+        if index == 2 and parts[3] in PACKAGE_TREES and len(parts) > 4:
+            continue
+        return "/".join(parts[:index])
     return "/".join(parts[:2])
 
 

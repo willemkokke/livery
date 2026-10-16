@@ -323,10 +323,8 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
     [
         (
             PACKAGE + '\n[phases.biuld.odd]\nmain = "{package}._steps:main"\n',
-            "phases.biuld names no phase; the phases are sync, clean, build, format,"
-            " lint, typecheck, typecomplete, examples, drift, provenance, layering,"
-            " test, stamp, publish, verify, configure, run, docs, deploy; did you"
-            " mean 'build'?",
+            "phases.biuld names no phase; the phases are {phases}; did you mean"
+            " 'build'?",
         ),
         (
             PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
@@ -364,12 +362,16 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
 def test_a_phase_table_the_file_alone_shows_wrong_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declared: str, refusal: str
 ) -> None:
+    from livery.workshop._phases import declared_phases
+
     fake_extensions(tmp_path, monkeypatch, odd=declared)
     fake_steps(tmp_path, "odd", SAYS.format(name="odd"))
     with pytest.raises(DeclarationError) as raised:
         _extensions.declaration("acme.odd")
     path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
-    assert str(raised.value) == f"{path}: {refusal}"
+    # The installed extensions' phases follow the base's.
+    phases = ", ".join(declared_phases())
+    assert str(raised.value) == f"{path}: {refusal.replace('{phases}', phases)}"
 
 
 def test_a_failed_provider_stops_its_reader_and_is_the_verdict(
@@ -805,11 +807,17 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
 
 
 def test_a_run_of_the_registered_steps_refuses_a_context_naming_no_phase(
-    tmp_path: Path, restored_steps: None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, restored_steps: None
 ) -> None:
     from livery.workshop._phases import run_registered
     from livery.workshop._steps import StepRecord, register_step
 
+    fake_extensions(
+        tmp_path,
+        monkeypatch,
+        pages="[extension]\napi-version = 1\n\n[phases.acme-pages]\n"
+        'level = "workspace"\ngated = false\nverb = false\n',
+    )
     with pytest.raises(PhaseError, match=r"this context names none$"):
         run_registered(PhaseContext(root=tmp_path))
     with pytest.raises(PhaseError, match=r"^bkoo is not a declared phase"):
@@ -824,7 +832,7 @@ def test_a_run_of_the_registered_steps_refuses_a_context_naming_no_phase(
     register_step(StepRecord("tree", "configure", note, extension="acme.tree"))
     register_step(StepRecord("other", "lint", note, extension="acme.tree"))
     run_registered(PhaseContext(root=tmp_path, phase="configure"))
-    run_registered(PhaseContext(root=tmp_path, phase="deploy"))
+    run_registered(PhaseContext(root=tmp_path, phase="acme-pages"))
     assert ran == ["configure.tree"]
 
 

@@ -8,9 +8,9 @@ it on by listing the extension:
 extensions = ["mkdocstrings"]
 ```
 
-It requires the docs extension, which the workshop's wheel ships, so
-the workspace's set takes docs in through it, and the canonical list
-leaves docs out.
+It requires the docs extension, `livery-extensions-docs`, so the
+workspace's set takes docs in through it, and the canonical list leaves
+docs out.
 
 ## The reference pages
 

@@ -23,8 +23,8 @@ import re
 import tomllib
 from pathlib import Path
 
-from livery.extensions.docs._contract import docs_table
-from livery.extensions.docs._site import _project_name, zensical_config
+from livery.extensions.docs._contract import docs_table, project_name
+from livery.extensions.docs._site import zensical_config
 from livery.workshop import discover_packages
 
 #: Site-tree prefixes whose pages never enter ``llms-full.txt``:
@@ -166,7 +166,7 @@ def llms_files(root: Path) -> tuple[str, str]:
     whatever host serves the site.
     """
     table = docs_table(root)
-    title = str(table.get("title", "")) or _project_name(root)
+    title = str(table.get("title", "")) or project_name(root)
     description = str(table.get("description", ""))
     site = str(table.get("site-url", "")) or "/"
     if not site.endswith("/"):

@@ -24,6 +24,7 @@ from livery.workshop._packages import Package
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -386,6 +387,8 @@ def test_ci_run_spawns_the_jobs_entries(
     from types import SimpleNamespace
 
     import livery.footman as footman
+
+    skip_unless_installed("docs")
 
     seen: list[list[str]] = []
 
