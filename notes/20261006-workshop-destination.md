@@ -1407,7 +1407,11 @@ remained after N1.
    distribution `livery-extensions-coverage` 0.0.0, with its tests, its
    footman plugin and Pygments; the suites of pytest, cmake and docs
    reach it through a test edge, and the workshop wheel depends on
-   Pygments no more.
+   Pygments no more. P5a (built, #1723) makes public what nanobind
+   reads: `build_release`, `discover_release`, `python_matrix`,
+   `JOB_BUILT_MEMBERS`, `tool_receipts` with `ToolReceipt`, and
+   `store_home`; python's and conan's entry modules export the names
+   nanobind reads of them.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1764,6 +1768,7 @@ neither needs nor rules out).
 | cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
 | `livery-extensions-coverage`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `state_store`, `leg_scope`, `verified_branch` and the other names coverage reads | the release wave raising the floor within its set (step 8's R1) |
 | coverage's coverage floor at its measured 96 | the ratchet back to 100 |
+| `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache` and `restore_from_releases` to nanobind | conan's per-host artifact (phase 13) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
@@ -3698,6 +3703,18 @@ neither needs nor rules out).
   --extension=coverage` refuses: coverage registers no step of its
   own, so the plain pass is its proof, where the ratchet and scoped-leg
   scenarios run coverage end to end.
+
+- 2026-10-16, step 8's P5a (#1723), built: nanobind reads no private
+  name; 7 names join `__all__` (77 to 84). `livery.workshop` serves a
+  name under the name its defining module gives it, so `_lifecycle.build`,
+  `_tools.Receipt` and `_tools.receipts` were renamed `build_release`,
+  `ToolReceipt` and `tool_receipts` where they are defined, with no
+  alias. `tool_receipts` raises `ValueError` on a file that is not a
+  receipt, as its two readers in the base expect. python and conan
+  gain entry modules that re-export lazily, as docs' does: importing
+  each loads the same four modules docs' loads. The public API tables
+  above now list every name `__all__` holds; 28 were missing,
+  `check_option`'s row is `step_option`'s.
 
 ## Open
 
