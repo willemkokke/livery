@@ -569,14 +569,16 @@ def test_a_newly_listed_extension_s_block_arrives_at_the_next_sync(
     sync_workspace(root)
     delivered = root / ".workshop" / "fragments" / "verbs.extensions.md"
     assert "## claude\n" in delivered.read_text()
-    assert "## cpp\n" not in delivered.read_text()
+    assert "## python\n" not in delivered.read_text()
     # Listing it is the whole step: the next sync delivers its block.
-    (root / "workshop.toml").write_text('[workspace]\nextensions = ["claude", "cpp"]\n')
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["claude", "python"]\n'
+    )
     lines = sync_workspace(root)
     assert "  updated .workshop/fragments/verbs.extensions.md" in lines
-    found = installed_declaration("cpp")
+    found = installed_declaration("python")
     assert found is not None and found.description
-    assert f"## cpp\n\n{found.description}\n" in delivered.read_text()
+    assert f"## python\n\n{found.description}\n" in delivered.read_text()
 
 
 def test_the_entry_file_imports_the_sections_in_order_then_the_repository_s_own(

@@ -31,6 +31,11 @@ path = "packages/toolroom-store"
 kind = "runtime"
 floor = "0.4.0"
 
+[[depends]]
+path = "packages/extensions/cpp"
+kind = "runtime"
+floor = "0.0.0"
+
 # The suite reads what a change touched through livery.git.
 [[depends]]
 path = "packages/git"

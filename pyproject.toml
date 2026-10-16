@@ -27,7 +27,7 @@ default-groups = ["dev", "docs"]
 # re-derive the same list while letting a stray directory join
 # unnoticed. A non-python member (a cpp-conan package) is no uv project
 # and never appears.
-members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/claude", "packages/extensions/cmake", "packages/extensions/conan", "packages/extensions/coverage", "packages/extensions/docs", "packages/extensions/lfs", "packages/extensions/mkdocstrings", "packages/extensions/mypy", "packages/extensions/nanobind", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/git", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
+members = ["packages/extensions/basedpyright", "packages/extensions/changelog", "packages/extensions/clang-format", "packages/extensions/clang-tidy", "packages/extensions/claude", "packages/extensions/cmake", "packages/extensions/conan", "packages/extensions/coverage", "packages/extensions/cpp", "packages/extensions/docs", "packages/extensions/lfs", "packages/extensions/mkdocstrings", "packages/extensions/mypy", "packages/extensions/nanobind", "packages/extensions/pyrefly", "packages/extensions/pytest", "packages/extensions/ruff", "packages/extensions/ty", "packages/footman", "packages/forge", "packages/git", "packages/strongroom", "packages/toolroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/workshop"]
 
 [tool.uv.sources]
 livery-extensions-basedpyright = { workspace = true }
@@ -38,6 +38,7 @@ livery-extensions-claude = { workspace = true }
 livery-extensions-cmake = { workspace = true }
 livery-extensions-conan = { workspace = true }
 livery-extensions-coverage = { workspace = true }
+livery-extensions-cpp = { workspace = true }
 livery-extensions-docs = { workspace = true }
 livery-extensions-lfs = { workspace = true }
 livery-extensions-mkdocstrings = { workspace = true }
@@ -82,6 +83,7 @@ dev = [
     "livery-extensions-cmake",
     "livery-extensions-conan",
     "livery-extensions-coverage[dev]",
+    "livery-extensions-cpp",
     "livery-extensions-docs",
     "livery-extensions-lfs",
     "livery-extensions-mkdocstrings[test]",

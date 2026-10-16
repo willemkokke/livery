@@ -19,6 +19,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    # The cpp extension conan requires: a conan package is C or C++.
+    "livery-extensions-cpp>=0.0.0",
     "livery-footman>=0.60.0",
     # The forge's releases: the route a conan package takes on a forge
     # that hosts no conan registry, its saved caches attached to the
@@ -29,8 +31,7 @@ dependencies = [
     "livery-toolroom>=0.11.0",
     # The store's host keys, which name each host's saved cache.
     "livery-toolroom-store>=0.4.0",
-    # The base, and the cpp extension conan requires, which the
-    # workshop's wheel ships.
+    # The base.
     "livery-workshop>=0.10.0",
 ]
 

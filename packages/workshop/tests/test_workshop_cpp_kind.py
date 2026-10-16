@@ -1,10 +1,9 @@
-"""The cpp kind in the gate: what a C++ package's files are, and what judges them.
+"""A C++ package in the gate: which steps judge it, and what the project render wires.
 
-The package lists cmake and conan, a distribution of its own,
-`livery-extensions-conan`, which requires cpp; a test that reads cpp's
-answers through conan's requirement skips while conan is not
-installed. conan's own suite covers its profile, its build and its
-template, and the cmake extension's suite covers the gate build.
+The package lists cmake and conan, which ship in distributions of their
+own, as cpp does. cpp's own suite covers the categories it gives a
+package's paths, conan's its profile, its build and its template, and
+the cmake extension's suite the gate build.
 """
 
 from __future__ import annotations
@@ -17,7 +16,6 @@ from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import judges, step_for
 from workshop_cmake_declared import cmake_steps_fixture  # noqa: F401
-from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
@@ -29,33 +27,6 @@ def _package(directory: Path, name: str, *extensions: str) -> Package:
         depends=(),
         extensions=extensions,
     )
-
-
-def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
-    tmp_path: Path,
-) -> None:
-    from livery.workshop._categories import (
-        CONFIGURATION,
-        SOURCE,
-        TEST,
-        TEST_SUPPORT,
-        category_of,
-    )
-
-    skip_unless_installed("conan")
-    package = _package(
-        tmp_path / "packages" / "native", "acme-native", "cmake", "conan"
-    )
-
-    def category(path: str) -> str:
-        return category_of(package, path).name
-
-    assert category("tests/test_native.cpp") == TEST
-    assert category("tests/helpers.hpp") == TEST_SUPPORT
-    assert category("src/native.cpp") == SOURCE
-    assert category("include/acme/native.hpp") == SOURCE
-    assert category("CMakeLists.txt") == CONFIGURATION
-    assert category("conanfile.py") == CONFIGURATION
 
 
 def test_python_steps_skip_a_native_member_by_name(
@@ -102,28 +73,6 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     ctx = PhaseContext(root=tmp_path, packages=(py,))
     assert not set(NATIVE_CHECKS) & set(judges(ctx))
     assert capsys.readouterr().out == ""
-
-
-def test_a_package_listing_cmake_and_conan_is_categorised_by_cpp_s_table(
-    tmp_path: Path,
-) -> None:
-    """Conan requires cpp, so a package listing cmake and conan reads cpp's table."""
-    from livery.workshop._categories import category_of
-
-    skip_unless_installed("conan")
-    listing = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
-    expected = {
-        "tests/test_geometry.cpp": "test",
-        "tests/geometry_test.c": "test",
-        "tests/CMakeLists.txt": "test-support",
-        "src/geometry.cpp": "source",
-        "include/acme/geometry.h": "source",
-        "conanfile.py": "configuration",
-        "docs/index.md": "prose",
-    }
-    found = {path: category_of(listing, path).name for path in expected}
-    assert found == expected
-    assert category_of(listing, "src/geometry.cpp").supplier == "cpp"
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
