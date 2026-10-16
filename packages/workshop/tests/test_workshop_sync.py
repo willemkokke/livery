@@ -12,6 +12,7 @@ import pytest
 
 from livery.workshop._packages import Package
 from livery.workshop._sync import sync_workspace
+from workshop_installed import skip_unless_installed
 from workshop_links import link_entries as materialise
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -447,6 +448,7 @@ def test_a_sync_over_packages_holding_no_conan_makes_no_profile(
 def test_a_sync_over_two_packages_holding_conan_makes_the_profile_once(
     tmp_path: Path, conan_profiles: list[Path]
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop import _lifecycle
 
     # One lists conan, and nanobind's set holds conan through its

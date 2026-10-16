@@ -364,10 +364,11 @@ provides = { wheel = "path" }
 ```
 
 An extension whose packages must not run a step another extension of
-their set adds deletes it, with the reason. nanobind builds a package's
-platform wheels, so in a set that holds nanobind python's `uv build`
-never runs, and neither do the conan steps that would stamp, build and
-publish the recipe the package consumes:
+their set adds deletes it, with the reason. The nanobind extension, a
+distribution of its own, `livery-extensions-nanobind`, builds a
+package's platform wheels, so in a set that holds nanobind python's
+`uv build` never runs, and neither do the conan steps that would stamp,
+build and publish the recipe the package consumes:
 
 ```toml
 [phases.build.nanobind]
@@ -552,7 +553,10 @@ package's contract lists the born template's `extensions` in their
 canonical form. Every written file is the workspace's own from then on,
 and nothing records the template: an extension that needs to know what
 a package is reads it from the package's own manifests, as python reads
-its scripts. The templates the workshop's wheel declares:
+its scripts. The templates the livery distributions declare, each
+available while the extension that declares it is installed. The
+nanobind extension ships in `livery-extensions-nanobind`, and the
+workshop's wheel ships the others:
 
 | Template | Declared by | Lists | Extends | Options |
 |---|---|---|---|---|

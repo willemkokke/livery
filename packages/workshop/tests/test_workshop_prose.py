@@ -626,6 +626,7 @@ def test_this_repository_s_block_for_one_extension_matches_its_golden(
 def test_the_compositions_and_tools_fragments_render_what_is_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cmake_steps: object
 ) -> None:
+    skip_unless_installed("nanobind")
     root = _workspace(tmp_path)
     assert render_compositions(root, AGENT) == ""
     # A package holding no extension, one that lists none,

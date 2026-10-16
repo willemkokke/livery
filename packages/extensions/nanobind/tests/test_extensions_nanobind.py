@@ -1,18 +1,22 @@
-"""The nanobind extension: its declaration, its wheels job's labels and members.
+"""The nanobind extension: its distribution, its declaration, its wheels job.
 
 The refusals first: the extension in the workspace's list, its key in
 a package that holds no nanobind, and the labels a package that holds
-it gets wrong; and a workspace without nanobind names no member its
-job builds. Then the declaration, the union of labels, the members the
-wheels job builds, the mount that adds the wheels job for a workspace
-whose packages hold nanobind, and the verb each leg of the job runs.
+it gets wrong; a workspace without nanobind names no member its job
+builds and installs nothing of it. Then its own distribution, the
+declaration, the plugin, the mount and the kit, the union of labels,
+the members the wheels job builds, the mount that adds the wheels job
+for a workspace whose packages hold nanobind, and the verb each leg of
+the job runs.
 """
 
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import os
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,12 +24,12 @@ from typing import cast
 
 import pytest
 
-from livery.extensions.nanobind import _ci, _tasks
-from livery.footman import Context
-from livery.workshop._packages import Package, discover_packages
-
 # The wheels job is nanobind's, added as the mount adds it.
-from workshop_nanobind_declared import nanobind_jobs  # noqa: F401
+from extensions_nanobind_workspace import nanobind_jobs  # noqa: F401
+from livery.extensions.nanobind import _ci, _tasks
+from livery.footman import Context, Group
+from livery.workshop._packages import Package, discover_packages
+from livery.workshop.testing import CLAUSES, Clause
 
 
 def _member(root: Path, name: str, contract: str) -> None:
@@ -211,24 +215,124 @@ def test_a_workspace_without_nanobind_names_no_job_built_member(
     assert _ci.job_built_members(tmp_path) == {}
 
 
+def _composed_dev_group(root: Path) -> list[str]:
+    """The dev group of the project file the engine composes for *root*."""
+    import tomllib
+
+    from livery.workshop._shipped_files import outputs
+
+    (composed,) = [o for o in outputs(root) if o.path == "pyproject.toml"]
+    group: list[str] = tomllib.loads(composed.body.decode())["dependency-groups"]["dev"]
+    return group
+
+
+def test_a_workspace_without_nanobind_installs_none(tmp_path: Path) -> None:
+    # Unlisted, neither the extension's distribution nor nanobind itself
+    # reaches the venv, and the workshop's wheel requires neither.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nname = "acme"\nextensions = []\n'
+    )
+    _member(tmp_path, "lib", 'extensions = ["python"]\nname = "lib"\n')
+    assert [line for line in _composed_dev_group(tmp_path) if "nanobind" in line] == []
+    required = importlib.metadata.requires("livery-workshop") or []
+    assert [line for line in required if "nanobind" in line] == []
+    # A package that lists it brings its distribution and the venv's
+    # nanobind, which an editor's configure of the module reads.
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
+    dev = _composed_dev_group(tmp_path)
+    assert "livery-extensions-nanobind" in dev
+    assert "nanobind>=2.7" in dev
+
+
+def _mounted_tree(root: Path) -> Group:
+    """The tree a process started now at *root* mounts, the templates' verbs in it."""
+    from livery.footman import _registry as registry
+    from livery.workshop import _points
+    from livery.workshop._extensions import mount_extensions
+
+    _points.restore(_points.snapshot(initial=True))
+    with registry.capture() as tree:
+        mount_extensions(root)
+    return tree
+
+
+def test_a_workspace_that_lists_no_nanobind_has_no_verb_for_its_template(
+    tmp_path: Path,
+) -> None:
+    from livery.footman.testing import Runner
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nname = "acme"\nnamespace = "acme"\nextensions = ["python"]\n'
+    )
+    # The refusal first: nothing lists nanobind, so no verb creates its
+    # template, and footman refuses a task it does not know.
+    refused = Runner().invoke(
+        "new.package.nanobind-module native",
+        tasks=_mounted_tree(tmp_path),
+        cwd=tmp_path,
+    )
+    assert refused.exit_code == 64, refused.stderr
+    assert "no task named 'new.package.nanobind-module'" in refused.stderr
+    assert not (tmp_path / "packages").exists()
+    # Listed, the template's verb exists.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nname = "acme"\nnamespace = "acme"\nextensions = ["nanobind"]\n'
+    )
+    verbs = _mounted_tree(tmp_path).groups["new"].groups["package"]
+    assert "nanobind-module" in verbs.tasks
+
+
 # --- the declaration ----------------------------------------------------------
 
 
-def test_the_wheel_ships_nanobind_declaring_its_key_its_job_and_its_verb() -> None:
+def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> None:
+    from livery.workshop._extensions import declaration, shipping_distribution
+
+    ours = {
+        (entry.group, entry.name, entry.value)
+        for entry in importlib.metadata.distribution(
+            "livery-extensions-nanobind"
+        ).entry_points
+    }
+    assert ours == {
+        ("workshop.extensions", "nanobind", "livery.extensions.nanobind"),
+        (
+            "footman.tasks",
+            "livery.extensions.nanobind",
+            "livery.extensions.nanobind._tasks",
+        ),
+    }
+    theirs = importlib.metadata.distribution("livery-workshop").entry_points
+    assert [
+        entry.name
+        for entry in theirs
+        if entry.value.startswith("livery.extensions.nanobind")
+    ] == []
+    shipped = shipping_distribution("livery.extensions.nanobind")
+    assert shipped is not None and shipped.name == "livery-extensions-nanobind"
+    # The extensions it requires, python, cpp and conan, ship in the
+    # workshop's wheel, which this one requires.
+    required = importlib.metadata.requires("livery-extensions-nanobind") or []
+    assert [line for line in required if line.startswith("livery-workshop")] == [
+        "livery-workshop>=0.10.0"
+    ]
+    declared = declaration("nanobind")
+    assert declared is not None
+    assert {
+        name: getattr(shipping_distribution(f"livery.extensions.{name}"), "name", "")
+        for name in declared.requires
+    } == {
+        "python": "livery-workshop",
+        "cpp": "livery-workshop",
+        "conan": "livery-workshop",
+    }
+
+
+def test_nanobind_declares_its_key_its_job_and_its_verb() -> None:
     from livery.workshop._contract_keys import declarations
     from livery.workshop._declaration import DeclaredValue, Reference, defined_tasks
     from livery.workshop._extensions import declaration
 
-    found = {
-        entry.name: entry.value
-        for entry in importlib.metadata.entry_points(group="workshop.extensions")
-    }
-    assert found["nanobind"] == "livery.extensions.nanobind"
-    plugins = {
-        entry.name: entry.value
-        for entry in importlib.metadata.entry_points(group="footman.tasks")
-    }
-    assert plugins["livery.extensions.nanobind"] == "livery.extensions.nanobind._tasks"
     declared = declaration("nanobind")
     assert declared is not None
     # The distribution, the extension module's language and its provider.
@@ -443,10 +547,10 @@ def test_the_emitted_wheels_job_runs_the_declared_labels(tmp_path: Path) -> None
 def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
     tmp_path: Path,
 ) -> None:
+    from extensions_nanobind_workspace import jobs_restored
     from livery.footman import _registry as registry
     from livery.workshop import _points, _steps
     from livery.workshop._extensions import installed_set, mount_extensions
-    from workshop_docs_declared import jobs_restored
 
     pure = tmp_path / "pure"
     pure.mkdir()
@@ -470,6 +574,75 @@ def test_the_mount_adds_the_wheels_job_where_a_package_holds_nanobind(
                 assert _points.jobs_of(root, "release") == jobs
     finally:
         _steps.restore(state)
+
+
+def test_the_plugin_loaded_alone_registers_the_nanobind_group_alone() -> None:
+    # The task reference renders each provider's tree with nothing else
+    # mounted: the plugin's tree holds the nanobind group and no group of
+    # the base's, with the wheels verb hidden.
+    probe = (
+        "import json\n"
+        "import livery.footman as footman\n"
+        "import livery.extensions.nanobind._tasks\n"
+        "tree = footman.task_tree()\n"
+        "group = tree['groups']['nanobind']\n"
+        "print(json.dumps([sorted(tree['groups']), sorted(tree['tasks']),"
+        " sorted(group['tasks'])]))\n"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout) == [["nanobind"], [], ["wheels"]]
+
+
+def _mount(root: Path) -> tuple[str, ...]:
+    """Mount what *root*'s lists hold, as a verb there would; the names mounted."""
+    from livery.footman import _registry as registry
+    from livery.workshop._extensions import mount_extensions
+
+    with registry.capture():
+        return mount_extensions(root)
+
+
+def test_a_package_listing_nanobind_mounts_it_with_what_it_requires(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
+    assert _mount(tmp_path) == ("cpp", "conan", "python", "nanobind")
+
+
+@pytest.mark.parametrize("clause", CLAUSES, ids=lambda clause: clause.name)
+def test_nanobind_conforms(clause: Clause, tmp_path: Path) -> None:
+    from livery.workshop._steps import StepRecord, steps_by_name
+    from livery.workshop.testing import Subject
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    _native(tmp_path, "ext", '["ubuntu-latest"]')
+    _mount(tmp_path)
+    # nanobind registers no gate step: its one step builds a release, on
+    # the build phase's isolated side.
+    steps: tuple[StepRecord, ...] = tuple(
+        record for record in steps_by_name().values() if record.extension == "nanobind"
+    )
+    assert steps == ()
+    subject = Subject("livery.extensions.nanobind", sets=(("nanobind",),))
+    assert clause.judge(subject) == []
+
+
+def test_the_loop_s_dev_wheels_hold_this_distribution() -> None:
+    # The loop's plain pass creates loop-native from nanobind-module, so
+    # its stack lists nanobind, and the dev wheels the pass builds and
+    # publishes before the birth hold this distribution: the newborn
+    # installs it, and its wheels job runs nanobind.wheels from it.
+    from livery.workshop._e2e import LOOP_MEMBERS, dev_members, loop_stack
+
+    root = Path(__file__).resolve().parents[4]
+    templates = {member.name: member.template for member in LOOP_MEMBERS}
+    assert templates["loop-native"] == "nanobind-module"
+    assert "nanobind" in loop_stack()
+    assert "extensions/nanobind" in dev_members(root, loop_stack())
 
 
 # --- the verb -------------------------------------------------------------------

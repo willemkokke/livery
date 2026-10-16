@@ -408,8 +408,8 @@ def test_a_plugin_no_distribution_declares_breaks_the_clause(
         " 'acme.nowhere', which no installed distribution declares in"
         " footman.tasks; the mount cannot mount its verbs"
     ]
-    # The workshop's wheel ships the nanobind extension's plugin.
-    declaration.write_text('[extension]\nplugin = "livery.extensions.nanobind"\n')
+    # The workshop's wheel declares the base's own plugin.
+    declaration.write_text('[extension]\nplugin = "livery.workshop"\n')
     assert _names(Subject("acme_kit_plugin"), clause) == []
 
 
@@ -627,7 +627,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
 
 def test_every_template_here_composes() -> None:
     # conan's C++ templates list cmake.
-    skip_unless_installed("cmake")
+    skip_unless_installed("cmake", "nanobind")
     from livery.footman import installed_entry_points
     from livery.workshop._extensions import extension_package
     from livery.workshop._seeds import available_templates
@@ -981,11 +981,11 @@ def test_the_builtin_steps_pass_every_clause() -> None:
     # A package that lists nothing, and one listing each installed
     # extension that composes something in a package: those the
     # workshop's wheel ships, and those of their own distributions
-    # installed here, such as cmake.
+    # installed here, such as cmake and nanobind.
     composing = {
         (name,) for name in installed_extensions() if composes_per_package(name)
     }
-    assert composing >= {("conan",), ("cpp",), ("nanobind",), ("python",)}
+    assert composing >= {("conan",), ("cpp",), ("python",)}
     assert set(subject.sets) == {(), *composing}
     assert {record.name for record in subject.steps} == {
         "drift.check",

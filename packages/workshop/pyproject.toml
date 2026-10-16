@@ -56,8 +56,6 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
-# The nanobind extension's verb, the one the release's wheels job runs.
-"livery.extensions.nanobind" = "livery.extensions.nanobind._tasks"
 
 # The workshop extensions this wheel ships, by the name a workspace
 # lists: each maps to the package beside its extension.toml, which the
@@ -65,7 +63,6 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 [project.entry-points."workshop.extensions"]
 conan = "livery.extensions.conan"
 cpp = "livery.extensions.cpp"
-nanobind = "livery.extensions.nanobind"
 python = "livery.extensions.python"
 
 # The devkit advertisement: "meant to be mounted as built-in tasks".
@@ -123,7 +120,6 @@ module-name = [
     "livery.workshop",
     "livery.extensions.conan",
     "livery.extensions.cpp",
-    "livery.extensions.nanobind",
     "livery.extensions.python",
 ]
 namespace = true

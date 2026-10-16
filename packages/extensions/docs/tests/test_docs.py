@@ -2142,6 +2142,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/lfs": "workshop.extensions.lfs",
         "extensions/mkdocstrings": "workshop.extensions.mkdocstrings",
         "extensions/mypy": "workshop.extensions.mypy",
+        "extensions/nanobind": "workshop.extensions.nanobind",
         "extensions/pyrefly": "workshop.extensions.pyrefly",
         "extensions/pytest": "workshop.extensions.pytest",
         "extensions/ruff": "workshop.extensions.ruff",

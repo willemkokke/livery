@@ -20,6 +20,7 @@ members = [
     "livery-extensions-lfs",
     "livery-extensions-mkdocstrings",
     "livery-extensions-mypy",
+    "livery-extensions-nanobind",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",
     "livery-extensions-ruff",
@@ -816,6 +817,7 @@ dev = [
     { name = "livery-extensions-lfs" },
     { name = "livery-extensions-mkdocstrings", extra = ["test"] },
     { name = "livery-extensions-mypy" },
+    { name = "livery-extensions-nanobind" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-pytest" },
     { name = "livery-extensions-ruff" },
@@ -855,6 +857,7 @@ dev = [
     { name = "livery-extensions-lfs", editable = "packages/extensions/lfs" },
     { name = "livery-extensions-mkdocstrings", extras = ["test"], editable = "packages/extensions/mkdocstrings" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
+    { name = "livery-extensions-nanobind", editable = "packages/extensions/nanobind" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-pytest", editable = "packages/extensions/pytest" },
     { name = "livery-extensions-ruff", editable = "packages/extensions/ruff" },
@@ -1005,11 +1008,13 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-coverage" },
+    { name = "livery-extensions-nanobind" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-coverage", marker = "extra == 'test'", editable = "packages/extensions/coverage" },
+    { name = "livery-extensions-nanobind", marker = "extra == 'test'", editable = "packages/extensions/nanobind" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-git", editable = "packages/git" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
@@ -1061,12 +1066,14 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "livery-extensions-coverage" },
+    { name = "livery-extensions-nanobind" },
     { name = "livery-forge" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "livery-extensions-coverage", marker = "extra == 'test'", editable = "packages/extensions/coverage" },
+    { name = "livery-extensions-nanobind", marker = "extra == 'test'", editable = "packages/extensions/nanobind" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1132,6 +1139,34 @@ requires-dist = [
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+
+[[package]]
+name = "livery-extensions-nanobind"
+version = "0.0.0"
+source = { editable = "packages/extensions/nanobind" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-git" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "livery-forge" },
+    { name = "livery-toolroom-store" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
+    { name = "livery-git", editable = "packages/git" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-toolroom-store", marker = "extra == 'test'", editable = "packages/toolroom-store" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-pyrefly"

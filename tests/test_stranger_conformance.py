@@ -70,9 +70,10 @@ _LOCAL_SOURCES = "".join(
         ("livery-forge", "forge"),
         ("livery-toolroom", "toolroom"),
         ("livery-footman", "footman"),
-        # The drive's root lists cmake, which ships as a distribution of
-        # its own.
+        # The drive's root lists cmake and nanobind, which ship as
+        # distributions of their own.
         ("livery-extensions-cmake", "extensions/cmake"),
+        ("livery-extensions-nanobind", "extensions/nanobind"),
     )
 )
 
@@ -306,8 +307,9 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
             "extensions = []", 'extensions = ["cmake", "nanobind"]', 1
         )
     )
-    # cmake ships as a distribution of its own, which the project file's
-    # region sources from this checkout: the sync installs it from there.
+    # cmake and nanobind ship as distributions of their own, which the
+    # project file's region sources from this checkout: the sync installs
+    # them from there.
     synced = subprocess.run(
         ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
     )

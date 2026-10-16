@@ -11,17 +11,16 @@ import pytest
 from _pytest.outcomes import Skipped  # the skip a fixture raises
 
 import livery.toolroom.tools as tools
+from extensions_nanobind_steps import python_steps_fixture  # noqa: F401
+from extensions_nanobind_workspace import seed_into, skip_unless_installed
 from livery.extensions.nanobind import _build, _ci, _container
 from livery.extensions.python import _backend as _python
 from livery.workshop._identity import project_facts
 from livery.workshop._packages import Package
-from workshop_composed import seed_into
-from workshop_installed import skip_unless_installed
-from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (BaseException,)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _toolchain_gap() -> str:

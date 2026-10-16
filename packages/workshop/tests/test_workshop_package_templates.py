@@ -253,6 +253,7 @@ def test_a_template_whose_chain_lists_an_uninstalled_extension_refuses_naming_ea
     )
     # nanobind-module extends python's python-library: nanobind requires
     # python, so listing nanobind alone takes the whole chain in.
+    skip_unless_installed("nanobind")
     native = _workspace(tmp_path / "native", "nanobind")
     render_member(native, "ext", "nanobind-module")
     assert _files(root) == before
@@ -329,6 +330,7 @@ def _workspace_lists(root: Path, *listed: str) -> None:
 def test_the_listed_templates_are_the_bases_and_the_installed_sets(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._seeds import installed_templates
 
     root = _workspace(tmp_path / "acme")
@@ -539,6 +541,7 @@ def test_the_base_s_templates_take_the_grammar_an_extension_declares_one_in() ->
 def test_fm_new_package_alone_is_a_group_naming_each_template_s_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.footman.testing import Runner
     from livery.workshop._seeds import installed_templates
 
@@ -1122,6 +1125,7 @@ OPTIONS = {
 
 
 def test_the_available_templates_are_these() -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._seeds import available_templates
 
     found = {
@@ -1134,6 +1138,7 @@ def test_the_available_templates_are_these() -> None:
 
 
 def test_the_available_templates_take_these_options() -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._seeds import (
         available_templates,
         chain_options,
@@ -1156,6 +1161,8 @@ def test_the_available_templates_take_these_options() -> None:
 
 
 def test_every_template_directory_the_workshop_ships_is_a_declared_template() -> None:
+    # The other distributions installed here, nanobind's among them,
+    # declare templates of their own beside the workshop's.
     from livery.workshop._seeds import TEMPLATES, available_templates, template_files
 
     installed = available_templates()
@@ -1168,10 +1175,11 @@ def test_every_template_directory_the_workshop_ships_is_a_declared_template() ->
         if content.is_dir() and (content / TEMPLATES).is_dir()
         for directory in (content / TEMPLATES).iterdir()
     }
-    assert shipped == declared
+    assert shipped <= declared
 
 
 def test_the_chain_runs_from_the_template_extended_to_the_one_born() -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._seeds import template_chain
 
     chains = {
@@ -1219,6 +1227,7 @@ def test_a_template_s_file_wins_over_the_one_it_extends_and_over_package_base(
 def test_the_contract_lists_the_template_s_canonical_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("nanobind")
     from livery.workshop._seeds import create_package
 
     root = _workspace(tmp_path / "acme", "acme.lua", "nanobind")
