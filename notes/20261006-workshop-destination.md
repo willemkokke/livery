@@ -395,7 +395,8 @@ runs the test phase isolated once per resolution `[release] prove`
 lists, `floor` (lowest-direct), `latest` (a fresh resolution at the
 newest versions) or `head` (the lock as it stands, from the built
 wheel), with the co-released set's dist directories as `release-dirs`;
-`prove-floors` refuses naming the list. This repository lists `head`.
+`prove-floors` is no key, and the judge refuses it as it refuses any
+unknown key. This repository lists `head`.
 
 **One walk.** `run_phase` as built, with a step running at its
 extension's level and independent steps running concurrently.
@@ -1306,7 +1307,8 @@ The parts, each mergeable alone, in this order:
 
 #1670, `fm sync` failing when its `uv sync` moves a mounted
 extension's distribution, is built after N1 and before P1b merges.
-#1653 sweeps the refusals of removed spellings that remain after N1.
+#1653 (built): no code refuses or rewrites a removed spelling that
+remained after N1.
 
 8. **Each extension leaves the workshop wheel** for its own
    distribution, its tests with it, released under the names claimed
@@ -1507,7 +1509,8 @@ parts, each mergeable alone:
   (CMake's target type, conan's `package_type`, `[project.scripts]`).
   `fm new.package <name> <template>` births a package from one, and
   refuses without one, listing the installed templates with their
-  `doc`; `--kind` and a contract's `template` refuse. The seed trees
+  `doc`; `--kind` meets the ordinary refusal of an unknown option, and
+  a contract's `template` that of an unknown key. The seed trees
   became python's `python-library`, the base's `workshop-extension`,
   nanobind's `nanobind-module` and conan's `cpp-library`; conan adds
   `cpp-executable` and python `python-cli`, whose scripts python
@@ -3492,6 +3495,30 @@ neither needs nor rules out).
   extension's sync step never ran. The conformance kit's `walk-order`
   and `gate-lines` clauses judge only gated phases' steps, and take a
   step's extension by the name the workspace lists.
+- 2026-10-16, #1653, built: no code refuses, rewrites or notes a
+  removed spelling, as Willem ruled on 2026-10-15. Removed: the
+  refusal of `compatible`, `before` and `after` under `[extension]`;
+  the refusals `extension.toml` gave the check tables, `[options]`,
+  `[root-files]`, `[rules]` and the keys a step table dropped; the
+  refusals a contract gave `[release] prove-floors`, `[ci]
+  wheel-platforms`, `[qa]`, `template`, `[docs] python-paths`,
+  `[checks]` and `[roles]`; `normalise_keys`, so `fm submit` reads a
+  contract from history as it is written; the hidden `--kind` option
+  of `fm new.package`; the refusal and the mount note of a bracketed
+  `[workspace] extensions` entry; the note `fm sync` printed for
+  `tools.lock` and `tools.graphs/`; the template channel's header
+  marker; the retired workflow names `governance.yml`, `docs.yml` and
+  `release-legs.yml`; the local gate record's `affected` scope; and
+  footman's refusal of its removed `plugins` list. The judge refuses
+  each key as unknown, and footman refuses `--kind` as an unknown
+  option. Two spellings had no refusal left, and each got the ordinary
+  one: a bracketed `[workspace] extensions` entry refuses as an entry
+  with a version or a scope does, and footman's `plugins` key refuses a
+  value that is not a table. A stray `tools.lock` is named by nothing,
+  since nothing judges unknown files at the root. The underscore-key
+  refusals of a contract and of `extension.toml` stay: they enforce the
+  kebab-case rule of 2026-09-25 for every key and name, the names the
+  schema's wildcards accept among them, and name no removed key.
 
 - 2026-10-16, #1695: `fm sync` installs a newly listed extension the
   way the workspace resolves it. The project file's dev group, which
