@@ -726,7 +726,6 @@ need none of these once they are words).
 | `PUBLIC_MODULES`, `COMPILE_COMMANDS`, `MODULE_ROOTS`, `CURRENT_VERSION`, `VERSION_FILES`, `REQUIREMENTS`, `DISTRIBUTIONS`, `BUILD_PLAN`, `EXECUTABLES`, `TOOLCHAINS`, `REFERENCES` | the queries the base defines, each a `Query[T]`; an extension answers them under `[queries]` | the same | `livery.workshop` |
 | `RequirementWriter` | the protocol of a `requirement-writers` answer: writes a dependency's floor into a package's native file | conan, python | `livery.workshop` |
 | `Stamper` | what the `stamp` phase writes through | python, cpp, conan | `livery.workshop` |
-| `ParsedModule`, `RuleContext` | what a rule's `judge` reference receives (`ParsedModule` the python extension's, `RuleContext` the base's) | housekeeping | `livery.workshop` |
 | the toolchain types | phase 14 names them | cpp | `livery.workshop`, phase 14 |
 
 **Workspace extensions.**
@@ -768,6 +767,18 @@ own** (nanobind, step 8's P5a).
 | `python_matrix` | the interpreters the CI matrix runs | nanobind | `livery.workshop` |
 | `tool_receipts`, `ToolReceipt` | what the checkout installed of each tool | nanobind | `livery.workshop` |
 | `store_home` | the tool store's home on this machine | nanobind | `livery.workshop` |
+
+**Extensions that build and judge a language's packages** (python,
+step 8's P8a). Each name loads where pytest is not installed.
+
+| Name | Purpose | Users | Lives in |
+| --- | --- | --- | --- |
+| `neighbours`, `Neighbours` | who owns each dotted name in the workspace | python | `livery.workshop` |
+| `SourceReferences`, `ReferencedName` | the record of the `references` answer: a source, the names it references, and how each is referenced | python | `livery.workshop` |
+| `graph_changed` | whether a contract, a native manifest or a root `src/` changed; a layering step's `widen` calls it | python | `livery.workshop` |
+| `venv_python`, `scripts_dir` | a venv's interpreter and executables directory on this host | python | `livery.workshop` |
+| `is_example` | whether a path is a documentation example | python | `livery.workshop` |
+| `SPEED_FILE_VARIABLE`, `speed_marks`, `SpeedMark` | the file the speed plugin sums test times into, and each package's test-time marks per leg | python | `livery.workshop` |
 
 **The docs extension's own public API**, `livery.extensions.docs`,
 for generator extensions alone, since nobody imports an extension but
@@ -1794,7 +1805,7 @@ neither needs nor rules out).
 
 | Temporary | Replaced by |
 | --- | --- |
-| the base's declarations of the `python.dev-group`, `python.docs-group` and `python.test.addopts` queries | the python extension's own declarations, once it leaves the workshop wheel (step 8) |
+| the base's declarations of the `python.dev-group` and `python.docs-group` queries | the python extension's own declarations, once it leaves the workshop wheel (step 8) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
@@ -3836,6 +3847,19 @@ neither needs nor rules out).
   floor bump; each is a temporary row, and #1731 proposes the seams
   (a tool home an extension declares, and requirement writers that
   raise a floor).
+
+- 2026-10-16, step 8's P8a (#1734), built: python reads no private
+  name of the workshop; 11 names join `__all__` (85 to 96).
+  `root_marks` moved into python; python keeps its own `RuleContext`,
+  so the planned public `ParsedModule` and `RuleContext` row is gone,
+  and reads its own `references` answer. F5 is applied: `publish_wheels`
+  is python's, and the dev act publishes a member whose distributions
+  are all python's through its publish phase, with the custom index as
+  the python target, and builds any other without publishing it. The
+  `python.test.addopts` query is pytest's declaration now. `is_example`
+  and `SPEED_FILE_VARIABLE` are defined in modules that import no
+  pytest, so the names python reads resolve where pytest is not
+  installed; the two pytest plugins leave the base with #1736.
 
 ## Open
 
