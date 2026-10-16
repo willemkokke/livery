@@ -77,7 +77,16 @@ answers; each listed extension's shipped files live where
 named files through [livery.workshop.fix_files][], and a phase's steps
 over named packages through [livery.workshop.run_phase_over][]; and
 what the listed extensions declare for an extension is
-[livery.workshop.contributions_for][].
+[livery.workshop.contributions_for][]. A phase the gate never runs,
+one declared ``gated = false``, runs over the workspace through
+[livery.workshop.run_phase][], which first removes what a step that
+stopped running declared it writes under ``outputs``. The members come
+in release order from [livery.workshop.order_topologically][], every
+dependency before its dependents, and [livery.workshop.release_tag][]
+reads the member and the version a release tag names. A query's
+combine function that decides between answers by what each answering
+extension requires hands the lookup it is called with to
+[livery.workshop.nearest_extensions][].
 
 An extension adds steps to a package's lifecycle phases under
 ``[phases.<phase>.<step>]``, with the keys every step takes;
@@ -103,6 +112,9 @@ if TYPE_CHECKING:
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
     from livery.workshop._composition import extension_set as extension_set
+    from livery.workshop._composition import (
+        nearest_extensions as nearest_extensions,
+    )
     from livery.workshop._contract import read_contract as read_contract
     from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
@@ -111,14 +123,17 @@ if TYPE_CHECKING:
     from livery.workshop._forge_lane import forge_repository as forge_repository
     from livery.workshop._forge_lane import this_forge as this_forge
     from livery.workshop._forge_lane import this_repository as this_repository
+    from livery.workshop._graph import order_topologically as order_topologically
     from livery.workshop._influence import Changes as Changes
     from livery.workshop._invoke import run_batched as run_batched
     from livery.workshop._packages import Edge as Edge
     from livery.workshop._packages import Package as Package
     from livery.workshop._packages import discover_packages as discover_packages
+    from livery.workshop._packages import release_tag as release_tag
     from livery.workshop._packages import verify_workspace as verify_workspace
     from livery.workshop._packages import workspace_suite as workspace_suite
     from livery.workshop._phases import PhaseContext as PhaseContext
+    from livery.workshop._phases import run_phase as run_phase
     from livery.workshop._prose import AGENT as AGENT
     from livery.workshop._prose import HUMAN as HUMAN
     from livery.workshop._prose import Prose as Prose
@@ -197,10 +212,14 @@ __all__ = [
     "forge_token",
     "generated_header",
     "guidance",
+    "nearest_extensions",
+    "order_topologically",
     "read_contract",
     "registry",
     "release_notes",
+    "release_tag",
     "run_batched",
+    "run_phase",
     "run_phase_over",
     "scoped_files",
     "scoped_packages",
@@ -253,6 +272,8 @@ _EXPORTS: dict[str, str] = {
     "discover_packages": "livery.workshop._packages",
     "extension_names": "livery.workshop._extensions",
     "extension_set": "livery.workshop._composition",
+    "nearest_extensions": "livery.workshop._composition",
+    "order_topologically": "livery.workshop._graph",
     "forge_repository": "livery.workshop._forge_lane",
     "this_forge": "livery.workshop._forge_lane",
     "this_repository": "livery.workshop._forge_lane",
@@ -264,7 +285,9 @@ _EXPORTS: dict[str, str] = {
     "read_contract": "livery.workshop._contract",
     "registry": "livery.workshop._registries",
     "release_notes": "livery.workshop._release_notes",
+    "release_tag": "livery.workshop._packages",
     "run_batched": "livery.workshop._invoke",
+    "run_phase": "livery.workshop._phases",
     "run_phase_over": "livery.workshop._quality",
     "scoped_files": "livery.workshop._steps",
     "scoped_packages": "livery.workshop._steps",

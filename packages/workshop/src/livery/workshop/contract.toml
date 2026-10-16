@@ -768,6 +768,10 @@ types = ["str"]
 doc = "the option's type, which a package's value must have: bool, str, int or strs, a list of strings"
 values = ["bool", "str", "int", "strs"]
 
+[contract.extension.phases."*"."*".outputs]
+types = ["strs"]
+doc = "the paths the step writes, each relative to the root, a directory ending in /, or package/<path> for the path in each package; never docs/ itself; when run_phase runs the phase, each output no running step declares is removed first, so a step that stops running leaves nothing behind wherever it wrote; none when absent"
+
 [contract.extension.phases."*"."*".provides]
 types = ["table"]
 doc = "the context keys the step writes inside its phase, each to its type; one step of a phase provides a key"

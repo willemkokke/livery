@@ -18,8 +18,13 @@ from pathlib import Path
 
 from livery.extensions.docs._navblocks import GENERATED_DIR
 from livery.footman import fail
-from livery.workshop import Changes, PhaseContext, selected_files
-from livery.workshop._packages import member_depth, package_directories
+from livery.workshop import (
+    Changes,
+    Package,
+    PhaseContext,
+    discover_packages,
+    selected_files,
+)
 
 #: The trees the site build writes under the workspace's `docs/`, which
 #: are not authored pages.
@@ -39,19 +44,30 @@ def _slug(heading: str) -> str:
     return re.sub(r"[-\s]+", "-", text).strip("-")
 
 
-def _docs_trees(root: Path) -> list[Path]:
+def _docs_trees(root: Path, packages: tuple[Package, ...]) -> list[Path]:
     trees = [root / "docs"]
-    trees += [
-        member / "docs"
-        for member in package_directories(root)
-        if (member / "docs").is_dir()
-    ]
+    trees += [package.directory / "docs" for package in packages]
     return [tree for tree in trees if tree.is_dir()]
 
 
-def _pages(root: Path) -> list[Path]:
+def _member_depth(packages: tuple[Package, ...], relative: Path) -> int:
+    """How many leading parts of *relative* name a package's directory.
+
+    2 for ``packages/forge/...``, 3 for ``packages/<group>/<name>/...``,
+    0 for a path outside every package, or one that is the package
+    directory itself or above it.
+    """
+    parts = relative.parts
+    for package in packages:
+        depth = len(Path(package.path).parts)
+        if len(parts) > depth and parts[:depth] == Path(package.path).parts:
+            return depth
+    return 0
+
+
+def _pages(root: Path, packages: tuple[Package, ...]) -> list[Path]:
     pages: list[Path] = []
-    for tree in _docs_trees(root):
+    for tree in _docs_trees(root, packages):
         pages += [
             page
             for page in sorted(tree.rglob("*.md"))
@@ -74,7 +90,8 @@ def link_problems(root: Path, pages: frozenset[str] | None = None) -> list[str]:
     tree.
     """
     problems: list[str] = []
-    for page in _pages(root):
+    packages = discover_packages(root)
+    for page in _pages(root, packages):
         if pages is not None and page.relative_to(root).as_posix() not in pages:
             continue
         text = page.read_text("utf-8")
@@ -88,7 +105,7 @@ def link_problems(root: Path, pages: frozenset[str] | None = None) -> list[str]:
                 resolved = (page.parent / path_part).resolve()
                 if path_part == "changelog.md" and "packages" in page.parts:
                     continue
-                depth = member_depth(root, Path(path_part))
+                depth = _member_depth(packages, Path(path_part))
                 if depth:
                     parts = Path(path_part).parts
                     resolved = (
@@ -153,7 +170,8 @@ def run_generators(root: Path) -> list[str]:
     ran: list[str] = []
     runner = ""
     for package in discover_packages(root):
-        for verb, _requires in package_generators(package):
+        for generator in package_generators(package):
+            verb = generator.verb
             if verb in ran:
                 continue  # two declarations of one shared verb run it once
             if not runner:

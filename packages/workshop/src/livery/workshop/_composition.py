@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import heapq
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from livery.workshop._declaration import Declaration
@@ -129,6 +129,22 @@ def implied(names: Iterable[str], lookup: Lookup) -> frozenset[str]:
     for name in names:
         found.update(closure(requirements(name, lookup), lookup))
     return frozenset(found)
+
+
+def nearest_extensions(names: Iterable[str], lookup: object) -> tuple[str, ...]:
+    """Of the extensions *names*, the ones no other of them requires: the nearest.
+
+    The rule a query's ``nearest`` combine applies, for a combine
+    function that decides between answers by what each answering
+    extension requires, transitively. *lookup* is the one such a
+    function is called with, passed on as it came. The nearest come in
+    the order of *names*; two of them means neither requires the other.
+    Answers whose requires close a cycle leave none nearest, and
+    ``layering.graph`` names the cycle.
+    """
+    named = tuple(dict.fromkeys(names))
+    required = implied(named, cast("Lookup", lookup))
+    return tuple(name for name in named if name not in required)
 
 
 def order(

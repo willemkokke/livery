@@ -17,7 +17,7 @@ from livery.extensions.docs import _site as _docs
 from livery.footman import Failed, fail
 from livery.workshop import PhaseContext
 from livery.workshop._packages import discover_packages
-from livery.workshop._phases import run_phase
+from livery.workshop._phases import walk_steps
 from livery.workshop._steps import StepRecord, register_step, steps_by_name
 from workshop_coverage_meter import install_meter, leave_part, stored_unit
 from workshop_installed import skip_unless_installed
@@ -228,6 +228,138 @@ def test_a_step_no_longer_listed_leaves_no_pages_behind(
     assert not (mounted / "api").exists() and not (mounted / "tasks").exists()
 
 
+def _remount(root: Path) -> None:
+    """Mount *root* afresh, as the next build's process of its own does."""
+    from livery.workshop import _extensions, _points, _steps
+
+    _steps.restore(_steps.snapshot(initial=True))
+    _points.restore(_points.snapshot(initial=True))
+    _extensions.restore(_extensions.snapshot(initial=True))
+    _mount(root)
+
+
+def _generator(root: Path, entry: str) -> None:
+    """Make *entry* the one generator the member lists under ``[docs] generators``."""
+    contract = root / "packages" / "core" / "workshop.toml"
+    lines = contract.read_text().splitlines(keepends=True)
+    text = "".join(line for line in lines if not line.startswith("generators = "))
+    contract.write_text(text.replace("[docs]\n", f"[docs]\ngenerators = [{entry}]\n"))
+
+
+def test_a_generator_output_outside_the_root_refuses_before_any_step_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._phases import PhaseError
+
+    root = _workspace(tmp_path)
+    _generator(root, '{ verb = "acme.index", outputs = ["../index/"] }')
+    _mount(root)
+    ran: list[str] = []
+
+    def note(ctx: PhaseContext) -> None:
+        ran.append(ctx.step)
+
+    register_step(StepRecord("note", "docs", note, extension="acme.note"))
+    with pytest.raises(
+        PhaseError,
+        match=r"^an output of the docs phase names '\.\./index/', which leaves the"
+        r" root",
+    ):
+        _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert ran == []
+
+
+def test_a_generator_no_package_lists_any_more_leaves_no_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import shutil
+
+    import livery.footman as footman
+
+    def generate(argv: list[str], **kwargs: object) -> int:
+        # The index generator writes its index under the root's docs/tools/.
+        if argv[-1] == "acme.index":
+            index = Path(str(kwargs["cwd"])) / "docs" / "tools" / "index.json"
+            index.parent.mkdir(parents=True, exist_ok=True)
+            index.write_text(f"{argv[-1]}\n")
+        return 0
+
+    monkeypatch.setattr(footman, "run", generate)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/fm")
+    root = _workspace(tmp_path)
+    _generator(root, '{ verb = "acme.index", outputs = ["docs/tools/"] }')
+    _mount(root)
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert (root / "docs" / "tools" / "index.json").read_text() == "acme.index\n"
+    # Listed again, the generator finds its index as it left it.
+    (root / "docs" / "tools" / "kept.json").write_text("{}\n")
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert (root / "docs" / "tools" / "kept.json").is_file()
+    capsys.readouterr()
+    # The member lists it no more: the next build removes the index.
+    _generator(root, '"acme.other"')
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert not (root / "docs" / "tools").exists()
+    assert "  removed docs/tools/: no running step of the docs phase writes it\n" in (
+        capsys.readouterr().out
+    )
+
+
+def test_the_task_reference_turned_off_leaves_no_redirect_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from livery.extensions.docs import _taskref
+    from livery.workshop import _steps
+
+    row = {"help": "One line.", "params": []}
+    tree: dict[str, object] = {
+        "help": "",
+        "groups": {"acme": {"help": "", "tasks": {"page": row}, "groups": {}}},
+        "tasks": {},
+    }
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/fm")
+    root = _workspace(tmp_path)
+    contract = root / "workshop.toml"
+    listed = contract.read_text()
+    contract.write_text(listed + "\n[phases.docs.task-reference]\nenabled = true\n")
+    _remount(root)
+    assert _steps.steps_by_name()["docs.task-reference"].outputs == ("docs/tasks/",)
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert (root / "docs" / "tasks" / "acme-page.md").is_file()
+    # Turned off, the step no longer runs, and its redirect pages go.
+    contract.write_text(listed)
+    _remount(root)
+    assert "docs.task-reference" not in _steps.steps_by_name()
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert not (root / "docs" / "tasks").exists()
+
+
+def test_coverage_unlisted_leaves_no_coverage_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _steps
+
+    install_meter(tmp_path, monkeypatch)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: None)
+    root = _workspace(tmp_path, '["docs", "acme.meter", "coverage"]')
+    _measured(root)
+    _remount(root)
+    assert _steps.steps_by_name()["docs.coverage"].outputs == ("package/htmlcov/",)
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    tree = root / "packages" / "core" / "htmlcov"
+    assert (tree / "index.html").is_file()
+    # Coverage unlisted, its step no longer runs, and the tree it drew goes.
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
+    _remount(root)
+    assert "docs.coverage" not in _steps.steps_by_name()
+    _docs.run_site_phase(root, _docs.DOCS_PHASE)
+    assert not tree.exists()
+
+
 def test_a_dormant_coverage_draws_nothing_and_the_page_states_the_absence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -325,7 +457,7 @@ def test_the_docs_steps_write_apart(
     written: dict[str, set[str]] = {}
     for record in steps:
         before = _tree(alone)
-        run_phase(PhaseContext(root=alone, packages=members, phase="docs"), (record,))
+        walk_steps(PhaseContext(root=alone, packages=members, phase="docs"), (record,))
         after = _tree(alone)
         written[record.name] = {
             path for path, held in after.items() if before.get(path) != held

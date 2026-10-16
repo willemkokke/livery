@@ -246,7 +246,7 @@ def test_an_after_naming_a_step_the_workspace_did_not_mount_orders_nothing(
 def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
     restored_registries, tmp_path: Path
 ) -> None:
-    from livery.workshop._phases import run_phase
+    from livery.workshop._phases import walk_steps
     from livery.workshop._steps import with_earlier
 
     ran: list[str] = []
@@ -272,7 +272,7 @@ def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
         "lint.probe",
         "test.probe",
     ]
-    run_phase(ctx, records)
+    walk_steps(ctx, records)
     assert sorted(ran) == ["build.probe", "lint.probe", "test.probe"]
     assert ran[0] == "build.probe"
     # An after naming no registered step refuses naming the registry.
