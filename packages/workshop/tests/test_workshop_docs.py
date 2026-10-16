@@ -25,6 +25,7 @@ from livery.extensions.python._backend import (
 from livery.footman import Failed
 from livery.workshop._declaration import DeclarationError
 from livery.workshop._packages import discover_packages
+from workshop_api_pages import write_api_pages
 from workshop_composed import composed_groups
 from workshop_coverage_pages import read_page
 from workshop_docs_declared import docs_jobs  # noqa: F401
@@ -90,21 +91,6 @@ def _package_entry(nav: Any, name: str) -> Any:
     group of the same name included.
     """
     return next(entry for entry in _package_entries(nav) if name in entry)
-
-
-def _referenced(root: Path) -> list[str]:
-    """Write each package's API reference as the docs phase's step writes it.
-
-    The members whose reference was written: the API pages and the
-    ``api`` nav block the section reads.
-    """
-    from livery.extensions.mkdocstrings._pages import documented, write_reference
-
-    return [
-        package.member
-        for package in discover_packages(root)
-        if documented(package) and write_reference(package)
-    ]
 
 
 # The fallbacks first: a workspace without docs, an undeclared table, a
@@ -404,69 +390,6 @@ def test_a_members_policy_outside_public_and_all_refuses_naming_them(
         f"{path}: queries.\"docs.members\".value is 'some'; the query's values are"
         " 'public', 'all'"
     )
-
-
-def test_a_second_generator_s_tables_reach_the_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _writing(
-        tmp_path,
-        monkeypatch,
-        carve="[project.plugins.mkdocstrings.handlers.carve]\n"
-        "paths = {members}\n\n"
-        "[project.plugins.mkdocstrings.handlers.carve.options]\n"
-        'depth = 2\nstyle = "chisel"\nstrict = true\n',
-    )
-    root = _workspace(
-        tmp_path, docs_table='extensions = ["acme.carve", "mkdocstrings"]\n'
-    )
-    _referenced(root)
-    config = zensical_config(root)
-    handlers = tomllib.loads(config)["project"]["plugins"]["mkdocstrings"]["handlers"]
-    assert handlers["carve"]["paths"] == ["bare", "core"]
-    assert handlers["carve"]["options"] == {
-        "depth": 2,
-        "style": "chisel",
-        "strict": True,
-    }
-    assert handlers["python"]["paths"] == ["packages/bare/src", "packages/core/src"]
-    # The answers join in composition order, after the docs extension's
-    # own tables.
-    assert (
-        config.index("[project.markdown_extensions.pymdownx.snippets]")
-        < config.index("[project.plugins.mkdocstrings.handlers.carve]")
-        < config.index("[project.plugins.mkdocstrings.handlers.python]")
-    )
-    # A preview hands the answers its one package, read from two levels down.
-    preview = tomllib.loads(scoped_config(root, named_package(root, "core")))
-    carved = preview["project"]["plugins"]["mkdocstrings"]["handlers"]["carve"]
-    assert carved["paths"] == ["../../core"]
-
-
-def test_a_package_no_generator_documents_has_no_api_entry(tmp_path: Path) -> None:
-    root = _workspace(tmp_path, docs_table='extensions = ["docs", "mkdocstrings"]\n')
-    bare = root / "packages" / "bare"
-    (bare / "workshop.toml").write_text(
-        'extensions = ["cmake", "conan"]\nname = "acme-bare"\n'
-    )
-    (bare / "pyproject.toml").unlink()
-    (bare / "docs").mkdir()
-    (bare / "docs" / "index.md").write_text("# bare\n")
-    assert _referenced(root) == ["core"]
-    # No page states an absence: the section carries its own pages alone.
-    assert not (bare / "docs" / "_generated").exists()
-    config = tomllib.loads(zensical_config(root))
-    section = _package_entry(config["project"]["nav"], "bare")
-    assert section["bare"] == [{"Index": "packages/bare/index.md"}]
-    core = _package_entry(config["project"]["nav"], "core")
-    assert any("API" in part for part in core["core"])
-    handlers = config["project"]["plugins"]["mkdocstrings"]["handlers"]
-    assert list(handlers) == ["python"]
-    assert handlers["python"]["paths"] == ["packages/core/src"]
-    # Without its pages a package has no section at all.
-    (bare / "docs" / "index.md").unlink()
-    config = tomllib.loads(zensical_config(root))
-    assert not any("bare" in e for e in _package_entries(config["project"]["nav"]))
 
 
 # Phase 3: changelogs and the release view. Fallbacks first.
@@ -870,8 +793,7 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
 
     root = _workspace(
         tmp_path,
-        docs_table='extensions = ["docs", "mkdocstrings"]\n'
-        '[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
+        docs_table='[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
     )
     config = scoped_config(root, named_package(root, "core"))
     parsed = toml.loads(config)
@@ -883,12 +805,6 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
     assert any("core" in entry for entry in nav)
     assert not any("bare" in entry for entry in nav)
     assert "Releases" not in config
-    handler = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"]
-    # Sources resolve from the preview directory back into the
-    # workspace; cross-package references resolve through the
-    # published site's inventory.
-    assert handler["paths"] == ["../../packages/core/src"]
-    assert "https://docs.acme.example/home/objects.inv" in handler["inventories"]
 
 
 def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> None:
@@ -900,7 +816,7 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
 
     root = _workspace(tmp_path)
     generate_changelog_pages(root)
-    _referenced(root)
+    write_api_pages(root)
     mount_package_docs(root)
     core = named_package(root, "core")
     stale = root / ".docs-preview" / "core" / "stale.md"
@@ -1915,7 +1831,7 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
     from livery.extensions.docs._site import RELEASES, generate_release_pages
 
     root = _workspace(tmp_path)
-    _referenced(root)
+    write_api_pages(root)
     (root / "packages/core/docs/_generated/tool.md").write_text("# tool\n")
     config = zensical_config(root)
     parsed = tomllib.loads(config)
@@ -1971,7 +1887,7 @@ def test_a_generators_own_block_renders_its_entries_where_placed(
     tmp_path: Path,
 ) -> None:
     root = _workspace(tmp_path)
-    _referenced(root)
+    write_api_pages(root)
     (root / "packages/core/docs/_generated/tools").mkdir(parents=True)
     (root / "packages/core/docs/nav.toml").write_text(
         'nav = [\n    { "Index" = "index.md" },\n'
@@ -1989,7 +1905,7 @@ def test_a_generators_own_block_renders_its_entries_where_placed(
 
 def test_a_placed_block_fills_where_its_markers_sit(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    _referenced(root)
+    write_api_pages(root)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     (root / "packages/core/docs/nav.toml").write_text(
         'nav = [\n    { "Index" = "index.md" },\n'
@@ -2009,7 +1925,7 @@ def test_a_placed_block_fills_where_its_markers_sit(tmp_path: Path) -> None:
 def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) -> None:
     """Changelog and Coverage ahead of the tasks block, the API after everything."""
     root = _workspace(tmp_path)
-    _referenced(root)
+    write_api_pages(root)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
@@ -2085,78 +2001,6 @@ def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api(
         ), (name, labels)
 
 
-#: The python handler's options as this repository's site renders them.
-_HANDLER_OPTIONS = {
-    "docstring_style": "google",
-    "show_if_no_docstring": True,
-    "show_root_heading": True,
-    "show_root_full_path": True,
-    "separate_signature": True,
-    "show_signature_annotations": True,
-    "signature_crossrefs": True,
-    "members_order": "source",
-    "merge_init_into_class": True,
-    "summary": True,
-    "heading_level": 2,
-}
-
-#: The inventory every python reference here resolves against.
-_PYTHON_INVENTORY = "https://docs.python.org/3/objects.inv"
-
-
-def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stubs(
-    no_development_section: None,
-) -> None:
-    """The handler of this repository's site, and of toolroom's preview.
-
-    A path for each member that ships python modules, in the packages'
-    order, with toolroom's rendered stubs after its sources. footman
-    declines its reference, and the members that ship no module give
-    no path: clang-format, mypy, pyrefly, ruff and ty. No extension here
-    answers the members policy, so the options carry no filter.
-    """
-    site = tomllib.loads(zensical_config(ROOT))
-    assert site["project"]["plugins"]["mkdocstrings"]["handlers"] == {
-        "python": {
-            "paths": [
-                "packages/extensions/basedpyright/src",
-                "packages/extensions/changelog/src",
-                "packages/extensions/clang-tidy/src",
-                "packages/extensions/claude/src",
-                "packages/extensions/cmake/src",
-                "packages/extensions/lfs/src",
-                "packages/extensions/pytest/src",
-                "packages/forge/src",
-                "packages/git/src",
-                "packages/strongroom/src",
-                "packages/toolroom/src",
-                "packages/toolroom/docs/_generated/stubs",
-                "packages/toolroom-bench/src",
-                "packages/toolroom-store/src",
-                "packages/workshop/src",
-            ],
-            "inventories": [_PYTHON_INVENTORY],
-            "options": _HANDLER_OPTIONS,
-        }
-    }
-    # The preview reads the same paths from two levels down, and
-    # resolves the rest of the site through its published inventory.
-    preview = tomllib.loads(scoped_config(ROOT, named_package(ROOT, "toolroom")))
-    assert preview["project"]["plugins"]["mkdocstrings"]["handlers"] == {
-        "python": {
-            "paths": [
-                "../../packages/toolroom/src",
-                "../../packages/toolroom/docs/_generated/stubs",
-            ],
-            "inventories": [
-                _PYTHON_INVENTORY,
-                "https://docs.willem.net/livery/objects.inv",
-            ],
-            "options": _HANDLER_OPTIONS,
-        }
-    }
-
-
 # Phase 3 of the modular docs plan: the section is the package's, the site assembles.
 
 
@@ -2210,7 +2054,7 @@ def test_the_workshops_pages_land_in_the_packages_generated_tree(
     root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     assert generate_changelog_pages(root) == ["core"]
-    assert _referenced(root) == ["bare", "core"]
+    assert write_api_pages(root) == ["bare", "core"]
     generated = root / "packages/core/docs/_generated"
     assert (generated / "changelog.md").is_file()
     assert (generated / "api" / "index.md").is_file()
@@ -2240,7 +2084,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
 
     from livery.extensions.docs import _site as _docs
 
-    root = _workspace(tmp_path, docs_table='extensions = ["docs", "mkdocstrings"]\n')
+    root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
     # The rules under test are the ones the base and the listed
     # extensions compose, so a build output an extension forgets to
@@ -2249,9 +2093,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
 
     listing = tmp_path / "listing"
     listing.mkdir()
-    (listing / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["docs", "mkdocstrings"]\n'
-    )
+    (listing / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     (ignore,) = [o for o in outputs(listing) if o.path == ".gitignore"]
     (root / ".gitignore").write_bytes(ignore.body)
     git = [
@@ -2265,7 +2107,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     # The listed extensions' steps of the docs phase run as a verb runs them.
     _mount(root)
     _docs._generate_all(root)
-    assert (root / "packages/core/docs/_generated/api/index.md").is_file()
+    assert (root / "packages/core/docs/_generated/changelog.md").is_file()
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
     ).stdout.decode()
@@ -2474,6 +2316,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
         "extensions/claude": "workshop.extensions.claude",
         "extensions/cmake": "workshop.extensions.cmake",
         "extensions/lfs": "workshop.extensions.lfs",
+        "extensions/mkdocstrings": "workshop.extensions.mkdocstrings",
         "extensions/mypy": "workshop.extensions.mypy",
         "extensions/pyrefly": "workshop.extensions.pyrefly",
         "extensions/pytest": "workshop.extensions.pytest",
@@ -2485,7 +2328,7 @@ def test_this_workspaces_packages_tree_places_every_member_where_it_sits() -> No
 def test_the_nav_has_one_packages_entry_with_its_landing_page(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     # bare's section is its API reference alone.
-    _referenced(root)
+    write_api_pages(root)
     _name(root, "bare", "core.extras.bare")
     nav = tomllib.loads(zensical_config(root))["project"]["nav"]
     (packages,) = [entry for entry in nav if "Packages" in entry]

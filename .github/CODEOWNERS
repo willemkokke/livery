@@ -5,6 +5,7 @@
 /.github/CODEOWNERS @willemkokke
 /packages/extensions/cmake/ @willemkokke
 /packages/extensions/lfs/ @willemkokke
+/packages/extensions/mkdocstrings/ @willemkokke
 /packages/footman/ @willemkokke
 /packages/forge/ @willemkokke
 /packages/git/ @willemkokke

@@ -35,7 +35,6 @@ SHIPPED = {
     "coverage": "livery.extensions.coverage",
     "cpp": "livery.extensions.cpp",
     "docs": "livery.extensions.docs",
-    "mkdocstrings": "livery.extensions.mkdocstrings",
     "nanobind": "livery.extensions.nanobind",
     "python": "livery.extensions.python",
 }
@@ -52,6 +51,11 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
         if entry.group == "workshop.extensions"
     }
     assert declared == SHIPPED
+    # What an extension that left needed goes with it: griffelib, which
+    # the API reference's check reads sources with, is none of the
+    # wheel's requirements, in any extra.
+    required = distribution("livery-workshop").requires or []
+    assert [line for line in required if "griffelib" in line] == []
     # The build ships the base's root and each of theirs, and no other.
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")

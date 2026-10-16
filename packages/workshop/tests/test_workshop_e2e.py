@@ -863,6 +863,7 @@ def test_the_loop_s_own_fm_never_asks_a_signer() -> None:
 
 def test_a_contract_s_root_set_is_read_by_name(tmp_path: Path) -> None:
     assert _e2e._listed_extensions(tmp_path) == frozenset()  # pyright: ignore[reportPrivateUsage]
+    skip_unless_installed("mkdocstrings")
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nextensions = [{ name = "acme.house", without = ["docs"] },'
         ' "basedpyright", "mkdocstrings"]\n'
@@ -2287,6 +2288,8 @@ def test_the_plain_pass_lists_the_stock_but_the_site_and_what_members_need() -> 
     from livery.workshop._extensions import SELF, declaration
     from livery.workshop._new_project import birth_extensions, canonical_extensions
 
+    # The site is what mkdocstrings' declaration requires.
+    skip_unless_installed("mkdocstrings")
     stock = tuple(birth_extensions([SELF]))
 
     def builds_the_site(name: str) -> bool:

@@ -3,8 +3,9 @@
 The refusals and fallbacks first: listed with docs, the old paths
 key, a package that declines, a package of another language, a
 workspace that does not list it and what that workspace installs, and
-the workshop wheel's runtime requirements. Then the pages, the
-handler's tables and the members policy.
+the wheel's runtime requirements. Then the distribution that ships the
+extension, the kit, the pages, the handler's tables, the members
+policy, and the site the docs extension assembles with them.
 """
 
 from __future__ import annotations
@@ -15,7 +16,11 @@ from typing import Any
 
 import pytest
 
-from livery.extensions.docs._navblocks import GENERATED_DIR
+from extensions_mkdocstrings_workspace import (
+    composed_groups,
+    fake_extensions,
+    fake_steps,
+)
 from livery.extensions.docs._site import (
     DOCS_PHASE,
     named_package,
@@ -26,6 +31,7 @@ from livery.extensions.docs._site import (
 from livery.extensions.mkdocstrings import _pages
 from livery.extensions.mkdocstrings._pages import (
     API_DIR,
+    GENERATED_DIR,
     INVENTORIES,
     OPTIONS,
     declared_paths,
@@ -35,12 +41,14 @@ from livery.extensions.mkdocstrings._pages import (
     write_reference,
 )
 from livery.footman import Failed
-from livery.workshop._packages import Package, discover_packages
-from livery.workshop._steps import steps_by_name
-from workshop_composed import composed_groups
-from workshop_extension_fakes import fake_extensions
+from livery.workshop import Package, discover_packages
+from livery.workshop._steps import StepRecord, steps_by_name
+from livery.workshop.testing import CLAUSES, Clause, Subject
 
 _FAILURES = (SystemExit, Failed)
+
+#: This repository's root, which the tests named for this workspace read.
+ROOT = Path(__file__).resolve().parents[4]
 
 
 def _workspace(
@@ -148,7 +156,9 @@ def test_mkdocstrings_alone_installs_docs(tmp_path: Path) -> None:
     # mounts it first, and the step joins the docs phase it declares.
     assert _extensions.closure_problems(root) == []
     assert _extensions.root_set(root) == ("docs", "mkdocstrings")
-    assert ("docs", "livery-workshop") in _extensions.extension_entries(root)
+    entries = _extensions.extension_entries(root)
+    assert ("docs", "livery-workshop") in entries
+    assert ("mkdocstrings", "livery-extensions-mkdocstrings") in entries
     _mount(root)
     assert steps_by_name()["docs.mkdocstrings"].extension == "mkdocstrings"
     assert steps_by_name()["lint.doclinks"].extension == "docs"
@@ -281,13 +291,11 @@ def test_a_workspace_without_mkdocstrings_renders_no_reference_and_no_handler_bl
     assert list(_handlers(config)) == ["python"]
 
 
-def test_a_workspace_without_mkdocstrings_installs_no_mkdocstrings(
-    tmp_path: Path,
-) -> None:
-    # The python handler reaches the venv through the extension's line in
-    # the docs group alone: no other line of the project file names it, and
-    # the workshop wheel, which the dev group installs for the extensions it
-    # ships, requires none of it.
+def test_a_workspace_without_mkdocstrings_installs_none(tmp_path: Path) -> None:
+    # Unlisted, neither the extension's distribution nor the python
+    # handler reaches the venv: no line of any group the project file
+    # composes names either, and the workshop wheel, which the dev group
+    # installs for the base and the docs extension, requires none of it.
     from importlib.metadata import requires
 
     root = _workspace(tmp_path, listed='["docs"]')
@@ -299,33 +307,78 @@ def test_a_workspace_without_mkdocstrings_installs_no_mkdocstrings(
     assert [line for line in lines if "mkdocstrings" in line] == []
     required = requires("livery-workshop") or []
     assert [line for line in required if "mkdocstrings" in line] == []
-    # Listed after docs, its line follows the builder's.
-    contract.write_text(
-        '[workspace]\nname = "acme"\nextensions = ["docs", "mkdocstrings"]\n'
-    )
-    assert composed_groups(root)["docs"] == [
-        "zensical>=0.0.50",
-        "mkdocstrings-python>=1.11",
-    ]
+    # Listed, the dev group installs the extension's distribution, and
+    # its handler's line follows the builder's in the docs group.
+    contract.write_text('[workspace]\nname = "acme"\nextensions = ["mkdocstrings"]\n')
+    groups = composed_groups(root)
+    assert "livery-extensions-mkdocstrings" in groups["dev"]
+    assert groups["docs"] == ["zensical>=0.0.50", "mkdocstrings-python>=1.11"]
 
 
-def test_the_workshop_wheel_requires_no_griffelib_at_runtime() -> None:
+def test_the_wheel_requires_griffelib_for_its_tests_alone() -> None:
     # The reference check imports griffe inside the function that reads the
     # sources, and a workspace that lists mkdocstrings gets griffe through
     # mkdocstrings-python. So the wheel names griffelib in its test extra
     # alone, which the release's isolated legs install to run this suite.
     from importlib.metadata import requires
 
-    from livery.extensions.python._installed import requirement_name
-
     markers = [
         marker.strip().replace('"', "'")
         for spec, _, marker in (
-            line.partition(";") for line in requires("livery-workshop") or ()
+            line.partition(";")
+            for line in requires("livery-extensions-mkdocstrings") or ()
         )
-        if requirement_name(spec) == "griffelib"
+        if spec.strip().startswith("griffelib")
     ]
     assert markers == ["extra == 'test'"]
+
+
+# Then the distribution that ships it, and the kit.
+
+
+def test_its_own_distribution_ships_mkdocstrings() -> None:
+    from importlib.metadata import distribution, requires
+
+    from livery.workshop._extensions import declaration, shipping_distribution
+
+    found = {
+        entry.name: entry.value
+        for entry in distribution("livery-extensions-mkdocstrings").entry_points
+        if entry.group == "workshop.extensions"
+    }
+    assert found == {"mkdocstrings": "livery.extensions.mkdocstrings"}
+    shipped = shipping_distribution("livery.extensions.mkdocstrings")
+    assert shipped is not None and shipped.name == "livery-extensions-mkdocstrings"
+    declared = declaration("mkdocstrings")
+    assert declared is not None and declared.requires == ("docs",)
+    # It requires docs, which the workshop's wheel ships, so its wheel
+    # requires the workshop's.
+    assert any(
+        line.startswith("livery-workshop")
+        for line in requires("livery-extensions-mkdocstrings") or ()
+    )
+
+
+@pytest.mark.parametrize("clause", CLAUSES, ids=lambda clause: clause.name)
+def test_mkdocstrings_conforms(clause: Clause, tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _mount(root)
+    steps: tuple[StepRecord, ...] = tuple(
+        record
+        for record in steps_by_name().values()
+        if record.extension == "mkdocstrings"
+    )
+    assert {record.name for record in steps} == {
+        "docs.mkdocstrings",
+        "lint.docrefs",
+        "lint.docstrings",
+    }
+    subject = Subject(
+        "livery.extensions.mkdocstrings",
+        sets=(("python",),),
+        steps=steps,
+    )
+    assert clause.judge(subject) == []
 
 
 # Then the pages, fallbacks first.
@@ -496,9 +549,247 @@ def test_all_members_writes_an_empty_filter_and_the_nearest_extension_wins(
 
 
 def test_the_members_policies_are_the_query_s_values() -> None:
-    from livery.extensions.docs._config import MEMBERS_POLICIES, PUBLIC_MEMBERS
+    from livery.extensions.docs import ALL_MEMBERS, MEMBERS, PUBLIC_MEMBERS
     from livery.workshop._queries import query_spec
 
-    spec = query_spec("docs.members")
-    assert spec.values == MEMBERS_POLICIES
+    spec = query_spec(MEMBERS.name)
+    assert spec.values == (PUBLIC_MEMBERS, ALL_MEMBERS)
     assert spec.default == PUBLIC_MEMBERS
+
+
+# The site the docs extension assembles: the reference's pages and
+# tables beside another answer's, in a preview, in this repository's
+# own site, and a build's outputs in a git tree.
+
+
+#: An extension answering docs.config with its _steps module's writer.
+_WRITER = '[extension]\n[queries]\n"docs.config" = "{package}._steps:writer"\n'
+
+#: The writer's module: its tables, the scope's root path and its
+#: members, as a TOML list, put in for ``{anchor}`` and ``{members}``.
+_WRITES = """
+def writer(root):
+    del root
+    return write
+
+
+def write(scope):
+    members = [scope.anchor + package.member for package in scope.packages]
+    listed = "[" + ", ".join(f'"{member}"' for member in members) + "]"
+    return TABLES.replace("{anchor}", scope.anchor).replace("{members}", listed)
+"""
+
+
+def _writing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **tables: str) -> None:
+    """Fake extensions ``acme.<name>`` answering docs.config, each writing *tables*.
+
+    ``{anchor}`` in a table stands for the scope's path to the root and
+    ``{members}`` for the members it covers, as a TOML list.
+    """
+    fake_extensions(tmp_path, monkeypatch, **dict.fromkeys(tables, _WRITER))
+    for name, text in tables.items():
+        fake_steps(tmp_path, name, f"TABLES = {text!r}\n" + _WRITES)
+
+
+def _section(config: str, name: str) -> list[Any] | None:
+    """The entries of *name*'s section under the Packages entry; None without one."""
+    nav = tomllib.loads(config)["project"]["nav"]
+    (packages,) = [entry for entry in nav if "Packages" in entry]
+    for entry in packages["Packages"]:
+        if name in entry:
+            found: list[Any] = entry[name]
+            return found
+    return None
+
+
+def test_a_second_generator_s_tables_reach_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _writing(
+        tmp_path,
+        monkeypatch,
+        carve="[project.plugins.mkdocstrings.handlers.carve]\n"
+        "paths = {members}\n\n"
+        "[project.plugins.mkdocstrings.handlers.carve.options]\n"
+        'depth = 2\nstyle = "chisel"\nstrict = true\n',
+    )
+    root = _workspace(tmp_path, listed='["acme.carve", "mkdocstrings"]')
+    _referenced(root)
+    config = zensical_config(root)
+    handlers = _handlers(config)
+    assert handlers["carve"]["paths"] == ["bare", "core"]
+    assert handlers["carve"]["options"] == {
+        "depth": 2,
+        "style": "chisel",
+        "strict": True,
+    }
+    assert handlers["python"]["paths"] == ["packages/bare/src", "packages/core/src"]
+    # The answers join in composition order, after the docs extension's
+    # own tables.
+    assert (
+        config.index("[project.markdown_extensions.pymdownx.snippets]")
+        < config.index("[project.plugins.mkdocstrings.handlers.carve]")
+        < config.index("[project.plugins.mkdocstrings.handlers.python]")
+    )
+    # A preview hands the answers its one package, read from two levels down.
+    preview = scoped_config(root, named_package(root, "core"))
+    assert _handlers(preview)["carve"]["paths"] == ["../../core"]
+
+
+def test_a_package_no_generator_documents_has_no_api_entry(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    bare = root / "packages" / "bare"
+    (bare / "workshop.toml").write_text(
+        'extensions = ["cmake", "conan"]\nname = "acme-bare"\n'
+    )
+    (bare / "pyproject.toml").unlink()
+    (bare / "docs").mkdir()
+    (bare / "docs" / "index.md").write_text("# bare\n")
+    assert _referenced(root) == ["core"]
+    # No page states an absence: the section carries its own pages alone.
+    assert not (bare / "docs" / GENERATED_DIR).exists()
+    config = zensical_config(root)
+    assert _section(config, "bare") == [{"Index": "packages/bare/index.md"}]
+    assert _api_labels(config, "core") == ["acme.core"]
+    handlers = _handlers(config)
+    assert list(handlers) == ["python"]
+    assert handlers["python"]["paths"] == ["packages/core/src"]
+    # Without its pages a package has no section at all.
+    (bare / "docs" / "index.md").unlink()
+    assert _section(zensical_config(root), "bare") is None
+
+
+def test_a_preview_s_handler_reads_from_two_levels_down_and_links_the_site(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(
+        tmp_path,
+        docs_table='[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
+    )
+    handler = _handlers(scoped_config(root, named_package(root, "core")))["python"]
+    # Sources resolve from the preview directory back into the
+    # workspace; cross-package references resolve through the
+    # published site's inventory.
+    assert handler["paths"] == ["../../packages/core/src"]
+    assert "https://docs.acme.example/home/objects.inv" in handler["inventories"]
+
+
+def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
+    """Everything a build writes is gitignored, the API reference among it."""
+    import subprocess
+
+    from livery.extensions.docs import _site as _docs
+    from livery.workshop._shipped_files import outputs
+
+    root = _workspace(tmp_path)
+    # The rules under test are the ones the base and the listed
+    # extensions compose, so a build output an extension forgets to
+    # ignore fails here instead of dirtying every checkout.
+    listing = tmp_path / "listing"
+    listing.mkdir()
+    (listing / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["mkdocstrings"]\n'
+    )
+    (ignore,) = [o for o in outputs(listing) if o.path == ".gitignore"]
+    (root / ".gitignore").write_bytes(ignore.body)
+    git = ["git", "-c", "commit.gpgsign=false"]
+    subprocess.run([*git, "init", "-q"], cwd=root, check=True)
+    subprocess.run([*git, "add", "-A"], cwd=root, check=True)
+    subprocess.run([*git, "commit", "-qm", "seed"], cwd=root, check=True)
+    # The listed extensions' steps of the docs phase run as a verb runs them.
+    _mount(root)
+    _docs._generate_all(root)
+    assert (
+        root / "packages/core/docs" / GENERATED_DIR / API_DIR / "index.md"
+    ).is_file()
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
+    ).stdout.decode()
+    assert status == "", status
+
+
+@pytest.fixture
+def no_development_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Assemble this repository's site config without its development section.
+
+    The development section renders the verbs fragment through this
+    repository's own fm, which syncs a checkout that never synced: a
+    release leg's fresh clone, whose links would then point into the
+    leg's scratch venv. The tests that take this read the handler,
+    never the development section.
+    """
+    monkeypatch.setattr(
+        "livery.extensions.docs._site.development_nav_lines", lambda root: []
+    )
+
+
+#: The python handler's options as this repository's site renders them.
+_HANDLER_OPTIONS = {
+    "docstring_style": "google",
+    "show_if_no_docstring": True,
+    "show_root_heading": True,
+    "show_root_full_path": True,
+    "separate_signature": True,
+    "show_signature_annotations": True,
+    "signature_crossrefs": True,
+    "members_order": "source",
+    "merge_init_into_class": True,
+    "summary": True,
+    "heading_level": 2,
+}
+
+#: The inventory every python reference here resolves against.
+_PYTHON_INVENTORY = "https://docs.python.org/3/objects.inv"
+
+
+def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stubs(
+    no_development_section: None,
+) -> None:
+    """The handler of this repository's site, and of toolroom's preview.
+
+    A path for each member that ships python modules, in the packages'
+    order, with toolroom's rendered stubs after its sources. footman
+    declines its reference, and the members that ship no module give
+    no path: clang-format, mypy, pyrefly, ruff and ty. No extension here
+    answers the members policy, so the options carry no filter.
+    """
+    assert _handlers(zensical_config(ROOT)) == {
+        "python": {
+            "paths": [
+                "packages/extensions/basedpyright/src",
+                "packages/extensions/changelog/src",
+                "packages/extensions/clang-tidy/src",
+                "packages/extensions/claude/src",
+                "packages/extensions/cmake/src",
+                "packages/extensions/lfs/src",
+                "packages/extensions/mkdocstrings/src",
+                "packages/extensions/pytest/src",
+                "packages/forge/src",
+                "packages/git/src",
+                "packages/strongroom/src",
+                "packages/toolroom/src",
+                "packages/toolroom/docs/_generated/stubs",
+                "packages/toolroom-bench/src",
+                "packages/toolroom-store/src",
+                "packages/workshop/src",
+            ],
+            "inventories": [_PYTHON_INVENTORY],
+            "options": _HANDLER_OPTIONS,
+        }
+    }
+    # The preview reads the same paths from two levels down, and
+    # resolves the rest of the site through its published inventory.
+    preview = scoped_config(ROOT, named_package(ROOT, "toolroom"))
+    assert _handlers(preview) == {
+        "python": {
+            "paths": [
+                "../../packages/toolroom/src",
+                "../../packages/toolroom/docs/_generated/stubs",
+            ],
+            "inventories": [
+                _PYTHON_INVENTORY,
+                "https://docs.willem.net/livery/objects.inv",
+            ],
+            "options": _HANDLER_OPTIONS,
+        }
+    }
