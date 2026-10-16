@@ -42,3 +42,8 @@ floor = "0.0.0"
 path = "packages/extensions/docs"
 kind = "test"
 floor = "0.0.0"
+
+[[depends]]
+path = "packages/extensions/coverage"
+kind = "test"
+floor = "0.0.0"

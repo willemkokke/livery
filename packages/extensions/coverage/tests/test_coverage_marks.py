@@ -8,10 +8,15 @@ from pathlib import Path
 
 import pytest
 
+from extensions_coverage_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    seed_copier,
+)
 from livery import git
 from livery.extensions.coverage import _marks as coverage_marks
 from livery.workshop._ci_context import state_store
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
 def _git(cwd: Path, *args: str) -> str:

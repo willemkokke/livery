@@ -1,0 +1,202 @@
+"""Seed repositories built once, for every coverage test file that imports them.
+
+A rig that inits a bare origin, clones it, commits, and pushes spends
+one to two seconds in git processes before its test starts. The
+`seeds` fixture builds such a rig once per session (once per xdist
+worker) and copies it into the test's own directory, with every
+clone's remote re-pointed at the copy, so a test still owns a
+repository nobody else touches and a push from one test never
+reaches another test's origin. A test module imports `seed_copier` and
+`_seed_home` to register them; this is not a conftest, since
+footman's suite already has one of that name and the type checkers
+read the workspace as one program.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+import pytest
+
+#: A seed builder: makes the repositories under the directory it is given;
+#: whatever it returns is ignored, so a helper that returns a path serves.
+Build = Callable[[Path], object]
+
+#: What the `seeds` fixture hands a test: copy the *key* seed, built by *build*.
+Seeds = Callable[[str, Build], Path]
+
+#: Writes the files of a seed's first commit into the clone it is given.
+Fill = Callable[[Path], None]
+
+
+def copy_seed(home: Path, key: str, build: Build, destination: Path) -> Path:
+    """Build the *key* seed under *home* once, copy it into *destination*.
+
+    The copy keeps the seed's relative layout. Every git config in the
+    copy that named the seed's path names the copy's instead, so the
+    clones' remotes are the copy's own bare repositories.
+    """
+    seed = home / key
+    if not seed.is_dir():
+        # Built in place, so the clones' remotes name the seed's own
+        # path, which the copy below rewrites; a build that fails
+        # leaves nothing behind for the next test to mistake for a seed.
+        seed.mkdir()
+        try:
+            _without_auto_maintenance(build, seed)
+        except BaseException:
+            shutil.rmtree(seed, ignore_errors=True)
+            raise
+    _copy(seed, destination)
+    # Git spells a path in its config as it was given, forward slashes
+    # on every platform where it normalises, and a backslash escaped as
+    # two; every spelling the seed's path could have taken is renamed.
+    spellings = [
+        (str(seed), str(destination)),
+        (seed.as_posix(), destination.as_posix()),
+        (str(seed).replace("\\", "\\\\"), str(destination).replace("\\", "\\\\")),
+    ]
+    for config in destination.rglob("config"):
+        bare = (config.parent / "HEAD").is_file()
+        if config.parent.name != ".git" and not bare:
+            continue
+        text = config.read_text("utf-8")
+        renamed = text
+        for old, new in spellings:
+            renamed = renamed.replace(old, new)
+        if renamed != text:
+            config.write_text(renamed, "utf-8")
+    return destination
+
+
+def _without_auto_maintenance(build: Build, seed: Path) -> None:
+    """Run *build* with git's automatic gc and maintenance off.
+
+    A commit or push may detach `git gc --auto`, which rewrites the
+    object store while the first copy reads it (seen on a macOS
+    runner: `objects/maintenance.lock` vanished mid-copy). The
+    variables reach every git the build spawns and nothing after it.
+    """
+    # Appended after the keys already in the environment (the suite's
+    # signing overlay), never in their place.
+    first = int(os.environ.get("GIT_CONFIG_COUNT", "0") or "0")
+    added = {
+        "GIT_CONFIG_COUNT": str(first + 2),
+        f"GIT_CONFIG_KEY_{first}": "gc.auto",
+        f"GIT_CONFIG_VALUE_{first}": "0",
+        f"GIT_CONFIG_KEY_{first + 1}": "maintenance.auto",
+        f"GIT_CONFIG_VALUE_{first + 1}": "false",
+    }
+    before = {key: os.environ.get(key) for key in added}
+    os.environ.update(added)
+    try:
+        build(seed)
+    finally:
+        for key, value in before.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _copy(seed: Path, destination: Path) -> None:
+    """Copy the seed, git's locks left out, retried once over a git still writing."""
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        # Only git's own lock files go: a `uv.lock` in the work tree is
+        # a file the repository tracks, and a copy without it leaves
+        # the clone one deletion away from clean.
+        if not _inside_git(Path(directory), seed):
+            return set()
+        return {name for name in names if name.endswith(".lock")}
+
+    for attempt in range(3):
+        try:
+            shutil.copytree(
+                seed, destination, dirs_exist_ok=True, symlinks=True, ignore=ignore
+            )
+            return
+        except shutil.Error:
+            if attempt == 2:
+                raise
+            time.sleep(0.5)
+
+
+def _inside_git(directory: Path, seed: Path) -> bool:
+    """Whether *directory* is one of git's own, or lies inside one.
+
+    A git directory is `.git`, or a bare repository, which is any
+    directory holding a `HEAD` file. The walk stops at *seed*, so a
+    directory outside it is never read.
+    """
+    current = directory
+    while True:
+        if current.name == ".git" or (current / "HEAD").is_file():
+            return True
+        if current == seed or current.parent == current:
+            return False
+        current = current.parent
+
+
+@pytest.fixture(scope="session")
+def _seed_home(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("seeds")
+
+
+# The fixture's name is `seeds`; the function has another name so a
+# test module can import it beside a rig whose parameter is `seeds`.
+@pytest.fixture(name="seeds")
+def seed_copier(_seed_home: Path, tmp_path: Path) -> Seeds:
+    """Copy the *key* seed, built once by *build*, into this test's directory.
+
+    Returns the test's directory; the repositories sit at the relative
+    paths *build* made them at.
+    """
+
+    def get(key: str, build: Build) -> Path:
+        return copy_seed(_seed_home, key, build, tmp_path)
+
+    return get
+
+
+def pushed(base: Path, *, clone: str = "work", fill: Fill | None = None) -> Path:
+    """Make a bare origin under *base* and a clone of it whose main is pushed.
+
+    The clone has a committer identity and one commit. Returns the
+    clone, which sits at `base / clone`, beside `base / "origin.git"`.
+
+    Args:
+        base: the directory the origin and the clone are made under.
+        clone: the clone's directory name, which a suite asserting on
+            paths chooses to read well in its own messages.
+        fill: writes the first commit's files into the clone. The
+            default writes one `seed.txt`, which a test may edit and
+            commit with `-a`.
+    """
+    origin = base / "origin.git"
+    _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
+    repo = base / clone
+    # The identity rides the clone: two processes fewer per repository,
+    # which the Windows leg pays tens of milliseconds each for.
+    _git(base, "clone", "-q", *_IDENTITY, str(origin), str(repo))
+    if fill is None:
+        (repo / "seed.txt").write_text("seed\n")
+    else:
+        fill(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "chore: seed")
+    _git(repo, "push", "-q", "-u", "origin", "main")
+    return repo
+
+
+#: The committer a seeded repository carries, set at the clone.
+_IDENTITY = ()
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)

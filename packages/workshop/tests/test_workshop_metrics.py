@@ -696,30 +696,6 @@ def test_a_job_the_forge_has_not_started_carries_no_times() -> None:
     assert running["queued_ms"] == 51000.0 and running["wall_ms"] == 60000.0
 
 
-def test_collect_drops_the_legs_measured_lines_with_its_half(
-    work: Path, tmp_path: Path
-) -> None:
-    from livery.extensions.coverage import _record as coverage_record
-
-    fake = FakeForge()
-    fake.create_repo("owner", "repo")
-    repo = fake.repository("owner", "repo")
-    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
-    why = coverage_record.leave_run(
-        work, RUN, leg="check-a", scope="verified", packages=(), units={}
-    )
-    assert why == ""
-    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
-    ref = _metrics.run_ref(RUN, "check-a")
-    held = git.read(state_store(work), ref).files
-    assert held is not None
-    assert set(held) == {_metrics.ROW_FILE, coverage_record.RUN_FILE}
-    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
-    assert f"  {ref}: dropped" in lines
-    assert git.read(state_store(work), ref).files is None
-    assert coverage_record.run_legs(work, RUN) == ([], "")
-
-
 # --- the run's sections: folded into the run's file, rendered as a trend ------
 
 

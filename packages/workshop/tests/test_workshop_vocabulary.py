@@ -380,14 +380,42 @@ VERB_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
 
 
 def _coverage_verbs() -> set[str]:
-    """The coverage extension's verbs, read from its plugin's group."""
-    from livery.footman import _registry as registry
+    """The coverage extension's verbs, read as data from its plugin's task tree.
 
-    with registry.capture():
-        from livery.extensions.coverage import _tasks
+    The plugin the extension's declaration names is a ``footman.tasks``
+    entry point. A fresh interpreter loads that entry point alone and
+    prints the tree footman built from it, so this suite imports no
+    module of the extension. Skips while coverage is not installed.
+    """
+    import json
+    import subprocess
+    import sys
+    from importlib.metadata import entry_points
 
-        group = _tasks.coverage_group
-        return {f"{group.name}.{name}" for name in group.tasks}
+    from livery.workshop._extensions import installed_declaration
+
+    skip_unless_installed("coverage")
+    declared = installed_declaration("coverage")
+    assert declared is not None and declared.plugin
+    (entry,) = entry_points(group="footman.tasks", name=declared.plugin)
+    probe = (
+        "import json, sys\n"
+        "from importlib import import_module\n"
+        "import livery.footman as footman\n"
+        "import_module(sys.argv[1])\n"
+        "groups = footman.task_tree()['groups']\n"
+        "print(json.dumps({name: sorted(group['tasks'])"
+        " for name, group in groups.items()}))\n"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", probe, entry.value],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    groups: dict[str, list[str]] = json.loads(run.stdout)
+    return {f"{name}.{task}" for name, tasks in groups.items() for task in tasks}
 
 
 def verb_scan(src: Path, verbs: set[str]) -> Counter[tuple[str, str]]:

@@ -983,7 +983,10 @@ def test_a_native_member_requires_the_msvc_measurer_only_while_coverage_is_liste
     assert not {"dotnet_coverage", "dotnet"} & set(_tools.write_lock(root).tools)
     # Listed, cmake measures for coverage: its [for.coverage] table
     # requires the engine on the Windows hosts alone, at cmake's site,
-    # and the lock pins it there with its SDK.
+    # and the lock pins it there with its SDK. Coverage is a
+    # distribution of its own, so the rest skips while it is not
+    # installed.
+    skip_unless_installed("coverage")
     (root / "workshop.toml").write_text(
         '[workspace]\nextensions = ["coverage"]\n\n[toolroom]\nindex = "records"\n'
     )

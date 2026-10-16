@@ -408,8 +408,8 @@ def test_a_plugin_no_distribution_declares_breaks_the_clause(
         " 'acme.nowhere', which no installed distribution declares in"
         " footman.tasks; the mount cannot mount its verbs"
     ]
-    # The workshop's wheel ships the coverage extension's plugin.
-    declaration.write_text('[extension]\nplugin = "livery.extensions.coverage"\n')
+    # The workshop's wheel ships the nanobind extension's plugin.
+    declaration.write_text('[extension]\nplugin = "livery.extensions.nanobind"\n')
     assert _names(Subject("acme_kit_plugin"), clause) == []
 
 
