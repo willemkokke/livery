@@ -57,7 +57,7 @@ PAGES = "tasks"
 #: The docs phase's step that writes the task reference, declared off:
 #: the root contract turns it on, and it renders the tasks of every
 #: providing package.
-STEP = "docs.task-reference"
+TASK_REFERENCE = "docs.task-reference"
 
 
 def task_page(owner: str, address: str) -> str:

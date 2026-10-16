@@ -93,6 +93,7 @@ def test_the_surface_is_declared() -> None:
         "contributions_for",
         "discover_packages",
         "extension_names",
+        "extension_set",
         "fix_files",
         "forge_repository",
         "forge_token",
@@ -109,6 +110,8 @@ def test_the_surface_is_declared() -> None:
         "scoped_suite",
         "selected_files",
         "shipped_content",
+        "step_enabled",
+        "step_extensions",
         "step_option",
         "testing",
         "this_forge",
@@ -124,8 +127,16 @@ def test_the_workshop_serves_no_nav_block_helper() -> None:
     # A generator writes its nav block as data, the file the docs
     # extension reads; neither the workshop nor the extension serves code
     # for it.
+    import livery.extensions.docs as docs_module
+
     with pytest.raises(AttributeError, match="rewrite_nav_block"):
         workshop_module.rewrite_nav_block  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
+    for name in ("write_nav_block", "nav_block_file", "GENERATED_DIR"):
+        with pytest.raises(
+            AttributeError,
+            match=f"module 'livery.extensions.docs' has no attribute '{name}'",
+        ):
+            getattr(docs_module, name)
 
 
 def test_the_api_serves_its_testing_kit_on_first_use_and_refuses_an_unknown_name() -> (

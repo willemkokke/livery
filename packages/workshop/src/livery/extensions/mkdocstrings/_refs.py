@@ -151,8 +151,8 @@ def _authored_pages(
     the build writes is not authored: a member's generated tree, and
     the root tree's mounts and generated sections.
     """
-    from livery.extensions.docs._navblocks import GENERATED_DIR
-    from livery.extensions.docs._site import SITE_TREES
+    from livery.extensions.docs import SITE_TREES
+    from livery.extensions.mkdocstrings._pages import GENERATED_DIR
 
     trees = [("", root / "docs")]
     trees += [
@@ -183,7 +183,7 @@ def site_request(root: Path) -> dict[str, Any]:
     task reference's step on; and the sources of the members that
     decline their reference.
     """
-    from livery.extensions.docs._taskref import STEP, advertised_providers
+    from livery.extensions.docs import TASK_REFERENCE, advertised_providers
     from livery.extensions.mkdocstrings._config import options as handler_options
     from livery.extensions.mkdocstrings._pages import (
         API_DIR,
@@ -191,8 +191,7 @@ def site_request(root: Path) -> dict[str, Any]:
         documented,
         pages,
     )
-    from livery.workshop import discover_packages
-    from livery.workshop._extensions import enabled_steps
+    from livery.workshop import discover_packages, step_enabled
 
     packages = discover_packages(root)
     directives: list[tuple[str, str]] = []
@@ -208,7 +207,7 @@ def site_request(root: Path) -> dict[str, Any]:
     with_sources = [
         package for package in packages if (package.directory / "src").is_dir()
     ]
-    referenced = STEP in enabled_steps(root)
+    referenced = step_enabled(root, TASK_REFERENCE)
     return {
         "sources": [
             str((package.directory / "src").resolve()) for package in with_sources
@@ -530,7 +529,7 @@ def _task_docstrings(
     a provider prints while it is imported stays out of the answer.
     """
     import livery.footman as footman
-    from livery.extensions.docs._taskref import task_page
+    from livery.extensions.docs import task_page
 
     with contextlib.redirect_stdout(sys.stderr):
         for index, (identity, _member) in enumerate(providers):

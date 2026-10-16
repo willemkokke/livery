@@ -723,14 +723,16 @@ need none of these once they are words).
 **The docs extension's own public API**, `livery.extensions.docs`,
 for generator extensions alone, since nobody imports an extension but
 the workshop that mounts it and an extension that requires it. A
-package's generator writes data the extension reads. Each name
-arrives when an extension that requires docs needs it; none has yet:
+package's generator writes data the extension reads, such as its nav
+block. Each name arrives when an extension that requires docs needs
+it; mkdocstrings needed these (step 8's P2a):
 
 | Name | Purpose | Users |
 | --- | --- | --- |
-| `Page` | one generated page: path, title, nav position; what a generator's `run` returns | mkdocstrings (phase 11), doxygen (phase 12), the task reference and coverage pages |
-| `GENERATED` | the generated tree's name under a package's `docs/` | generators |
-| `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the members policy's values | mkdocstrings |
+| `Scope`, `Writer` | the types of the `docs.config` answer | mkdocstrings |
+| `MEMBERS`, `PUBLIC_MEMBERS`, `ALL_MEMBERS` | the `docs.members` query and its policy's values | mkdocstrings |
+| `SITE_TREES` | the site's trees a generator places pages under | mkdocstrings |
+| `TASK_REFERENCE`, `advertised_providers`, `task_page` | the task reference step's name, the providers it documents, a task's page | mkdocstrings |
 
 ### What leaves the public surface, and the break each causes
 
@@ -1322,7 +1324,11 @@ extension's distribution, is built after N1 and before P1b merges.
    because a creation never installs. P1a (built, #1667) makes
    `undeployed` public; P1b (built, #1667) moves cmake to
    `packages/extensions/cmake`, distribution `livery-extensions-cmake`
-   0.0.0, with its tests and fixture, after the one-kind work.
+   0.0.0, with its tests and fixture, after the one-kind work. P2a
+   (built, #1708) makes public what mkdocstrings reads: the workshop's
+   `extension_set` (in composition order), `step_extensions` and
+   `step_enabled`, `step_option` answering from the installed
+   declaration, and the docs extension's entry module.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension

@@ -1205,12 +1205,12 @@ def test_the_workspace_sheet_is_listed_last_while_it_exists(tmp_path: Path) -> N
 def extensioned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A workspace listing the base and a theme extension whose content is faked."""
     from livery.extensions.docs import _site
+    from livery.workshop import shipped_content as real
 
     root = _workspace(tmp_path, docs_table='extensions = ["acme.theme"]\n')
     content = tmp_path / "acme-theme-content"
     (content / "docs" / "assets").mkdir(parents=True)
     (content / "docs" / "assets" / "theme.css").write_text("body { color: red }\n")
-    real = _site.shipped_content
 
     def faked(start: Path | None = None) -> tuple[tuple[str, Path], ...]:
         return (*real(start), ("acme.theme", content))
