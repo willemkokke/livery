@@ -1678,24 +1678,17 @@ def _registry(port: int) -> str:
     return f"http://localhost:{port}/api/packages/{_e2e.E2E_OWNER}/conan"
 
 
-def _point_the_remote(url: str, cwd: Path, home: Path | None = None) -> None:
+def _point_the_remote(url: str, cwd: Path) -> None:
     """Point conan's ``workshop`` remote at *url*, as a release does first.
 
     The release's publish and its serving probe both run this command
     before they upload or list. It goes to the conan home the process
-    environment names, or to *home*: a runner's job runs with its
-    runner's home.
+    environment names.
     """
     from livery.extensions.conan import _package
 
     added = _package._conan(  # pyright: ignore[reportPrivateUsage]
-        cwd,
-        "remote",
-        "add",
-        _package.CONAN_REMOTE,
-        url,
-        "--force",
-        env={"CONAN_HOME": str(home)} if home is not None else None,
+        cwd, "remote", "add", _package.CONAN_REMOTE, url, "--force"
     )
     assert added.code == 0, added.stderr
 
@@ -1712,14 +1705,6 @@ def _remotes(home: Path, cwd: Path) -> dict[str, str]:
     assert listed.code == 0, listed.stderr
     entries = json.loads(listed.stdout)
     return {str(entry["name"]): str(entry["url"]) for entry in entries}
-
-
-def _runner_home(environment: _devenv.Environment) -> Path:
-    """The conan home the first runner's configuration hands its jobs."""
-    config = (environment.runner_dir(1) / "config.yaml").read_text()
-    found = re.search(r"^    CONAN_HOME: (.+)$", config, re.M)
-    assert found is not None, config
-    return Path(found.group(1))
 
 
 @pytest.fixture
@@ -1836,26 +1821,26 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     first = _e2e.enter_environment("e2e")
     assert first.url == "http://localhost:47615"
     # The release points the remote at the pass's forge from the host, in
-    # the home the pass runs conan with, and from the runner, in the home
-    # its configuration hands the jobs.
+    # the home the pass runs conan with. A runner's job points it in its
+    # own home, under the job's temp, which goes with the job: the
+    # runner's configuration hands its jobs no home.
     _point_the_remote(_registry(47615), tmp_path)
-    _point_the_remote(_registry(47615), tmp_path, home=_runner_home(first))
+    assert "CONAN_HOME" not in (first.runner_dir(1) / "config.yaml").read_text()
     first_home = Path(os.environ["CONAN_HOME"])
     assert _remotes(first_home, tmp_path)["workshop"] == _registry(47615)
     second = _e2e.enter_environment("e2e", fresh=True)
     assert second.url == "http://localhost:57713"
-    # Before the second pass's release runs, no home that the pass or its
-    # runner builds with names the first forge.
+    # Before the second pass's release runs, the home the pass builds
+    # with names no earlier forge.
     pass_home = Path(os.environ["CONAN_HOME"])
-    for home in (pass_home, _runner_home(second)):
-        assert not [url for url in _remotes(home, tmp_path).values() if "47615" in url]
+    assert not [url for url in _remotes(pass_home, tmp_path).values() if "47615" in url]
     _point_the_remote(_registry(57713), tmp_path)
     assert _remotes(pass_home, tmp_path)["workshop"] == _registry(57713)
     # Both homes are the environment's own, and the job's home never held
     # the loop's remote.
     assert first_home == pass_home == second.conan_home
     assert pass_environment["CONAN_HOME"] == str(second.conan_home)
-    assert _runner_home(second) == second.runner_dir(1) / "conan"
+    assert "CONAN_HOME" not in (second.runner_dir(1) / "config.yaml").read_text()
     assert "workshop" not in _remotes(job_home, tmp_path)
     # A pass that is not fresh keeps the environment, its forge, and the
     # remote that names it.

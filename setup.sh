@@ -8,8 +8,37 @@
 # environment entered here -> the native members built against it.
 # Source it to enter this shell; `setup.sh github` persists the
 # emission (GITHUB_ENV/GITHUB_PATH) for the CI steps after it, which
-# then call fm bare.
+# then call fm bare, and a GitLab job sources `setup.sh gitlab`,
+# whose shell runs the job's later lines.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# On a CI job conan's home is always the job's own: conan's cache takes
+# one process at a time, and a runner may run several jobs at once, so
+# a home the runner sets for every job is not used. A GitHub job keeps
+# it under its temp, RUNNER_TEMP. A GitLab job keeps it in its checkout,
+# CI_PROJECT_DIR, a path no two jobs running at once share, under
+# .workshop/, which git ignores. The native members build through conan
+# in `fm sync --locked` below, so the home is placed before it, and
+# a job whose runner names no such directory stops here. Called with
+# the variable's name, its value, and the home under it.
+_job_conan_home() {
+    if [ -z "$2" ]; then
+        echo "setup: this job's runner sets no $1; a job keeps conan's home" \
+            "in a directory of its own, so run it on a runner that sets one" >&2
+        return 1
+    fi
+    if [ ! -d "$2" ]; then
+        echo "setup: $1 names $2, which is not a directory; a job keeps" \
+            "conan's home in it, so its runner must create it first" >&2
+        return 1
+    fi
+    if [ -n "${CONAN_HOME:-}" ] && [ "$CONAN_HOME" != "$3" ]; then
+        echo "setup: conan's home is $3, this job's own; the runner's" \
+            "CONAN_HOME, $CONAN_HOME, is not used, since conan's cache takes" \
+            "one process at a time" >&2
+    fi
+    CONAN_HOME="$3"
+    export CONAN_HOME
+}
 # On a GitHub job uv's cache and the runner's data directory, the tool
 # store under it, live under the runner's temp, the working drive. On
 # a Windows runner the working drive is not the home directory's: a
@@ -21,10 +50,16 @@ _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # below for every later step. A placement the job already carries
 # stands: a runner that keeps its caches across jobs sets them in its
 # own environment, and the temp is only where nothing is set.
-if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
+if [ "${1:-}" = github ]; then
+    _job_conan_home RUNNER_TEMP "${RUNNER_TEMP:-}" "${RUNNER_TEMP:-}/conan" \
+        || { return 1 2>/dev/null || exit 1; }
     UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
     FOOTMAN_DATA_DIR="${FOOTMAN_DATA_DIR:-$RUNNER_TEMP/footman}"
     export UV_CACHE_DIR FOOTMAN_DATA_DIR
+elif [ "${1:-}" = gitlab ]; then
+    _job_conan_home CI_PROJECT_DIR "${CI_PROJECT_DIR:-}" \
+        "${CI_PROJECT_DIR:-}/.workshop/conan" \
+        || { return 1 2>/dev/null || exit 1; }
 fi
 # uv at the lock's pin, the version the venv carries: every sync in
 # this job, this script's and fm's own, runs the same uv and

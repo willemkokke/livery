@@ -243,7 +243,7 @@ WINDOWS_TEMP_VALUES = ("runner", "system")
 
 
 def runner_placements(environ: dict[str, str]) -> dict[str, str]:
-    """What a GitHub job places under the runner's temp: uv's cache, the data directory.
+    """What a GitHub job places under the runner's temp: its caches and conan's home.
 
     The runner's temp is the working drive, where the checkout and the
     venv are; on a Windows runner the home directory is another drive,
@@ -251,27 +251,50 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     cache into the venv. The entry script exports the same paths
     before its sync and materialise, since it runs before any verb
     can; the workflow's cache step restores and saves the store under
-    the data directory. conan's home joins them, on the working drive
-    and at the path the workflow's own cache step restores. Empty off
-    a runner that names no temp. A key the job's environment already
-    sets keeps its value, and that value is what gets persisted: a
-    runner with a persistent cache sets the key for every step and
-    loses nothing, and the entry script, which exports the same keys
-    for its own sync before it asks for the emission, hands them on to
-    the steps after it, where an export of a step's shell never
-    reaches by itself.
+    the data directory. Empty off a runner that names no temp.
+
+    uv's cache and the data directory take many processes at once, so
+    a key the job's environment already sets keeps its value, and that
+    value is what gets persisted: a runner with a persistent cache sets
+    the key for every step and loses nothing, and the entry script,
+    which exports the same keys for its own sync before it asks for
+    the emission, hands them on to the steps after it, where an export
+    of a step's shell never reaches by itself.
+
+    Conan's home is different: conan's cache takes one process at a
+    time, and a runner may run several jobs at once. So conan's home is
+    always `conan` under the runner's temp, which is the job's own, and
+    a ``CONAN_HOME`` the runner sets for every job is not used. It is
+    also the path the workflow's conan cache step restores.
+
+    Raises:
+        Failed: on a job (``GITHUB_ACTIONS`` set) whose runner names no
+            ``RUNNER_TEMP``, or when ``RUNNER_TEMP`` names no directory:
+            the job then has no directory of its own for conan's home.
     """
     from livery.footman import directory_variable
 
     runner_temp = environ.get("RUNNER_TEMP", "")
     if not runner_temp:
+        if environ.get("GITHUB_ACTIONS"):
+            fail(
+                "this job's runner sets no RUNNER_TEMP: a job keeps conan's home"
+                " in its own temporary directory, so run it on a runner that"
+                " sets one"
+            )
         return {}
-    wanted = {
+    if not Path(runner_temp).is_dir():
+        fail(
+            f"RUNNER_TEMP names {runner_temp}, which is not a directory: a job"
+            " keeps conan's home in it, so its runner must create it first"
+        )
+    shared = {
         "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
-        "CONAN_HOME": f"{runner_temp}/conan",
         directory_variable("DATA_DIR"): f"{runner_temp}/footman",
     }
-    return {key: environ.get(key) or value for key, value in wanted.items()}
+    placed = {key: environ.get(key) or value for key, value in shared.items()}
+    placed["CONAN_HOME"] = f"{runner_temp}/conan"
+    return placed
 
 
 def with_runner_placements(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:
