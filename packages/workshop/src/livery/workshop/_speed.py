@@ -36,6 +36,12 @@ from livery import git
 from livery.footman import fail
 from livery.workshop._ci_context import RunContext, state_store
 
+#: The environment variable a test runner sets to the file the speed
+#: plugin writes each package's summed test time into, as JSON; with it
+#: unset the plugin sums nothing and writes nothing. It lives here, in
+#: a module that imports no pytest, so a runner reads it without pytest.
+SPEED_FILE_VARIABLE = "WORKSHOP_SPEED_FILE"
+
 #: The marks: one row per write, the newest per package and leg the
 #: mark; anyone may write, since an accept is a person's act, and the
 #: gate job's writer guards its own rule that only a run records or

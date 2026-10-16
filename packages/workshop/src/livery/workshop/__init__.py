@@ -182,6 +182,7 @@ if TYPE_CHECKING:
         nearest_extensions as nearest_extensions,
     )
     from livery.workshop._contract import read_contract as read_contract
+    from livery.workshop._examples import is_example as is_example
     from livery.workshop._extensions import contributions_for as contributions_for
     from livery.workshop._extensions import extension_names as extension_names
     from livery.workshop._extensions import shipped_content as shipped_content
@@ -220,10 +221,6 @@ if TYPE_CHECKING:
     from livery.workshop._prose import guidance as guidance
     from livery.workshop._provenance import generated_header as generated_header
     from livery.workshop._publish import discover_release as discover_release
-    from livery.workshop._pytest_examples import is_example as is_example
-    from livery.workshop._pytest_speed import (
-        SPEED_FILE_VARIABLE as SPEED_FILE_VARIABLE,
-    )
     from livery.workshop._pythons import python_matrix as python_matrix
     from livery.workshop._pythons import scripts_dir as scripts_dir
     from livery.workshop._pythons import venv_python as venv_python
@@ -246,6 +243,7 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
+    from livery.workshop._speed import SPEED_FILE_VARIABLE as SPEED_FILE_VARIABLE
     from livery.workshop._speed import SpeedMark as SpeedMark
     from livery.workshop._speed import speed_marks as speed_marks
     from livery.workshop._steps import NONE as NONE
@@ -398,8 +396,8 @@ _EXPORTS: dict[str, str] = {
     "graph_changed": "livery.workshop._steps",
     "scripts_dir": "livery.workshop._pythons",
     "venv_python": "livery.workshop._pythons",
-    "is_example": "livery.workshop._pytest_examples",
-    "SPEED_FILE_VARIABLE": "livery.workshop._pytest_speed",
+    "is_example": "livery.workshop._examples",
+    "SPEED_FILE_VARIABLE": "livery.workshop._speed",
     "SpeedMark": "livery.workshop._speed",
     "speed_marks": "livery.workshop._speed",
     "RUNS": "livery.workshop._metrics",

@@ -19,10 +19,7 @@ from pathlib import Path
 
 import pytest
 
-#: The environment variable a test runner sets to the file the speed
-#: plugin writes each package's summed test time into, as JSON; with it
-#: unset the plugin sums nothing and writes nothing.
-SPEED_FILE_VARIABLE = "WORKSHOP_SPEED_FILE"
+from livery.workshop._speed import SPEED_FILE_VARIABLE
 
 _sums: dict[str, dict[str, float]] = defaultdict(lambda: {"seconds": 0.0, "tests": 0})
 

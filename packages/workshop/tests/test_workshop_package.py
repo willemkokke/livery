@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 
 import pytest
 
@@ -172,6 +174,73 @@ def test_the_surface_is_declared() -> None:
         "workspace_root",
         "workspace_suite",
     ]
+
+
+#: The names an extension that runs python and judges its sources reads
+#: of the workshop. The workshop does not depend on pytest, so none of
+#: them may need it.
+PYTHON_READS = (
+    "Neighbours",
+    "ReferencedName",
+    "SPEED_FILE_VARIABLE",
+    "SourceReferences",
+    "SpeedMark",
+    "graph_changed",
+    "is_example",
+    "neighbours",
+    "scripts_dir",
+    "speed_marks",
+    "venv_python",
+)
+
+#: A fresh interpreter's preamble: every import of pytest fails, and
+#: what the interpreter's start-up loaded of it is forgotten first.
+_WITHOUT_PYTEST = """\
+import importlib.abc, sys
+
+BLOCKED = ("pytest", "_pytest")
+
+
+class Blocked(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path=None, target=None):
+        if name.partition(".")[0] in BLOCKED:
+            raise ImportError(f"{name} is blocked")
+        return None
+
+
+for loaded in [m for m in sys.modules if m.partition(".")[0] in BLOCKED]:
+    del sys.modules[loaded]
+sys.meta_path.insert(0, Blocked())
+"""
+
+
+def _without_pytest(body: str) -> subprocess.CompletedProcess[str]:
+    """Run *body* in a fresh interpreter in which importing pytest fails."""
+    return subprocess.run(
+        [sys.executable, "-c", _WITHOUT_PYTEST + body],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_the_names_python_reads_need_no_pytest() -> None:
+    # The block bites first: a pytest plugin of the workshop cannot load
+    # in that interpreter, so a name served from one would fail there.
+    refused = _without_pytest("import livery.workshop._pytest_examples\n")
+    assert refused.returncode != 0
+    assert "ImportError: pytest is blocked" in refused.stderr
+    found = _without_pytest(
+        "from livery.workshop import SPEED_FILE_VARIABLE, SpeedMark, is_example,"
+        " speed_marks\n"
+        "import livery.workshop as workshop\n"
+        f"for name in {PYTHON_READS!r}:\n"
+        "    getattr(workshop, name)\n"
+        "print(sorted(m for m in sys.modules if m.partition('.')[0] in BLOCKED))\n"
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout == "[]\n"
+    assert set(PYTHON_READS) <= set(workshop_module.__all__)
 
 
 def test_the_workshop_serves_no_nav_block_helper() -> None:
