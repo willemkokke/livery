@@ -1037,50 +1037,20 @@ deliver_files = step(_deliver_files, title="deliver").opts(capture=False)
 write_generated = step(_write_generated, title="generated").opts(capture=False)
 
 
-#: Lock files the store never reads, which a workspace may still hold
-#: beside or instead of its lock: sync names each one it finds, with
-#: the verb that writes the lock the store reads, and leaves it.
-UNREAD_LOCKS = ("tools.lock", "tools.graphs")
-
-
-def unread_locks(root: Path) -> list[str]:
-    """The lock files in *root* the store never reads, in one line; empty for none."""
-    from livery.toolroom.store import LOCK_FILE
-
-    found = [
-        f"{name}/" if (root / name).is_dir() else name
-        for name in UNREAD_LOCKS
-        if (root / name).exists()
-    ]
-    if not found:
-        return []
-    names = " and ".join(found)
-    return [
-        f"  tools: the store reads {LOCK_FILE}, not {names};"
-        f" `{footman.prog()} toolroom.lock` writes it, and {names} can be deleted"
-    ]
-
-
 def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
     """Supply every locked tool through the store and write the receipts; the lines.
 
     The bundle the sites require, materialised as `fm sync` and
     `fm toolroom.sync` enter the environment, and the stubs the
     checkers read written after it: a checkout with no `toolroom.lock`
-    yet has nothing to materialise and says so. A lock file the store
-    never reads is named first, with the verb that writes the one it
-    does. *offline* supplies from the machine's store and its sources
-    alone.
+    yet has nothing to materialise and says so. *offline* supplies from
+    the machine's store and its sources alone.
     """
     from livery.toolroom.store import LOCK_FILE
     from livery.workshop._tools import current_lock, materialise, stub_lines
 
-    unread = unread_locks(root)
     if current_lock(root) is None:
-        return [
-            *unread,
-            f"  tools: no {LOCK_FILE}; `{footman.prog()} toolroom.lock` writes one",
-        ]
+        return [f"  tools: no {LOCK_FILE}; `{footman.prog()} toolroom.lock` writes one"]
     done = materialise(root, strict=False, offline=offline)
     supplied = [m for m in done if m.receipt is not None]
     installed = [m.receipt.tool for m in supplied if m.installed and m.receipt]
@@ -1090,7 +1060,6 @@ def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:
         if m.receipt is not None and m.receipt.source == "host"
     ]
     lines = [
-        *unread,
         (
             f"  tools: {len(supplied)} receipt(s), installed {', '.join(installed)}"
             if installed

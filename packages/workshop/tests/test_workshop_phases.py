@@ -327,22 +327,6 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
             " mean 'build'?",
         ),
         (
-            PACKAGE + '\n[phases.build]\nreads = ["x"]\n',
-            "phases.build.reads belongs to a step: a phase's table holds steps,"
-            " [phases.build.<step>], each with main",
-        ),
-        (
-            PACKAGE + '\n[phases.build]\npre = "{package}._steps:main"\n',
-            "phases.build.pre goes: a step is named, and a step that runs after it"
-            " names it in after",
-        ),
-        (
-            PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
-            'post = "{package}._steps:main"\n',
-            "phases.build.odd.post goes: a step is named, runs after the steps it"
-            " names in after, and does its own cleanup on failure",
-        ),
-        (
             PACKAGE + '\n[phases.build.odd]\nmain = "{package}._steps:main"\n'
             'provides = { x = "str" }\nreads = ["x"]\n',
             "phases.build.odd.reads names x, which its provides names too; a step"
@@ -369,9 +353,6 @@ def test_a_key_nobody_provides_and_an_order_with_no_start_refuse(
     ],
     ids=[
         "unknown-phase",
-        "key-of-a-step",
-        "pre",
-        "post",
         "reads-its-own",
         "no-function",
         "scope",

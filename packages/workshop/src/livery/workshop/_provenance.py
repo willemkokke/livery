@@ -58,7 +58,6 @@ def comment_style(path: Path) -> str:
 
 #: Phrases that mark a header as machine-written, for refresh.
 _MARKERS = (
-    "the template channel",
     "the workshop from workshop.toml",
     "Seeded from",
     "extension content",

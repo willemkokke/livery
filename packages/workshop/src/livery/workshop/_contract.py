@@ -7,10 +7,6 @@ package's contract in its directory. Every reader parses one through
 hand, and a key spelled with an underscore refuses at any depth,
 naming the key, its kebab-case spelling, and the file to fix. There
 is no rewrite: a wrong spelling is one edit where the refusal points.
-
-A contract read from git history is the one read that cannot be
-edited; [livery.workshop._contract.normalise_keys][] reads it as if
-its keys were spelled right, since the spelling may predate the rule.
 """
 
 from __future__ import annotations
@@ -18,7 +14,7 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from livery.footman import fail
 
@@ -62,26 +58,6 @@ def underscore_keys(table: dict[str, Any], *, prefix: str = "") -> list[str]:
     return found
 
 
-def normalise_keys(table: dict[str, Any]) -> dict[str, Any]:
-    """*table* with every key, at any depth, in kebab-case.
-
-    The lenient read for a contract that cannot be edited: one from
-    git history, where a checkout from before the rule may still
-    spell its keys with underscores.
-    """
-    normalised: dict[str, Any] = {}
-    for key, value in table.items():
-        if isinstance(value, dict):
-            value = normalise_keys(value)
-        elif isinstance(value, list):
-            value = [
-                normalise_keys(item) if isinstance(item, dict) else item
-                for item in value
-            ]
-        normalised[kebab(key)] = value
-    return normalised
-
-
 def parse_contract(text: str, *, where: str) -> dict[str, Any]:
     """Parse contract *text*; refuse a key spelled with an underscore.
 
@@ -111,57 +87,6 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
             f" Rename each key in {where}."
         )
     return data
-
-
-#: Each key a contract spells another way, by its path from the top
-#: level, to the line refusing it: the judge would call the key unknown
-#: without naming the spelling that says it. A path of one name is a
-#: whole table.
-OTHER_SPELLINGS: dict[tuple[str, ...], str] = {
-    ("release", "prove-floors"): (
-        "[release] prove-floors is not a key: [release] prove lists the"
-        " resolutions a release tests each member at, from floor, latest and"
-        ' head; prove = ["latest"] leaves the floor out'
-    ),
-    ("ci", "wheel-platforms"): (
-        "[ci] wheel-platforms is not a key: a package that holds nanobind"
-        " names the runner labels that build its platform wheels under"
-        " [nanobind] wheel-platforms"
-    ),
-    ("qa",): (
-        "[qa] is not a table: a package's coverage policy is its [coverage]"
-        " table, where coverage-floor is floor and coverage-epsilon is epsilon,"
-        " read while [workspace] extensions lists coverage"
-    ),
-    ("template",): (
-        "template is not a key: a package is what its extensions and its own"
-        " files say, and the template it was born from is read at its birth"
-        " alone; delete it"
-    ),
-    ("docs", "python-paths"): (
-        "[docs] python-paths is not a key: the directories the API reference"
-        " also reads modules from are the paths option of the step that writes"
-        " it, [phases.docs.mkdocstrings] paths, read while [workspace]"
-        " extensions lists mkdocstrings"
-    ),
-}
-
-
-def other_spellings(data: dict[str, Any]) -> list[str]:
-    """Each key of contract *data* that the contract spells another way, one line each.
-
-    Read before the judge, so the refusal names the key to write
-    ([livery.workshop._contract.OTHER_SPELLINGS][]).
-    """
-    found: list[str] = []
-    for path, line in OTHER_SPELLINGS.items():
-        table = data
-        for name in path[:-1]:
-            nested = table.get(name)
-            table = cast("dict[str, Any]", nested) if isinstance(nested, dict) else {}
-        if path[-1] in table:
-            found.append(line)
-    return found
 
 
 def spelled_list(names: tuple[str, ...] | list[str]) -> str:
@@ -252,20 +177,10 @@ def load_contract(path: Path) -> dict[str, Any]:
                 *(listing(entry).name for entry in entries),
             ]
             listed = frozenset(closure(names, installed_declaration))
-        # The check tables' spelling of a step's options is named before
-        # the judge, which would call it unknown.
-        from livery.workshop._packages import removed_option_tables
-
-        problems = (
-            removed_option_tables(data)
-            or other_spellings(data)
-            or judge(data, contract="package", where=str(path), listed=listed)
-        )
+        problems = judge(data, contract="package", where=str(path), listed=listed)
     else:
         listed = listed_extensions(data) | set(installed_set(path.parent))
-        problems = other_spellings(data) or judge(
-            data, contract="root", where=str(path), listed=listed
-        )
+        problems = judge(data, contract="root", where=str(path), listed=listed)
     if problems:
         fail(f"{path}:\n" + "\n".join(f"  {line}" for line in problems))
     _CONTRACTS[key] = copy.deepcopy(data)

@@ -432,16 +432,21 @@ enabled = false
 """
 
 
-def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
+def test_an_entry_with_brackets_a_version_or_a_scope_refuses_naming_the_spelling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
-    for spelled in ("acme.tool>=1.0", "acme.tool?", "acme.tool@linux"):
+    for spelled in (
+        "acme.tool[deep]",
+        "acme.tool>=1.0",
+        "acme.tool?",
+        "acme.tool@linux",
+    ):
         root_contract(tmp_path, f'["{spelled}"]')
         assert _extensions.closure_problems(tmp_path) == [
             f"[workspace] extensions lists {spelled!r}; an entry is a name alone,"
-            " with no version or scope: the lock pins an extension's version from"
-            " its wheel"
+            " with no brackets, version or scope: the lock pins an extension's"
+            " version from its wheel"
         ]
     # A spelling the grammar does not read is named the same way, and
     # read whole as a name no distribution declares.
@@ -452,42 +457,6 @@ def test_an_entry_with_a_version_or_a_scope_refuses_naming_the_spelling(
         for problem in problems
     )
     assert _extensions.extension_names(tmp_path) == ("acme.tool[deep",)
-
-
-def test_an_extension_entry_with_brackets_refuses_naming_enabled(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    restored_steps: None,
-) -> None:
-    fake_extensions(tmp_path, monkeypatch, tool=_DECLARED_OFF)
-    root_contract(tmp_path, '["acme.tool[typecomplete.acme]"]')
-    why = (
-        "[workspace] extensions lists 'acme.tool[typecomplete.acme]'; an entry is"
-        " a name alone, and a step acme.tool declares off is turned on with"
-        " [phases.typecomplete.acme] enabled = true in this contract"
-    )
-    assert _extensions.closure_problems(tmp_path) == [why]
-    # An option that is no step address names the address's shape.
-    root_contract(tmp_path, '["acme.tool[deep]"]')
-    assert _extensions.closure_problems(tmp_path) == [
-        "[workspace] extensions lists 'acme.tool[deep]'; an entry is a name alone,"
-        " and a step acme.tool declares off is turned on with"
-        " [phases.<phase>.<step>] enabled = true in this contract"
-    ]
-    # The mount names it and reads the name alone: the step declared
-    # off stays off.
-    from livery.footman import _registry as registry
-
-    with registry.capture():
-        assert _extensions.mount_extensions(tmp_path) == ("acme.tool",)
-    assert (
-        "[workspace] extensions lists 'acme.tool[deep]'; an entry is a name alone"
-        in capsys.readouterr().err
-    )
-    names = _steps.steps_by_name()
-    assert "lint.acme" in names
-    assert "typecomplete.acme" not in names
 
 
 def test_a_step_declared_off_is_on_where_the_root_contract_enables_it(

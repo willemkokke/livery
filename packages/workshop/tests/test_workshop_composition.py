@@ -21,7 +21,7 @@ from livery.workshop._composition import (
     order,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._declaration import Declaration, DeclarationError
+from livery.workshop._declaration import Declaration
 from livery.workshop.testing import CLAUSES, Subject
 from workshop_extension_fakes import (
     fake_extensions,
@@ -56,21 +56,6 @@ def restored_steps():
 
 
 # The refusals first.
-
-
-@pytest.mark.parametrize("key", ["compatible", "before", "after"])
-def test_an_extension_declaring_compatible_before_or_after_refuses_naming_requires(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
-) -> None:
-    fake_extensions(tmp_path, monkeypatch, odd=PACKAGE + f'{key} = ["acme.other"]\n')
-    with pytest.raises(DeclarationError) as raised:
-        _extensions.declaration("acme.odd")
-    path = tmp_path / "site" / "acme" / "odd" / "extension.toml"
-    assert str(raised.value) == (
-        f"{path}: extension.{key} is not a key: a package's set is its list and"
-        " what the list requires, so composition is requires alone; drop it, and"
-        " name in requires what this extension cannot work without"
-    )
 
 
 def test_a_requirement_joins_the_package_set_whatever_it_declares(
