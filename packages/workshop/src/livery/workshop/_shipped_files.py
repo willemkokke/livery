@@ -273,7 +273,7 @@ def _packaged(
 
     A package's own files, its native tools' configuration, come from the
     first step by name whose fragment names an extension the package
-    holds ([livery.workshop._composition.extension_set][]).
+    holds ([livery.workshop.extension_set][]).
     """
     from livery.workshop._composition import extension_set
     from livery.workshop._fragments import package_files, package_fragment

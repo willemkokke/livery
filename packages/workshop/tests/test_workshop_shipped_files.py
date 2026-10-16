@@ -11,6 +11,7 @@ from livery.footman import Failed
 from livery.workshop import _fragment_engine as engine
 from livery.workshop._fragment_engine import Fragment
 from livery.workshop._shipped_files import deliver, shipped_drift
+from workshop_installed import skip_unless_installed
 
 _REGION = (
     "# -- workshop: region rules, yours to edit; the render keeps it --\n"
@@ -45,6 +46,7 @@ def test_the_repositorys_region_comes_after_every_extensions_lines(
 def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("docs")
     root = _workspace(tmp_path / "ws", '["docs"]')
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
@@ -55,6 +57,7 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
         "  wrote .taplo.toml",
         "  wrote .vscode/extensions.json",
         "  wrote .vscode/settings.json",
+        "  wrote overrides/main.html",
         "  wrote tasks.py",
     ]
     ignored = (root / ".gitignore").read_text()
@@ -65,9 +68,13 @@ def test_a_withdrawn_extensions_lines_leave_and_the_region_stays(
     (root / ".gitignore").write_text(edited)
     assert shipped_drift(root) == []
     # The docs extension leaves the list: its lines go, the repository's
-    # line stays, and the file is still the engine's to rewrite.
+    # line stays, and the file is still the engine's to rewrite. The
+    # site's theme override, the extension's own render, goes with it.
     _workspace(root, "[]")
-    assert _composed(deliver(root)) == ["  updated .gitignore"]
+    assert _composed(deliver(root)) == [
+        "  updated .gitignore",
+        "  removed overrides/main.html: no listed extension renders it",
+    ]
     ignored = (root / ".gitignore").read_text()
     assert "site/" not in ignored
     assert "mine/\n# -- workshop: end rules --" in ignored

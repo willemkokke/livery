@@ -558,20 +558,20 @@ def test_a_sibling_no_writer_of_the_set_takes_refuses_naming_the_sibling_s_set(
         _lifecycle.declare_requirement(echo, lib, "0.1.0")
     assert str(refused.value) == (
         "packages/echo holds python, and no writer of its set takes a requirement"
-        " on packages/lib, which holds cmake, conan, cpp: a writer takes a sibling"
+        " on packages/lib, which holds cmake, cpp, conan: a writer takes a sibling"
         " of its own ecosystem alone. List an extension whose manifest takes"
         " packages/lib, or drop the dependency"
     )
     # The edge refuses before its contract changes.
-    with pytest.raises(Failed, match=re.escape("which holds cmake, conan, cpp")):
+    with pytest.raises(Failed, match=re.escape("which holds cmake, cpp, conan")):
         declare_edge(echo, lib, kind="runtime", floor="0.1.0")
     # A package that lists nothing holds no writer at all.
     with pytest.raises(
         Failed,
         match=re.escape(
             "packages/bare holds no extension, and no writer of its set takes a"
-            " requirement on packages/native, which holds nanobind, python, cpp,"
-            " conan:"
+            " requirement on packages/native, which holds cpp, conan, python,"
+            " nanobind:"
         ),
     ):
         _lifecycle.declare_requirement(bare, native, "0.1.0")
@@ -776,7 +776,7 @@ def test_a_test_edge_no_writer_takes_refuses_naming_both_sets(tmp_path: Path) ->
         _lifecycle.declare_requirement(echo, lib, "0.1.0", kind="test")
     assert str(refused.value).startswith(
         "packages/echo holds python, and no writer of its set takes a test"
-        " requirement on packages/lib, which holds cmake, conan, cpp:"
+        " requirement on packages/lib, which holds cmake, cpp, conan:"
     )
     assert _tree(tmp_path) == before
 

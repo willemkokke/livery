@@ -102,6 +102,7 @@ def test_no_rendered_python_line_is_over_the_column_limit_whatever_the_name(
     tmp_path: Path, package_name: str
 ) -> None:
     """A long or short package name lands in a literal on a line of its own."""
+    skip_unless_installed("docs")
     rendered = _render_named(tmp_path, package_name)
     over = [
         (path.name, line)
@@ -206,6 +207,7 @@ def test_the_one_wheel_skip_follows_the_hosts_libc(
 
 
 def test_the_chain_seeds_parent_files_under_the_leaf(tmp_path: Path) -> None:
+    skip_unless_installed("docs")
     package = _render_chain(tmp_path)
     directory = package.directory
     # The parent's files survive beneath the leaf's.

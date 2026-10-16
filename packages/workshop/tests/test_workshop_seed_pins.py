@@ -114,16 +114,12 @@ def _as_a_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
 
     The isolation plugin puts back after the test what it found before.
     """
-    from livery.workshop import _extensions, _points, _site_files, _steps
+    from livery.workshop import _extensions, _points, _steps
 
     monkeypatch.setattr(footman, "prog", lambda: "fm")
     _steps.restore(_steps.snapshot(initial=True))
     _points.restore(_points.snapshot(initial=True))
     _extensions.restore(_extensions.snapshot(initial=True))
-    # An extension registers the site files it renders when its module is
-    # imported, and no test puts that registry back. No workspace here
-    # lists such an extension, so a process started in one renders none.
-    monkeypatch.setattr(_site_files, "_FILES", {})
 
 
 def _workspace(root: Path, listed: tuple[str, ...] = ()) -> Path:

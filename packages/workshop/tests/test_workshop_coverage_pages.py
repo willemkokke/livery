@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -22,8 +23,15 @@ from livery.extensions.coverage._format import (
 )
 from livery.extensions.coverage._record import Unit
 from livery.footman import Failed
-from workshop_coverage_meter import COVERAGE_PY, install_meter, meter, stored_unit
+from workshop_coverage_meter import (
+    COVERAGE_PY,
+    install_meter,
+    leave_part,
+    meter,
+    stored_unit,
+)
 from workshop_coverage_pages import read_page
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -38,7 +46,12 @@ def _workspace(
     monkeypatch: pytest.MonkeyPatch,
     listed: str = '["docs", "acme.meter", "coverage"]',
 ) -> Path:
-    """A workspace whose member ``core`` holds ``mod.py`` and an htmlcov report."""
+    """A workspace whose member ``core`` holds ``mod.py`` and an htmlcov report.
+
+    The report is declared in the member's ``[docs]`` table, which is the
+    docs extension's, so the test skips while docs is not installed.
+    """
+    skip_unless_installed("docs")
     install_meter(tmp_path, monkeypatch)
     root = tmp_path / "ws"
     core = root / "packages" / "core"
@@ -830,3 +843,124 @@ def test_the_tree_is_written_afresh_with_its_shared_assets(tmp_path: Path) -> No
     # A file no lexer claims is drawn as its plain text.
     assert read_page(tree / index.rows[0]["href"]).lines[1].source == "x"
     assert _render.page_name("packages/x/a.py") != _render.page_name("packages/y/a.py")
+
+
+def test_the_deploy_phase_draws_main_s_record_where_the_legs_left_no_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, '["docs", "coverage"]')
+    source = root / "packages" / "core" / "src" / "core" / "mod.c"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("int a = 1;\nint b = 2;\n")
+    # The docs phase's step pulls nothing: no data, nothing drawn.
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    assert _pages.draw(root, merged=False) == []
+    # The deploy phase's step draws the store's units in the legs' place:
+    # the parts a leg made, as main's record keeps them.
+    written = leave_part(
+        root, "packages/core", {"packages/core/src/core/mod.c": {1: 1, 2: 0}}
+    )
+    stored = stored_unit("packages/core", (json.loads(written.read_text()),))
+    written.unlink()
+    monkeypatch.setattr(
+        "livery.extensions.coverage._pages._stored",
+        lambda root: (
+            {"check-a": {"packages/core": stored}},
+            ["main/check-b: nothing recorded"],
+        ),
+    )
+    # A declared package the data never touched states the absence.
+    bare = root / "packages" / "bare"
+    bare.mkdir()
+    (bare / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-bare"\n\n[docs]\n'
+        'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    (bare / "pyproject.toml").write_text('[project]\nname = "acme-bare"\n')
+    assert _pages.draw(root, merged=True) == ["core"]
+    out = capsys.readouterr().out
+    assert "  coverage: main/check-b: nothing recorded\n" in out
+    assert "bare: no measured data; its page states the absence" in out
+    assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
+    assert not (root / "packages" / "bare" / "htmlcov").exists()
+
+
+def _region_rows(rows: list[dict[str, str]], noun: str) -> list[tuple[str, ...]]:
+    """The rows of a region index for the fixture's file, as a reader reads them.
+
+    Each row: the region, the line its link lands on, then statements,
+    missing, excluded, branches, partial, and the total coverage.
+    """
+    return [
+        (
+            row[noun],
+            row["href"].partition("#")[2],
+            row["statements"],
+            row["missing"],
+            row["excluded"],
+            row["branches"],
+            row["partial"],
+            row["coverage"],
+        )
+        for row in rows
+        if row.get("File", "").endswith("measured.py")
+    ]
+
+
+def test_a_partial_line_s_page_names_the_jump_that_never_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # coverage.py's arcs reach the pages through the pytest extension's
+    # reduction, a distribution of its own: a run of this wheel alone
+    # has none.
+    pytest.importorskip("livery.extensions.pytest")
+    from workshop_measured import measure
+
+    root = _workspace(tmp_path, monkeypatch, '["docs", "pytest", "coverage"]')
+    measure(root / "packages" / "core" / "src" / "acme" / "core" / "measured.py", root)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
+    assert _pages.draw(root, merged=False) == ["core"]
+    report = root / "packages" / "core" / "htmlcov"
+    # Each function and class has its row, narrowed to its own lines and
+    # linked to its first; the lines outside every one have a row too.
+    functions = read_page(report / "function_index.html").rows
+    assert _region_rows(functions, "function") == [
+        ("Tally.__init__", "t2", "1", "0", "0", "0", "0", "100%"),
+        ("Tally.note", "t5", "2", "0", "0", "2", "1", "75%"),
+        ("total", "t10", "6", "2", "0", "4", "2", "60%"),
+        ("unused", "t19", "0", "0", "1", "0", "0", "100%"),
+        ("(no function)", "", "9", "0", "1", "2", "0", "100%"),
+    ]
+    assert _region_rows(read_page(report / "class_index.html").rows, "class") == [
+        ("Tally", "t1", "3", "0", "0", "2", "1", "80%"),
+        ("(no class)", "", "15", "2", "2", "6", "2", "81%"),
+    ]
+    # The file's page, as the index links it: each partial line carries
+    # the partial category and names its untaken jump, with the sentence
+    # that says why. The line whose untaken jump `# pragma: no branch`
+    # waives is not partial.
+    page = next(row["href"] for row in functions if row.get("function") == "total")
+    lines = read_page(report / page.partition("#")[0]).lines
+    partial = {number: line for number, line in lines.items() if line.category == "par"}
+    assert sorted(partial) == [6, 12, 14]
+    for number, jump, sentence in (
+        (
+            6,
+            "6 ↛ exit",
+            "line 6 didn't return from function 'note' because the condition on"
+            " line 6 was always true",
+        ),
+        (
+            12,
+            "12 ↛ 13",
+            "line 12 didn't jump to line 13 because the loop on line 12 never started",
+        ),
+        (
+            14,
+            "14 ↛ 15",
+            "line 14 didn't jump to line 15 because the condition on line 14 was"
+            " never true",
+        ),
+    ):
+        assert partial[number].jumps == [jump]
+        assert partial[number].whys == [sentence]

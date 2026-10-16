@@ -357,7 +357,9 @@ Deliverables:
 - The option open 1 rules, in `contract.toml` for steps and CI jobs,
   read into one shape the engine takes; every declaration of the
   workshop, its extensions and this repository's contract in it.
-- The old spellings refuse, naming the new one.
+- An old spelling meets the ordinary refusal of an unknown key or
+  option, as the 2026-10-15 ruling on removed spellings says: no code
+  of its own refuses or rewrites it.
 
 Acceptance, the pins first:
 

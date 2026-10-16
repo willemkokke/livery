@@ -20,7 +20,6 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from itertools import takewhile
 from pathlib import Path, PurePosixPath
-from typing import Any
 
 from livery.workshop._contract import load_contract
 
@@ -350,12 +349,13 @@ RUNTIME_LANGUAGE = "python"
 
 
 def holds_runtime_language(package: Package) -> bool:
-    """Whether *package* holds the runtime's language, `RUNTIME_LANGUAGE`.
+    """Say whether *package* holds the extension of the workshop's own language.
 
-    A member holds it when it lists it, or when an extension it lists
-    requires it. The workspace's own tests hold it when the root's set
-    does. Discovery asks this of every member, so a member that lists
-    it is answered without reading any extension's declaration.
+    That extension is ``python``. A member holds it when it lists it,
+    or when an extension it lists requires it. The workspace's own
+    tests hold it when the root's set does. Discovery asks this of
+    every member, so a member that lists it is answered without
+    reading any extension's declaration.
     """
     if RUNTIME_LANGUAGE in package.extensions:
         return True
@@ -391,57 +391,6 @@ def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
             if directory.is_dir():
                 paths.append(f"{package.path}/{name}")
     return tuple(paths)
-
-
-def removed_option_tables(contract: dict[str, Any]) -> list[str]:
-    """Each ``[checks]`` or ``[roles]`` table of a package *contract*, one line each.
-
-    The check tables' spelling of a step's options: each line names
-    the table and the step spelling that says it, ``[phases.<phase>]``
-    for every step of a phase and ``[phases.<phase>.<step>]`` for one.
-    Read before the contract's judge, which would refuse the table as
-    unknown without naming what replaced it.
-    """
-    problems: list[str] = []
-    checks = contract.get("checks")
-    if "checks" in contract and not isinstance(checks, dict):
-        problems.append(
-            "[checks] is the check tables' spelling; a step's options are"
-            " [phases.<phase>.<step>]"
-        )
-    steps: dict[str, Any] = checks if isinstance(checks, dict) else {}
-    for step, table in steps.items():
-        # [checks.<step>.<phase>] is one step's table; a scalar or an
-        # empty table under [checks.<step>] is the step's in every phase.
-        nested = (
-            [str(phase) for phase, value in table.items() if isinstance(value, dict)]
-            if isinstance(table, dict)
-            else []
-        )
-        problems += [
-            f"[checks.{step}.{phase}] is the check tables' spelling; the step's"
-            f" options are [phases.{phase}.{step}]"
-            for phase in nested
-        ]
-        if not isinstance(table, dict) or len(nested) < max(len(table), 1):
-            problems.append(
-                f"[checks.{step}] is the check tables' spelling; a step's options"
-                f" are [phases.<phase>.{step}], and [phases.<phase>] reaches"
-                " every step of the phase"
-            )
-    phases = contract.get("roles")
-    if "roles" in contract and not isinstance(phases, dict):
-        problems.append(
-            "[roles] is the check tables' spelling; every step of a phase takes"
-            " [phases.<phase>]"
-        )
-    named: dict[str, Any] = phases if isinstance(phases, dict) else {}
-    problems += [
-        f"[roles.{phase}] is the check tables' spelling; every step of the phase"
-        f" takes [phases.{phase}]"
-        for phase in named
-    ]
-    return problems
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:

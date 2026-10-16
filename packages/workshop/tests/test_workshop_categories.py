@@ -23,6 +23,7 @@ from livery.workshop._packages import Package, discover_packages
 
 # The site's jobs are the docs extension's, added as the mount adds them.
 from workshop_docs_declared import docs_jobs  # noqa: F401
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
@@ -382,6 +383,8 @@ def test_explain_prints_category_channel_supplier_and_claims(
 ) -> None:
     from livery.workshop import _provenance
 
+    skip_unless_installed("docs")
+
     member = _member(tmp_path, "")
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     (member / "docs" / "examples").mkdir(parents=True)
@@ -440,6 +443,8 @@ def test_the_docs_job_reads_the_docs_and_the_readme_and_not_the_notes(
     tmp_path: Path,
 ) -> None:
     from livery.workshop._points import jobs_reading
+
+    skip_unless_installed("docs")
 
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     read = [
@@ -517,6 +522,8 @@ def test_the_docs_job_skips_a_change_it_reads_nothing_of_and_runs_otherwise(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop import _points
+
+    skip_unless_installed("docs")
 
     (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["docs"]\n')
     changed: list[str] = ["notes/musings.md"]

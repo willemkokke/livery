@@ -28,9 +28,9 @@ from livery.workshop import (
     Package,
     answer,
     discover_packages,
+    extension_set,
     read_contract,
 )
-from livery.workshop._composition import extension_set
 
 #: The extension whose packages build platform wheels.
 EXTENSION = "nanobind"

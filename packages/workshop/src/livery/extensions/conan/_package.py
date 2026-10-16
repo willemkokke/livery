@@ -218,7 +218,7 @@ def is_conan_package(member: Package) -> bool:
     reference. A member that holds conan through a consumer's recipe,
     one that names no reference, is not one.
     """
-    from livery.workshop._composition import extension_set
+    from livery.workshop import extension_set
 
     return EXTENSION in extension_set(member) and names_a_reference(member)
 
@@ -327,7 +327,7 @@ def workspace_file(root: Path, *, absolute: bool = False) -> str:
     the root while a package's set holds conan and withdraws it with
     the last package that did. A package that lists conan, or an
     extension that requires it, holds it
-    ([livery.workshop._composition.extension_set][]). The members are
+    ([livery.workshop.extension_set][]). The members are
     listed in path order.
 
     Conan finds the file by walking up from the directory a command

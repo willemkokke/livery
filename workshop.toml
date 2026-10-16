@@ -34,9 +34,10 @@ extensions = [
     # in the workshop wheel.
     "coverage",
     # The site's python API reference, its handler's tables in the
-    # site's config, and the docstring checks; shipped in the workshop
-    # wheel. It requires docs, the site's assembly and verbs, which
-    # ride in the same wheel.
+    # site's config, and the docstring checks, in a distribution of its
+    # own, livery-extensions-mkdocstrings. It requires docs, the site's
+    # assembly and verbs, in a distribution of its own,
+    # livery-extensions-docs, which the set takes in through it.
     "mkdocstrings",
     # The type checker on every platform, configured by the root mypy.ini.
     "mypy",

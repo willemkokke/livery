@@ -1,7 +1,7 @@
 """The CI run this process belongs to, and the state store built with its policy.
 
 The run context reads the runner's environment: GitHub's and Gitea's
-``GITHUB_*`` variables, GitLab's ``CI_*``. [livery.workshop._ci_context.state_store][]
+``GITHUB_*`` variables, GitLab's ``CI_*``. [livery.workshop.state_store][]
 builds the [livery.git.StateStore][] every verb reads and writes the
 workshop's series through, with the three answers the store takes as
 construction data: whether this is a CI run, the identity every commit
@@ -38,12 +38,13 @@ SNAPSHOT_VARIABLE = "WORKSHOP_SNAPSHOT"
 
 
 def state_store(root: Path) -> git.StateStore:
-    """The state store of the checkout at *root*, with the workshop's policy.
+    """Open the state store of the checkout at *root*, with the workshop's policy.
 
     A CI run may write a ``ci_only`` series and a desk may not; every
     commit the store makes is by the tools' identity
-    ([livery.git.tool_identity][]); a published listing travels in
-    `SNAPSHOT_VARIABLE`.
+    ([livery.git.tool_identity][]); a published listing travels in the
+    ``WORKSHOP_SNAPSHOT`` variable. Every series the workshop and its
+    extensions keep is read and written through it.
     """
     prog = footman.prog()
     return git.StateStore(

@@ -13,7 +13,7 @@ extension's; a phase nobody declares refuses naming the declared ones,
 and two extensions declaring one phase refuse naming both.
 
 Every phase's steps run through the one walk,
-[livery.workshop._phases.run_phase][]: each step a footman step inside
+[livery.workshop._phases.walk_steps][]: each step a footman step inside
 one ``parallel()`` block, a workspace step once and a package step
 once per package in scope, independent steps concurrently, a step
 after the steps it names in ``after`` and after the providers of the
@@ -22,8 +22,10 @@ engine around it ([livery.workshop._quality.walk][]); the release
 train and ``fm run`` run a package's lifecycle phases through it
 ([livery.workshop._lifecycle][]), the steps those of the package's set
 ([livery.workshop._phases.phase_steps][]); ``fm sync`` runs the sync
-phase's registered steps through it over the workspace. Each step
-receives the one context, [livery.workshop.PhaseContext][].
+phase's registered steps through it over the workspace, and
+[livery.workshop.run_phase][] those of any phase the gate never runs,
+first removing what a step that stopped running declared it writes.
+Each step receives the one context, [livery.workshop.PhaseContext][].
 
 A step table's ``deletes`` names steps of other extensions, each
 ``<owner>:<phase>.<step>`` with its reason, that never run for a
@@ -728,7 +730,7 @@ class _Unit:
 _POLL_SECONDS = 0.05
 
 
-def run_phase(
+def walk_steps(
     ctx: PhaseContext,
     steps: Iterable[StepRecord],
     *,
@@ -845,7 +847,7 @@ def run_registered(ctx: PhaseContext) -> PhaseContext:
 
     The steps the mount registered for ``ctx.phase``, in registration
     order: each listed extension's own, and those of the
-    ``[for.<target>]`` tables that apply. They run as `run_phase` runs
+    ``[for.<target>]`` tables that apply. They run as `walk_steps` runs
     any steps, so a phase the gate never runs, one declared with
     ``gated = false``, runs this way over the workspace its context
     names. A workspace step that names extensions runs once while a
@@ -861,13 +863,30 @@ def run_registered(ctx: PhaseContext) -> PhaseContext:
         Exception: the first failing step's, raised again once every
             step ran.
     """
+    running, _idle = _registered(ctx)
+    return walk_steps(ctx, running)
+
+
+def _registered(
+    ctx: PhaseContext,
+) -> tuple[tuple[StepRecord, ...], tuple[StepRecord, ...]]:
+    """The steps registered for ``ctx.phase``: those that run, and those that do not.
+
+    A workspace step that names extensions runs while a package the
+    context judges holds one of them, and a line says so for each one
+    that does not.
+
+    Raises:
+        PhaseError: when *ctx* names no phase.
+    """
     from livery.workshop._steps import PACKAGE, judges_unit, steps_by_name
 
     if not ctx.phase:
         raise PhaseError(
             "a run of the registered steps names its phase, and this context names none"
         )
-    records: list[StepRecord] = []
+    running: list[StepRecord] = []
+    idle: list[StepRecord] = []
     for record in steps_by_name().values():
         if record.phase != ctx.phase:
             continue
@@ -875,9 +894,195 @@ def run_registered(ctx: PhaseContext) -> PhaseContext:
         if named and not any(judges_unit(record, unit) for unit in ctx.judged):
             wanted = " or ".join(record.extensions)
             print(f"  {record.name}: no package holds {wanted}; not run")
+            idle.append(record)
             continue
-        records.append(record)
-    return run_phase(ctx, tuple(records))
+        running.append(record)
+    return tuple(running), tuple(idle)
+
+
+#: The record of what each phase's last run through `run_phase` declared
+#: it writes: the checkout's own state, never committed.
+OUTPUTS_RECORD = ".workshop/state/outputs.json"
+
+#: The prefix of an output that names a path in each package.
+IN_EACH_PACKAGE = "package/"
+
+
+def output_refusal(output: str) -> str:
+    """Why *output* cannot name what a step writes, or ``""`` when it can.
+
+    An output is a path relative to the workspace root, or
+    ``package/<path>`` for that path in each package; a directory ends
+    in ``/``. It lies below the root, or below the package, and it is
+    never ``docs/`` itself, the root's or a package's, which holds the
+    authored pages. The text completes a sentence about the output.
+    """
+    import re
+
+    inner = output.removeprefix(IN_EACH_PACKAGE)
+    where = "each package" if inner != output else "the root"
+    parts = tuple(part for part in inner.split("/") if part not in ("", "."))
+    if (
+        "\\" in output
+        or inner.startswith("/")
+        or re.match(r"[A-Za-z]:", inner)
+        or ".." in parts
+    ):
+        return (
+            f"names {output!r}, which leaves the root; an output is a path below"
+            " the root, or package/<path> for the path in each package"
+        )
+    if not parts:
+        return f"names {output!r}, {where} itself; an output is a path below it"
+    if parts == ("docs",):
+        tree = "each package's" if inner != output else "the root's"
+        return (
+            f"names {output!r}, {tree} docs/ itself, which holds the authored"
+            " pages; an output is a path below it"
+        )
+    return ""
+
+
+def _outputs_held(root: Path) -> dict[str, tuple[str, ...]]:
+    """Each phase's outputs, as its last run through `run_phase` recorded them.
+
+    A record that cannot be read, or holds another shape, records
+    nothing: the next run writes it again.
+    """
+    import json
+
+    try:
+        held = json.loads((root / OUTPUTS_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(held, dict) or held.get("schema") != 1:
+        return {}
+    phases = held.get("phases")
+    if not isinstance(phases, dict):
+        return {}
+    return {
+        phase: tuple(output for output in listed if isinstance(output, str))
+        for phase, listed in cast("dict[str, object]", phases).items()
+        if isinstance(listed, list)
+    }
+
+
+def _remove_outputs(
+    root: Path,
+    phase: str,
+    running: tuple[str, ...],
+    idle: tuple[str, ...],
+    packages: tuple[Package, ...],
+) -> None:
+    """Remove what no running step of *phase* writes, and record what they do.
+
+    Each output the phase's last run recorded, or a registered step
+    that does not run declares, goes unless a running step declares
+    it; one line names each path removed. The record then holds the
+    running steps' outputs.
+    """
+    import json
+    import shutil
+
+    held = _outputs_held(root)
+    kept = set(running)
+    stale = [
+        output
+        for output in dict.fromkeys((*held.get(phase, ()), *idle))
+        if output not in kept and not output_refusal(output)
+    ]
+    for output in stale:
+        inner = output.removeprefix(IN_EACH_PACKAGE)
+        homes = [p.directory for p in packages] if inner != output else [root]
+        for home in homes:
+            path = home / inner
+            if path.is_symlink() or path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+            else:
+                continue
+            shown = path.relative_to(root).as_posix() + (
+                "/" if output.endswith("/") else ""
+            )
+            print(f"  removed {shown}: no running step of the {phase} phase writes it")
+    recorded = tuple(sorted(kept))
+    if held.get(phase, ()) == recorded:
+        return
+    held[phase] = recorded
+    path = root / OUTPUTS_RECORD
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "schema": 1,
+        "phases": {name: list(held[name]) for name in sorted(held) if held[name]},
+    }
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+
+def run_phase(root: Path, phase: str, *, outputs: Iterable[str] = ()) -> PhaseContext:
+    """Run a phase the gate never runs over the workspace at *root*; the shared context.
+
+    The steps the listed extensions register for *phase*, their own and
+    those of the ``[for.<target>]`` tables that apply, run side by side
+    through the walk every phase runs through, each workspace step once
+    and each package step once per package whose set holds an
+    extension it names. A workspace step that names extensions runs
+    while a package holds one of them; while none does, a line says so
+    and the step does not run. A phase with no registered step runs
+    nothing.
+
+    Before the steps run, the paths a step declares under ``outputs``
+    are settled: each one the phase's last run recorded, or a step that
+    does not run now declares, is removed unless a step that runs now
+    declares it, and a line names each path removed. So a step that
+    stops running, its extension unlisted or no longer installed or the
+    step turned off, leaves nothing behind wherever it wrote, and a
+    running step finds its own output as it left it. The record lives
+    in the checkout's ``.workshop/state/``.
+
+    Args:
+        root: The workspace root.
+        phase: The phase, one declared with ``gated = false``.
+        outputs: Paths this run writes that no step declares, such as
+            those of the verbs a step runs: each in the shape a step
+            declares one, and removed and recorded as a running step's
+            are.
+
+    Returns:
+        The context the steps shared.
+
+    Raises:
+        PhaseError: when nobody declares *phase*, naming the declared
+            phases; when the gate runs it; or when an output in
+            *outputs* is not a path below the root, or names ``docs/``
+            itself.
+        Exception: the first failing step's, raised again once every
+            step ran.
+    """
+    from livery.workshop._packages import discover_packages
+
+    spec = phase_spec(phase)
+    if spec.gated:
+        raise PhaseError(
+            f"the gate runs the {phase} phase; run_phase runs a phase declared"
+            " with gated = false, and run_phase_over runs a gated phase's steps"
+            " over named packages"
+        )
+    given = tuple(outputs)
+    for output in given:
+        refusal = output_refusal(output)
+        if refusal:
+            raise PhaseError(f"an output of the {phase} phase {refusal}")
+    ctx = PhaseContext(root=root, packages=discover_packages(root), phase=phase)
+    running, idle = _registered(ctx)
+    _remove_outputs(
+        root,
+        phase,
+        (*(o for record in running for o in record.outputs), *given),
+        tuple(o for record in idle for o in record.outputs),
+        ctx.packages,
+    )
+    return walk_steps(ctx, running)
 
 
 def _judge_inputs(given: Mapping[str, Mapping[str, object]], where: str) -> None:

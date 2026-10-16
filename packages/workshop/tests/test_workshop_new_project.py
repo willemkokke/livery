@@ -201,6 +201,7 @@ def test_a_birth_writes_canonical_extensions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from workshop_extension_fakes import fake_extensions
+    from workshop_installed import skip_unless_installed
 
     # The refusal first: a set whose declared order has no start cannot
     # be written, and the birth makes no folder.
@@ -219,7 +220,9 @@ def test_a_birth_writes_canonical_extensions(
     )
     assert not (tmp_path / "acme-tools").exists()
     # The list given is written as its canonical list: an extension
-    # another one requires is left out, in composition order.
+    # another one requires is left out, in composition order. That
+    # mkdocstrings requires docs is its declaration's to say.
+    skip_unless_installed("mkdocstrings")
     _birth(local=True, extensions="ruff, mkdocstrings, docs, basedpyright")
     contract = (tmp_path / "acme-tools" / "workshop.toml").read_text()
     assert 'extensions = ["basedpyright", "mkdocstrings", "ruff"]' in contract

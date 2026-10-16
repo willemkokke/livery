@@ -198,39 +198,6 @@ def test_the_newest_release_of_a_grouped_package_is_found() -> None:
     }
 
 
-def test_the_release_history_lists_a_grouped_package_newest_first(
-    tmp_path: Path,
-) -> None:
-    from livery.extensions.docs._site import _receipt_tags
-
-    _package(tmp_path, "forge")
-    _package(tmp_path, "extensions/ruff")
-
-    def git(*args: str) -> None:
-        subprocess.run(
-            ["git", *args],
-            cwd=tmp_path,
-            capture_output=True,
-            check=True,
-        )
-
-    git("init", "-q")
-    git("commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "seed")
-    for tag in (
-        "packages/forge/v0.9.0",
-        "packages/forge/v0.10.0",
-        "packages/extensions/ruff/v0.1.0",
-        "archive/setup",
-    ):
-        git("tag", tag)
-    rows = [row[1:] for row in _receipt_tags(tmp_path)]
-    assert rows == [
-        ("forge", "livery-forge", "0.10.0"),
-        ("forge", "livery-forge", "0.9.0"),
-        ("extensions/ruff", "livery-extensions-ruff", "0.1.0"),
-    ]
-
-
 def test_an_uncut_grouped_receipt_belongs_to_its_set(tmp_path: Path) -> None:
     _package(tmp_path, "forge")
     _package(tmp_path, "extensions/ruff")
@@ -250,6 +217,22 @@ def test_a_test_node_names_its_package_at_either_depth() -> None:
         == "packages/extensions/ruff"
     )
     assert package_of("tests/test_root.py::test_y") == ""
+
+
+def test_a_grouped_member_named_like_a_package_tree_names_itself() -> None:
+    # packages/extensions/docs is a package in the extensions group, not
+    # the docs tree of a package named extensions.
+    assert (
+        package_of("packages/extensions/docs/tests/test_x.py::test_y")
+        == "packages/extensions/docs"
+    )
+    assert (
+        package_of("packages/extensions/docs/docs/examples/first.py::first")
+        == "packages/extensions/docs"
+    )
+    assert package_of("packages/forge/docs/examples/first.py::first") == (
+        "packages/forge"
+    )
 
 
 def test_a_grouped_helper_module_carries_the_group_in_its_prefix(

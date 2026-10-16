@@ -197,20 +197,6 @@ def test_a_chain_of_steps_proves_its_tree_back_to_a_full_row(
     assert [row.tree for row in proof.steps] == [third, second, first]
     assert proof.root == "full" and proof.root_tree == first
     assert proof.describe() == f"2 step(s) on a full gate of {first[:12]}"
-    # The earlier spelling's affected row is a step too.
-    fourth = _commit(work, "c.txt")
-    fresh = datetime.now(UTC).isoformat(timespec="seconds")
-    legacy = {
-        f"{fourth}--affected--{third}": _raw(
-            fourth, when=fresh, scope="affected", base_tree=third
-        )
-    }
-    assert (
-        git.put(state_store(work), _gate_record.SERIES.ref, legacy, message="legacy")
-        == ""
-    )
-    proof, _ = _gate_record.covering(work)
-    assert proof is not None and proof.steps[0].tree == fourth
 
 
 def test_a_chain_rests_on_a_tree_cis_record_holds(

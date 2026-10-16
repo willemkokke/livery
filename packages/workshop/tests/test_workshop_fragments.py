@@ -21,6 +21,7 @@ from livery.workshop._steps import (
     register_step,
     unregister_step,
 )
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (BaseException,)
 
@@ -197,6 +198,8 @@ def test_an_unreceipted_copy_is_adopted_when_equal_and_kept_when_not(
 def test_this_workspace_composes_no_tool_table_from_the_base_s_records() -> None:
     from livery.workshop._identity import project_facts
     from livery.workshop._templates import render_injections
+
+    skip_unless_installed("docs")
 
     root = Path(__file__).resolve().parents[3]
     injected = render_injections(root, project_facts(root))

@@ -534,54 +534,6 @@ def test_new_package_without_a_template_refuses_naming_the_installed_templates(
     assert not (root / "packages").exists()
 
 
-@pytest.mark.parametrize(
-    ("kind", "written"),
-    [
-        ("package-python", "`fm new.package thing python-library`"),
-        ("package-cpp-conan", "`fm new.package thing cpp-package`"),
-        ("package-python-nanobind", "`fm new.package thing nanobind-module`"),
-        ("package-extension", "`fm new.package thing workshop-extension`"),
-        ("package-lua", "`fm new.package thing <template>`"),
-    ],
-)
-def test_new_package_with_kind_refuses_naming_the_template_argument(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, written: str
-) -> None:
-    from livery.workshop._templates import new_package
-
-    root = _workspace(tmp_path / "acme", "python")
-    monkeypatch.setattr(
-        "livery.workshop._templates.workspace_root", lambda start=None: root
-    )
-    with pytest.raises(_FAILURES) as caught:
-        new_package("thing", "python-library", kind=kind)
-    text = str(caught.value)
-    assert (
-        "--kind is not an option: a package is born from a template, the word"
-        f" after its name; write {written}"
-    ) in text
-    assert "\n  python-library: " in text
-    assert not (root / "packages").exists()
-
-
-def test_a_contract_writing_template_refuses(tmp_path: Path) -> None:
-    from livery.workshop._contract import load_contract
-
-    root = _workspace(tmp_path / "acme", "python")
-    render_member(root, "thing", "python-library")
-    contract = root / "packages" / "thing" / "workshop.toml"
-    contract.write_text(
-        contract.read_text("utf-8") + 'template = "package-extension"\n', "utf-8"
-    )
-    with pytest.raises(_FAILURES) as caught:
-        load_contract(contract)
-    assert (
-        "template is not a key: a package is what its extensions and its own"
-        " files say, and the template it was born from is read at its birth"
-        " alone; delete it"
-    ) in str(caught.value)
-
-
 # Creation options: the refusals first, each before anything is written.
 
 #: A lua module whose flavour is required, its rocks counted, and a lua
@@ -1227,3 +1179,25 @@ def test_cpp_package_builds_and_tests_each_package_type(
         check=False,
     )
     assert (ran.returncode, ran.stdout) == (0, "acme-tool 0.0.0\n")
+
+
+def test_the_docs_seeds_live_once_in_the_base_tree() -> None:
+    # Every package's birth writes package-base first, the one home of
+    # the docs seeds; a copy in a template would shadow the base's and
+    # rot separately.
+    from livery.workshop._seeds import available_templates, template_files
+
+    seeds = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "livery"
+        / "workshop"
+        / "content"
+        / "seeds"
+    )
+    base = seeds / "package-base" / "docs"
+    assert (base / "nav.toml").is_file()
+    assert (base / "index.md.jinja").is_file()
+    assert sorted(tree.name for tree in seeds.iterdir()) == ["package-base", "project"]
+    for template in available_templates().values():
+        assert not (template_files(template) / "docs").exists(), template.name

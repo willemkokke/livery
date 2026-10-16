@@ -24,6 +24,7 @@ from livery.workshop._steps import (
     step_names,
     unregister_step,
 )
+from workshop_extension_fakes import fake_extensions
 from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
@@ -75,6 +76,30 @@ def test_an_unknown_step_name_refuses_naming_the_registry(restored_registries):
         step_for("nothing")
     with pytest.raises(_FAILURES, match="not a registered step"):
         unregister_step("nothing")
+
+
+def test_step_option_refuses_a_step_no_installed_extension_declares_naming_it(
+    restored_registries, tmp_path: Path
+) -> None:
+    from livery.footman import prog
+    from livery.workshop import step_enabled, step_extensions, step_option
+
+    package = _package(tmp_path, "one", "python")
+    refusal = (
+        "no installed extension declares the step 'lint.ghost'; install the"
+        f" extension that declares it (`{prog()} sync` installs the ones the"
+        " workspace lists), or name a step an installed extension declares"
+    )
+    with pytest.raises(_FAILURES) as refused:
+        step_option("lint.ghost", package, "enabled")
+    assert str(refused.value) == refusal
+    # The step's other readers read it the same way, and refuse alike.
+    with pytest.raises(_FAILURES) as refused:
+        step_extensions("lint.ghost")
+    assert str(refused.value) == refusal
+    with pytest.raises(_FAILURES) as refused:
+        step_enabled(tmp_path, "lint.ghost")
+    assert str(refused.value) == refusal
 
 
 def test_selected_files_refuses_a_context_that_names_no_step(tmp_path: Path) -> None:
@@ -221,7 +246,7 @@ def test_an_after_naming_a_step_the_workspace_did_not_mount_orders_nothing(
 def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
     restored_registries, tmp_path: Path
 ) -> None:
-    from livery.workshop._phases import run_phase
+    from livery.workshop._phases import walk_steps
     from livery.workshop._steps import with_earlier
 
     ran: list[str] = []
@@ -247,7 +272,7 @@ def test_a_step_after_another_phases_step_runs_once_before_both_in_the_walk(
         "lint.probe",
         "test.probe",
     ]
-    run_phase(ctx, records)
+    walk_steps(ctx, records)
     assert sorted(ran) == ["build.probe", "lint.probe", "test.probe"]
     assert ran[0] == "build.probe"
     # An after naming no registered step refuses naming the registry.
@@ -437,39 +462,64 @@ def test_an_option_on_an_unknown_address_or_an_undeclared_option_refuses(
         option_value(step_for("test.fake"), package, "workers")
 
 
-def test_a_package_option_table_in_the_check_spelling_refuses_naming_the_step_spelling(
-    tmp_path: Path,
+#: An installed extension's two steps: one with an option, and one
+#: declared off.
+_DECLARED = """\
+[phases.lint.acme-depth]
+main = "{package}._steps:noop"
+scope = "package"
+extensions = ["python"]
+
+[phases.lint.acme-depth.options.depth]
+type = "int"
+default = 1
+doc = "how deep the step reads"
+
+[phases.lint.acme-pages]
+main = "{package}._steps:noop"
+enabled = false
+"""
+
+
+def test_step_option_answers_from_the_installed_declaration_while_nothing_is_mounted(
+    restored_registries, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    said = {
-        "[checks.fake.test]\nparallel = false\n": (
-            "[checks.fake.test] is the check tables' spelling; the step's options"
-            " are [phases.test.fake]"
-        ),
-        "[checks.fake]\nparallel = false\n": (
-            "[checks.fake] is the check tables' spelling; a step's options are"
-            " [phases.<phase>.fake], and [phases.<phase>] reaches every step of"
-            " the phase"
-        ),
-        "checks = 3\n": (
-            "[checks] is the check tables' spelling; a step's options are"
-            " [phases.<phase>.<step>]"
-        ),
-        "[roles.test]\nparallel = false\n": (
-            "[roles.test] is the check tables' spelling; every step of the phase"
-            " takes [phases.test]"
-        ),
-        "roles = 3\n": (
-            "[roles] is the check tables' spelling; every step of a phase takes"
-            " [phases.<phase>]"
-        ),
-    }
-    for text, line in said.items():
-        with pytest.raises(_FAILURES) as caught:
-            _member_with(tmp_path, text)
-        assert line in str(caught.value), text
-        # The refusal comes before the contract's, which cannot name the
-        # spelling.
-        assert "has no key" not in str(caught.value), text
+    from livery.workshop import step_enabled, step_extensions, step_option
+    from livery.workshop._steps import Option
+
+    fake_extensions(tmp_path, monkeypatch, depth=_DECLARED)
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    # Nothing is mounted: the registry holds the base's own steps alone.
+    assert not {"lint.acme-depth", "lint.acme-pages"} & set(step_names())
+    package = _member_with(tmp_path, "")
+    assert step_option("lint.acme-depth", package, "depth") == 1
+    package = _member_with(tmp_path, "[phases.lint.acme-depth]\ndepth = 3\n")
+    assert step_option("lint.acme-depth", package, "depth") == 3
+    assert step_extensions("lint.acme-depth") == ("python",)
+    # The option's refusals hold as they do for a registered step.
+    with pytest.raises(_FAILURES, match="declares no option 'width'"):
+        step_option("lint.acme-depth", package, "width")
+    # A step declared on is on; one declared off is on while the root
+    # contract turns it on.
+    assert step_enabled(tmp_path, "lint.acme-depth") is True
+    assert step_enabled(tmp_path, "lint.acme-pages") is False
+    (tmp_path / "workshop.toml").write_text(
+        "[workspace]\n\n[phases.lint.acme-pages]\nenabled = true\n"
+    )
+    assert step_enabled(tmp_path, "lint.acme-pages") is True
+    # Registered, as a mount registers it, the registration answers.
+    register_step(
+        StepRecord(
+            "acme-depth",
+            "lint",
+            _noop,
+            scope=PACKAGE,
+            extensions=("cpp",),
+            options=(Option("depth", "int", 2, "how deep the step reads"),),
+        )
+    )
+    assert step_option("lint.acme-depth", _member_with(tmp_path, ""), "depth") == 2
+    assert step_extensions("lint.acme-depth") == ("cpp",)
 
 
 def test_the_deeper_table_wins_key_by_key(tmp_path: Path, python_steps: object) -> None:

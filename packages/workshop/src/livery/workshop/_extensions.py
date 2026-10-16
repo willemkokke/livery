@@ -149,12 +149,23 @@ def _readable(extension: str) -> Declaration | None:
     has one whose package ships no declaration file: the mount names
     it, and the sync installs the one this workspace builds.
     """
-    if extension == SELF:
-        return None
-    entry = _declared().get(extension)
-    if entry is None or declaration_file(entry.value.partition(":")[0]) is None:
+    if extension == SELF or not ships_declaration(extension):
         return None
     return declaration(extension)
+
+
+def ships_declaration(extension: str) -> bool:
+    """Whether an installed distribution declares *extension* and ships its file.
+
+    False for an extension no installed distribution declares, and for
+    one whose entry point names a package without a declaration file,
+    as an install whose files moved away leaves behind.
+    """
+    entry = _declared().get(extension)
+    return (
+        entry is not None
+        and declaration_file(entry.value.partition(":")[0]) is not None
+    )
 
 
 def ships_elsewhere(target: str, distribution: str) -> bool:
@@ -351,6 +362,28 @@ def _declared_steps(found: Declaration) -> list[StepRecord]:
     return records
 
 
+def installed_record(name: str) -> StepRecord | None:
+    """The step *name* as an installed extension declares it; None when none does.
+
+    *name* is ``<phase>.<step>``. The installed extensions are read in
+    name order, each one's top-level tables and its ``[for.<target>]``
+    tables alike, and the first that declares the step answers, its
+    record naming it. A declaration that cannot be read declares
+    nothing here: the mount and ``layering.graph`` name it.
+    """
+    for extension in installed_extensions():
+        try:
+            found = _readable(extension)
+        except DeclarationError:
+            continue
+        if found is None:
+            continue
+        for record in _declared_steps(found):
+            if record.name == name:
+                return replace(record, extension=extension)
+    return None
+
+
 def _named_by_steps() -> frozenset[str]:
     """The extensions a step of an installed extension names in ``extensions``.
 
@@ -477,25 +510,6 @@ def extension_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     workspace.
     """
     return tuple((name, distribution_of(name)) for name in installed_set(start))
-
-
-def _bracketed(spelled: str) -> str:
-    """Why the entry *spelled* cannot carry brackets; empty for a name alone."""
-    from livery.toolroom.store import Spec, SpecError
-
-    try:
-        spec = Spec.parse(spelled, where="[workspace] extensions")
-    except SpecError:
-        return ""
-    if not spec.options:
-        return ""
-    phase, _, step = next(iter(spec.options)).partition(".")
-    address = f"{phase}.{step}" if step else "<phase>.<step>"
-    return (
-        f"[workspace] extensions lists {spelled!r}; an entry is a name alone, and"
-        f" a step {spec.name} declares off is turned on with [phases.{address}]"
-        " enabled = true in this contract"
-    )
 
 
 def stack_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
@@ -725,9 +739,6 @@ def mount_extensions(start: Path | None = None) -> tuple[str, ...]:
     enabled = enabled_steps(start)
     contributes = _contributing(active)
     asleep = frozenset(_dormant(tuple(active), contributes))
-    for entry in _listed(start):
-        if why := _bracketed(_spelling(entry)):
-            _note(f"{why}; the mount reads the name alone")
     # The base is present before this walk; every extension joins once
     # its mount ran.
     present = [SELF]
@@ -1723,12 +1734,9 @@ def _why(names: list[str], wanted: tuple[str, ...]) -> str:
 def listing_problems(root: Path) -> list[str]:
     """Each ``[workspace] extensions`` entry spelled as more than a name.
 
-    An entry is a name. It takes no version, ``?`` or scope: an
-    extension's version comes from its wheel's metadata, and the lock
-    pins it. It takes no brackets either: a step the extension declares
-    off is turned on at the step's address, ``[phases.<phase>.<step>]
-    enabled = true``, and the refusal names that spelling. An extension
-    no installed distribution declares is
+    An entry is a name. It takes no brackets, version, ``?`` or scope:
+    an extension's version comes from its wheel's metadata, and the
+    lock pins it. An extension no installed distribution declares is
     [livery.workshop._extensions.entry_problems][]'s to name.
     """
     from livery.toolroom.store import Spec, SpecError
@@ -1740,15 +1748,12 @@ def listing_problems(root: Path) -> list[str]:
             spec = Spec.parse(spelled, where="[workspace] extensions")
         except SpecError:
             spec = None
-        if spec is None or spec.optional or spec.floor or spec.scope:
+        if spec is None or spec.options or spec.optional or spec.floor or spec.scope:
             problems.append(
                 f"[workspace] extensions lists {spelled!r}; an entry is a name alone,"
-                " with no version or scope: the lock pins an extension's version"
-                " from its wheel"
+                " with no brackets, version or scope: the lock pins an extension's"
+                " version from its wheel"
             )
-            continue
-        if why := _bracketed(spelled):
-            problems.append(why)
     return problems
 
 

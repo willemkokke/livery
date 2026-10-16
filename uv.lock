@@ -15,7 +15,9 @@ members = [
     "livery-extensions-clang-tidy",
     "livery-extensions-claude",
     "livery-extensions-cmake",
+    "livery-extensions-docs",
     "livery-extensions-lfs",
+    "livery-extensions-mkdocstrings",
     "livery-extensions-mypy",
     "livery-extensions-pyrefly",
     "livery-extensions-pytest",
@@ -808,7 +810,9 @@ dev = [
     { name = "livery-extensions-clang-tidy" },
     { name = "livery-extensions-claude" },
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-docs" },
     { name = "livery-extensions-lfs" },
+    { name = "livery-extensions-mkdocstrings", extra = ["test"] },
     { name = "livery-extensions-mypy" },
     { name = "livery-extensions-pyrefly" },
     { name = "livery-extensions-pytest" },
@@ -844,7 +848,9 @@ dev = [
     { name = "livery-extensions-clang-tidy", editable = "packages/extensions/clang-tidy" },
     { name = "livery-extensions-claude", editable = "packages/extensions/claude" },
     { name = "livery-extensions-cmake", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-docs", editable = "packages/extensions/docs" },
     { name = "livery-extensions-lfs", editable = "packages/extensions/lfs" },
+    { name = "livery-extensions-mkdocstrings", extras = ["test"], editable = "packages/extensions/mkdocstrings" },
     { name = "livery-extensions-mypy", editable = "packages/extensions/mypy" },
     { name = "livery-extensions-pyrefly", editable = "packages/extensions/pyrefly" },
     { name = "livery-extensions-pytest", editable = "packages/extensions/pytest" },
@@ -1002,6 +1008,32 @@ requires-dist = [
 ]
 
 [[package]]
+name = "livery-extensions-docs"
+version = "0.0.0"
+source = { editable = "packages/extensions/docs" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-git" },
+    { name = "livery-toolroom" },
+    { name = "livery-workshop" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "livery-forge" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-forge", marker = "extra == 'test'", editable = "packages/forge" },
+    { name = "livery-git", editable = "packages/git" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["test"]
+
+[[package]]
 name = "livery-extensions-lfs"
 version = "0.0.0"
 source = { editable = "packages/extensions/lfs" }
@@ -1017,6 +1049,30 @@ requires-dist = [
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
 ]
+
+[[package]]
+name = "livery-extensions-mkdocstrings"
+version = "0.0.0"
+source = { editable = "packages/extensions/mkdocstrings" }
+dependencies = [
+    { name = "livery-extensions-docs" },
+    { name = "livery-footman" },
+    { name = "livery-workshop" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "griffelib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "griffelib", marker = "extra == 'test'", specifier = ">=2.2.0" },
+    { name = "livery-extensions-docs", editable = "packages/extensions/docs" },
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-workshop", editable = "packages/workshop" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-mypy"
@@ -1071,6 +1127,7 @@ coverage = [
 ]
 test = [
     { name = "livery-extensions-cmake" },
+    { name = "livery-extensions-docs" },
     { name = "livery-footman" },
     { name = "livery-git" },
 ]
@@ -1079,6 +1136,7 @@ test = [
 requires-dist = [
     { name = "coverage", marker = "extra == 'coverage'", specifier = ">=7.13" },
     { name = "livery-extensions-cmake", marker = "extra == 'test'", editable = "packages/extensions/cmake" },
+    { name = "livery-extensions-docs", marker = "extra == 'test'", editable = "packages/extensions/docs" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "livery-git", marker = "extra == 'test'", editable = "packages/git" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -1295,13 +1353,9 @@ dev = [
     { name = "types-pygments" },
     { name = "types-pyyaml" },
 ]
-test = [
-    { name = "griffelib" },
-]
 
 [package.metadata]
 requires-dist = [
-    { name = "griffelib", marker = "extra == 'test'", specifier = ">=2.2.0" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-git", editable = "packages/git" },
@@ -1314,7 +1368,7 @@ requires-dist = [
     { name = "types-pygments", marker = "extra == 'dev'" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev", "test"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "markdown"

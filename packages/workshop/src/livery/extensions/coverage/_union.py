@@ -34,7 +34,7 @@ def expected_legs(root: Path, run: RunContext) -> tuple[list[str], list[str]]:
     every other event runs them all. Both empty without a root
     contract, as a test workspace may be.
     """
-    from livery.workshop._points import check_legs, pull_request_legs
+    from livery.workshop import check_legs, pull_request_legs
 
     if not (root / "workshop.toml").is_file():
         return [], []
@@ -110,8 +110,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         run_contexts,
         run_legs,
     )
-    from livery.workshop import ci_run
-    from livery.workshop._verified import AFFECTED, FULL, NOTHING, VERIFIED
+    from livery.workshop import LegScope, ci_run
 
     # The floors read the union file this run writes, and no other.
     (root / UNION).unlink(missing_ok=True)
@@ -168,13 +167,13 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 f"leg {leg.key} names no label, so no record can supply what it"
                 " skipped; the job runner sets WORKSHOP_LEG for every leg"
             )
-        if leg.scope in (VERIFIED, NOTHING):
+        if leg.scope in ("verified", "nothing"):
             print(f"  coverage: leg {leg.label} ran {leg.scope!r}: no suite, no data")
         elif leg.scope == ABSENT:
             pass
-        elif leg.scope in (FULL, AFFECTED, MEASURED):
-            marker = {"scope": leg.scope, "packages": list(leg.packages), "leg": ""}
-            expected = suites_that_ran(marker, root, packages)
+        elif leg.scope in ("full", "affected", MEASURED):
+            ran_scope = LegScope(leg.scope, leg.packages)
+            expected = suites_that_ran(ran_scope, root, packages)
             missing = [unit.path for unit in expected if unit.path not in leg.units]
             if missing:
                 fail(
@@ -462,19 +461,21 @@ def _record_bases(root: Path, run: RunContext) -> tuple[tuple[str, ...], str]:
     alone, and its full gate measured everything anyway.
     """
     from livery.extensions.coverage._record import MAIN, record_bases
-    from livery.workshop._verified import record, tree_id
+    from livery.workshop import verified_branch
 
     if run.event == "push":
-        row, why = record(root, tree_id(root))
-        branch = row.branch if row is not None else ""
-        if why:
-            print(f"  coverage record: the verified row could not be read ({why})")
-        elif branch:
+        proving = verified_branch(root)
+        if proving.reason:
             print(
-                f"  coverage record: {MAIN} takes {branch}'s record for the tree"
-                " it proved"
+                "  coverage record: the verified row could not be read"
+                f" ({proving.reason})"
             )
-        return record_bases(branch), MAIN
+        elif proving.branch:
+            print(
+                f"  coverage record: {MAIN} takes {proving.branch}'s record for"
+                " the tree it proved"
+            )
+        return record_bases(proving.branch), MAIN
     if run.event == "pull_request" and run.head_ref:
         return record_bases(run.head_ref), run.head_ref
     return (MAIN,), ""

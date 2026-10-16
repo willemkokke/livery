@@ -256,8 +256,7 @@ def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]]:
     build draws the local data a gate run left, or states the absence.
     """
     from livery.git import remote_snapshot
-    from livery.workshop._ci_context import state_store
-    from livery.workshop._points import check_legs
+    from livery.workshop import check_legs, state_store
 
     with remote_snapshot(state_store(root), fetch=("coverage/main/",)):
         return stored_rows(root, check_legs(root))

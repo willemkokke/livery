@@ -263,12 +263,13 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ),
     ("_entry", "conan"): (
         1,
-        "the entry script's note on what a native member builds with;"
-        " the toolchains, phase 14",
+        "the entry script's note on what a native member builds with, and"
+        " the job's own conan home; the toolchains, phase 14",
     ),
     ("_env_tasks", "conan"): (
-        1,
-        "a GitHub job's conan home; the CI placement review, #1534",
+        3,
+        "a GitHub job's conan home, and the two refusals of a job with no"
+        " temp of its own to keep it in (#1715); the CI placement review, #1534",
     ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),
@@ -280,10 +281,6 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_new_project", "mkdocstrings"): (
         1,
         "fm new.project writes the stock list, as ruled",
-    ),
-    ("_contract", "mkdocstrings"): (
-        1,
-        "the refusal of [docs] python-paths names the step option that replaces it",
     ),
 }
 

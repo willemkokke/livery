@@ -38,7 +38,11 @@ the wrong type and a value outside its allowed set each refuse on
 read, naming the file, the key, what the table takes, and the nearest
 spelling. An extension's keys are taken in the root's contract while
 the installed set holds it, and in a package's contract while the
-root's set or the package's own set holds it. The base declares its
+root's set or the package's own set holds it. While a list names an
+extension no installed distribution declares, what that extension
+requires is unknown, so no installed extension's key refuses as one no
+list takes until `fm sync` installs it; a key no installed extension
+declares still refuses. The base declares its
 own keys the way an extension does, in the `contract.toml` its
 package ships beside its code, the keys of `extension.toml` among
 them.
@@ -139,7 +143,8 @@ spelling. Every key is optional to the mount:
   `enabled = false` registers only while the root contract turns it on
   at the step's own address, `[phases.<phase>.<step>] enabled = true`;
 - `[for.<target>]`, the same tables, read only while the target is
-  listed, its `[for.<target>.queries]` answers, its
+  installed and applied only while it is listed, its
+  `[for.<target>.queries]` answers, its
   `[for.<target>.fragments]` files and its
   `[for.<target>.toolroom] requires` among them: cmake's
   `[for.coverage]` table requires Microsoft's coverage engine on
@@ -694,80 +699,32 @@ rendered template reads any workspace-level query by its name,
 `queries['python.dev-group']`. The docs extension answers
 `python.docs-group` with zensical, the site's builder, and the
 mkdocstrings extension with its python handler, so a workspace that
-lists neither composes an empty `docs` group. The docs extension
-declares three more queries. The site's config, `docs.config`: an
-extension that adds tables to it answers with the function that
-writes them for the packages a config covers, every package for the
-site and one for a package's preview; the docs extension joins each
-answer's tables after its own, in composition order, a table two
-answers write refuses naming both, and the joined config must parse.
-The site's private-members policy, `docs.members`: `public` keeps the
-API reference's default filter, `all` documents every member, the
-nearest answer wins, and any other value refuses naming both. The
-theme block,
-`docs.theme`: a table of the block's values (`language`, `font.text`,
-`font.code`, `features`, `palette`) a theme extension answers in part,
-each key over the base's block from the nearest answer setting it, the
-one no other answer setting it requires; two answers setting one key
-while neither requires the other refuse, naming both, and so does an
-unknown key.
+lists neither composes an empty `docs` group.
 
-The docs extension also declares two phases of its own, both at the
-workspace level, outside the gate and with no verb; their steps run
-side by side, and a failing one is named and stops the verb. Every docs
-verb runs the `docs` phase before it assembles the site's config: its
-`generators` step runs the verbs each package names under `[docs]
-generators`, each once, at the root, and its `task-reference` step
-writes the task reference of every package that advertises
-`footman.tasks` entry points, declared off until the root contract
-turns it on with `[phases.docs.task-reference] enabled = true`. Before
-the phase runs, the verb removes every generated tree, each package's
-`docs/_generated/` and the root's, which the phase's steps and the
-extension's own passes write again. So a step that no longer runs, its
-extension unlisted or the step turned off, leaves no page and no nav
-block behind.
-`fm docs.publish` runs the `deploy` phase on the built site just before
-it publishes it, then puts each declared coverage report's tree into
-the site. A listed extension that requires docs adds its steps to
-either phase at its top level, and any other in its `[for.docs]`
-table, while docs is listed.
+The documentation site is an extension of its own,
+`livery-extensions-docs`, listed as `docs`. It owns the site's
+assembly, the `docs` verbs, the `docs.config`, `docs.members` and
+`docs.theme` queries, and the `docs` phase every docs verb runs before
+it assembles the site's config and the `deploy` phase `fm docs.publish`
+runs on the built site, and it arrives through its own task entry
+point. A package's `[docs]` table is the extension's whole, so it
+refuses, naming docs, while the workspace does not list the extension.
+The base reads no `[docs]` table and imports no extension, which
+`layering.base-imports-no-extension` enforces.
 
-The python API reference is an extension inside the workshop wheel,
-`livery.extensions.mkdocstrings`, listed as `mkdocstrings` after docs,
-which it requires. Its `mkdocstrings` step of the docs phase runs once
-for each package whose set holds python and writes the package's
-reference into its generated tree: a page per module of each of its
-roots under `api/`, public modules before private ones at every level,
-each page one directive the handler renders with the module's members,
-and the `api` nav block that lists them. The site places that block
-after the section's other entries, unless the package's `nav.toml`
-places it with a marker pair. A package that declines with
-`[docs] api = false` gets neither. The step's `paths` option names
-further directories, relative to the package, the python handler reads
-modules from after the package's sources, such as stubs a generator
-renders:
-
-```toml
-[phases.docs.mkdocstrings]
-paths = ["docs/_generated/stubs"]
-```
-
-The extension answers `docs.config` with the python handler's tables:
-the search paths of the packages the config covers, the inventories,
-with the published site's own for a preview, and the handler's
-options, with an empty filter list when `docs.members` answers `all`.
-A workspace that does not list it renders no API reference and no
-handler table, and installs no mkdocstrings: the extension answers
-`python.docs-group` with `mkdocstrings-python`, which also brings
-griffe, the library `lint.docrefs` reads the sources with. It also
-holds the two lint steps that judge the docstrings the reference
-publishes: `lint.docrefs`, every cross-reference in a docstring the
-site renders names an anchor the site renders, and `lint.docstrings`,
-every name a python package exports has a docstring.
+The python API reference is an extension of its own,
+`livery-extensions-mkdocstrings`, listed as `mkdocstrings`; it requires
+docs. Its step of the docs phase writes each python package's reference
+into the package's generated tree, a page per module and the `api` nav
+block that lists them, and it answers `docs.config` with the python
+handler's tables. It also holds the two lint steps that judge the
+docstrings the reference publishes, `lint.docrefs` and
+`lint.docstrings`. A workspace that does not list it renders no API
+reference and installs no mkdocstrings.
 
 The coverage extension, `livery.extensions.coverage`, ships in the
-workshop wheel, listed as `coverage`, and adds a step to each of those
-phases in its `[for.docs]` table, for each package whose `[docs]
+workshop wheel, listed as `coverage`, and adds a step to each of the
+docs extension's two phases in its `[for.docs]` table, for each package whose `[docs]
 coverage` names an `htmlcov` report. It draws each such package's pages
 itself, from parts in its line format: per file, the statements and the lines that
 ran, the branches with the sentence that says why an untaken one never
@@ -788,13 +745,6 @@ the package's floor: the one its contract names or the default, the
 mark it ratchets to, read beside main's record, or that nothing judges
 it. While nothing listed measures, the coverage extension is dormant
 and adds no step, and each declared report's page states the absence.
-An
-extension's site css ships in
-its wheel under `content/docs/assets/`; the build stages it under
-`docs/_extensions/` and lists it in `extra_css` in extension order, before
-the packages' declared sheets and the workspace's own
-`docs/assets/site.css`, which loads last. A
-step an extension withdraws takes its lines with it.
 
 A step is named by its phase and its own name, `test.pytest` for the
 step `pytest` of the phase `test`, and that name is everything a
@@ -850,9 +800,9 @@ category is the most specific rule's, the nearer table winning a tie
 between tables and two rules of one table never tying; every step a
 step runs `after` is registered or declared by an installed extension,
 and following them never leads back to it; an extension's
-`extension.toml` holds only declared keys, each of
-its type, and every reference in it names a function its module
-defines; importing a module a reference names registers nothing, which
+`extension.toml`, read under the name its distribution lists it by as
+the mount reads it, holds only declared keys, each of its type, and
+every reference in it names a function its module defines; importing a module a reference names registers nothing, which
 the kit proves by importing each in a process of its own; every task a
 CI job's entries name is one the extension defines, read from its
 sources; every category a step's claims name is one the workshop
@@ -909,61 +859,28 @@ in its code, such as a workspace answer that varies with which
 packages list it, is refused in a package's list and is listed in
 `[workspace] extensions` instead.
 
-The documentation site is an extension inside the workshop wheel,
-`livery.extensions.docs`, listed in `[workspace] extensions` as a
-table naming `livery-workshop` as its distribution. It owns the site's
-assembly, the `docs` verbs, the `docs.config`, `docs.members` and
-`docs.theme` queries, the `docs` and `deploy` phases, the staged
-extension css, the generators a package declares and the seam the site
-publishes through, and it arrives through its own task entry point.
-A package's `[docs]` table is the extension's whole, `api` among its
-keys, so it refuses, naming docs, while the workspace does not list
-the extension. The base reads no `[docs]` table: the extension places
-each package in the site's Packages tree at the shallowest import path
-the package's code is referenced by, and the python extension copies a
-package's `docs/` into the wheel it builds. The base imports no
-extension, which `layering.base-imports-no-extension` enforces. The
-extension lives under `livery.extensions`, a namespace any
+Every extension lives under `livery.extensions`, a namespace any
 distribution can add an extension to.
-The root contract's `[docs]` table is the extension's, `site-url`
-among its keys. A `pre_tasks` hook of the extension links each task
-name in `--help`, `--list` and `--json` rows to the task's page on the
-site, through the redirect page `tasks/<name>/` under `site-url`,
-where `<name>` is the task's address with its dots as dashes. A
-workspace whose pages live elsewhere sets a URL template in
-`[workspace] docs-url` instead, which the base's own hook hands to
+
+A task's name links to its page through a URL template. A workspace
+sets one in `[workspace] docs-url`, which the base's own hook hands to
 footman: `{path}` is the task's address joined by slashes, `{slug}`
-joined by dashes. That key comes before the site's, and footman's own
-configured `docs-url` before both.
-The site's CI comes with the extension: its `extension.toml` declares
-the gate point's `docs` job, which the verdict waits for, as
-`[ci.jobs.gate.docs]` with the task it runs; a workspace that does not
-list the extension renders no such job. The job names the function
-that lists the system packages it installs and declares the files the
-site reads, so the CI render and the shell's skip rule work without
-reading the `[docs]` table. A contributed job sits before the first
-job of its point that waits for it, else before the point's verdict
-job, else last. A table naming a job the point already has, declared,
-inherited or contributed, joins it instead of adding one; a join's
-`needs` join the needs of a job the point has of its own, and a join
-of a job the point inherits names none. A join of a point's own
-verdict job may name `judges`, tasks that judge the run: they run
-before the job collects the run's rows, and a red one stops the job
-before the verdict and the stamp, as a red builtin entry does; `judges`
-on any other job refuses. `[ci.jobs.merge.docs]` keeps
-the built site as the run's artifact on a push, and
-`[ci.jobs.merge.gate]` collects it into the gate job, adds the
-publish to the gate job's entries after its verdict, and names the
-function that answers the publish seam. So the site is built once per
-run, its deploy phase draws this run's coverage trees into it from the
-union the gate judged, and it is published from the gate job: through
-the container and ssh seams
-directly, and through the forge's pages by uploading it for the
-forge's own pages deploy, a job with no checkout and no entry. The
-extension
-renders the site's development section from the prose fragments
-the mounted extensions ship for a human reader, one page per section
-under `development/`.
+joined by dashes. That key comes before the docs extension's links
+under its `site-url`, and footman's own configured `docs-url` before
+both.
+
+An extension contributes CI jobs in its `extension.toml`, as the docs
+extension declares the gate point's `docs` job in `[ci.jobs.gate.docs]`.
+A workspace that does not list the extension renders no such job. A
+contributed job sits before the first job of its point that waits for
+it, else before the point's verdict job, else last. A table naming a
+job the point already has, declared, inherited or contributed, joins
+it instead of adding one; a join's `needs` join the needs of a job the
+point has of its own, and a join of a job the point inherits names
+none. A join of a point's own verdict job may name `judges`, tasks that
+judge the run: they run before the job collects the run's rows, and a
+red one stops the job before the verdict and the stamp, as a red
+builtin entry does; `judges` on any other job refuses.
 
 The formatter and the linter are an extension with a distribution of
 its own, `livery-extensions-ruff`, listed as `ruff`. Listed, it
@@ -1460,6 +1377,18 @@ absence.
   the pytest extension's `pytest.toml`), so two packages may share a
   test file's name; a helper module in a package's `tests/` carries
   the package's name, and the session refuses to start otherwise.
+- Every CI job keeps conan's home in a directory of its own, whatever
+  `CONAN_HOME` the runner sets for its jobs. Conan's cache takes one
+  process at a time, and a runner that takes several jobs at once
+  would otherwise have two of them write one cache. On a GitHub or
+  Gitea runner the home is `conan` under `RUNNER_TEMP`, the job's
+  temporary directory, placed by `setup.sh github`. On a GitLab runner
+  it is `.workshop/conan` under `CI_PROJECT_DIR`, the job's checkout,
+  placed by `source setup.sh gitlab`: GitLab clones each of the jobs
+  that run at the same time into its own path, and git ignores
+  `.workshop/`. The entry places the home before its sync builds a
+  native member, and refuses a job whose runner does not set that
+  variable or names a directory that does not exist.
 - `fm start`: open the work. An issue number assigns and branches
   `<kind>/<number>-<slug>`, a quoted title files the issue first, and
   `<kind>/<slug>` starts a branch that belongs to no issue, whose

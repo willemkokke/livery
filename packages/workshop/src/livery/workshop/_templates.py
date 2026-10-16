@@ -34,15 +34,6 @@ new = group(
     help="Create a project from the extensions' seeds, or a package from a template",
 )
 
-#: Each seed tree ``--kind`` named, to the template a package takes in
-#: its place, for the refusal that names it.
-REMOVED_TREES = {
-    "package-python": "python-library",
-    "package-extension": "workshop-extension",
-    "package-python-nanobind": "nanobind-module",
-    "package-cpp-conan": "cpp-package",
-}
-
 
 def _root() -> Path:
     """The workspace root, or fail."""
@@ -375,7 +366,6 @@ def new_package(
         doc("the template the package is born from (python-library, ...)"),
         suggest(template_names, strict=False),
     ] = "",
-    kind: Annotated[str, hidden] = "",
     resume: Annotated[bool, hidden] = False,
     answers: Annotated[
         dict[str, object] | None,
@@ -429,13 +419,6 @@ def new_package(
         wire_member(root, name)
         return
     prog = footman.prog()
-    if kind:
-        wanted = REMOVED_TREES.get(kind, "<template>")
-        fail(
-            "--kind is not an option: a package is born from a template, the word"
-            f" after its name; write `{prog} new.package {name} {wanted}`. The"
-            f" installed templates are:\n{_installed(root)}"
-        )
     if not template:
         fail(
             f"name the template packages/{name} is born from:"

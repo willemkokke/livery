@@ -60,11 +60,9 @@ MERGES = 5
 SERIES = git.Series("gate-record", window=KEEP, ci_only=False, local=True)
 
 #: The scopes: a full gate roots a chain; a step gates the delta from
-#: ``base_tree``. ``affected`` is the step of an earlier spelling,
-#: whose ``base_tree`` was the merge base with the base branch.
+#: ``base_tree``.
 FULL = "full"
 STEP = "step"
-AFFECTED = "affected"
 
 
 @dataclass(frozen=True)
@@ -73,8 +71,8 @@ class Row:
 
     Attributes:
         tree: The git tree id the gate proved.
-        scope: ``full``, or ``step`` (``affected`` in the earlier
-            spelling) for a gate of the delta from ``base_tree``.
+        scope: ``full``, or ``step`` for a gate of the delta from
+            ``base_tree``.
         packages: The packages a step gated; empty for ``full``, and
             for a step whose delta reached no package.
         base_tree: The proved tree a step's delta was taken from;
@@ -242,8 +240,7 @@ def chain(
     """The chain proving *tree*, or ``None`` when the rows do not reach a root.
 
     *roots* are the trees CI's record holds. Rows older than `MAX_AGE`
-    do not count; a row of an earlier spelling counts as a step. A
-    cycle or a base no row proves ends the walk empty. *found* are the
+    do not count. A cycle or a base no row proves ends the walk empty. *found* are the
     rows already read, for a caller walking many trees; the record is
     read once here otherwise.
     """
@@ -268,9 +265,7 @@ def chain(
             return Chain(tree, tuple(steps), FULL, current)
         if current in roots:
             return Chain(tree, tuple(steps), "verified", current)
-        links = [
-            row for row in candidates if row.scope in (STEP, AFFECTED) and row.base_tree
-        ]
+        links = [row for row in candidates if row.scope == STEP and row.base_tree]
         if not links:
             return None
         step = max(links, key=lambda row: row.when)

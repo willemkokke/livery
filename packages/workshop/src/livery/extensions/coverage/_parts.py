@@ -131,7 +131,7 @@ def native(package: Package) -> bool:
     set, so they are native while that set does not hold the runtime's
     language.
     """
-    from livery.workshop._packages import holds_runtime_language
+    from livery.workshop import holds_runtime_language
 
     return not holds_runtime_language(package)
 

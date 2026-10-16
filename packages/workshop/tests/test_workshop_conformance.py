@@ -194,6 +194,35 @@ def test_a_declaration_with_an_unknown_key_or_a_dangling_reference_breaks_the_cl
     assert _names(Subject("acme_kit_extension"), "declaration-validates") == []
 
 
+def test_a_declaration_is_judged_under_the_name_its_distribution_lists_it_by(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The mount reads an installed extension's file under the name its
+    # entry point declares, and so does the kit: a phase the file
+    # declares is the extension's own, never another extension's.
+    from importlib.metadata import EntryPoint
+
+    from livery.footman import (
+        _entries,  # pyright: ignore[reportPrivateUsage]
+        installed_entry_points,
+    )
+    from workshop_extension_fakes import read_afresh
+
+    package = tmp_path / "acme_kit_phased"
+    package.mkdir()
+    (package / "extension.toml").write_text(
+        "[extension]\napi-version = 1\n\n[phases.acme-site]\n"
+        'level = "workspace"\ngated = false\nverb = false\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    scanned = installed_entry_points()
+    entry = EntryPoint("phased", "acme_kit_phased", "workshop.extensions")
+    monkeypatch.setattr(_entries, "_scan", lambda: (*scanned, entry))
+    monkeypatch.setattr(_entries, "_SCAN", None)
+    read_afresh(monkeypatch)
+    assert _names(Subject("acme_kit_phased"), "declaration-validates") == []
+
+
 def test_a_reference_whose_module_registers_at_import_breaks_the_clause(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -379,7 +408,8 @@ def test_a_plugin_no_distribution_declares_breaks_the_clause(
         " 'acme.nowhere', which no installed distribution declares in"
         " footman.tasks; the mount cannot mount its verbs"
     ]
-    declaration.write_text('[extension]\nplugin = "livery.extensions.docs"\n')
+    # The workshop's wheel ships the coverage extension's plugin.
+    declaration.write_text('[extension]\nplugin = "livery.extensions.coverage"\n')
     assert _names(Subject("acme_kit_plugin"), clause) == []
 
 
@@ -569,6 +599,7 @@ def test_every_installed_extension_passes_the_declaration_clauses() -> None:
     )
     assert packages
     clauses = {
+        "declaration-validates",
         "references-register-nothing",
         "entries-name-defined-tasks",
         "claims-name-categories",

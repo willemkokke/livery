@@ -12,11 +12,10 @@ import pytest
 from livery import git
 from livery.extensions.coverage import _leg as coverage_leg
 from livery.extensions.coverage import _record as coverage_record
-from livery.workshop import _quality, _verified
+from livery.workshop import LegScope, _quality, _verified, leg_scope
 from livery.workshop._ci_context import RunContext
 from livery.workshop._gate_record import Plan
 from livery.workshop._packages import Package
-from livery.workshop._verified import read_marker
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
@@ -164,7 +163,7 @@ def test_a_push_narrows_from_the_records_nearest_proved_tree(
     assert bases == ["main"]
     assert "affected-legs: the scoped gate from the record's nearest proved tree" in out
     assert "nothing affected" in out
-    assert read_marker(root)["base_tree"] == "b" * 40
+    assert leg_scope(root).base_tree == "b" * 40
 
 
 def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
@@ -443,7 +442,7 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     assert bases == ["develop"]
     assert "affected-legs: the scoped gate against origin/develop" in out
     assert "nothing affected" in out
-    assert read_marker(root)["base_tree"] == "b" * 40
+    assert leg_scope(root).base_tree == "b" * 40
 
 
 # --- the coverage store decides which skipped suites run anyway ---------------
@@ -566,13 +565,8 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     assert gated == [("packages/x",)]
     assert reads == []
     assert "affected: packages/x" in out
-    marker = read_marker(root)
-    assert marker == {
-        "scope": "affected",
-        "packages": ["packages/x"],
-        "leg": "check-a",
-        "base_tree": "b" * 40,
-    }
+    marker = leg_scope(root)
+    assert marker == LegScope("affected", ("packages/x",), "check-a", "b" * 40)
     # The coverage leg then measures the suite no record can supply.
     ran = _measured(monkeypatch)
     measured = coverage_leg.top_up(root, (x, y, z), marker)
@@ -585,7 +579,9 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     )
     assert "packages/y runs" not in out
     assert "measuring: packages/z run for their lines alone\n" in out
-    assert measured == {**marker, "packages": ["packages/x", "packages/z"]}
+    assert measured == LegScope(
+        "affected", ("packages/x", "packages/z"), "check-a", "b" * 40
+    )
     # An unreadable record runs every skipped suite and names the reason.
     monkeypatch.setattr(
         coverage_record,
@@ -694,12 +690,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     out = capsys.readouterr().out
     assert gated == [("tests",)]
     assert "affected: tests" in out
-    assert read_marker(root) == {
-        "scope": "affected",
-        "packages": ["tests"],
-        "leg": "check-a",
-        "base_tree": "b" * 40,
-    }
+    assert leg_scope(root) == LegScope("affected", ("tests",), "check-a", "b" * 40)
     # A suite the records cannot supply runs in the coverage leg, beside
     # the unit, which stays in the scope its file names.
     del held["packages/y"]
@@ -707,9 +698,9 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     _quality.check()
     assert gated == [("tests",)]
     ran = _measured(monkeypatch)
-    measured = coverage_leg.top_up(root, (x, y), read_marker(root))
+    measured = coverage_leg.top_up(root, (x, y), leg_scope(root))
     assert ran == [("packages/y",)]
-    assert measured["packages"] == ["packages/y", "tests"]
+    assert measured.packages == ("packages/y", "tests")
     assert (
         "coverage store: packages/y runs, nothing to reuse" in capsys.readouterr().out
     )
@@ -757,8 +748,8 @@ def test_a_proved_tree_with_no_test_step_listed_measures_nothing(
         lambda root, *, leg, base="main": coverage_record.Record({}),
     )
     _quality.check()
-    marker = read_marker(root)
-    assert marker["scope"] == "verified"
+    marker = leg_scope(root)
+    assert marker.scope == "verified"
     assert coverage_leg.top_up(root, packages, marker) == marker
     assert ran == []
 
@@ -783,8 +774,8 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
 
     monkeypatch.setattr(coverage_record, "recorded", _every)
     _quality.check()
-    marker = read_marker(root)
-    assert marker["scope"] == "verified"
+    marker = leg_scope(root)
+    assert marker.scope == "verified"
     assert coverage_leg.top_up(root, packages, marker) == marker
     assert ran == []
     # The branch the verified row names is asked first, then main.
@@ -802,17 +793,12 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
         lambda root, *, leg, base="main": coverage_record.Record(moved),
     )
     _quality.check()
-    assert read_marker(root)["scope"] == "verified"
-    measured = coverage_leg.top_up(root, packages, read_marker(root))
+    assert leg_scope(root).scope == "verified"
+    measured = coverage_leg.top_up(root, packages, leg_scope(root))
     out = capsys.readouterr().out
     assert ran == [("packages/y", "tests")]
     assert "measuring: packages/y, tests run for their lines alone" in out
-    assert measured == {
-        "scope": "measured",
-        "packages": ["packages/y", "tests"],
-        "leg": "check-a",
-        "base_tree": "",
-    }
+    assert measured == LegScope("measured", ("packages/y", "tests"), "check-a")
 
 
 def test_a_prose_only_diff_says_so_and_skips(
@@ -844,7 +830,7 @@ def test_a_prose_only_diff_says_so_and_skips(
         " notes/, markdown, the root docs/ tree, or zensical.toml); the gate"
         " skips, the site build judges them" in out
     )
-    assert read_marker(root)["scope"] == "nothing"
+    assert leg_scope(root).scope == "nothing"
     # The site's own files count the same way: a docs-only change
     # with the root zensical.toml among it runs no gate on the legs.
     _stepping(monkeypatch, "zensical.toml", "docs/assets/logo.svg", "notes/a.md")

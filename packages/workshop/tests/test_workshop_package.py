@@ -34,8 +34,6 @@ SHIPPED = {
     "conan": "livery.extensions.conan",
     "coverage": "livery.extensions.coverage",
     "cpp": "livery.extensions.cpp",
-    "docs": "livery.extensions.docs",
-    "mkdocstrings": "livery.extensions.mkdocstrings",
     "nanobind": "livery.extensions.nanobind",
     "python": "livery.extensions.python",
 }
@@ -52,6 +50,11 @@ def test_the_workshop_wheel_ships_the_base_and_these_extensions() -> None:
         if entry.group == "workshop.extensions"
     }
     assert declared == SHIPPED
+    # What an extension that left needed goes with it: griffelib, which
+    # the API reference's check reads sources with, is none of the
+    # wheel's requirements, in any extra.
+    required = distribution("livery-workshop").requires or []
+    assert [line for line in required if "griffelib" in line] == []
     # The build ships the base's root and each of theirs, and no other.
     project = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text("utf-8")
@@ -75,10 +78,14 @@ def test_the_surface_is_declared() -> None:
         "PATHS",
         "PUBLIC_MODULES",
         "REQUIREMENTS",
+        "RUNS",
         "VERSION_FILES",
         "WHOLE",
+        "WORKSPACE_TESTS",
+        "Category",
         "Changes",
         "Edge",
+        "LegScope",
         "Package",
         "PhaseContext",
         "Prose",
@@ -86,22 +93,35 @@ def test_the_surface_is_declared() -> None:
         "RegistryTarget",
         "ReleaseNotes",
         "RunContext",
+        "VerifiedBranch",
         "__version__",
         "answer",
+        "category_of",
+        "check_legs",
         "ci_changes",
         "ci_run",
         "contributions_for",
         "discover_packages",
         "extension_names",
+        "extension_set",
         "fix_files",
         "forge_repository",
         "forge_token",
         "generated_header",
         "guidance",
+        "holds_runtime_language",
+        "leave_leg_file",
+        "leave_section",
+        "leg_scope",
+        "nearest_extensions",
+        "order_topologically",
+        "pull_request_legs",
         "read_contract",
         "registry",
         "release_notes",
+        "release_tag",
         "run_batched",
+        "run_phase",
         "run_phase_over",
         "scoped_files",
         "scoped_packages",
@@ -109,11 +129,16 @@ def test_the_surface_is_declared() -> None:
         "scoped_suite",
         "selected_files",
         "shipped_content",
+        "state_store",
+        "step_enabled",
+        "step_extensions",
         "step_option",
+        "tested",
         "testing",
         "this_forge",
         "this_repository",
         "undeployed",
+        "verified_branch",
         "verify_workspace",
         "workspace_root",
         "workspace_suite",
@@ -122,8 +147,7 @@ def test_the_surface_is_declared() -> None:
 
 def test_the_workshop_serves_no_nav_block_helper() -> None:
     # A generator writes its nav block as data, the file the docs
-    # extension reads; neither the workshop nor the extension serves code
-    # for it.
+    # extension reads; the workshop serves no code for it.
     with pytest.raises(AttributeError, match="rewrite_nav_block"):
         workshop_module.rewrite_nav_block  # noqa: B018  # pyright: ignore[reportAttributeAccessIssue]
 

@@ -37,7 +37,7 @@ from livery import git
 from livery.footman import Arg, doc, fail, group
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop import _stack
-from livery.workshop._contract import load_contract, normalise_keys
+from livery.workshop._contract import load_contract
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._extensions import workspace_root
 from livery.workshop._traces import drop_run
@@ -663,9 +663,7 @@ def _required_context_at(root: Path, ref: str) -> str:
         text = git.run(root, "show", f"{ref}:workshop.toml")
     except git.GitError:
         return ""
-    # History is read, never rewritten: a contract from before the
-    # kebab-case keys is normalised instead of refused.
-    data = normalise_keys(tomllib.loads(text))
+    data = tomllib.loads(text)
     return str((data.get("ci") or {}).get("required-context") or "gate")
 
 
