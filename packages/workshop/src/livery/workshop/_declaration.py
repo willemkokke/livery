@@ -73,11 +73,7 @@ tool's exit code is its tool's words (``main`` as a template, with
 ``"module:function"``, imported when it runs. The read imports
 nothing. A reference whose module is not in the extension's package,
 or whose module does not define the name at its top level, refuses
-here, read from the module's source. A ``[checks]`` table or an
-``[options]`` table refuses naming the step spelling, as does a key
-of a step table that the spelling dropped, ``pre`` and ``post`` among
-them; a ``[root-files]`` table refuses naming the fragments spelling,
-and a ``[rules]`` table the layering phase's steps.
+here, read from the module's source.
 """
 
 from __future__ import annotations
@@ -459,8 +455,6 @@ def _read(extension: str, package: str, path: Path, text: str) -> Declaration:
 
     data = _parsed(path, text)
     reader = _Reader(extension, package, path)
-    reader.removed(data)
-    reader.requires_alone(data.get("extension", {}))
     problems = judge(data, contract="extension", where=str(path), listed=None)
     if problems:
         raise DeclarationError(
@@ -574,25 +568,6 @@ class _Reader:
                 f"names no phase; the phases are {', '.join(self.specs)}{hint}",
             )
         return found
-
-    def requires_alone(self, identity: object) -> None:
-        """Refuse ``compatible``, ``before`` or ``after`` under ``[extension]``.
-
-        A package's set is its list and what the list requires, so an
-        extension names what it cannot work without in ``requires`` and
-        composes by nothing else. Judged before the contract's keys, so
-        the refusal names what composes instead of the nearest key.
-        """
-        if not isinstance(identity, dict):
-            return
-        for key in ("compatible", "before", "after"):
-            if key in cast("dict[str, Any]", identity):
-                raise self.refuse(
-                    ("extension", key),
-                    "is not a key: a package's set is its list and what the list"
-                    " requires, so composition is requires alone; drop it, and name"
-                    " in requires what this extension cannot work without",
-                )
 
     def additions(
         self,
@@ -750,124 +725,6 @@ class _Reader:
             gates=bool(entry.get("gates", False)),
             extension=self.extension,
         )
-
-    def removed(self, data: dict[str, Any]) -> None:
-        """Refuse the check tables' spelling, naming the step's.
-
-        A ``[checks.<step>.<phase>]`` table is the step
-        ``[phases.<phase>.<step>]``, an ``[options]`` table is
-        ``enabled`` on the step, a ``[root-files."<path>"]`` table is
-        ``[fragments."<path>"]``, a ``[rules.<name>]`` table is
-        ``[phases.layering.<name>]``, and a key the step table dropped
-        says what says it now. Read before the contract judges the file,
-        which would refuse the key as unknown without saying what
-        replaced it. The tables under ``[for.<target>]`` are judged
-        the same way.
-        """
-        tables: list[tuple[tuple[str, ...], dict[str, Any]]] = [((), data)]
-        targets = data.get("for")
-        if isinstance(targets, dict):
-            tables += [
-                (("for", target), cast("dict[str, Any]", table))
-                for target, table in cast("dict[str, Any]", targets).items()
-                if isinstance(table, dict)
-            ]
-        for prefix, table in tables:
-            self.removed_tables(table, prefix)
-
-    def removed_tables(self, data: dict[str, Any], prefix: tuple[str, ...]) -> None:
-        """Refuse the check tables' spelling in *data*, one table of the file."""
-        if "checks" in data:
-            # The first check table names the step it is: [checks.<step>.<phase>]
-            # is [phases.<phase>.<step>]; a bare table names the shape.
-            where = [*prefix, "checks"]
-            step, phase = "<step>", "<phase>"
-            checks = data["checks"]
-            if isinstance(checks, dict) and cast("dict[str, Any]", checks):
-                step, phases = next(iter(cast("dict[str, Any]", checks).items()))
-                where.append(step)
-                named = (
-                    [key for key, value in phases.items() if isinstance(value, dict)]
-                    if isinstance(phases, dict)
-                    else []
-                )
-                if named:
-                    phase = str(named[0])
-                    where.append(phase)
-            raise self.refuse(
-                tuple(where),
-                f"is the check tables' spelling; a step is [phases.{phase}.{step}]"
-                " with main, its body: a template, the tool's name then its"
-                " arguments, or a reference to its code, module:function",
-            )
-        if "options" in data:
-            raise self.refuse(
-                (*prefix, "options"),
-                "is not a table: a step a workspace turns on declares enabled = false"
-                " under [phases.<phase>.<step>], and the workspace turns it on with"
-                " [phases.<phase>.<step>] enabled = true in its root contract",
-            )
-        if "root-files" in data:
-            # The first file names the fragment it is; a bare table
-            # names the shape.
-            where = [*prefix, "root-files"]
-            path = "<path>"
-            files = data["root-files"]
-            if isinstance(files, dict) and cast("dict[str, Any]", files):
-                path = next(iter(cast("dict[str, Any]", files)))
-                where.append(path)
-            raise self.refuse(
-                tuple(where),
-                f'is [fragments."{path}"]: a file the extension\'s code writes names'
-                " its render there, module:function called with the workspace root,"
-                " and the fragment lives while the workspace's lists hold the"
-                " extension",
-            )
-        if "rules" in data:
-            # The first rule names the step it is; a bare table names
-            # the shape.
-            where = [*prefix, "rules"]
-            step = "<step>"
-            rules = data["rules"]
-            if isinstance(rules, dict) and cast("dict[str, Any]", rules):
-                step = next(iter(cast("dict[str, Any]", rules)))
-                where.append(step)
-            raise self.refuse(
-                tuple(where),
-                f"is [phases.layering.{step}]: a rule is a step of the layering"
-                " phase, its main a reference to its code, module:function called"
-                " with the gate's context over the one parse, and its fix the same"
-                " shape where it rewrites",
-            )
-        phases = data.get("phases")
-        if not isinstance(phases, dict):
-            return
-        for phase, table in cast("dict[str, Any]", phases).items():
-            if not isinstance(table, dict):
-                continue
-            held = cast("dict[str, Any]", table)
-            # The phase table's own body keys, pre and post among them:
-            # a step named so is a table, and stays.
-            for key in ("pre", "main", "post", "provides", "reads"):
-                if key not in held or isinstance(held[key], dict):
-                    continue
-                if key in _REMOVED:
-                    raise self.refuse(
-                        (*prefix, "phases", phase, key),
-                        _REMOVED[key].format(phase=phase, step="<step>"),
-                    )
-                raise self.refuse(
-                    (*prefix, "phases", phase, key),
-                    "belongs to a step: a phase's table holds steps,"
-                    f" [phases.{phase}.<step>], each with main",
-                )
-            for step, entry in _step_tables(held).items():
-                for key, spelling in _REMOVED.items():
-                    if key in entry:
-                        raise self.refuse(
-                            (*prefix, "phases", phase, step, key),
-                            spelling.format(phase=phase, step=step),
-                        )
 
     def steps(
         self, data: dict[str, Any], prefix: tuple[str, ...]
@@ -1800,31 +1657,6 @@ def _known_phases(own: dict[str, PhaseSpec], path: Path) -> dict[str, PhaseSpec]
             )
         known[name] = spec
     return known
-
-
-#: The keys a step table does not take, each to what says it in the
-#: step's spelling, so a stale declaration is told what to write;
-#: ``{phase}`` and ``{step}`` name the step.
-_REMOVED: dict[str, str] = {
-    "narrowing": "is said by {{paths}} in main: a template with it narrows by the"
-    " paths the run reaches, one without runs whole",
-    "transport": "goes: the paths go on the command line, where {{paths}} stands"
-    " in main",
-    "threshold": "goes: a template with {{paths}} runs over the paths the run"
-    " reaches, and one without runs whole",
-    "roles": "goes: a step belongs to one phase; declare a step under the other"
-    " phase too",
-    "listed-with": "is enabled = false on the step, which a workspace turns on"
-    " with [phases.{phase}.{step}] enabled = true in its root contract",
-    "judge": "is main: the step's body, a template or a reference",
-    "run": "is main: the step's body, a template or a reference",
-    "arguments": "is said by {{arguments}} in main, where the words after -- go",
-    "editor-extension": "is the extension's answer to the editor-extensions query:"
-    ' [queries.editor-extensions] value = ["<marketplace id>"]',
-    "pre": "goes: a step is named, and a step that runs after it names it in after",
-    "post": "goes: a step is named, runs after the steps it names in after, and"
-    " does its own cleanup on failure",
-}
 
 
 def _step_tables(table: dict[str, Any]) -> dict[str, dict[str, Any]]:

@@ -462,41 +462,6 @@ def test_an_option_on_an_unknown_address_or_an_undeclared_option_refuses(
         option_value(step_for("test.fake"), package, "workers")
 
 
-def test_a_package_option_table_in_the_check_spelling_refuses_naming_the_step_spelling(
-    tmp_path: Path,
-) -> None:
-    said = {
-        "[checks.fake.test]\nparallel = false\n": (
-            "[checks.fake.test] is the check tables' spelling; the step's options"
-            " are [phases.test.fake]"
-        ),
-        "[checks.fake]\nparallel = false\n": (
-            "[checks.fake] is the check tables' spelling; a step's options are"
-            " [phases.<phase>.fake], and [phases.<phase>] reaches every step of"
-            " the phase"
-        ),
-        "checks = 3\n": (
-            "[checks] is the check tables' spelling; a step's options are"
-            " [phases.<phase>.<step>]"
-        ),
-        "[roles.test]\nparallel = false\n": (
-            "[roles.test] is the check tables' spelling; every step of the phase"
-            " takes [phases.test]"
-        ),
-        "roles = 3\n": (
-            "[roles] is the check tables' spelling; every step of a phase takes"
-            " [phases.<phase>]"
-        ),
-    }
-    for text, line in said.items():
-        with pytest.raises(_FAILURES) as caught:
-            _member_with(tmp_path, text)
-        assert line in str(caught.value), text
-        # The refusal comes before the contract's, which cannot name the
-        # spelling.
-        assert "has no key" not in str(caught.value), text
-
-
 #: An installed extension's two steps: one with an option, and one
 #: declared off.
 _DECLARED = """\

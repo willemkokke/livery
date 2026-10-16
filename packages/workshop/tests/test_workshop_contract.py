@@ -187,45 +187,6 @@ def test_the_release_resolutions_refuse_another_word_and_one_listed_twice(
     assert _contract.load_contract(path)["release"] == {"prove": []}
 
 
-def test_prove_floors_refuses_naming_the_prove_list(tmp_path: Path) -> None:
-    refusal = (
-        "  [release] prove-floors is not a key: [release] prove lists the"
-        " resolutions a release tests each member at, from floor, latest and"
-        ' head; prove = ["latest"] leaves the floor out'
-    )
-    path = _workspace(tmp_path, "\n[release]\nprove-floors = false\n")
-    assert _refusal(lambda: _contract.load_contract(path)) == f"{path}:\n{refusal}"
-    member = _workspace(
-        tmp_path,
-        "",
-        'extensions = ["python"]\nname = "m"\n\n[release]\nprove-floors = true\n',
-    )
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-
-
-def test_ci_wheel_platforms_refuses_naming_the_nanobind_key(tmp_path: Path) -> None:
-    refusal = (
-        "  [ci] wheel-platforms is not a key: a package that holds nanobind"
-        " names the runner labels that build its platform wheels under"
-        " [nanobind] wheel-platforms"
-    )
-    member = _workspace(
-        tmp_path,
-        "",
-        'name = "m"\nextensions = ["nanobind"]\n\n[ci]\n'
-        'wheel-platforms = ["ubuntu-latest"]\n',
-    )
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # The key in nanobind's table loads: the package lists nanobind.
-    member.write_text(
-        'name = "m"\nextensions = ["nanobind"]\n\n[nanobind]\n'
-        'wheel-platforms = ["ubuntu-latest", "windows-latest"]\n'
-    )
-    assert _contract.load_contract(member)["nanobind"] == {
-        "wheel-platforms": ["ubuntu-latest", "windows-latest"]
-    }
-
-
 def test_a_package_listing_no_extensions_mounts_none_and_takes_no_extension_s_keys(
     tmp_path: Path,
 ) -> None:
@@ -268,28 +229,6 @@ def test_a_depends_edge_and_the_forge_keep_their_kind(tmp_path: Path) -> None:
     ]
     (package,) = discover_packages(tmp_path)
     assert [edge.kind for edge in package.depends] == ["test"]
-
-
-def test_qa_refuses_naming_the_coverage_table(tmp_path: Path) -> None:
-    refusal = (
-        "  [qa] is not a table: a package's coverage policy is its [coverage]"
-        " table, where coverage-floor is floor and coverage-epsilon is epsilon,"
-        " read while [workspace] extensions lists coverage"
-    )
-    member = _workspace(
-        tmp_path,
-        "",
-        'extensions = ["python"]\nname = "m"\n\n[qa]\ncoverage-floor = 90\n',
-    )
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # An empty table refuses the same way, and so does one in a
-    # workspace that already lists coverage.
-    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
-    member.write_text('extensions = ["python"]\nname = "m"\n\n[qa]\n')
-    assert _refusal(lambda: _contract.load_contract(member)) == f"{member}:\n{refusal}"
-    # The policy in coverage's table loads.
-    member.write_text('extensions = ["python"]\nname = "m"\n\n[coverage]\nfloor = 90\n')
-    assert _contract.load_contract(member)["coverage"] == {"floor": 90}
 
 
 def test_a_coverage_table_while_coverage_is_unlisted_refuses_naming_it(
@@ -390,8 +329,6 @@ def test_an_underscore_key_refuses_naming_the_kebab_spelling_and_the_fix() -> No
     assert message.startswith("workshop.toml: contract keys are kebab-case")
     assert "ci.required_context (spell it required-context)" in message
     assert message.endswith("Rename each key in workshop.toml.")
-    # No rewrite exists any more: the fix is the edit the message names.
-    assert not hasattr(_contract, "migrate_contracts")
 
 
 def test_nested_tables_and_arrays_of_tables_are_judged_too() -> None:
@@ -427,14 +364,6 @@ def test_underscore_keys_are_listed_with_their_paths() -> None:
         "ci.required_context",
         "ci.schedule.point_name",
     ]
-
-
-def test_normalise_keys_reads_history_as_if_spelled_right() -> None:
-    tree = {"ci": {"required_context": "gate"}, "depends": [{"floor_kind": "x"}]}
-    assert _contract.normalise_keys(tree) == {
-        "ci": {"required-context": "gate"},
-        "depends": [{"floor-kind": "x"}],
-    }
 
 
 def test_a_contract_is_parsed_once_until_it_or_a_sibling_changes(

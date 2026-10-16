@@ -129,32 +129,6 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # --- the refusals ---------------------------------------------------------------
 
 
-def test_an_old_lock_name_is_named_with_the_verb_that_writes_the_new_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A lock file the store never reads is named, never read, moved or deleted."""
-    root = _workspace(tmp_path, monkeypatch)
-    (root / "tools.lock").write_text("{}\n")
-    (root / "tools.graphs").mkdir()
-    named = (
-        "  tools: the store reads toolroom.lock, not tools.lock and tools.graphs/;"
-        " `fm toolroom.lock` writes it, and tools.lock and tools.graphs/ can be"
-        " deleted"
-    )
-    assert _sync.materialise_tools(root) == [
-        named,
-        "  tools: no toolroom.lock; `fm toolroom.lock` writes one",
-    ]
-    assert (root / "tools.lock").read_text() == "{}\n"
-    # Beside a lock the store reads, the leftover is still named first.
-    (root / "tools.graphs").rmdir()
-    _tools.write_lock(root)
-    assert _sync.materialise_tools(root)[0] == (
-        "  tools: the store reads toolroom.lock, not tools.lock;"
-        " `fm toolroom.lock` writes it, and tools.lock can be deleted"
-    )
-
-
 def test_materialising_without_a_lock_or_an_unlocked_tool_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

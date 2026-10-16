@@ -808,20 +808,23 @@ def test_missing_plugin_pull_refuses(tmp_path):
     assert "ghost" in result.stderr
 
 
-def test_stale_plugins_config_key_is_taught(tmp_path):
-    # The config key died with the composition rework; a leftover key is a
-    # taught refusal, never a silent ignore.
+def test_a_plugins_config_key_that_is_no_table_refuses(tmp_path):
+    # The key is the table of providers' sections; a value of another
+    # type refuses, never a silent ignore.
     project = tmp_path / "proj4b"
     project.mkdir()
     (project / "pyproject.toml").write_text(
-        '[project]\nname="x"\n[tool.footman]\nplugins = ["shared"]\n'
+        '[project]\nname="x"\n[tool.footman]\nplugins = "shared"\n'
     )
     (project / "tasks.py").write_text(
         "from livery.footman import task\n@task\ndef own(): ...\n"
     )
     result = Runner().invoke("own", cwd=project)
     assert result.exit_code == EX_USAGE
-    assert "plugins key was removed" in result.stderr
+    assert (
+        "[tool.footman] plugins is a table: [tool.footman.plugins.<section>]"
+        " holds a provider's settings"
+    ) in result.stderr
 
 
 def _advertise(tmp_path, monkeypatch, module, body, entry):

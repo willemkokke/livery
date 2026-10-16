@@ -164,26 +164,11 @@ def test_mkdocstrings_alone_installs_docs(tmp_path: Path) -> None:
     assert steps_by_name()["lint.doclinks"].extension == "docs"
 
 
-def test_python_paths_in_the_docs_table_refuses_naming_the_step_option(
+def test_the_paths_option_refuses_another_type_and_reaches_the_handler(
     tmp_path: Path,
 ) -> None:
-    from livery.workshop._contract import read_contract
-
     root = _workspace(tmp_path)
-    member = root / "packages" / "core"
-    contract = member / "workshop.toml"
-    contract.write_text(
-        'extensions = ["python"]\nname = "acme-core"\n\n'
-        '[docs]\npython-paths = ["docs/_generated/stubs"]\n'
-    )
-    with pytest.raises(_FAILURES) as refused:
-        read_contract(member)
-    assert str(refused.value) == (
-        f"{contract}:\n  [docs] python-paths is not a key: the directories the API"
-        " reference also reads modules from are the paths option of the step that"
-        " writes it, [phases.docs.mkdocstrings] paths, read while [workspace]"
-        " extensions lists mkdocstrings"
-    )
+    contract = root / "packages" / "core" / "workshop.toml"
     # A value of another type refuses naming the option.
     contract.write_text(
         'extensions = ["python"]\nname = "acme-core"\n\n'
