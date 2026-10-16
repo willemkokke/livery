@@ -13,9 +13,8 @@ from livery.extensions.mkdocstrings._docstrings import (
     undocumented_exports,
 )
 from livery.footman import Failed
+from livery.workshop import Package, PhaseContext
 from livery.workshop import _steps as registry
-from livery.workshop._packages import Package
-from livery.workshop._phases import PhaseContext
 from livery.workshop._steps import steps_by_name
 
 

@@ -18,13 +18,14 @@ from livery.extensions.docs._llms import (
     resolve_snippets,
     write_llms_files,
 )
+from workshop_api_pages import write_api_pages
 
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     root = tmp_path / "ws"
     root.mkdir()
     (root / "workshop.toml").write_text(
-        f'[workspace]\nextensions = ["docs", "mkdocstrings"]\n{docs_table}'
+        f'[workspace]\nextensions = ["docs"]\n{docs_table}'
     )
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (root / "docs").mkdir()
@@ -47,13 +48,10 @@ def _mounted(root: Path) -> Path:
         generate_changelog_pages,
         mount_package_docs,
     )
-    from livery.extensions.mkdocstrings._pages import write_reference
-    from livery.workshop._packages import discover_packages
 
     generate_changelog_pages(root)
-    # The API reference as the docs phase's step writes it.
-    for package in discover_packages(root):
-        write_reference(package)
+    # An API reference, as a reference generator writes it.
+    write_api_pages(root)
     mount_package_docs(root)
     return root
 

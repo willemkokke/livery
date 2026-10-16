@@ -20,6 +20,7 @@ from livery.workshop._packages import discover_packages
 from livery.workshop._phases import run_phase
 from livery.workshop._steps import StepRecord, register_step, steps_by_name
 from workshop_coverage_meter import install_meter, leave_part, stored_unit
+from workshop_installed import skip_unless_installed
 
 _FAILURES = (SystemExit, Failed)
 
@@ -115,8 +116,6 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.extensions.coverage import _pages
-    from livery.extensions.mkdocstrings import _pages as _reference
-    from livery.workshop._packages import Package
 
     install_meter(tmp_path, monkeypatch)
     asked: list[str] = []
@@ -126,12 +125,7 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         asked.append("deploy" if merged else "docs")
         return []
 
-    def written(package: Package) -> list[str]:
-        asked.append(f"mkdocstrings {package.path}")
-        return []
-
     monkeypatch.setattr(_pages, "draw", drawn)
-    monkeypatch.setattr(_reference, "write_reference", written)
 
     def note(ctx: PhaseContext) -> None:
         asked.append(f"{ctx.step} {ctx.member.path}")
@@ -141,16 +135,13 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         _docs.run_site_phase(root, _docs.DEPLOY_PHASE)
 
     # Coverage listed with an entry that leaves docs out: its [for.docs]
-    # table adds no step to either phase. The API reference unlisted adds
-    # none either. A package step naming an extension no package holds
-    # runs over no package.
+    # table adds no step to either phase. A package step naming an
+    # extension no package holds runs over no package.
     root = _workspace(
         tmp_path, '["docs", "acme.meter", { name = "coverage", without = ["docs"] }]'
     )
     _mount(root)
-    assert not {"docs.coverage", "deploy.coverage", "docs.mkdocstrings"} & set(
-        steps_by_name()
-    )
+    assert not {"docs.coverage", "deploy.coverage"} & set(steps_by_name())
     register_step(
         StepRecord(
             "held",
@@ -164,10 +155,9 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
     both_phases(root)
     assert asked == []
     # Listed for docs, coverage is asked in each phase, and a package
-    # step naming the member's extension runs over the member, the API
-    # reference's among them.
+    # step naming the member's extension runs over the member.
     (root / "workshop.toml").write_text(
-        '[workspace]\nextensions = ["docs", "mkdocstrings", "acme.meter", "coverage"]\n'
+        '[workspace]\nextensions = ["docs", "acme.meter", "coverage"]\n'
     )
     _mount(root)
     register_step(
@@ -181,12 +171,7 @@ def test_a_docs_step_for_an_unlisted_extension_is_never_asked(
         )
     )
     both_phases(root)
-    assert sorted(asked) == [
-        "deploy",
-        "docs",
-        "docs.held packages/core",
-        "mkdocstrings packages/core",
-    ]
+    assert sorted(asked) == ["deploy", "docs", "docs.held packages/core"]
 
 
 def test_a_step_no_longer_listed_leaves_no_pages_behind(
@@ -197,6 +182,7 @@ def test_a_step_no_longer_listed_leaves_no_pages_behind(
     from livery.extensions.docs import _taskref
     from livery.workshop import _extensions, _points, _steps
 
+    skip_unless_installed("mkdocstrings")
     row = {"help": "One line.", "params": []}
     tree: dict[str, object] = {
         "help": "",
@@ -285,6 +271,7 @@ def test_the_docs_steps_write_apart(
     import livery.footman as footman
     from livery.extensions.docs import _taskref
 
+    skip_unless_installed("mkdocstrings")
     install_meter(tmp_path, monkeypatch)
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: None)
     row = {"help": "One line.", "params": []}

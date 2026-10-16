@@ -57,14 +57,6 @@ dependencies = [
 # under a current Cython. The workspace's dev group installs the member
 # as `livery-workshop[dev]`.
 dev = ["pyyaml>=6.0.3", "types-pyyaml", "types-pygments"]
-# The mkdocstrings extension rides in this wheel, and its reference
-# check reads the sources with griffe, which griffelib ships, imported
-# inside the function that reads them. A workspace that lists
-# mkdocstrings gets griffe through mkdocstrings-python, the extension's
-# line in the docs dependency group, so the wheel's runtime needs none.
-# This package's suite runs the check, so the release's isolated legs
-# install the wheel with this extra. The floor is the lock's.
-test = ["griffelib>=2.2.0"]
 
 [project.entry-points."footman.tasks"]
 "livery.workshop" = "livery.workshop._mount"
@@ -84,7 +76,6 @@ conan = "livery.extensions.conan"
 coverage = "livery.extensions.coverage"
 cpp = "livery.extensions.cpp"
 docs = "livery.extensions.docs"
-mkdocstrings = "livery.extensions.mkdocstrings"
 nanobind = "livery.extensions.nanobind"
 python = "livery.extensions.python"
 
@@ -145,7 +136,6 @@ module-name = [
     "livery.extensions.coverage",
     "livery.extensions.cpp",
     "livery.extensions.docs",
-    "livery.extensions.mkdocstrings",
     "livery.extensions.nanobind",
     "livery.extensions.python",
 ]
