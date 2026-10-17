@@ -1432,10 +1432,13 @@ absence.
   count is one, its matrix is the `os` and `python` lists; when any
   count is above one it is `include` entries, one per runner, Python
   and shard in that order, each `{os, python, shard}` with the shard
-  spelled `<i>of<n>`, and a runner with one shard has its entry with
-  `1of1`, so every entry carries the key and the one call passes
-  `--shard="${{ matrix.shard }}"`. The forge names each job by the
-  entry's values in order, `check (windows-latest, 3.14, 2of4)`. When
+  spelled `<i>of<n>`; a runner with one shard has its entry without
+  the shard key, and the one call passes
+  `--shard="${{ matrix.shard }}"`, which reaches that runner's leg
+  empty and runs it as one shard of one. The forge names each job by
+  the entry's values in order, `check (windows-latest, 3.14, 2of4)`,
+  and a one-shard runner's as the unsplit leg, `check (ubuntu-latest,
+  3.14)`, the name its rows are keyed by. When
   a pull request's runners or counts differ from every other event's,
   a `legs` job holds both matrices as literals, the event picks one,
   and the check job reads it with `fromJSON`; both literals take the
