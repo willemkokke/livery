@@ -69,12 +69,44 @@ reads the run with the measurer beside that compiler, and leaves one
 part per package under `.workshop/coverage/parts/`, named after its
 measurer. Its page says what each measurer gives. The union across legs
 merges each file's parts by the line format's rules: the readings at the
-content the checkout holds and by one measurer merge, and a reading of
-other content or by another measurer is named and left out, so two
+content the checkout holds and by one measurer merge, a reading of the
+file's earlier content is carried across the change as the next section
+says, and a reading by another measurer is named and left out, so two
 compilers' readings never merge. A package's figure counts its `source`
 category's files, each by what its measurer judges: a native measurer's
 lines alone, coverage.py's statements and branches. A package with a
 floor that no leg measured refuses by name and never passes.
+
+## The carry across a change
+
+A reading of a file at an earlier content, a record's row of a leg the
+pull request did not run, say, is carried across the change when the
+checkout's object store holds the content it was taken at: the union
+reads that content by the reading's digest and diffs it against the
+checkout's content. Each line the change left in place maps to its line
+in the checkout's content, and the reading keeps, at the mapped lines
+alone, the lines that ran and how often, the tests that reached them,
+each branch whose two ends map to a branch the current content has, with
+its runs, and each count of a line's branches where the current content
+counts as many. The statements, the excluded lines, the spans, the
+functions and classes, and the ranges are the content's own facts, which
+the readings at the current content supply, so a file needs one leg that
+measured it at the content the checkout holds; a file no leg measured
+keeps its carried reading whole.
+
+A reading on a line the change touched or removed is dropped, and so is
+a branch with an end on such a line: the union prints one line per
+carried reading, naming its unit, its measurer and the content it was
+taken at, with how many of its measured lines were kept and how many
+dropped. A changed line only another platform reaches is red by name
+until a run of every leg measures it. A reading whose content the object
+store does not hold is left out and named, as a reading by another
+measurer is.
+
+What the carry gives up: an unchanged line whose reachability changed
+elsewhere, its only caller on another platform removed, say, keeps its
+carried reading until the merge point's full run measures the file
+afresh. A run of the pull request on every leg corrects it sooner.
 
 ## The record
 

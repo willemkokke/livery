@@ -906,3 +906,245 @@ def test_a_merge_adds_runs_and_keeps_each_branch_s_sentence() -> None:
         Range(2, 1, 2, 5, 3),
         Range(3, 1, 3, 4, 0),
     )
+
+
+# --- carrying a reading across a change ---------------------------------------
+
+
+#: A content and the one a change made of it: a line inserted above, the
+#: last line removed, and the lines between left in place. The old
+#: lines 1 to 5 are the new lines 2 to 6; the old line 6 is gone.
+_OLD = "a = 1\nif a:\n    b = 2\nelse:\n    c = 3\nd = 4\n"
+_NEW = "z = 0\na = 1\nif a:\n    b = 2\nelse:\n    c = 3\n"
+#: The old content with its line 5 edited.
+_EDITED = "a = 1\nif a:\n    b = 2\nelse:\n    c = 30\nd = 4\n"
+_TEXTS = {fmt.digest(text.encode()): text for text in (_OLD, _NEW, _EDITED)}
+OLD, NEW, EDITED = (fmt.digest(text.encode()) for text in (_OLD, _NEW, _EDITED))
+
+
+def _source(digest: str) -> str:
+    """The text of a content, as the union hands it to the merge."""
+    return _TEXTS.get(digest, "")
+
+
+def _at(
+    unit: str,
+    digest: str,
+    *,
+    measurer: Measurer = COVERAGE_PY,
+    contexts: tuple[str, ...] = (),
+    **keys: Any,
+) -> Part:
+    """*unit*'s reading of ``packages/x/a.py`` at *digest*."""
+    entry = Entry(digest=digest, **keys)
+    return Part(unit, measurer, {"packages/x/a.py": entry}, contexts)
+
+
+#: The current content's branches, as every reading at it names them.
+_NEW_BRANCHES = (
+    Branch(3, 4, 0, 1),
+    Branch(3, 6, 1, 0, "line 3 didn't jump to line 6"),
+    Branch(6, -3, 0, 0, "line 6 didn't return from the function"),
+)
+
+
+def _kept(**keys: Any) -> Part:
+    """The reading at the current content: its facts, and what *keys* say ran."""
+    return _at(
+        "packages/x",
+        NEW,
+        statements=frozenset({1, 2, 3, 4, 6}),
+        branches=_NEW_BRANCHES,
+        **keys,
+    )
+
+
+def _carried_line(digest: str, kept: int, total: int) -> str:
+    return (
+        "packages/x/a.py: carried the reading of tests by coverage.py 7.16.2 on"
+        f" CPython 3.14 at content {digest[:12]} across the change: {kept} of"
+        f" {total} measured line(s) kept, {total - kept} dropped"
+    )
+
+
+def _left_out_line(digest: str, current: str) -> str:
+    return (
+        "packages/x/a.py: left out the reading of tests by coverage.py 7.16.2 on"
+        f" CPython 3.14 at content {digest[:12]}; the union keeps the one of"
+        f" packages/x by coverage.py 7.16.2 on CPython 3.14 at content"
+        f" {current[:12]}"
+    )
+
+
+def test_a_carried_reading_on_a_changed_line_is_dropped_and_the_counts_named() -> None:
+    kept = _at(
+        "packages/x", EDITED, statements=frozenset({1, 2, 3, 5, 6}), counts={1: 1}
+    )
+    # The old reading ran line 1, which the change left in place, and
+    # line 5, which it edited.
+    older = _at("tests", OLD, counts={1: 1, 5: 1})
+    combined = fmt.merge([older, kept], {"packages/x/a.py": EDITED}, source=_source)
+    assert combined.left_out == (_carried_line(OLD, 1, 2),)
+    assert combined.carried == 1
+    merged = combined.files["packages/x/a.py"]
+    assert merged.units == ("packages/x", "tests")
+    assert merged.entry.executed == {1}
+    assert dict(merged.entry.counts) == {1: 2}
+    # A line the change left in place that is no statement of the
+    # current content, one a string now spans say, is dropped too.
+    kept = _at("packages/x", NEW, statements=frozenset({1, 3, 4, 6}))
+    older = _at("tests", OLD, counts={1: 1})
+    combined = fmt.merge([older, kept], {"packages/x/a.py": NEW}, source=_source)
+    assert combined.left_out == (_carried_line(OLD, 0, 1),)
+    assert combined.files["packages/x/a.py"].entry.executed == frozenset()
+
+
+def test_a_deleted_file_s_reading_is_left_out_as_one_at_other_content() -> None:
+    newer = _kept(counts={1: 1})
+    other = _at("other", NEW, statements=frozenset({1, 2, 3, 4, 6}), counts={1: 1})
+    older = _at("tests", OLD, statements=frozenset({1, 2, 3, 5, 6}), counts={5: 1})
+    # The checkout no longer has the file: no digest of it is current,
+    # the readings at the content most of them share are kept, and
+    # nothing is carried, both texts at hand or not.
+    combined = fmt.merge([older, newer, other], {}, source=_source)
+    assert combined.left_out == (_left_out_line(OLD, NEW),)
+    assert combined.carried == 0
+    assert combined.files["packages/x/a.py"].entry.executed == {1}
+    # Nor when the checkout holds a content no reading was taken at.
+    combined = fmt.merge(
+        [older, newer, other], {"packages/x/a.py": "f" * 40}, source=_source
+    )
+    assert combined.left_out == (_left_out_line(OLD, NEW),)
+    assert combined.carried == 0
+
+
+def test_a_reading_whose_content_the_source_lacks_is_left_out() -> None:
+    newer = _kept(counts={1: 1})
+    older = _at("tests", OLD, counts={5: 1})
+    current = {"packages/x/a.py": NEW}
+
+    def without_old(digest: str) -> str:
+        return "" if digest == OLD else _source(digest)
+
+    def without_new(digest: str) -> str:
+        return "" if digest == NEW else _source(digest)
+
+    for source in (without_old, without_new, None):
+        combined = fmt.merge([older, newer], current, source=source)
+        assert combined.left_out == (_left_out_line(OLD, NEW),)
+        assert combined.carried == 0
+        assert combined.files["packages/x/a.py"].entry.executed == {1}
+
+
+def test_a_reading_by_another_measurer_identity_is_never_carried() -> None:
+    newer = _kept(counts={1: 1})
+    older = _at(
+        "tests",
+        OLD,
+        measurer=Measurer("coverage.py", "7.16.2", "CPython 3.11", judges=(fmt.LINES,)),
+        counts={5: 1},
+    )
+    combined = fmt.merge([older, newer], {"packages/x/a.py": NEW}, source=_source)
+    assert combined.left_out == (
+        "packages/x/a.py: left out the reading of tests by coverage.py 7.16.2 on"
+        f" CPython 3.11 at content {OLD[:12]}; the union keeps the one of"
+        f" packages/x by coverage.py 7.16.2 on CPython 3.14 at content {NEW[:12]}",
+    )
+    assert combined.carried == 0
+    assert combined.files["packages/x/a.py"].entry.executed == {1}
+
+
+def test_a_branch_carries_only_where_both_ends_map_to_a_branch_of_the_content() -> None:
+    newer = _kept(counts={1: 1, 2: 1, 3: 1, 4: 1})
+    older = _at(
+        "tests",
+        OLD,
+        counts={1: 1, 2: 1, 5: 1},
+        branches=(
+            # Both ends map, and the branch is matched by its target,
+            # whatever place the old reading gave it among its line's.
+            Branch(2, 5, 0, 1),
+            Branch(2, 3, 1, 0, "line 2 didn't jump to line 3"),
+            # The exit of the function starting on line 2, now line 3.
+            Branch(5, -2, 0, 2),
+            # One end on the removed line.
+            Branch(5, 6, 1, 1),
+            # Both ends map, but the current content has no such branch.
+            Branch(1, 5, 0, 1),
+        ),
+    )
+    combined = fmt.merge([older, newer], {"packages/x/a.py": NEW}, source=_source)
+    assert combined.left_out == (_carried_line(OLD, 3, 3),)
+    entry = combined.files["packages/x/a.py"].entry
+    assert entry.branches == (
+        Branch(3, 4, 0, 1),
+        Branch(3, 6, 1, 1, "line 3 didn't jump to line 6"),
+        Branch(6, -3, 0, 2, "line 6 didn't return from the function"),
+    )
+    assert entry.partial == frozenset()
+
+
+def test_an_unchanged_line_s_reading_carries_across_an_insertion_and_a_deletion() -> (
+    None
+):
+    newer = _kept(
+        counts={1: 1, 2: 1, 3: 1, 4: 1},
+        reached={1: frozenset({0}), 2: frozenset({0}), 3: frozenset({0})},
+        contexts=("",),
+    )
+    older = _at(
+        "tests",
+        OLD,
+        counts={1: 1, 2: 1, 5: 1, 6: 1},
+        branches=(
+            Branch(2, 3, 0, 0, "line 2 didn't jump to line 3"),
+            Branch(2, 5, 1, 1),
+        ),
+        reached={1: frozenset({0}), 5: frozenset({0, 1}), 6: frozenset({1})},
+        contexts=("t1", "t2"),
+    )
+    combined = fmt.merge([older, newer], {"packages/x/a.py": NEW}, source=_source)
+    assert combined.left_out == (_carried_line(OLD, 3, 4),)
+    assert combined.carried == 1
+    assert combined.contexts == ("", "t1", "t2")
+    merged = combined.files["packages/x/a.py"]
+    assert merged.units == ("packages/x", "tests")
+    entry = merged.entry
+    assert entry.digest == NEW
+    assert entry.statements == {1, 2, 3, 4, 6}
+    assert entry.executed == {1, 2, 3, 4, 6}
+    assert dict(entry.counts) == {1: 1, 2: 2, 3: 2, 4: 1, 6: 1}
+    assert entry.branches == (
+        Branch(3, 4, 0, 1),
+        Branch(3, 6, 1, 1, "line 3 didn't jump to line 6"),
+        Branch(6, -3, 0, 0, "line 6 didn't return from the function"),
+    )
+    # The tests that reached old line 1 reached new line 2, and old
+    # line 5's new line 6; old line 6's are gone with the line.
+    assert dict(entry.reached) == {1: {0}, 2: {0, 1}, 3: {0}, 6: {1, 2}}
+    # A measurer that counts a line's branches without naming them
+    # carries a count where the current content counts as many, and
+    # adds its runs.
+    counted = _at(
+        "packages/x",
+        NEW,
+        measurer=GCOV,
+        statements=frozenset({1, 2, 3, 4, 6}),
+        counts={3: 4},
+        branch_counts=((3, 2, 1),),
+    )
+    before = _at(
+        "tests",
+        OLD,
+        measurer=GCOV,
+        counts={2: 2, 5: 7},
+        branch_counts=((2, 2, 2), (5, 3, 1)),
+    )
+    combined = fmt.merge([before, counted], {"packages/x/a.py": NEW}, source=_source)
+    entry = combined.files["packages/x/a.py"].entry
+    assert dict(entry.counts) == {3: 6, 6: 7}
+    assert entry.branch_counts == ((3, 2, 2),)
+    assert combined.left_out == (
+        "packages/x/a.py: carried the reading of tests by gcov 14.2 at content"
+        f" {OLD[:12]} across the change: 2 of 2 measured line(s) kept, 0 dropped",
+    )
