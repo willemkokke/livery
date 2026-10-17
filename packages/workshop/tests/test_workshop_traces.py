@@ -48,10 +48,10 @@ def _seed(base: Path) -> None:
 
 @pytest.fixture
 def work(seeds: Seeds, tmp_path: Path) -> Path:
-    """A clone whose origin is a bare repository, with a contract in it."""
+    """A clone whose origin is a bare repository; its contract pushes traces."""
     seeds("traces", _seed)
     root = tmp_path / "work"
-    _contract(root)
+    _contract(root, profile=True)
     return root
 
 
@@ -97,14 +97,19 @@ def _trace_file(root: Path, name: str = "fm-profile.json") -> Path:
 
 
 def test_the_contract_answers_its_defaults_when_it_says_nothing(work: Path) -> None:
+    _contract(work)
     kept, why = _traces.policy(work)
     assert why == ""
     assert kept == _traces.Policy(
-        legs=_traces.PROFILE_DEFAULT,
+        timing=_traces.TIMING_DEFAULT,
+        profile=_traces.PROFILE_DEFAULT,
         window=_traces.WINDOW_DEFAULT,
         into=_traces.INTO_DEFAULT,
         keep=_traces.KEEP_DEFAULT,
     )
+    # The rows are kilobytes and three verbs read them; a trace is
+    # megabytes a leg and one verb reads it, so only the rows are on.
+    assert kept.timing and not kept.profile
     # Beside the checkout's other records, and inside what the rendered
     # ignore list already covers, so profiling adds nothing to the root.
     assert _traces.INTO_DEFAULT.startswith(".workshop/")
@@ -163,13 +168,40 @@ def test_the_sweep_keeps_the_newest_and_takes_the_rest(tmp_path: Path) -> None:
     assert len(lines) == 3
 
 
+def test_a_push_beside_no_profiled_run_refuses_naming_both_keys(work: Path) -> None:
+    """A pushed trace is the one a profiled run writes.
+
+    Refused where every reader meets the policy once, so the job runner
+    deciding its box and the push deciding its ref read the same
+    refusal, rather than one printing a line the other never sees.
+    """
+    from livery.footman import Failed
+    from livery.workshop._points import _tracing
+
+    _contract(work, profile=True, timing=False)
+    with pytest.raises(Failed) as caught:
+        _traces.policy(work)
+    message = str(caught.value)
+    assert "[ci] profile is true and [ci] timing is false" in message
+    assert "drop timing = false or set profile = false" in message
+    with pytest.raises(Failed, match=r"\[ci\] timing is false"):
+        _tracing(work)
+    with pytest.raises(Failed, match=r"\[ci\] profile is true"):
+        _traces.push(work, _trace_file(work))
+    # Both off contradicts nothing: nothing runs profiled, nothing is pushed.
+    _contract(work, profile=False, timing=False)
+    kept, why = _traces.policy(work)
+    assert why == "" and not kept.timing and not kept.profile
+
+
 def test_a_key_of_the_wrong_type_refuses_and_one_out_of_range_is_named(
     work: Path,
 ) -> None:
-    _contract(work, profile="yes", profile_window="lots", profile_into=17)
+    _contract(work, timing="yes", profile="yes", profile_window="lots", profile_into=17)
     with pytest.raises(BaseException) as caught:
         _traces.policy(work)
     message = str(caught.value)
+    assert "ci.timing is a string ('yes'); it takes true or false" in message
     assert "ci.profile is a string ('yes'); it takes true or false" in message
     assert "ci.profile-window is a string ('lots'); it takes an integer" in message
     assert "ci.profile-into is an integer (17); it takes a string" in message
@@ -182,13 +214,33 @@ def test_a_key_of_the_wrong_type_refuses_and_one_out_of_range_is_named(
     assert "[ci] profile-into is ''; it is a path" in why
 
 
-def test_a_contract_that_wants_no_traces_pushes_nothing_and_says_nothing(
+def test_a_contract_that_asks_for_no_push_pushes_nothing_and_says_nothing(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _contract(work, profile=False)
+    """Off is what the contract answers when it says nothing.
+
+    So is ``timing = false``, which runs nothing profiled to push.
+    """
     _in_ci(monkeypatch)
-    assert _traces.push(work, _trace_file(work)) == ""
+    cases: tuple[dict[str, bool], ...] = ({}, {"profile": False}, {"timing": False})
+    for keys in cases:
+        _contract(work, **keys)
+        assert _traces.push(work, _trace_file(work)) == "", keys
     assert git.list_refs(state_store(work), _traces.TRACES.prefix) == {}
+
+
+def test_profile_alone_turns_timing_on_and_the_push_proceeds(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._points import _pushing, _tracing
+
+    _contract(work, profile=True)
+    kept, why = _traces.policy(work)
+    assert why == "" and kept.timing and kept.profile
+    assert _tracing(work) and _pushing(work)
+    _in_ci(monkeypatch, run="5", leg="check")
+    line = _traces.push(work, _trace_file(work))
+    assert "pushed to refs/workshop-trace/run/5/check" in line
 
 
 def test_a_run_that_is_not_ci_keeps_its_trace_on_the_machine(work: Path) -> None:
@@ -298,7 +350,7 @@ def test_the_janitor_keeps_the_window_s_newest_runs_and_drops_the_rest(
     Ranked by the run id, which every forge hands out increasing, so
     the janitor never fetches a trace to learn how old it is.
     """
-    _contract(work, profile_window=2)
+    _contract(work, profile=True, profile_window=2)
     trace = _trace_file(work)
     for run in ("9", "10", "11"):
         for leg in ("check", "docs"):
@@ -326,10 +378,10 @@ def test_a_good_into_is_read_and_a_wrong_key_stops_the_push(
     against a policy nobody meant: the line names the key, so the
     workspace can be corrected before the next run.
     """
-    _contract(work, profile_into="build/traces")
+    _contract(work, profile=True, profile_into="build/traces")
     kept, why = _traces.policy(work)
     assert (kept.into, why) == ("build/traces", "")
-    _contract(work, profile_window=-4)
+    _contract(work, profile=True, profile_window=-4)
     _in_ci(monkeypatch)
     line = _traces.push(work, _trace_file(work))
     assert line == "profile: [ci] profile-window is -4; it is a whole number of runs"
@@ -1111,18 +1163,24 @@ def test_a_commit_nobody_can_walk_from_is_a_root_and_a_loop_cannot_spin(
     assert len(_traces.chain(work, repo, "b" * 40, depth=0).nodes) == 1
 
 
-def test_a_contract_that_wants_no_traces_records_nothing_about_a_run(
+def test_a_contract_that_keeps_no_trace_still_records_what_a_run_ran_on(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The record is a row the merge point reads, not a trace anyone pays for.
 
-    _contract(work, profile=False)
+    The wave of a squash the forge filed under a tip that moved on is
+    found through it, so neither key switches it off.
+    """
+    _contract(work, timing=False)
     _in_ci(monkeypatch, run="91", leg="publish")
     context = _ci_context.RunContext(
         "github", "91", "workflow_dispatch", "refs/heads/main", "f" * 40
     )
     _head(monkeypatch, "e" * 40)
-    assert _traces.about(work, run=context) == ""
-    assert git.read(state_store(work), _traces.ABOUT.series("e" * 40).ref).files is None
+    line = _traces.about(work, run=context)
+    assert "run 91 recorded as the run of eeeeeeeeeeee" in line
+    rows = _traces.ABOUT.series("e" * 40).rows(state_store(work))
+    assert [row.data["run"] for row in rows.rows] == ["91"]
 
 
 def test_a_run_the_forge_files_under_another_commit_records_what_it_ran_on(

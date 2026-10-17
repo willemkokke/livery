@@ -1092,11 +1092,19 @@ INHERITS = {point.name: point.inherits for point in DECLARED if point.inherits}
 
 
 def _tracing(root: Path) -> bool:
-    """Whether this workspace keeps a trace of what CI does."""
+    """Whether the jobs run profiled, for their timing rows (``[ci] timing``)."""
     from livery.workshop._traces import policy
 
     kept, _why = policy(root)
-    return kept.legs
+    return kept.timing
+
+
+def _pushing(root: Path) -> bool:
+    """Whether a job pushes its trace to the trace refs (``[ci] profile``)."""
+    from livery.workshop._traces import policy
+
+    kept, _why = policy(root)
+    return kept.profile
 
 
 def profile_box() -> AbstractContextManager[Path]:
@@ -1914,8 +1922,9 @@ def run_point(
     with a cadence runs only on its day, judged by
     `today`, and says when it runs next otherwise. Every entry runs
     under ``--profile``, writing its own trace beside the others, and
-    the job's box collects them into one timeline the runner pushes;
-    ``[ci] profile = false`` does none of that. Every child's
+    the job's box collects them into one timeline, which the runner
+    pushes where ``[ci] profile`` asks; ``[ci] timing = false`` does
+    none of that. Every child's
     environment names the leg in
     `livery.workshop._ci_context.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
@@ -1986,10 +1995,14 @@ def run_point(
     # entries after it, so the job lists once, not once per entry.
     with contextlib.ExitStack() as scope:
         # Every entry writes its own trace and drops a copy in the job's
-        # box, so the job's own timeline is the union of the work it did.
-        # `[ci] profile = false` opens no box, passes no flag, and pushes
-        # nothing: off costs nothing rather than less.
+        # box, so the job's own timeline is the union of the work it did,
+        # and a check leg's timing row is read from the gate's. `[ci]
+        # timing = false` opens no box, passes no flag, and pushes
+        # nothing: off costs nothing rather than less. `[ci] profile`
+        # decides whether the box's union leaves the runner at the end;
+        # off, nothing is assembled from the box at all.
         drop = scope.enter_context(profile_box()) if _tracing(root) else None
+        pushing = drop is not None and _pushing(root)
         published = scope.enter_context(
             remote_snapshot(state_store(root), publish=True)
         )
@@ -2063,10 +2076,12 @@ def run_point(
                     red.append(reason)
         finally:
             # A red job's timeline is the one most worth having, so the
-            # push happens whatever the entries did.
-            if drop is not None:
+            # push happens whatever the entries did. What the run ran on
+            # is a row the merge point reads, so every job records it,
+            # traced or not.
+            if drop is not None and pushing:
                 _push_job(root, drop, job=display, leg=label)
-                _push_about(root)
+            _push_about(root)
         if red:
             fail("; ".join(red))
     if not entries:

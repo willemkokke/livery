@@ -8,9 +8,10 @@ walk follows a commit through everything it caused, live or weeks
 later. The prompt this plan opens with is answered end to end. One open
 line remains: the window's depth is measured and the number is
 Willem's, so twenty stands until he rules. The feature is
-investigative: a job pushes its trace whatever happens, nobody pays for
-it until someone asks a question, and `[ci] profile = false` costs
-nothing at all.
+investigative: a job pushes its trace whatever happens where
+`[ci] profile` asks for the push, nobody pays for it until someone asks
+a question, and `[ci] timing = false` costs nothing at all (the one
+switch became two on 2026-10-17; see the decision record).
 
 ## The prompt (Willem)
 
@@ -331,6 +332,9 @@ residue with no breakdown until GitLab reports steps.
 
 ### One switch
 
+Superseded on 2026-10-17 by two keys, `[ci] timing` and `[ci] profile`;
+see the decision record. The text below is the phase as built.
+
 `[ci] profile`, defaulted on, governs the whole feature. Off means zero
 cost and not less cost: no entry runs profiled, nothing is written on
 the runner, nothing is pushed, nothing is recorded. A large, mature
@@ -609,6 +613,20 @@ Acceptance, and what proves each:
   a day, which is empty exactly when someone comes looking. The
   workspace's own contract stops repeating the number and takes the
   default.
+- 2026-10-17, the one switch is two. `[ci] timing`, on unless said
+  otherwise, runs every job profiled and gives each check leg its
+  timing row, the kilobytes `fm ci.timings`, the speed marks and
+  `fm ci.balance` read. `[ci] profile`, off unless asked, pushes the
+  trace itself, megabytes a leg that only `fm ci.profile` reads;
+  `profile = true` implies timing, and `profile = true` beside
+  `timing = false` refuses in `policy()`, naming both keys, since the
+  contract judge is per key and every reader of the policy meets
+  `policy()` once. One key could not keep the rows and drop the push,
+  which is what a workspace outside an investigation wants. The record
+  of what a dispatched run ran on is written under neither key: the
+  merge point reads it to find a failed wave about a squash, so it is
+  a row every job writes, not a cost either key prices. livery's own
+  contract keeps `profile = true`.
 
 ## Open
 

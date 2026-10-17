@@ -1428,7 +1428,7 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
 
     skip_unless_installed("docs")
 
-    root = _root(tmp_path)
+    root = _root(tmp_path, schedule="\n[ci]\nprofile = true\n")
     boxes: list[str] = []
     pushed: list[tuple[str, str]] = []
 
@@ -1500,7 +1500,7 @@ def test_a_job_that_went_red_still_keeps_its_trace(
     from livery.footman import Failed
     from livery.workshop import _traces
 
-    root = _root(tmp_path)
+    root = _root(tmp_path, schedule="\n[ci]\nprofile = true\n")
     pushed: list[str] = []
 
     def red(argv: list[str], env: dict[str, str]) -> int:
@@ -1541,13 +1541,13 @@ def test_a_job_that_went_red_still_keeps_its_trace(
     assert pushed == ["govern"]
 
 
-def test_a_workspace_that_keeps_no_traces_pays_nothing(
+def test_a_workspace_that_keeps_no_timing_pays_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Off is zero cost: no box, no flag, no push, and no plugin loaded."""
     from livery.workshop import _traces
 
-    root = _root(tmp_path, schedule="\n[ci]\nprofile = false\n")
+    root = _root(tmp_path, schedule="\n[ci]\ntiming = false\n")
     seen: list[list[str]] = []
     boxed: list[str] = []
 
@@ -1557,12 +1557,100 @@ def test_a_workspace_that_keeps_no_traces_pays_nothing(
         return 0
 
     def refuse(*args: object, **kwargs: object) -> str:
-        raise AssertionError("a workspace that keeps no traces pushed one")
+        raise AssertionError("a workspace that keeps no timing pushed a trace")
 
     monkeypatch.setattr(_traces, "push", refuse)
     _points.run_point(root, "merge", "govern", spawn=green)
     assert seen == [["fm", "workflow.configure", "--if-changed"]]
     assert boxed == ["<unset>"]
+
+
+def test_the_defaults_run_the_job_profiled_and_push_no_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Timing on, profile off: a box for the entries, and nothing leaves the runner."""
+    from livery.workshop import _traces
+
+    root = _root(tmp_path)
+    seen: list[list[str]] = []
+    boxed: list[str] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        boxed.append(env.get("FM_PROFILE_DIR", "<unset>"))
+        # Each entry leaves a fragment, as a profiled child does.
+        event = {"ph": "X", "name": argv[-1], "pid": 1, "tid": 1, "ts": 1.0, "dur": 1.0}
+        (Path(env["FM_PROFILE_DIR"]) / f"{len(seen)}.json").write_text(
+            json.dumps({"traceEvents": [event]}), encoding="utf-8"
+        )
+        return 0
+
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise AssertionError("a workspace that asked for no push pushed a trace")
+
+    monkeypatch.setattr(_traces, "push", refuse)
+    _points.run_point(root, "merge", "govern", spawn=green)
+    assert seen == [
+        [
+            "fm",
+            "--profile=fm-profile-workflow-configure.json",
+            "workflow.configure",
+            "--if-changed",
+        ]
+    ]
+    assert len(set(boxed)) == 1 and boxed[0] != "<unset>"
+    assert "profile:" not in capsys.readouterr().out
+
+
+def test_the_defaults_write_the_leg_s_row_from_the_trace_and_push_none(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The row is read from the gate's own trace; the push is the trace's own cost."""
+    from livery import git
+    from livery.workshop import _traces
+    from livery.workshop._ci_context import LEG_VARIABLE, state_store
+    from livery.workshop._ci_tasks import leg_flow
+    from livery.workshop._metrics import ROW_FILE, RUNS
+    from livery.workshop._verified import FULL, write_marker
+
+    root = seeds("pushed", pushed) / "work"
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "owner"\n'
+    )
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "7")
+    flags: list[str] = []
+
+    def spawn(argv: list[str], env: dict[str, str]) -> int:
+        task = _task_of(argv)
+        flags.append(argv[1])
+        if task == "check":
+            # The gate's own trace and its scope, as a profiled gate leaves
+            # them, and the copy it drops in the job's box.
+            event = {"ph": "X", "cat": "task", "name": "check", "pid": 1, "tid": 1}
+            trace = json.dumps({"traceEvents": [{**event, "ts": 0, "dur": 9000}]})
+            (root / _points.TRACE).write_text(trace)
+            (Path(env["FM_PROFILE_DIR"]) / "check.json").write_text(trace)
+            write_marker(root, FULL, leg=env[LEG_VARIABLE])
+        if task == "ci.leg":
+            monkeypatch.setenv(LEG_VARIABLE, env[LEG_VARIABLE])
+            job = argv[-1].removeprefix("--job=")
+            leg_flow(root, job=job, trace=Path(_points.TRACE))
+        return 0
+
+    _points.run_point(
+        root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=spawn
+    )
+    # Every entry ran under a trace of its own.
+    assert flags and all(flag.startswith("--profile=") for flag in flags)
+    # The leg's row is on its per-run ref, read from the gate's trace.
+    ref = RUNS.series("7", "check-ubuntu-latest-3.14").ref
+    held = git.read(state_store(root), ref).files
+    assert held is not None and ROW_FILE in held
+    # And no trace left the runner.
+    assert git.list_refs(state_store(root), _traces.TRACES.prefix) == {}
+    assert "pushed" not in capsys.readouterr().out
 
 
 def test_a_job_only_an_entry_names_is_emitted_on_one_runner(tmp_path: Path) -> None:

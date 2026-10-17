@@ -7,8 +7,8 @@ the tasks, commands and tests that leg actually ran. Open the file at
 [ui.perfetto.dev](https://ui.perfetto.dev); `chrome://tracing` and speedscope
 read it too.
 
-Nothing is kept unless the workspace asks for it, and nothing is read unless
-someone asks a question.
+No trace leaves a runner unless the workspace asks for it, and nothing is read
+unless someone asks a question.
 
 ## Getting one
 
@@ -153,7 +153,11 @@ No clone pays any of it: the channel is pushed and never mirrored.
 
 ```toml
 [ci]
-# Whether CI keeps a trace of what it did at all.
+# Whether every job runs profiled, so each check leg writes the trace its
+# timing row is read from. On unless said otherwise.
+timing = true
+# Whether a job pushes the trace it wrote to the trace refs. Off unless
+# asked; on needs timing on.
 profile = true
 # How many runs of traces are kept.
 profile-window = 100
@@ -164,6 +168,16 @@ profile-into = ".workshop/profiles"
 profile-keep = 10
 ```
 
+Two keys price two records. `timing` governs the profiled run: every entry
+of every job runs under `--profile`, and a check leg's timing row, the
+kilobytes `fm ci.timings`, the speed marks and `fm ci.balance` read, is read
+from the trace the gate wrote. `profile` governs the trace itself, megabytes
+a leg that only `fm ci.profile` reads: on, the job's box becomes one file
+pushed to the channel; off, the trace stays on the runner and goes with it,
+and the timing row is unaffected. A pushed trace is the one a profiled run
+writes, so `profile = true` implies timing, and a contract saying
+`profile = true` beside `timing = false` refuses, naming both keys.
+
 The two bounds answer different questions. `profile-window` governs the
 pushed channel, so it decides how far back a run can still be assembled;
 `profile-keep` governs this checkout's own disk, and the files it sweeps are
@@ -173,8 +187,9 @@ A key of the wrong type refuses when the contract is read, like any other
 contract key. A count below zero or an empty path is named on the leg that
 read it, and its default stands.
 
-`profile = false` means zero cost rather than less: no job runs anything
-profiled, nothing is written on a runner, and nothing is pushed. A run from
-a period when it was off still assembles at the job level, because that
-shape comes from the forge rather than from us. So an installation large
-enough to care can leave it off and turn it on while investigating.
+`timing = false` means zero cost rather than less: no job runs anything
+profiled, nothing is written on a runner, no timing row, and nothing is
+pushed. A run from a period when the push was off still assembles at the job
+level, because that shape comes from the forge rather than from us. So an
+installation large enough to care keeps its timing rows, leaves `profile`
+off, which is the default, and turns it on while investigating.
