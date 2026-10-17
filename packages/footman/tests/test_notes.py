@@ -8,23 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from livery.footman import _manifest, _notes
 from livery.footman._executor import run_chain
 from livery.footman._registry import Group
 from livery.footman._split import split_chain
 from livery.footman.testing import Runner
-
-
-@pytest.fixture(autouse=True)
-def clean_notes():
-    """Every test starts with default policy and a fresh dedup set."""
-    _notes.install_policy(None)
-    _notes.reset()
-    yield
-    _notes.install_policy(None)
-    _notes.reset()
 
 
 def drive(build, line, **cfg):

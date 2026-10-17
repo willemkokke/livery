@@ -71,16 +71,24 @@ def coverage_union() -> None:
     from contextlib import nullcontext
 
     from livery.extensions.coverage._floors import enforce_coverage
+    from livery.extensions.coverage._record import record_prefixes
     from livery.extensions.coverage._union import combine_union
     from livery.git import remote_snapshot
     from livery.workshop import ci_run, leave_section, state_store
 
     root = _root()
     run = ci_run()
-    # The legs' per-run refs and every record the union may carry
-    # from: one listing and one fetch.
+    # The legs' per-run refs and the records the union reads, the head
+    # branch's and main's: one listing and one fetch. Main's run reads
+    # the record of the branch the verified row names, known only once
+    # that row is read; its first read brings the record, every leg of
+    # it, in one more fetch (`remote_snapshot` brings a ref's whole key
+    # group), so it is not missing from the prefixes here.
     scope = (
-        remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "coverage/"))
+        remote_snapshot(
+            state_store(root),
+            fetch=(f"run/{run.run_id}/", *record_prefixes(run.head_ref)),
+        )
         if run is not None
         else nullcontext()
     )

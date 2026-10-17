@@ -8,6 +8,7 @@ import shutil
 import stat
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -552,6 +553,55 @@ def test_the_stamp_names_the_legs_labels(work: Path) -> None:
     assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1013"
     found, _ = _verified.record(work, tree)
     assert found is not None and found.legs == (MACOS, UBUNTU, WINDOWS)
+
+
+def test_the_stamp_skips_the_forges_rows_of_a_platforms_shards(work: Path) -> None:
+    # The fold left one row under the platform's name; the forge's rows
+    # of its shards carry no scope and block nothing.
+    entry: dict[str, Any] = {
+        "schema": _metrics.SCHEMA,
+        "jobs": {
+            DISPLAY[WINDOWS]: {
+                "scope": {"scope": "full", "packages": [], "leg": WINDOWS}
+            },
+            "check (windows-latest, 3.14, 1of2)": {"conclusion": "success"},
+            "check (windows-latest, 3.14, 2of2)": {"conclusion": "success"},
+            "check: [2of2]": {"conclusion": "success"},
+            DISPLAY[UBUNTU]: {
+                "scope": {"scope": "full", "packages": [], "leg": UBUNTU}
+            },
+        },
+    }
+    assert (
+        git.put(
+            state_store(work),
+            _metrics.SERIES.ref,
+            {_metrics.run_file(RUN.run_id): json.dumps(entry)},
+            message="rows",
+            ci_only=True,
+        )
+        == ""
+    )
+    tree = _verified.tree_id(work)
+    line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
+    assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1013"
+    found, _ = _verified.record(work, tree)
+    assert found is not None and found.legs == (UBUNTU, WINDOWS)
+    # A check row without a scope that spells no shard is a leg that
+    # left none, as before.
+    entry["jobs"]["check (macos-latest, 3.14)"] = {"conclusion": "success"}
+    assert (
+        git.put(
+            state_store(work),
+            _metrics.SERIES.ref,
+            {_metrics.run_file(RUN.run_id): json.dumps(entry)},
+            message="rows",
+            ci_only=True,
+        )
+        == ""
+    )
+    line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
+    assert line == "  verified: no stamp, check (macos-latest, 3.14) left no scope"
 
 
 def test_the_merges_stamp_names_every_platform_after_a_one_platform_pull_request(

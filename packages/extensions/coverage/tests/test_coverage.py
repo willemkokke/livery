@@ -28,6 +28,7 @@ from livery import git
 from livery.extensions.coverage import _floors as coverage_floors
 from livery.extensions.coverage import _leg as coverage_leg
 from livery.extensions.coverage import _record as coverage_record
+from livery.extensions.coverage import _tasks as coverage_tasks
 from livery.extensions.coverage import _union as coverage_union
 from livery.extensions.coverage._format import Merged
 from livery.extensions.python import _backend as _python
@@ -2462,3 +2463,165 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     )
     with pytest.raises(_FAILURES):
         coverage_floors.enforce_coverage(tmp_path, (package,))
+
+
+# The sharded check leg: a shard leaves parts for the suites with a
+# test file in its share alone. The refusal first: a shard's record
+# that does not read.
+
+
+def test_a_shard_expects_parts_only_for_the_suites_its_share_touched(
+    tmp_path: Path, python_steps: object
+) -> None:
+    from datetime import UTC, datetime
+
+    from livery.workshop import Shard, leave_shard
+    from livery.workshop._shard import SHARD_FILE
+
+    x, y = _suite(tmp_path, "x"), _suite(tmp_path, "y")
+    _own_tests(tmp_path)
+    full = LegScope("full", leg="check-a-2of2")
+    before = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+    record = tmp_path / SHARD_FILE
+    record.parent.mkdir(parents=True)
+    record.write_text("{not json", encoding="utf-8")
+    with pytest.raises(
+        _FAILURES,
+        match=(
+            r"coverage: \.workshop/fm-shard\.json does not parse \(.*\); a sharded"
+            r" leg's parts are judged by the test files its shard ran"
+        ),
+    ):
+        coverage_leg.suites_that_ran(full, tmp_path, (x, y))
+    record.unlink()
+
+    def ran() -> list[str]:
+        return [
+            unit.path for unit in coverage_leg.suites_that_ran(full, tmp_path, (x, y))
+        ]
+
+    # Without a record, or on one shard of one, every unit ran whole.
+    assert ran() == ["packages/x", "packages/y", "tests"]
+    leave_shard(
+        tmp_path,
+        shard=Shard(1, 1),
+        digest="d",
+        files=("packages/y/tests/test_b.py",),
+        rows=(),
+        before=before,
+    )
+    assert ran() == ["packages/x", "packages/y", "tests"]
+    # On a shard of two, the units with a test file in the share: y's
+    # and the workspace's own; a file of another package whose path
+    # starts like x's is not x's.
+    leave_shard(
+        tmp_path,
+        shard=Shard(2, 2),
+        digest="d",
+        files=(
+            "packages/y/tests/sub/test_b.py",
+            "tests/test_w.py",
+            "packages/xy/tests/test_q.py",
+        ),
+        rows=("r1.json",),
+        before=before,
+    )
+    assert ran() == ["packages/y", "tests"]
+    # A share with no file of any unit: nothing ran on this shard.
+    leave_shard(
+        tmp_path, shard=Shard(2, 2), digest="d", files=(), rows=(), before=before
+    )
+    assert ran() == []
+
+
+def test_a_shard_leaves_parts_for_the_suites_its_share_touched_alone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+) -> None:
+    from datetime import UTC, datetime
+
+    from livery.workshop import Shard, leave_shard
+    from livery.workshop._verified import FULL, write_marker
+
+    _measured_by_pytest(tmp_path, python=False)
+    x = _suite(tmp_path, "x")
+    y = _suite(tmp_path, "y")
+    y_source = str(_source(tmp_path, "y"))
+    _source(tmp_path, "x")
+    # Only y's tests ran on this shard: x's share is empty, so the leg
+    # expects no part of x and refuses nothing.
+    _contextual_part(
+        tmp_path,
+        "host.1.X",
+        {
+            "": {y_source: [1]},
+            "packages/y/tests/test_mod.py::test_one|run": {y_source: [2, 3]},
+        },
+    )
+    write_marker(tmp_path, FULL, leg="check-a-2of2")
+    leave_shard(
+        tmp_path,
+        shard=Shard(2, 2),
+        digest="d",
+        files=("packages/y/tests/test_mod.py",),
+        rows=("r1.json",),
+        before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
+    )
+    put = _capture_leaves(monkeypatch)
+    _in_ci(monkeypatch, "check-a-2of2")
+    coverage_leg.gather_leg(tmp_path, (x, y))
+    out = capsys.readouterr().out
+    units = _units(put[0])
+    assert sorted(units) == ["packages/y"]
+    assert ran(units["packages/y"]) == {"packages/y/src/livery/y/mod.py": {1, 2, 3}}
+    assert put[0]["leg"] == "check-a-2of2" and put[0]["scope"] == "full"
+    assert "packages/x ran without a measurement" not in out
+    assert "coverage store: packages/y stored for closure" in out
+
+
+# --- the gate job: what it brings from the store -------------------------------
+
+
+def test_the_gate_job_brings_the_run_s_refs_and_the_two_records_it_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import contextlib
+    from collections.abc import Iterable
+
+    from livery.workshop import RunContext
+
+    monkeypatch.setattr(coverage_tasks, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(coverage_tasks, "discover_packages", lambda root: ())
+    monkeypatch.setattr(coverage_union, "combine_union", lambda root, packages: ())
+    brought: list[tuple[str, ...]] = []
+
+    def _snapshot(
+        store: git.StateStore, *, fetch: Iterable[str] = (), publish: bool = False
+    ) -> contextlib.AbstractContextManager[None]:
+        brought.append(tuple(fetch))
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr("livery.git.remote_snapshot", _snapshot)
+    runs: list[RunContext | None] = [None]
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: runs[0]
+    )
+    # Outside CI nothing is brought: the union refuses on its own.
+    coverage_tasks.coverage_union()
+    assert brought == []
+    # Main's run names no head branch: its legs' refs and main's record.
+    runs[0] = RunContext("gitea", "8", "push", "refs/heads/main")
+    coverage_tasks.coverage_union()
+    assert brought == [("run/8/", git.NAMESPACE + "coverage/main/")]
+    # A pull request's run: its legs' refs, its branch's record and main's.
+    runs[0] = RunContext(
+        "gitea", "9", "pull_request", "refs/pull/3/merge", head_ref="feat/x"
+    )
+    coverage_tasks.coverage_union()
+    assert brought[-1] == (
+        "run/9/",
+        git.NAMESPACE + "coverage/feat-x/",
+        git.NAMESPACE + "coverage/main/",
+    )

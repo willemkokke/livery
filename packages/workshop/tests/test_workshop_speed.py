@@ -189,10 +189,60 @@ def test_a_rows_own_label_names_the_leg_before_the_display_name() -> None:
 def test_leg_label_reads_a_matrix_display_name_and_keeps_a_plain_one() -> None:
     assert _speed.leg_label(UBUNTU) == LEG
     assert _speed.leg_label("check (macos-latest, 3.11)") == "check-macos-latest-3.11"
+    # A shard leg's display name has a third part, its shard.
+    assert (
+        _speed.leg_label("check (windows-latest, 3.14, 2of4)")
+        == "check-windows-latest-3.14-2of4"
+    )
+    assert _speed.leg_label("nightly (3.14)") == "nightly (3.14)"
     assert _speed.leg_label("docs") == "docs"
     assert _speed.is_reference(LEG) and not _speed.is_reference(
         "check-macos-latest-3.14"
     )
+
+
+def test_a_display_name_spells_its_shard_on_every_forge_and_its_platform_without() -> (
+    None
+):
+    from livery.workshop._shard import ONE, Shard
+
+    # No shard spelled, and a third value that is no shard, read as one
+    # of one, so a matrix with another third value breaks nothing.
+    assert _speed.display_shard(UBUNTU) == ONE
+    assert _speed.display_shard("check") == ONE
+    assert _speed.display_shard("check (ubuntu-latest, 3.14, extra)") == ONE
+    assert _speed.display_shard("check (ubuntu-latest, 3.14, 0of2)") == ONE
+    assert _speed.display_shard("check (windows-latest, 3.14, 2of4)") == Shard(2, 4)
+    assert _speed.display_shard("check: [2of4]") == Shard(2, 4)
+    assert _speed.platform_display("check (windows-latest, 3.14, 2of4)") == (
+        "check (windows-latest, 3.14)"
+    )
+    assert _speed.platform_display("check: [2of4]") == "check"
+    assert _speed.platform_display(UBUNTU) == UBUNTU
+    assert _speed.platform_display("check") == "check"
+    # The forge's own row of a shard: no scope and a shard spelled.
+    assert _speed.forge_shard_row("check (windows-latest, 3.14, 2of4)", {})
+    assert _speed.forge_shard_row("check: [2of4]", {"conclusion": "success"})
+    assert not _speed.forge_shard_row(UBUNTU, {})
+    assert not _speed.forge_shard_row(
+        "check (windows-latest, 3.14, 2of4)", {"scope": {"scope": "full"}}
+    )
+
+
+def test_samples_skip_the_forges_rows_of_a_platforms_shards() -> None:
+    # The folded row under the platform's name carries the sums; the
+    # shards' forge rows beside it, times alone, yield no sample.
+    shards: dict[str, dict[str, Any]] = {
+        "check (windows-latest, 3.14, 1of2)": {"conclusion": "success"},
+        "check (windows-latest, 3.14, 2of2)": {
+            "conclusion": "success",
+            "packages": {"forge": {"tests_ms": 1000.0, "tests": 1}},
+        },
+    }
+    folded = {**_leg(30.0), "scope": {"scope": "full", "leg": LEG}}
+    entries = [_entry(50, {UBUNTU: folded, **shards})]
+    found = _speed.samples(entries, "50")
+    assert [(sample.leg, sample.seconds) for sample in found] == [(LEG, 30.0)]
 
 
 def test_the_limit_is_the_margin_or_the_floor_whichever_is_higher() -> None:

@@ -99,6 +99,30 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
     assert gitlab == _ci_context.RunContext("gitlab", "42", "push", "main")
 
 
+def test_the_run_context_shard_is_the_legs_and_one_without_a_label() -> None:
+    from livery.workshop import Shard
+
+    # A label whose tail is outside the form raises naming it, before
+    # any shard is read as one.
+    broken = _ci_context.RunContext("github", "7", "push", "", leg="check-a-3.14-0of2")
+    with pytest.raises(ValueError, match="'0of2' is not a shard"):
+        _ = broken.shard
+    base = {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_EVENT_NAME": "push"}
+    split = _ci_context.run_context(
+        {**base, "WORKSHOP_LEG": "check-windows-latest-3.14-2of4"}
+    )
+    assert split is not None
+    assert split.leg == "check-windows-latest-3.14-2of4"
+    assert split.shard == Shard(2, 4)
+    plain = _ci_context.run_context(
+        {**base, "WORKSHOP_LEG": "check-ubuntu-latest-3.14"}
+    )
+    assert plain is not None and plain.shard == Shard(1, 1)
+    unlabelled = _ci_context.run_context(base)
+    assert unlabelled is not None and unlabelled.leg == ""
+    assert unlabelled.shard == Shard(1, 1)
+
+
 def test_ci_run_is_the_public_answer_and_none_at_a_desk() -> None:
     from livery.workshop import RunContext, ci_run
 

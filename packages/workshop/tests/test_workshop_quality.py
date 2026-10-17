@@ -7,13 +7,17 @@ built and dropped exits green having checked nothing.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 import workshop_python_steps as fake_steps
 from livery.workshop import _phases, _quality
+from livery.workshop._ci_context import LEG_VARIABLE
 from livery.workshop._packages import Package
+from livery.workshop._phases import PhaseContext
+from livery.workshop._shard import ONE, Shard
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 # The python steps that judge and never rewrite, sorted, as the fakes
@@ -82,6 +86,94 @@ def _record(
     monkeypatch.setattr(fake_steps, "run_typecheck", named("typecheck.fake"))
     monkeypatch.setattr(fake_steps, "run_test", named("test.fake"))
     return ran, calls
+
+
+def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
+    """A fake Gitea run, this process on the check leg labelled *leg*."""
+    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "1013")
+    monkeypatch.setenv(LEG_VARIABLE, leg)
+
+
+def _seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[PhaseContext]:
+    """A bare workspace at *tmp_path*, the walk replaced; the contexts it is handed."""
+    seen: list[PhaseContext] = []
+
+    def walk(ctx: PhaseContext, **kwargs: object) -> None:
+        del kwargs
+        seen.append(ctx)
+
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    (tmp_path / "tasks.py").write_text("x = 1\n")
+    monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(_quality, "walk", walk)
+    monkeypatch.chdir(tmp_path)
+    return seen
+
+
+def test_a_shard_outside_the_form_refuses_before_anything_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _seeded(tmp_path, monkeypatch)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(
+        (SystemExit, Exception),
+        match=re.escape("'0of2' is not a shard: the index counts from 1"),
+    ):
+        _quality.check("tasks.py", shard="0of2")
+    with pytest.raises(
+        (SystemExit, Exception),
+        match=re.escape(
+            "'two' is not a shard; a shard is spelled <i>of<n>, such as 2of4"
+        ),
+    ):
+        _quality.run_steps(("drift.check",), shard="two")
+    assert seen == []
+
+
+def test_a_leg_label_outside_the_form_refuses_naming_the_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _seeded(tmp_path, monkeypatch)
+    _in_ci(monkeypatch, "check-ubuntu-latest-3.14-0of2")
+    with pytest.raises(
+        (SystemExit, Exception),
+        match=re.escape(
+            "WORKSHOP_LEG=check-ubuntu-latest-3.14-0of2: '0of2' is not a shard:"
+            " the index counts from 1"
+        ),
+    ):
+        _quality.run_phase_over("drift", ())
+    assert seen == []
+
+
+def test_inside_ci_the_legs_label_names_the_shard_and_the_flag_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _seeded(tmp_path, monkeypatch)
+    _in_ci(monkeypatch, "check-ubuntu-latest-3.14-2of3")
+    # No flag: the gate over named files, a verb with and without
+    # paths, and a phase run over packages all read the label.
+    _quality.check("tasks.py")
+    _quality.run_steps(("drift.check",))
+    _quality.run_steps(("drift.check",), ("tasks.py",))
+    _quality.run_phase_over("drift", ())
+    assert [ctx.shard for ctx in seen] == [Shard(2, 3)] * 4
+    # The flag, when given, is the shard.
+    seen.clear()
+    _quality.check("tasks.py", shard="3of3")
+    _quality.run_steps(("drift.check",), shard="1of3")
+    assert [ctx.shard for ctx in seen] == [Shard(3, 3), Shard(1, 3)]
+    # A label without a shard is one shard of one, as a desk is.
+    seen.clear()
+    _in_ci(monkeypatch, "check-ubuntu-latest-3.14")
+    _quality.run_phase_over("drift", ())
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    _quality.run_steps(("drift.check",))
+    assert [ctx.shard for ctx in seen] == [ONE, ONE]
 
 
 def test_a_fixing_gate_refuses_inside_ci(
@@ -189,7 +281,6 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # fix and an extension's own included, and none of them is judged after:
     # the order lives in the walk alone, whichever gate calls it.
     from livery.workshop import _steps
-    from livery.workshop._phases import PhaseContext
     from livery.workshop._steps import StepRecord, register_step
 
     state = _steps.snapshot()
@@ -368,6 +459,95 @@ def test_the_whole_gate_runs_every_member_in_one_parallel_block(
             *PYTHON_JUDGES,
         )
     )
+
+
+def _remembered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    """What the local gate record is asked to remember; the record itself untouched."""
+    rows: list[dict[str, object]] = []
+
+    def remember(root: Path, **row: object) -> str:
+        del root
+        rows.append(row)
+        return "  remembered"
+
+    monkeypatch.setattr("livery.workshop._gate_record.remember", remember)
+    return rows
+
+
+def test_a_later_shard_runs_the_steps_that_read_it_alone_and_names_the_rest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    python_steps: object,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path)
+    rows = _remembered(monkeypatch)
+    shards: list[object] = []
+
+    def test_body(*args: object, **kwargs: object) -> None:
+        del args
+        ran.append("test.fake")
+        shards.append(kwargs["shard"])
+
+    monkeypatch.setattr(fake_steps, "run_test", test_body)
+    _quality._run_check(full=True, fix=False, base="", shard=Shard(2, 3))
+    # The one step that reads the shard runs, and sees which it is.
+    assert ran == ["<parallel", "test.fake", ">parallel"]
+    assert shards == [Shard(2, 3)]
+    out = capsys.readouterr().out
+    left = sorted(
+        line.strip().partition(":")[0]
+        for line in out.splitlines()
+        if "left to the first shard (this leg is 2of3)" in line
+    )
+    assert left == sorted(
+        (
+            "format.fake",
+            "layering.graph",
+            *LAYERING_STEPS,
+            "lint.fake",
+            "provenance.check",
+            "drift.check",
+            "typecheck.fake",
+        )
+    )
+    # A share of the gate proves no tree.
+    assert rows == []
+    assert (
+        "shard 2of3: a share of the gate ran; the tree is not recorded as proved" in out
+    )
+
+
+def test_the_first_shard_runs_every_step_and_names_none(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    python_steps: object,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path)
+    rows = _remembered(monkeypatch)
+    _quality._run_check(full=True, fix=False, base="", shard=Shard(1, 3))
+    assert sorted(ran[1:-1]) == sorted(
+        (
+            "format.fake",
+            "layering.graph",
+            *LAYERING_STEPS,
+            "lint.fake",
+            "provenance.check",
+            "drift.check",
+            *PYTHON_JUDGES,
+        )
+    )
+    out = capsys.readouterr().out
+    assert "left to the first shard" not in out
+    # The first shard still ran a share of the tests, so it proves no tree
+    # either; one shard of one does.
+    assert rows == []
+    assert "shard 1of3: a share of the gate ran" in out
+    ran.clear()
+    _quality._run_check(full=True, fix=False, base="")
+    assert len(rows) == 1
+    assert "a share of the gate ran" not in capsys.readouterr().out
 
 
 def test_a_workspace_without_python_starts_no_python_step(

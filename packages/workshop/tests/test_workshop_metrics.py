@@ -207,6 +207,30 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
     assert row["total_ms"] == 4640.0
 
 
+def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
+    trace = _trace(
+        tmp_path / "fm-profile.json",
+        tasks={"check": 4640.0},
+        tests={
+            "packages/forge/tests/test_a.py::test_one": 1000.0,
+            "packages/forge/tests/test_a.py::test_two": 250.0,
+            "packages/workshop/tests/test_b.py::test_three": 20.0,
+            # The workspace's own suite is no package, and still a file.
+            "tests/test_root.py::test_outside": 100.0,
+        },
+    )
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    # Three phases each: 3750 ms, 60 ms and 300 ms, to a tenth of a second.
+    assert row["files"] == {
+        "packages/forge/tests/test_a.py": 3.8,
+        "packages/workshop/tests/test_b.py": 0.1,
+        "tests/test_root.py": 0.3,
+    }
+    # The package sums stand beside it, as before.
+    assert row["packages"]["forge"] == {"tests_ms": 3750.0, "tests": 2}
+
+
 # --- the collect: refusals first ----------------------------------------------
 
 
@@ -264,6 +288,59 @@ def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(
         {"test": "packages/forge/tests/t.py::slow", "s": 4.0},
         {"test": "packages/forge/tests/t.py::quick", "s": 0.1},
     ]
+
+
+def test_a_shard_file_that_is_not_a_record_fails_the_legs_write_by_name(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    shard = work / _shard.SHARD_FILE
+    shard.parent.mkdir(parents=True)
+    shard.write_text("not json")
+    _lines, why = _metrics.put_leg(
+        work, RUN, job=JOB, label="check-a-2of4", trace=trace
+    )
+    assert why.startswith(f"{_shard.SHARD_FILE} does not parse")
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+
+
+def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
+    work: Path, tmp_path: Path
+) -> None:
+    from datetime import UTC, datetime
+
+    from livery.workshop import _shard
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
+    row, why = _metrics.RUNS.series(RUN.run_id, "check-a").row(
+        state_store(work), _metrics.ROW_FILE
+    )
+    assert why == "" and row is not None and "shard" not in row.data
+    before = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+    _shard.leave_shard(
+        work,
+        shard=_shard.Shard(2, 4),
+        digest="ab" * 32,
+        files=["b.py", "a.py"],
+        rows=["r1.json"],
+        before=before,
+    )
+    label = "check-a-2of4"
+    assert _metrics.put_leg(work, RUN, job=JOB, label=label, trace=trace)[1] == ""
+    row, why = _metrics.RUNS.series(RUN.run_id, label).row(
+        state_store(work), _metrics.ROW_FILE
+    )
+    assert why == "" and row is not None
+    assert row.data["shard"] == {
+        "shard": "2of4",
+        "digest": "ab" * 32,
+        "files": ["b.py", "a.py"],
+        "rows": ["r1.json"],
+        "before": before.isoformat(),
+    }
 
 
 def test_the_per_run_family_spells_the_janitors_prefix_and_safe_refs() -> None:
@@ -633,6 +710,74 @@ def test_collect_records_every_job_and_the_runs_wall(
     assert "\n  run\n" in text and "\n  docs\n" in text and "\n  gate\n" in text
     assert "\n  deploy\n" not in text
     assert _metrics._metrics({"jobs": {}}) == {}
+
+
+def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+    from livery.workshop._verified import write_marker
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    # The gate's marker beside the traces names the leg the rows are
+    # keyed by. A leg without tests writes no durations row; a leg with
+    # tests writes one under its platform leg, named as the run's file.
+    write_marker(tmp_path, "full", leg="check-a")
+    bare = _trace(tmp_path / "bare.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job="gate", label="gate", trace=bare)[1] == ""
+    tests = {
+        "packages/forge/tests/test_a.py::test_x": 1000.0,
+        "packages/forge/tests/test_b.py::test_y": 500.0,
+    }
+    full = _trace(tmp_path / "full.json", tasks={"check": 100.0}, tests=tests)
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=full)[1] == ""
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    series = _shard.DURATIONS.series("check-a")
+    assert f"  {series.ref}: 2 file(s) recorded for run {RUN.run_id}" in lines
+    assert not any(
+        line.startswith(f"  {_shard.DURATIONS.series('gate').ref}") for line in lines
+    )
+    found = series.rows(state_store(work))
+    assert not found.failed and len(found.rows) == 1
+    assert found.rows[0].name == _metrics.run_file(RUN.run_id)
+    assert found.rows[0].data["run"] == RUN.run_id
+    assert found.rows[0].data["files"] == {
+        "packages/forge/tests/test_a.py": 3.0,
+        "packages/forge/tests/test_b.py": 1.5,
+    }
+    assert _shard.DURATIONS.series("gate").rows(state_store(work)).rows == ()
+
+
+def test_collect_leaves_the_durations_to_the_fold_for_one_shards_row(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    tests = {"packages/forge/tests/test_a.py::test_x": 1000.0}
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0}, tests=tests)
+    from datetime import UTC, datetime
+
+    _shard.leave_shard(
+        work,
+        shard=_shard.Shard(1, 2),
+        digest="ab" * 32,
+        files=["packages/forge/tests/test_a.py"],
+        rows=[],
+        before=datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    label = "check-a-1of2"
+    assert _metrics.put_leg(work, RUN, job=JOB, label=label, trace=trace)[1] == ""
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert (
+        f"  {JOB}: one shard's row; the platform's folded row carries the durations"
+        in lines
+    )
+    assert _shard.DURATIONS.series("check-a").rows(state_store(work)).rows == ()
 
 
 def test_collect_finds_a_pull_requests_run_under_the_events_head(
@@ -1029,3 +1174,134 @@ def test_the_collect_and_the_drop_fail_open_when_the_forge_refuses_the_question(
     assert (
         git.read(state_store(work), _metrics.run_ref(RUN, "wheels")).files is not None
     )
+
+
+# --- a platform's shards in the rendering ------------------------------------
+
+
+def _run_entry(run: int, jobs: dict[str, dict[str, object]]) -> str:
+    return json.dumps(
+        {
+            "schema": _metrics.SCHEMA,
+            "run": str(run),
+            "sha": "d" * 40,
+            "run_wall_ms": 300000.0,
+            "jobs": jobs,
+        }
+    )
+
+
+def _leg_entry(
+    *, queued: float, wall: float, total: float, shard: dict[str, object] | None = None
+) -> dict[str, object]:
+    """A leg's row as the collect joins it: its trace half and the forge's times."""
+    row: dict[str, object] = {
+        "total_ms": total,
+        "tasks": {"check": total},
+        "waits_ms": {},
+        "packages": {"a": {"tests_ms": 1500.0, "tests": 5}},
+        "slowest": [],
+        "scope": {"scope": "full", "packages": [], "leg": "check-ubuntu-latest-3.14"},
+        "conclusion": "success",
+        "complete": True,
+        "queued_ms": queued,
+        "wall_ms": wall,
+        "steps": [{"name": "Gate", "ms": 260000.0}],
+    }
+    if shard is not None:
+        row["shard"] = shard
+    return row
+
+
+def _forge_entry(*, queued: float, wall: float) -> dict[str, object]:
+    """A job's row from the forge's times alone, as a shard's or the gate's is."""
+    return {
+        "conclusion": "success",
+        "status": "completed",
+        "complete": True,
+        "queued_ms": queued,
+        "wall_ms": wall,
+        "steps": [],
+    }
+
+
+def test_render_of_an_unsharded_platform_is_one_section_per_job(work: Path) -> None:
+    jobs = {
+        JOB: _leg_entry(queued=10000.0, wall=290000.0, total=250000.0),
+        "gate": _forge_entry(queued=5000.0, wall=60000.0),
+    }
+    files = {_metrics.run_file("1013"): _run_entry(1013, jobs)}
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
+    expected = """\
+  1 run(s), latest 1013 at dddddddddddd
+  check (ubuntu-latest, 3.14)
+    metric                                          latest       p50       p90
+    queued_ms                                        10.0s     10.0s     10.0s
+    step Gate                                       260.0s    260.0s    260.0s
+    task check                                      250.0s    250.0s    250.0s
+    tests a                                           1.5s      1.5s      1.5s
+    total_ms                                        250.0s    250.0s    250.0s
+    wall_ms                                         290.0s    290.0s    290.0s
+  gate
+    metric                                          latest       p50       p90
+    queued_ms                                         5.0s      5.0s      5.0s
+    wall_ms                                          60.0s     60.0s     60.0s
+  run
+    metric                                          latest       p50       p90
+    wall_ms                                         300.0s    300.0s    300.0s
+"""
+    assert "\n".join(_metrics.render(work)) + "\n" == expected
+
+
+def test_render_folds_a_platforms_shards_into_its_section_with_a_line_per_shard(
+    work: Path,
+) -> None:
+    """The folded row is the platform's section; each shard is a line under it.
+
+    The shards' own rows carry the forge's times and no scope: they
+    are no sections of their own, and no mover names one. A shard the
+    run's file has no forge row for shows no times.
+    """
+    shards = [
+        {
+            "shard": f"{index}of3",
+            "leg": f"check-ubuntu-latest-3.14-{index}of3",
+            "job": f"check (ubuntu-latest, 3.14, {index}of3)",
+            "when": "",
+            "files": 2,
+            "total_ms": 250000.0,
+            "packages": {},
+        }
+        for index in (1, 2, 3)
+    ]
+    folded = {
+        "count": 3,
+        "digest": "abc",
+        "rows": ["r1.json"],
+        "before": "2026-10-17T09:30:00+00:00",
+        "shards": shards,
+    }
+    jobs = {
+        JOB: _leg_entry(queued=10000.0, wall=290000.0, total=250000.0, shard=folded),
+        "check (ubuntu-latest, 3.14, 1of3)": _forge_entry(
+            queued=10000.0, wall=290000.0
+        ),
+        "check (ubuntu-latest, 3.14, 2of3)": _forge_entry(
+            queued=12000.0, wall=200000.0
+        ),
+        "gate": _forge_entry(queued=5000.0, wall=60000.0),
+    }
+    files = {_metrics.run_file(str(n)): _run_entry(n, jobs) for n in (1, 2)}
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
+    lines = _metrics.render(work, since=1, base=5)
+    assert "  check (ubuntu-latest, 3.14)" in lines
+    assert [line for line in lines if "of3" in line] == [
+        "    shard 1of3: wall 290.0s, queued 10.0s",
+        "    shard 2of3: wall 200.0s, queued 12.0s",
+        "    shard 3of3: wall -, queued -",
+    ]
+    # Under the platform's own metrics, before the next section.
+    at = lines.index("    shard 1of3: wall 290.0s, queued 10.0s")
+    assert lines[at - 1].startswith("    wall_ms")
+    assert lines[at + 3] == "  gate"
+    assert "  movers: the last 1 run(s) against the 1 before" in lines

@@ -734,3 +734,210 @@ def test_pull_request_runners_equal_to_the_runners_render_the_plain_list(
         "macos-latest",
     ]
     assert jobs["check"].get("needs", []) == []
+
+
+def _root_sharded(tmp_path: Path, kind: str, ci: str) -> Path:
+    root = _root(tmp_path, kind)
+    contract = root / "workshop.toml"
+    contract.write_text(contract.read_text() + ci)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("ci", "said"),
+    [
+        (
+            'shards = { "macos-latest" = 5 }\n',
+            r"\[ci\] shards gives macos-latest 5, above the cap of 4",
+        ),
+        (
+            'shards = { "windows-latest" = 2 }\n',
+            r"\[ci\] shards names windows-latest, which \[ci\] runners does not list",
+        ),
+        (
+            'pull-request-shards = { "macos-latest" = 0 }\n',
+            r"\[ci\] pull-request-shards gives macos-latest 0; a count is at least 1",
+        ),
+    ],
+)
+def test_a_shard_count_outside_the_contract_refuses_at_render(
+    tmp_path: Path, ci: str, said: str
+) -> None:
+    # The refusal is the contract reader's own; the render reaches it
+    # before it writes a line.
+    with pytest.raises(footman.Failed, match=said):
+        generate(_root_sharded(tmp_path, "github", ci))
+
+
+def test_the_facts_carry_one_shard_per_runner_while_no_shard_is_declared(
+    tmp_path: Path,
+) -> None:
+    facts = _facts(_root(tmp_path, "github"))
+    assert facts["shards"] == {"ubuntu-latest": 1, "macos-latest": 1}
+    assert facts["pull_request_shards"] == {"ubuntu-latest": 1, "macos-latest": 1}
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_shard_count_renders_the_check_matrix_as_include_entries_in_order(
+    tmp_path: Path, kind: str
+) -> None:
+    root = _root_sharded(tmp_path, kind, 'shards = { "macos-latest" = 2 }\n')
+    text = generate(root)[f".{kind}/workflows/ci.yml"]
+    jobs = _doc(text)["jobs"]
+    # A pull request's shards are the full set's, so no legs job: the
+    # matrix is literal on the check job, as include entries alone, one
+    # per os, python and shard in that order. A runner with one shard
+    # has its entry without the key: the forge names its job as the
+    # unsplit leg, `check (ubuntu-latest, 3.13)`, which is how the
+    # runner names it and keys its rows, and the call's shard is empty.
+    assert "legs" not in jobs
+    assert jobs["check"].get("needs", []) == []
+    assert jobs["check"]["strategy"] == {
+        "fail-fast": False,
+        "matrix": {
+            "include": [
+                {"os": "ubuntu-latest", "python": "3.13"},
+                {"os": "ubuntu-latest", "python": "3.14"},
+                {"os": "macos-latest", "python": "3.13", "shard": "1of2"},
+                {"os": "macos-latest", "python": "3.13", "shard": "2of2"},
+                {"os": "macos-latest", "python": "3.14", "shard": "1of2"},
+                {"os": "macos-latest", "python": "3.14", "shard": "2of2"},
+            ]
+        },
+    }
+    assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
+    assert _calls(jobs["check"]) == [
+        'ci.run --point=gate --job=check --os="${{ matrix.os }}"'
+        ' --python="${{ matrix.python }}" --shard="${{ matrix.shard }}"'
+    ]
+    # The entry's python is quoted as the plain list's is, since YAML
+    # reads a bare 3.10 as a number; the shard is a word.
+    assert '          - {os: macos-latest, python: "3.14", shard: 2of2}\n' in text
+    assert '          - {os: ubuntu-latest, python: "3.14"}\n' in text
+    # Nothing else moved: the verdict waits on the check legs as before.
+    assert "check" in jobs["gate"]["needs"]
+
+
+def test_pull_request_shards_that_differ_render_the_legs_job_with_include_literals(
+    tmp_path: Path,
+) -> None:
+    root = _root_sharded(
+        tmp_path,
+        "github",
+        'shards = { "macos-latest" = 2 }\n'
+        'pull-request-shards = { "ubuntu-latest" = 2 }\n',
+    )
+    jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
+    # The runners are the same on every event; the counts differ, so
+    # the legs job holds both matrices, each as include entries, and
+    # the event picks one. A runner with one shard has no shard key in
+    # either literal.
+    assert list(jobs)[:2] == ["legs", "check"]
+    (step,) = jobs["legs"]["steps"]
+    pull = (
+        '{"include":['
+        '{"os":"ubuntu-latest","python":"3.13","shard":"1of2"},'
+        '{"os":"ubuntu-latest","python":"3.13","shard":"2of2"},'
+        '{"os":"ubuntu-latest","python":"3.14","shard":"1of2"},'
+        '{"os":"ubuntu-latest","python":"3.14","shard":"2of2"},'
+        '{"os":"macos-latest","python":"3.13"},'
+        '{"os":"macos-latest","python":"3.14"}]}'
+    )
+    full = (
+        '{"include":['
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"},'
+        '{"os":"macos-latest","python":"3.13","shard":"1of2"},'
+        '{"os":"macos-latest","python":"3.13","shard":"2of2"},'
+        '{"os":"macos-latest","python":"3.14","shard":"1of2"},'
+        '{"os":"macos-latest","python":"3.14","shard":"2of2"}]}'
+    )
+    assert step["env"]["LEGS"] == (
+        f"${{{{ github.event_name == 'pull_request' && !contains("
+        f"github.event.pull_request.labels.*.name, 'ci:every-runner') &&"
+        f" '{pull}' || '{full}' }}}}"
+    )
+    assert step["run"] == 'echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"'
+    assert jobs["check"]["needs"] == ["legs"]
+    assert (
+        jobs["check"]["strategy"]["matrix"]
+        == "${{ fromJSON(needs.legs.outputs.matrix) }}"
+    )
+    assert _calls(jobs["check"]) == [
+        'ci.run --point=gate --job=check --os="${{ matrix.os }}"'
+        ' --python="${{ matrix.python }}" --shard="${{ matrix.shard }}"'
+    ]
+
+
+def test_narrowed_pull_request_runners_with_a_shard_render_include_literals_for_both(
+    tmp_path: Path,
+) -> None:
+    root = _root_sharded(
+        tmp_path,
+        "github",
+        'shards = { "macos-latest" = 2 }\npull-request-runners = ["ubuntu-latest"]\n',
+    )
+    jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
+    # A count above one on any event puts both literals in the include
+    # shape, so the one call passes the shard on every event, empty
+    # for a runner with one shard; the pull request's literal holds its
+    # runners alone, each with the count [ci] shards gives it while
+    # pull-request-shards is absent.
+    (step,) = jobs["legs"]["steps"]
+    pull = (
+        '{"include":['
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"}]}'
+    )
+    full = (
+        '{"include":['
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"},'
+        '{"os":"macos-latest","python":"3.13","shard":"1of2"},'
+        '{"os":"macos-latest","python":"3.13","shard":"2of2"},'
+        '{"os":"macos-latest","python":"3.14","shard":"1of2"},'
+        '{"os":"macos-latest","python":"3.14","shard":"2of2"}]}'
+    )
+    assert step["env"]["LEGS"] == (
+        f"${{{{ github.event_name == 'pull_request' && !contains("
+        f"github.event.pull_request.labels.*.name, 'ci:every-runner') &&"
+        f" '{pull}' || '{full}' }}}}"
+    )
+    assert _calls(jobs["check"]) == [
+        'ci.run --point=gate --job=check --os="${{ matrix.os }}"'
+        ' --python="${{ matrix.python }}" --shard="${{ matrix.shard }}"'
+    ]
+
+
+def test_the_gitlab_check_job_runs_the_first_runners_shards_as_a_parallel_matrix(
+    tmp_path: Path,
+) -> None:
+    prog = footman.prog()
+    # The fallback first: a count on another runner leaves the one
+    # GitLab leg, on the first runner, as it is.
+    root = _root_sharded(tmp_path, "gitlab", 'shards = { "macos-latest" = 2 }\n')
+    jobs = _doc(generate(root)[".gitlab-ci.yml"])
+    assert "parallel" not in jobs["check"]
+    assert jobs["check"]["script"][-1] == (
+        f'{prog} ci.run --point=gate --job=check --os="ubuntu-latest" --python="3.13"'
+    )
+    # The first runner's count runs the job as that many, each passing
+    # its SHARD.
+    (root / "workshop.toml").write_text(
+        (root / "workshop.toml")
+        .read_text()
+        .replace('shards = { "macos-latest" = 2 }', 'shards = { "ubuntu-latest" = 3 }')
+    )
+    text = generate(root)[".gitlab-ci.yml"]
+    jobs = _doc(text)
+    assert jobs["check"]["parallel"] == {
+        "matrix": [{"SHARD": ["1of3", "2of3", "3of3"]}]
+    }
+    assert jobs["check"]["script"][-1] == (
+        f'{prog} ci.run --point=gate --job=check --os="ubuntu-latest"'
+        ' --python="3.13" --shard="$SHARD"'
+    )
+    assert '  parallel:\n    matrix:\n      - SHARD: ["1of3", "2of3", "3of3"]\n' in text
+    # The verdict waits on the check job as before, and nothing else moved.
+    assert "check" in jobs["gate"]["needs"]
+    assert "parallel" not in jobs["gate"]

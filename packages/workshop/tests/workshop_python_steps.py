@@ -20,6 +20,7 @@ import pytest
 from livery.workshop._invoke import run_batched
 from livery.workshop._packages import Package
 from livery.workshop._phases import PhaseContext
+from livery.workshop._shard import ONE, Shard
 from livery.workshop._steps import (
     PACKAGES,
     PATHS,
@@ -53,9 +54,11 @@ def run_typecheck(*, paths: tuple[str, ...]) -> None:
     del paths
 
 
-def run_test(*, packages: tuple[Package, ...], scoped: bool, point: str) -> None:
+def run_test(
+    *, packages: tuple[Package, ...], scoped: bool, point: str, shard: Shard = ONE
+) -> None:
     """The test runner's call; a test replaces it to watch the calls."""
-    del packages, scoped, point
+    del packages, scoped, point, shard
 
 
 def _format_run(ctx: PhaseContext) -> None:
@@ -99,7 +102,7 @@ def _test_run(ctx: PhaseContext) -> None:
     unit = scoped_suite(ctx, "test.fake")
     suites = scoped_packages(ctx, "test.fake") + ((unit,) if unit else ())
     if suites:
-        run_test(packages=suites, scoped=ctx.scoped, point=ctx.point)
+        run_test(packages=suites, scoped=ctx.scoped, point=ctx.point, shard=ctx.shard)
 
 
 def records() -> tuple[StepRecord, ...]:
@@ -155,7 +158,7 @@ def records() -> tuple[StepRecord, ...]:
             "fake",
             "test",
             _test_run,
-            flags=("point",),
+            flags=("point", "shard"),
             narrowing=PACKAGES,
             extensions=("python",),
             tools=("fake",),

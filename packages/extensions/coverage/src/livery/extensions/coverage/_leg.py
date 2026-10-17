@@ -82,16 +82,17 @@ def own_tests(root: Path) -> tuple[Package, ...]:
 def suites_that_ran(
     marker: LegScope, root: Path, packages: tuple[Package, ...]
 ) -> tuple[Package, ...]:
-    """The units the leg ran, by its scope marker.
+    """The units the leg ran, by its scope marker and its shard's record.
 
     Every suite after a full gate, the named packages' suites after a
     narrowed or a measured one, none after a skip; the workspace's
     own tests whenever any suite ran and a test step runs them
     (`own_tests`), since every leg that runs a suite runs them then.
-    The marker decides, never the data's contexts: a
-    suite whose tests reach no line that collection had not already
-    reached leaves no context of its own under a first-hit tracer,
-    and still ran.
+    On a shard of a sharded leg, those among them with a test file in
+    the shard's share (`on_this_shard`). The marker decides, never the
+    data's contexts: a suite whose tests reach no line that collection
+    had not already reached leaves no context of its own under a
+    first-hit tracer, and still ran.
     """
     scope = marker.scope
     if scope == "full":
@@ -101,7 +102,42 @@ def suites_that_ran(
         ran = tuple(package for package in suites_of(packages) if package.path in named)
     else:
         return ()
-    return ran + own_tests(root)
+    return on_this_shard(root, ran + own_tests(root))
+
+
+def on_this_shard(root: Path, units: tuple[Package, ...]) -> tuple[Package, ...]:
+    """*units* less those with no test file in this shard's share; all on one of one.
+
+    A sharded check leg's test step runs each suite's share of its test
+    files and records the files it ran ([livery.workshop.read_shard][]).
+    A suite with no file in the share did not run on this shard, so its
+    parts are another shard's to leave, and the gate job folds every
+    shard's before the union reads. Without a record, or on one of one
+    shard of one, every unit ran whole here.
+
+    Raises:
+        Failed: When the record does not read, naming why: a sharded
+            leg's parts are judged by the files its shard ran.
+    """
+    from livery.workshop import read_shard
+
+    record, why = read_shard(root)
+    if why:
+        fail(
+            f"coverage: {why}; a sharded leg's parts are judged by the test files"
+            " its shard ran, and this leg's record does not read"
+        )
+    if record is None or record.shard.count == 1:
+        return units
+    return tuple(
+        unit for unit in units if any(_of_unit(unit, name) for name in record.files)
+    )
+
+
+def _of_unit(unit: Package, name: str) -> bool:
+    """Whether the test file *name*, root-relative, is one of *unit*'s own tests."""
+    base = unit.path if unit.path == WORKSPACE_TESTS else f"{unit.path}/tests"
+    return name.startswith(f"{base}/")
 
 
 def request(packages: tuple[Package, ...], unit: Package) -> dict[str, Any]:
@@ -552,14 +588,21 @@ def top_up(root: Path, packages: tuple[Package, ...], marker: LegScope) -> LegSc
     scope = marker.scope
     if run is None or scope not in ("affected", "nothing", "verified"):
         return marker
-    from livery.extensions.coverage._record import record_bases
+    from livery.extensions.coverage._record import record_bases, record_prefixes
     from livery.git import remote_snapshot
     from livery.workshop import tested
 
     named = set(marker.packages)
-    # The verified row and every record a unit may come from: one
-    # listing and one fetch.
-    with remote_snapshot(state_store(root), fetch=("verified", "coverage/")):
+    # The verified row and the records this leg reads, the head
+    # branch's and main's: one listing and one fetch. A verified leg
+    # reads the record of the branch the verified row names, known
+    # only once that row is read; when that is another branch, its
+    # first read brings the record, every leg of it, in one more fetch
+    # (`remote_snapshot` brings a ref's whole key group), so it is not
+    # missing from the prefixes here.
+    with remote_snapshot(
+        state_store(root), fetch=("verified", *record_prefixes(run.head_ref))
+    ):
         if scope == "verified":
             units = unrecorded(
                 root,

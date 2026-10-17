@@ -20,7 +20,9 @@ that store (livery.workshop._metrics), and ``ci.balance`` reads the
 same rows to predict each platform's wall at one to several shards
 and propose the counts (livery.workshop._balance); the hidden
 ``ci.metrics.collect`` is the gate job's writer ``ci.run`` schedules,
-and the hidden ``ci.leg`` is each check leg's one write of its row.
+the hidden ``ci.fold`` folds each platform's shards into one leg
+before the judges read, and the hidden ``ci.leg`` is each check leg's
+one write of its row.
 """
 
 from __future__ import annotations
@@ -871,15 +873,21 @@ def ci_run(
     job: Annotated[str, doc("the point's job this runner executes")],
     os: Annotated[str, doc("the matrix runner label, on a matrix job")] = "",
     python: Annotated[str, doc("the matrix python, on a matrix job")] = "",
+    shard: Annotated[
+        str, doc("the leg's shard, <i>of<n>, on a check leg the contract splits")
+    ] = "",
 ) -> None:
     """Run one job of a point: every task scheduled there, in order.
 
     The one verb the emitted workflows call, once per job. What the
     job does is data: the workshop's builtin schedule plus the
     contract's ``[[ci.schedule]]`` entries. A push to main promotes
-    the gate to the merge point, so the shell spells no decision. A
-    person may run a job by hand; the tasks that only CI may do
-    refuse or fail open on their own.
+    the gate to the merge point, so the shell spells no decision. On
+    a check leg the contract splits, ``--shard=2of4`` names the shard
+    this job runs as: it ends the leg's label and the job's display
+    name, and the walk runs that shard's share; without it the job
+    runs as one shard of one. A person may run a job by hand; the
+    tasks that only CI may do refuse or fail open on their own.
     """
     from livery.workshop._points import run_point
 
@@ -887,7 +895,7 @@ def ci_run(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     try:
-        run_point(root, point, job, os_label=os, python=python)
+        run_point(root, point, job, os_label=os, python=python, shard=shard)
     finally:
         note = sweep_tool_store()
         if note:
@@ -1085,6 +1093,42 @@ def ci_leg(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     leg_flow(root, job=job, trace=trace)
+
+
+def fold_flow(root: Path) -> None:
+    """Fold each platform's shards on the run's refs into one leg; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._fold import fold_run
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: a platform's shards are folded by CI only")
+        return
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/",)):
+        fold_run(root, run)
+
+
+@ci.task(name="fold", hidden=True)
+def ci_fold() -> None:
+    """Fold each platform's shards into one check leg on the run's refs.
+
+    Runs in the gate job before the judges, the collect, the verdict
+    and the stamp read the run's refs. A platform whose check leg ran
+    as several shards has one ref per shard; the fold proves the
+    shards are one leg's work (one scope, one test-file set from one
+    durations row, every file in exactly one shard, every shard the
+    matrix produces present) and puts one ref under the platform
+    leg's key, the timing sums added and every other file folded by
+    the extension that leaves it, then drops the shards' refs. A
+    platform whose shards disagree, or one of whose shards left no
+    ref, is red naming the platform, the shards and what differs. A
+    run with no sharded platform says so and changes nothing.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    fold_flow(root)
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
@@ -1312,10 +1356,12 @@ def ci_timings(
 
     Reads the metrics series the gate job writes; CI is its only
     writer, a local run reads. Per job, every metric's latest value
-    and its median and ninetieth percentile over the series' window,
-    then the biggest movers: the recent runs' median against the
-    base runs' median. Then the speed marks, each package's mark on
-    each leg beside the newest run's time.
+    and its median and ninetieth percentile over the series' window;
+    a platform that ran as shards is one job, its folded row, with a
+    line per shard under it giving the shard's wall and queue times
+    from the newest run. Then the biggest movers: the recent runs'
+    median against the base runs' median. Then the speed marks, each
+    package's mark on each leg beside the newest run's time.
     """
     root = workspace_root()
     if root is None:
