@@ -1172,6 +1172,108 @@ def test_rerun_keeps_failed_only_when_a_leg_failed(
     assert asked == [True]
 
 
+def _sharded_contract(root: Path, shards: str) -> None:
+    (root / "workshop.toml").write_text(
+        "[workspace]\nextensions = []\n\n[ci]\n"
+        'runners = ["ubuntu-latest", "windows-latest"]\n'
+        'python-versions = ["3.14"]\n'
+        f"{shards}\n"
+    )
+
+
+def _red_leg(
+    fake: FakeForge, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Repository, list[bool]]:
+    """A repository with a failed check leg beside its gate job; each rerun asked."""
+    from livery.forge import Job
+
+    repo = _repo(fake)
+    asked: list[bool] = []
+    real = repo.checks.rerun
+
+    def record(run: int, *, failed_only: bool = True) -> None:
+        asked.append(failed_only)
+        real(run, failed_only=failed_only)
+
+    def two_jobs(run: int) -> tuple[Job, ...]:
+        (only,) = fake.repository(OWNER, NAME).checks.jobs(run)
+        leg = Job(
+            id=only.id + 1,
+            name="check (windows-latest, 3.14, 1of2)",
+            status="completed",
+            conclusion="failure",
+            started_at="",
+            completed_at="",
+            steps=(),
+        )
+        return (leg, only)
+
+    monkeypatch.setattr(repo.checks, "rerun", record)
+    monkeypatch.setattr(repo.checks, "jobs", two_jobs)
+    return repo, asked
+
+
+def test_rerun_runs_the_whole_run_when_a_check_leg_runs_as_shards(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
+) -> None:
+    # A rerun of the failed jobs alone keeps the passing shards' refs
+    # from the first attempt, and the rerun shard partitions afresh, so
+    # the fold refuses: the whole run runs again instead.
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo, asked = _red_leg(fake, monkeypatch)
+    _sharded_contract(
+        root,
+        'shards = { "windows-latest" = 2 }\n'
+        'pull-request-runners = ["ubuntu-latest", "windows-latest"]\n'
+        'pull-request-shards = { "windows-latest" = 3, "ubuntu-latest" = 2 }',
+    )
+    rerun_flow(repo, root)
+    assert asked == [False]
+    # Each split platform counts once, whichever key splits it.
+    assert (
+        "  rerun: every job, since 2 check leg(s) run as shards and a rerun of one"
+        " shard partitions afresh" in capsys.readouterr().out
+    )
+
+
+def test_rerun_of_every_job_says_nothing_about_shards(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
+) -> None:
+    # --no-failed-only stays what it is: the whole run, for its own reason.
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo, asked = _red_leg(fake, monkeypatch)
+    _sharded_contract(root, 'shards = { "windows-latest" = 2 }')
+    rerun_flow(repo, root, failed_only=False)
+    assert asked == [False]
+    assert "run as shards" not in capsys.readouterr().out
+
+
+def test_rerun_keeps_failed_only_on_an_unsharded_contract(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    pushes: ForgePushes,
+) -> None:
+    fake, root = rig
+    pushes.outcome = "failure"
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo, asked = _red_leg(fake, monkeypatch)
+    _sharded_contract(root, 'shards = { "windows-latest" = 1 }')
+    rerun_flow(repo, root)
+    assert asked == [True]
+    assert "run as shards" not in capsys.readouterr().out
+
+
 def test_rerun_leaves_a_release_wave_to_the_train_off_main(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:

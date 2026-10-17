@@ -26,7 +26,10 @@ platform none of whose shards left a record partitioned nothing: the
 gate skipped on every shard, the tree already proved or nothing
 affected, or no step that reads the shard ran. Its shards fold on their
 scopes and files alone, with no partition to prove, and the line says
-so; one shard with a record beside one without is red by name.
+so; one shard with a record beside one without is red by name. Shards
+whose partitions differ and whose records name two attempts of the run
+are a rerun of some jobs: the refusal names the attempts and says to
+rerun the whole run.
 
 The folded row is the first shard's timing row (its tasks, steps and
 waits) with every shard's package sums added and its seconds per test
@@ -51,6 +54,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import livery.footman as footman
 from livery import git
 from livery.footman import fail
 from livery.workshop._ci_context import RunContext, state_store
@@ -398,7 +402,10 @@ def _prove(
     the labels' count when no shard left a record), the shards' scopes,
     their file sets, their suites, their durations rows, their bounds,
     and the files:
-    a file in two shards, or a union whose digest is not the set's. A
+    a file in two shards, or a union whose digest is not the set's.
+    Where the partitions disagree and the shards' records name two
+    attempts of the run, the refusal names the attempts instead
+    (`_refuse_attempts`). A
     record of one shard of one says the shard fell open on the record
     and ran the whole set; every shard of the platform must have, and
     each one's files must be the set, and then the first is folded
@@ -494,6 +501,7 @@ def _prove(
         return shards, set(), False, _shown_scope(next(iter(scopes.values())))
     digests = {label: marker.digest for label, marker in markers.items()}
     if len(set(digests.values())) > 1:
+        _refuse_attempts(platform, markers)
         shown = ", ".join(f"{label} {digest[:12]}" for label, digest in digests.items())
         fail(
             f"{platform}: the shards partitioned different test-file sets ({shown});"
@@ -501,6 +509,7 @@ def _prove(
         )
     suites = {label: marker.suites for label, marker in markers.items()}
     if len(set(suites.values())) > 1:
+        _refuse_attempts(platform, markers)
         shown = ", ".join(
             f"{label} {', '.join(named) if named else 'none'}"
             for label, named in suites.items()
@@ -511,6 +520,7 @@ def _prove(
         )
     rows = {label: marker.rows for label, marker in markers.items()}
     if len(set(rows.values())) > 1:
+        _refuse_attempts(platform, markers)
         shown = ", ".join(
             f"{label} {', '.join(read) if read else 'none'}"
             for label, read in rows.items()
@@ -521,6 +531,7 @@ def _prove(
         )
     bounds = {label: marker.before for label, marker in markers.items()}
     if len(set(bounds.values())) > 1:
+        _refuse_attempts(platform, markers)
         shown = ", ".join(
             f"{label} {before.isoformat()}" for label, before in bounds.items()
         )
@@ -555,6 +566,7 @@ def _prove(
             else:
                 seen[name] = ref.label
     if twice:
+        _refuse_attempts(platform, markers)
         rest = f" and {len(twice) - NAMED} more" if len(twice) > NAMED else ""
         fail(
             f"{platform}: {len(twice)} file(s) ran in two shards:"
@@ -563,12 +575,41 @@ def _prove(
         )
     together = files_digest(seen)
     if together != recorded:
+        _refuse_attempts(platform, markers)
         fail(
             f"{platform}: the files the shards ran together have digest"
             f" {together[:12]}, and the set they partitioned has {recorded[:12]}:"
             " a file of the set ran in no shard"
         )
     return shards, set(seen), False, ""
+
+
+def _refuse_attempts(platform: str, markers: Mapping[str, ShardMarker]) -> None:
+    """Refuse naming the shards' attempts when they differ; return when they agree.
+
+    Called where the shards' partitions disagree. A rerun of some jobs
+    of a run keeps the per-run refs the first attempt's passing shards
+    left, and the shard that reruns partitions afresh from the record
+    as it then is, so the shards come from two attempts with two
+    partitions; the fold cannot reconcile them, and the recovery is a
+    rerun of the whole run (``fm ci.rerun``, which does that for a
+    sharded contract). Shards of one attempt, or of records that name
+    none, return to the refusal that names what differs. The line is
+    printed and is the refusal's reason.
+    """
+    attempts = {label: marker.attempt for label, marker in markers.items()}
+    if len(set(attempts.values())) < 2:
+        return
+    shown = ", ".join(
+        f"{label} attempt {attempt or 'unknown'}" for label, attempt in attempts.items()
+    )
+    reason = (
+        f"{platform}: its shards come from different attempts of the run ({shown});"
+        " a rerun of some jobs partitions afresh, so rerun the whole run"
+        f" ({footman.prog()} ci.rerun)"
+    )
+    print(f"  fold: {reason}")
+    fail(reason)
 
 
 def _folded_row(

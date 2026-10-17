@@ -145,7 +145,12 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
     contains. The head commit's runs are the common case, but a
     workflow triggered on an earlier commit (a merged release squash,
     a path-filtered job) keeps its verdict until it re-runs, so
-    scoping to the head sha alone would miss it. Each rerun is read
+    scoping to the head sha alone would miss it. With *failed_only*
+    the failed jobs alone rerun, except where the contract splits a
+    check leg into shards ([livery.workshop._points.sharded_legs][]):
+    a rerun of one shard partitions afresh and the gate job's fold
+    would read one platform from two attempts, so the whole run reruns
+    and one line says why. Each rerun is read
     back: a forge that quietly ignores the request is named, never
     reported as re-running. Off main, a run on a commit main already
     contains is main's verdict (a scheduled nightly, a merge-point
@@ -203,6 +208,20 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
             print(f"  nothing failed on this branch as of {sha[:10]}")
         return
     verdict_jobs = {entry.job for entry in BUILTIN if entry.task == "ci.verdict"}
+    if failed_only:
+        # A rerun of the failed jobs alone keeps the per-run refs the
+        # first attempt's passing shards left, and the shard that reruns
+        # partitions afresh from the record as it then is; the gate
+        # job's fold reads one platform from two attempts and refuses.
+        from livery.workshop._points import sharded_legs
+
+        sharded = sharded_legs(root)
+        if sharded:
+            print(
+                f"  rerun: every job, since {len(sharded)} check leg(s) run as"
+                " shards and a rerun of one shard partitions afresh"
+            )
+            failed_only = False
     for run in failed:
         workflow = (run.workflow or "").rsplit("/", 1)[-1]
         # A release wave is the train's: its recovery re-dispatches
@@ -251,7 +270,13 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
 def ci_rerun(
     failed_only: Annotated[bool, doc("re-run only the failed jobs")] = True,
 ) -> None:
-    """Re-run the head commit's failed runs."""
+    """Re-run the head commit's failed runs.
+
+    The failed jobs alone by default; the whole run under
+    ``--no-failed-only``, and whenever the contract splits a check leg
+    into shards, since a rerun of one shard partitions the test files
+    afresh and the gate job's fold refuses shards of two attempts.
+    """
     repo, root = _resolved()
     rerun_flow(repo, root, failed_only=failed_only)
 

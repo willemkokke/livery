@@ -393,8 +393,11 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
     left, why = _shard.read_shard(tmp_path)
     assert why == "" and left is not None
     assert left.suites == ()
-    # Written again, the record carries the key.
+    # A record written before attempts were recorded names none.
+    assert left.attempt == ""
+    # Written again, the record carries the keys.
     assert _shard.marker_fields(left)["suites"] == []
+    assert _shard.marker_fields(left)["attempt"] == ""
     # A record left without naming suites names none the same way.
     _shard.leave_shard(
         tmp_path,
@@ -406,6 +409,20 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
     )
     left, why = _shard.read_shard(tmp_path)
     assert why == "" and left is not None and left.suites == ()
+    assert left.attempt == ""
+    # A shard that ran in the run's second attempt says so.
+    _shard.leave_shard(
+        tmp_path,
+        shard=_shard.Shard(1, 2),
+        digest="d",
+        files=["a.py"],
+        rows=[],
+        before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
+        attempt="2",
+    )
+    left, why = _shard.read_shard(tmp_path)
+    assert why == "" and left is not None and left.attempt == "2"
+    assert _shard.marker_fields(left)["attempt"] == "2"
 
 
 def test_the_shard_file_round_trips_under_the_workshop_directory(

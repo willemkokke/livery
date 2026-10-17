@@ -26,6 +26,7 @@ from livery.workshop import (
     partition,
     platform_leg,
     read_durations,
+    workspace_suite,
 )
 
 if TYPE_CHECKING:
@@ -57,6 +58,11 @@ def test_files(ctx: PhaseContext, suite: Package) -> tuple[str, ...]:
     named = ctx.tests.get(suite.path)
     if named:
         return tuple(sorted(named))
+    return _collected(suite)
+
+
+def _collected(suite: Package) -> tuple[str, ...]:
+    """Every test file pytest collects from *suite*'s test directory, sorted."""
     unit = suite.path == WORKSPACE_TESTS
     base = suite.directory if unit else suite.directory / "tests"
     prefix = suite.path if unit else f"{suite.path}/tests"
@@ -77,12 +83,17 @@ def share(
 ) -> dict[str, tuple[str, ...]]:
     """This shard's share of *suites*' test files, per suite path, and its record.
 
-    Every suite's test files (`test_files`) are packed into the shard's
-    count of slices by the durations of the leg's platform, read from
-    the rows stamped before the checkout's committer time
-    ([livery.workshop.checkout_time][]), and this shard's slice is
-    returned, a suite's files sorted; a suite with no file in the
-    slice maps to an empty tuple. The slice, the digest of the set, the
+    Every test file the workspace holds, each package's and the
+    workspace's own, is packed into the shard's count of slices by the
+    durations of the leg's platform, read from the rows stamped before
+    the checkout's committer time ([livery.workshop.checkout_time][]),
+    and of *suites*' test files (`test_files`) the ones in this shard's
+    slice are returned, a suite's files sorted; a suite with no file in
+    the slice maps to an empty tuple. The packing is over the whole
+    workspace, never over the suites of one run, so a file has one
+    shard however many runs of the step reach it on a leg: the gate's,
+    and the coverage top-up's, which runs other suites and the
+    workspace's own tests again. The slice, the digest of the set, the
     suites with a file in the set and the rows read are left in the
     shard's record. A suite with no test file is not named among the
     suites: it runs whole on the first shard, with every step that does
@@ -123,10 +134,11 @@ def share(
                 " every test file"
             )
     if leg and not rows:
-        slices: tuple[tuple[str, ...], ...] = (every, *([()] * (ctx.shard.count - 1)))
+        mine = every if ctx.shard.first else ()
     else:
-        slices = partition(every, durations, ctx.shard.count)
-    mine = slices[ctx.shard.index - 1]
+        slices = partition(_workspace_files(ctx, every), durations, ctx.shard.count)
+        ours = set(every)
+        mine = tuple(name for name in slices[ctx.shard.index - 1] if name in ours)
     _record(
         ctx.root,
         shard=ctx.shard,
@@ -135,6 +147,7 @@ def share(
         suites=named,
         rows=rows,
         before=before,
+        attempt=run.attempt if run is not None else "",
     )
     print(
         f"  {step}: shard {ctx.shard} runs {len(mine) or 'none'} of {len(every)}"
@@ -147,6 +160,22 @@ def share(
     }
 
 
+def _workspace_files(ctx: PhaseContext, every: Iterable[str]) -> tuple[str, ...]:
+    """Every test file the workspace holds, with *every*, the run's own, among them.
+
+    The packages' test directories and the workspace's own, as pytest
+    collects them; a file the run selects outside them is added, so the
+    run's files are always packed.
+    """
+    suites = list(ctx.packages)
+    unit = workspace_suite(ctx.root)
+    if unit is not None:
+        suites.append(unit)
+    found = {name for suite in suites for name in _collected(suite)}
+    found.update(every)
+    return tuple(sorted(found))
+
+
 def _record(
     root: Path,
     *,
@@ -156,6 +185,7 @@ def _record(
     suites: Iterable[str],
     rows: tuple[str, ...],
     before: datetime,
+    attempt: str = "",
 ) -> None:
     """Leave the shard's record, added to the one an earlier run of the step left.
 
@@ -189,6 +219,7 @@ def _record(
         rows=rows,
         before=before,
         suites=partitioned,
+        attempt=attempt,
     )
 
 
