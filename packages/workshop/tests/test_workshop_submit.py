@@ -43,7 +43,7 @@ from livery.workshop._verdict import (
     EXIT_STALLED,
     EXIT_TIMEOUT,
     classify,
-    follow,
+    follow_pull_request,
 )
 from workshop_seeds import (  # noqa: F401
     ForgePushes,
@@ -250,7 +250,7 @@ def test_a_red_hold_refuses_at_once_and_never_waits(
     pr = repo.pr.get(number)
     assert pr is not None
     fake._repos[(OWNER, NAME)].required_contexts = ("ci / gate (pull_request)",)
-    monkeypatch.setattr("livery.workshop._submit.time.sleep", _no_sleep)
+    monkeypatch.setattr("livery.workshop._verdict.time.sleep", _no_sleep)
     with pytest.raises(_FAILURES) as caught:
         _follow_merge_state(
             repo, "gitea", number, repo.pr.merge_now, number, title="feat: x"
@@ -283,7 +283,7 @@ def test_the_arm_rides_out_the_mergeability_recompute(
     # like an immediate merge would; the submit waits through the
     # window instead of dying on the first refusal.
     fake, root = rig
-    monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
+    monkeypatch.setattr("livery.workshop._verdict.time.sleep", lambda _s: None)
     fake.faults.merge_405_window = 2
     number = _submit(fake, root, armed=True)
     pr = _repo(fake).pr.get(number)
@@ -1296,7 +1296,7 @@ def test_a_disarmed_verdict_still_raises_for_the_watcher(
     fake, root = rig
     _submit(fake, root, armed=False, follow_to_verdict=False)
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
     verdict = classify(_repo(fake), "feat/1-first", root)
     assert "parked unarmed" in verdict.detail
@@ -1305,7 +1305,9 @@ def test_a_disarmed_verdict_still_raises_for_the_watcher(
 def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, Path]) -> None:
     fake, root = rig
     number = _submit(fake, root, armed=True)
-    verdict = follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+    verdict = follow_pull_request(
+        _repo(fake), "feat/1-first", root, interval=0, timeout=1
+    )
     assert verdict.state == "merged" and verdict.pr_number == number
 
 
@@ -1319,7 +1321,7 @@ def test_the_follow_polls_through_dropped_connections(
     _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.drop_connections = 2
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
     out = capsys.readouterr().out
     assert "forge unreachable (1/5)" in out and "forge unreachable (2/5)" in out
@@ -1343,7 +1345,7 @@ def test_the_follow_waits_out_a_spent_budget_and_carries_on(
     fake.faults.rate_limited = 2
     fake.faults.rate_limit_reset = time.time() + 300
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_DISARMED
     assert len([wait for wait in slept if wait > 290]) == 2
     out = capsys.readouterr().out
@@ -1366,10 +1368,13 @@ def test_ci_status_wait_waits_out_a_spent_budget(
     fake.settle(OWNER, NAME, sha)
     slept: list[float] = []
     monkeypatch.setattr("livery.workshop._verdict.time.sleep", slept.append)
-    # Without --wait the refusal is the caller's, with its reset named.
+    # Without --wait one read is made, and an unreadable forge is named
+    # in one line with the retrying form: exit 15, never a traceback.
+    from livery.workshop._verdict import EXIT_UNREACHABLE
+
     fake.faults.rate_limited = 1
-    with pytest.raises(ForgeError):
-        runs_status_flow(repo, root)
+    assert runs_status_flow(repo, root) == EXIT_UNREACHABLE
+    assert "ci.status --wait" in capsys.readouterr().out
     fake.faults.rate_limited = 1
     fake.faults.rate_limit_reset = None
     assert runs_status_flow(repo, root, wait=True, interval=0, timeout=5) == 0
@@ -1401,13 +1406,136 @@ def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
     number = _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.drop_connections = 50
     with pytest.raises(SystemExit) as caught:
-        follow(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_UNREACHABLE
     out = capsys.readouterr().out
     assert "forge unreachable (5/5)" in out
     assert "giving up" in out and "5 consecutive" in out
     assert "Remote end closed connection" in out
     assert f"fake://{OWNER}/{NAME}/pulls/{number}" in out
+
+
+def test_a_transient_forge_error_during_a_follow_retries_and_then_names_it(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._verdict import ForgeUnreachable, Pending, Transient, follow
+
+    # Refusal first: a forge that never answers spends the budget, and
+    # the follow names how long, the last error and the subject.
+    def never() -> int | Pending:
+        raise ForgeError("HTTP 502 on GET /runs", status=502)
+
+    with pytest.raises(ForgeUnreachable) as caught:
+        follow(
+            None,
+            never,
+            subject="the runs of main",
+            interval=0,
+            timeout=None,
+            transient=Transient(budget=2, interval=0),
+        )
+    line = caught.value.line
+    assert "2 consecutive polls" in line and "HTTP 502" in line
+    assert "the runs of main" in line
+    # Within the budget a dropped poll prints once, and the next
+    # answer is read; a pending answer prints its line as it arrives.
+    polls: list[ForgeError | Pending | int] = [
+        ForgeError("HTTP 502 on GET /runs", status=502),
+        Pending("  waiting: queued", key="queued"),
+        7,
+    ]
+
+    def flaky() -> int | Pending:
+        answer = polls.pop(0)
+        if isinstance(answer, ForgeError):
+            raise answer
+        return answer
+
+    assert follow(None, flaky, subject="the runs of main", interval=0) == 7
+    out = capsys.readouterr().out
+    assert "forge unreachable (1/5): HTTP 502" in out
+    assert "  waiting: queued" in out and "giving up" not in out
+
+
+def test_a_follow_past_its_deadline_names_the_subject_and_the_last_state() -> None:
+    from livery.workshop._verdict import FollowTimedOut, Pending, follow
+
+    with pytest.raises(FollowTimedOut) as caught:
+        follow(
+            None,
+            lambda: Pending("  waiting: queued", key="queued"),
+            subject="run 7",
+            interval=0,
+            timeout=0,
+        )
+    assert caught.value.subject == "run 7"
+    assert caught.value.last.state == "queued"
+    assert "run 7" in str(caught.value)
+
+
+def test_a_follow_prints_a_held_state_again_at_its_quiet_cadence(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._verdict import Pending, follow
+
+    # A fake clock that moves 31 seconds a read: the held line prints
+    # once, then again after the quiet minute, never between.
+    ticks = iter(range(0, 10_000, 31))
+    monkeypatch.setattr("livery.workshop._verdict.time.monotonic", lambda: next(ticks))
+    answers = iter([Pending("  waiting: queued", key="queued")] * 3 + ["done"])
+    assert (
+        follow(None, lambda: next(answers), subject="x", interval=0, quiet=60) == "done"
+    )
+    assert capsys.readouterr().out.count("  waiting: queued") == 2
+
+
+def test_a_superseded_run_during_a_follow_is_reported_not_failed(
+    rig: tuple[FakeForge, Path], pushes: ForgePushes
+) -> None:
+    from livery.workshop._verdict import classify
+
+    # The commit's first run failed; the same workflow ran again at
+    # the same commit and passed. The forge's combined status still
+    # aggregates the red, as GitHub's does, and the follow once stopped
+    # on it with exit 13. The newest run of each workflow decides.
+    fake, root = rig
+    pushes.outcome = "failure"
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    sha = git.head_sha(root)
+    fake.push(OWNER, NAME, "feat/1-first", sha=sha, outcome="success")
+    fake.settle(OWNER, NAME, sha)
+    repo = _repo(fake)
+    assert repo.checks.status(sha).state == "failure"
+    verdict = classify(repo, "feat/1-first", root)
+    assert verdict.state == "disarmed", verdict
+    assert verdict.pr_number == number
+    with pytest.raises(SystemExit) as caught:
+        follow_pull_request(repo, "feat/1-first", root, interval=0, timeout=5)
+    assert caught.value.code == EXIT_DISARMED
+
+
+def test_a_pull_request_the_forge_cannot_merge_ends_the_follow_at_once(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._verdict import EXIT_CONFLICTS, classify
+
+    # GitHub starts no run for a pull request it cannot merge, so the
+    # combined status stays none for as long as anyone waits, and the
+    # local probe sees no conflict when a merge driver the forge
+    # ignores resolves it here. The forge publishes the reason beside
+    # the pull request, and that ends the follow at once.
+    fake, root = rig
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    monkeypatch.setattr("livery.workshop._forge_lane.forge_kind", lambda root: "github")
+    monkeypatch.setattr(repo.pr, "merge_hold", lambda n: "dirty")
+    fake.faults.slow_status_reads = 20
+    verdict = classify(repo, "feat/1-first", root)
+    assert verdict.exit_code == EXIT_CONFLICTS and verdict.pr_number == number
+    assert "the forge reports dirty" in verdict.detail
+    with pytest.raises(SystemExit) as caught:
+        follow_pull_request(repo, "feat/1-first", root, interval=0, timeout=60)
+    assert caught.value.code == EXIT_CONFLICTS
 
 
 def test_ci_status_wait_polls_through_dropped_connections_then_gives_up(
@@ -1422,9 +1550,10 @@ def test_ci_status_wait_polls_through_dropped_connections_then_gives_up(
     fake.push(OWNER, NAME, git.current_branch(root), outcome="success", sha=sha)
     fake.settle(OWNER, NAME, sha)
     # Without --wait a single unreadable poll is the caller's error.
+
     fake.faults.drop_connections = 1
-    with pytest.raises(ForgeError):
-        runs_status_flow(repo, root)
+    assert runs_status_flow(repo, root) == EXIT_UNREACHABLE
+    assert "ci.status --wait" in capsys.readouterr().out
     fake.faults.drop_connections = 2
     assert runs_status_flow(repo, root, wait=True, interval=0, timeout=5) == 0
     out = capsys.readouterr().out
@@ -1882,7 +2011,7 @@ def test_the_self_heal_gate_narrows_the_same_way(
             answered.append(EXIT_BEHIND)
             raise SystemExit(EXIT_BEHIND)
 
-    monkeypatch.setattr("livery.workshop._submit.follow", _follow)
+    monkeypatch.setattr("livery.workshop._submit.follow_pull_request", _follow)
     pushes.auto_settle = False  # CI never settles, so the PR waits for the heal
     _submit(fake, root, gate=True, armed=True)
     assert answered == [EXIT_BEHIND]
@@ -1927,7 +2056,7 @@ def test_the_self_heal_hands_the_merged_checkout_to_a_fresh_submit(
         handed.append(root)
         raise SystemExit(0)
 
-    monkeypatch.setattr("livery.workshop._submit.follow", _follow)
+    monkeypatch.setattr("livery.workshop._submit.follow_pull_request", _follow)
     monkeypatch.setattr(_reconcile, "_reexec", _handed_on)
     pushes.auto_settle = False
     before = git.head_sha(root)
@@ -2009,7 +2138,7 @@ def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.workshop._verdict import follow as real_follow
+    from livery.workshop._verdict import follow_pull_request as real_follow
 
     fake, root = rig
     wt = tmp_path / "wt-dirty"
@@ -2024,7 +2153,7 @@ def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
         (wt / "scratch.txt").write_text("s\n")  # dirt arrives while the follow waits
         return real_follow(*args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr("livery.workshop._submit.follow", dirty_follow)
+    monkeypatch.setattr("livery.workshop._submit.follow_pull_request", dirty_follow)
     number = submit_flow(
         _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
     )
@@ -2062,7 +2191,7 @@ def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
     # Any fm command's janitor sweeps a worktree whose branch merged,
     # so another one can remove the tree between the merge and the
     # tidy: the merge landed, and nothing is left to do.
-    from livery.workshop._verdict import follow as real_follow
+    from livery.workshop._verdict import follow_pull_request as real_follow
 
     fake, root = rig
     wt = tmp_path / "wt-swept"
@@ -2075,7 +2204,7 @@ def test_a_merged_submit_whose_worktree_was_swept_meanwhile_finishes_clean(
         _sweep(root, wt, monkeypatch)
         return result
 
-    monkeypatch.setattr("livery.workshop._submit.follow", swept_follow)
+    monkeypatch.setattr("livery.workshop._submit.follow_pull_request", swept_follow)
     number = submit_flow(
         _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
     )
@@ -2445,7 +2574,12 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     pushes: ForgePushes,
 ) -> None:
     from livery.forge import ForgeError
-    from livery.workshop._verdict import EXIT_CI_FAILED, JobWatch, elapsed_label, follow
+    from livery.workshop._verdict import (
+        EXIT_CI_FAILED,
+        JobWatch,
+        elapsed_label,
+        follow_pull_request,
+    )
 
     assert [elapsed_label(s) for s in (0, 37, 65, 3725)] == [
         "0s",
@@ -2492,7 +2626,7 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     # The follow prints the same, then the verdict naming the job.
     capsys.readouterr()
     with pytest.raises(SystemExit) as caught:
-        follow(repo, "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(repo, "feat/1-first", root, interval=0, timeout=1)
     assert caught.value.code == EXIT_CI_FAILED
     out = capsys.readouterr().out
     assert out.index("ci.yml / gate: failed") < out.index(

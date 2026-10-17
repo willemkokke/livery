@@ -32,7 +32,6 @@ from livery.footman import doc, fail, group, pre_tasks, task
 from livery.forge import (
     ForgeError,
     Job,
-    RateLimited,
     Repository,
     Run,
     Unsupported,
@@ -45,11 +44,13 @@ from livery.workshop._verdict import (
     EXIT_PENDING,
     EXIT_TIMEOUT,
     EXIT_UNREACHABLE,
+    FollowTimedOut,
+    ForgeUnreachable,
     JobWatch,
-    Pace,
-    Transient,
+    Pending,
     classify,
     follow,
+    follow_pull_request,
 )
 
 ci = group("ci", help="The head commit's CI runs")
@@ -110,7 +111,9 @@ def status(
         render_workflows(workflow_states(repo, root))
         return
     if watch:
-        follow(repo, git.current_branch(root), root, interval=interval, timeout=timeout)
+        follow_pull_request(
+            repo, git.current_branch(root), root, interval=interval, timeout=timeout
+        )
         return
     code = status_flow(repo, root)
     if code:
@@ -360,44 +363,37 @@ def follow_run(
     red is 13 with the red jobs named; a wait that runs out is 14; a
     forge unreachable past the transient budget is 15.
     """
-    import time
 
-    deadline = time.monotonic() + timeout
-    transient = Transient(interval=interval)
-    pace = Pace(interval)
-    last = ""
-    quiet_since = time.monotonic()
-    while True:
-        try:
-            current = next((r for r in point_runs(repo, point) if r.id == run.id), run)
-        except RateLimited as exc:
-            deadline += pace.wait_out(exc)
-            continue
-        except ForgeError as exc:
-            if transient.note(exc):
-                print(transient.giving_up(f"{point} run {run.id} {run.url}"))
-                return EXIT_UNREACHABLE
-            time.sleep(interval)
-            continue
-        transient.reset()
+    def read() -> Run | Pending:
+        current = next((r for r in point_runs(repo, point) if r.id == run.id), run)
         if current.status == "completed":
-            word, code = runs_state((current,))
-            print(
-                f"  {word}: {point} run {current.id} {current.conclusion} {current.url}"
-            )
-            if code:
-                for job in repo.checks.jobs(current.id):
-                    if job.conclusion not in _GREEN:
-                        print(f"    {job.name}: {job.conclusion or job.status}")
-            return code
-        if current.status != last or time.monotonic() - quiet_since >= 60:
-            last = current.status
-            quiet_since = time.monotonic()
-            print(f"  waiting: {point} run {current.id} is {current.status}")
-        if time.monotonic() >= deadline:
-            print(f"  still {current.status} after {timeout:.0f}s; {current.url}")
-            return EXIT_TIMEOUT
-        pace.rest(repo)
+            return current
+        return Pending(
+            f"  waiting: {point} run {current.id} is {current.status}",
+            key=current.status,
+        )
+
+    try:
+        current = follow(
+            repo,
+            read,
+            subject=f"{point} run {run.id} {run.url}",
+            interval=interval,
+            timeout=timeout,
+        )
+    except ForgeUnreachable as exc:
+        print(exc.line)
+        return EXIT_UNREACHABLE
+    except FollowTimedOut as exc:
+        print(f"  still {exc.last.state} after {timeout:.0f}s; {run.url}")
+        return EXIT_TIMEOUT
+    word, code = runs_state((current,))
+    print(f"  {word}: {point} run {current.id} {current.conclusion} {current.url}")
+    if code:
+        for job in repo.checks.jobs(current.id):
+            if job.conclusion not in _GREEN:
+                print(f"    {job.name}: {job.conclusion or job.status}")
+    return code
 
 
 def _short_ref(ref: str) -> str:
@@ -491,8 +487,6 @@ def dispatch_flow(
     commits that did appear, exit 14. Without *follow* the run is
     named and the exit is 18 while it moves.
     """
-    import time
-
     from livery.workshop._points import (
         ONLY,
         asked_tasks,
@@ -545,10 +539,12 @@ def dispatch_flow(
     running = f", running {inputs[ONLY]} alone" if inputs.get(ONLY) else ""
     at = f" at {head[:10]}" if head else ""
     print(f"  dispatched the {point} point on {ref}{at} ({workflow}){running}")
-    deadline = time.monotonic() + register_timeout
-    while True:
-        runs = point_runs(repo, point)
-        own = own_runs(runs, seen=seen, started=started, ref=ref, head=head)
+    last_runs: tuple[Run, ...] = ()
+
+    def registered() -> Run | Pending:
+        nonlocal last_runs
+        last_runs = point_runs(repo, point)
+        own = own_runs(last_runs, seen=seen, started=started, ref=ref, head=head)
         if len(own) > 1:
             fail(
                 f"{len(own)} {point} runs started on {ref}{at} after this"
@@ -557,24 +553,36 @@ def dispatch_flow(
                 " Read them on the forge, or dispatch again once no other"
                 f" {point} dispatch on {ref} is starting"
             )
-        if own:
-            run = own[0]
-            break
-        if time.monotonic() >= deadline:
-            print(
-                f"  the dispatch was accepted but no {point} run of {ref}{at}"
-                f" appeared within {register_timeout:.0f}s; `{footman_prog()}"
-                f" ci.status --point={point}` reads one that appears later"
-            )
-            others = [
-                run
-                for run in runs
-                if run.id not in seen and run.event == "workflow_dispatch"
-            ]
-            if others:
-                print(f"  not its own: {'; '.join(map(_named, others))}")
-            return EXIT_TIMEOUT
-        time.sleep(interval)
+        return own[0] if own else Pending()
+
+    # `follow` is this verb's flag; the helper comes in under its own name.
+    from livery.workshop._verdict import follow as follow_until
+
+    try:
+        run = follow_until(
+            repo,
+            registered,
+            subject=f"the {point} run of {ref}{at}",
+            interval=interval,
+            timeout=register_timeout,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    except FollowTimedOut:
+        print(
+            f"  the dispatch was accepted but no {point} run of {ref}{at}"
+            f" appeared within {register_timeout:.0f}s; `{footman_prog()}"
+            f" ci.status --point={point}` reads one that appears later"
+        )
+        others = [
+            run
+            for run in last_runs
+            if run.id not in seen and run.event == "workflow_dispatch"
+        ]
+        if others:
+            print(f"  not its own: {'; '.join(map(_named, others))}")
+        return EXIT_TIMEOUT
     print(f"  {point}: run {run.id} {run.url}")
     if not follow:
         return runs_state((run,))[1]
@@ -671,10 +679,8 @@ def runs_status_flow(
     while the state is pending, until *timeout*, which exits 14; a
     transport error under *wait* is a retry, and a run of them that
     reaches the budget exits 15. Without *wait* an unreadable forge
-    is the caller's error.
+    is named in one line and exits 15 at once.
     """
-    import time
-
     sha = ""
     if point:
         subject = f"the {point} point"
@@ -683,31 +689,14 @@ def runs_status_flow(
         sha = _head_sha(repo, root)
         subject = sha[:10]
         nothing = f"no runs yet for {sha[:10]}"
-    deadline = time.monotonic() + timeout
-    transient = Transient(interval=interval)
-    pace = Pace(interval)
     seen_runs: dict[int, str] = {}
     jobs = JobWatch()
-    while True:
-        try:
-            if point:
-                runs = point_runs(repo, point, limit=1)
-            else:
-                runs = repo.checks.runs(head_sha=sha)
-        except RateLimited as exc:
-            if not wait:
-                raise
-            deadline += pace.wait_out(exc)
-            continue
-        except ForgeError as exc:
-            if not wait:
-                raise
-            if transient.note(exc):
-                print(transient.giving_up(f"the runs for {subject}"))
-                return EXIT_UNREACHABLE
-            time.sleep(interval)
-            continue
-        transient.reset()
+
+    def read() -> tuple[str, int, int]:
+        if point:
+            runs = point_runs(repo, point, limit=1)
+        else:
+            runs = repo.checks.runs(head_sha=sha)
         # A line per run when it moves, and a line per job likewise;
         # a poll that changes nothing prints nothing.
         for run in runs:
@@ -719,13 +708,41 @@ def runs_status_flow(
         word, code = runs_state(runs)
         if not runs:
             print(f"  {nothing}")
-        if code != EXIT_PENDING or not wait:
-            print(f"  {word}: {len(runs)} run(s) for {subject}")
-            return code
-        if time.monotonic() >= deadline:
+        return word, code, len(runs)
+
+    def settled() -> tuple[str, int, int] | Pending:
+        answer = read()
+        return Pending() if answer[1] == EXIT_PENDING else answer
+
+    if wait:
+        try:
+            word, code, count = follow(
+                repo,
+                settled,
+                subject=f"the runs for {subject}",
+                interval=interval,
+                timeout=timeout,
+                quiet=None,
+            )
+        except ForgeUnreachable as exc:
+            print(exc.line)
+            return EXIT_UNREACHABLE
+        except FollowTimedOut:
             print(f"  still pending after {timeout:.0f}s")
             return EXIT_TIMEOUT
-        pace.rest(repo)
+    else:
+        # One read, no retry: an unreadable forge is named in one line
+        # with the retrying form, never a traceback.
+        try:
+            word, code, count = read()
+        except ForgeError as exc:
+            print(
+                f"  the forge answered {exc} while reading the runs for {subject};"
+                f" run again, or `{footman_prog()} ci.status --wait` to retry"
+            )
+            return EXIT_UNREACHABLE
+    print(f"  {word}: {count} run(s) for {subject}")
+    return code
 
 
 @ci.task(name="status")

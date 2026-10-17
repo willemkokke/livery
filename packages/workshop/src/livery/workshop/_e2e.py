@@ -14,6 +14,7 @@ carry it at all.
 from __future__ import annotations
 
 import contextlib
+import functools
 import os
 import re
 import shutil
@@ -29,7 +30,7 @@ from collections.abc import (
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import livery.footman as footman
 from livery import git
@@ -38,12 +39,15 @@ from livery.forge import ForgeError
 from livery.workshop._ci_context import state_store
 from livery.workshop._ci_tasks import ci
 from livery.workshop._series import LOOP
-from livery.workshop._verdict import Transient
+from livery.workshop._verdict import FollowTimedOut, ForgeUnreachable, Pending, follow
 
 if TYPE_CHECKING:
     from livery.forge import Forge, Job, Registry, Repository, Run
     from livery.workshop._devenv import Environment
     from livery.workshop._packages import Package
+
+#: What a runs reader answers.
+_A = TypeVar("_A")
 
 #: The seeded organisation and the loop's one scratch repository.
 E2E_OWNER = "livery"
@@ -1190,15 +1194,22 @@ def start_over(
 
 def _gone_within(lane: Forge, wait: float) -> bool:
     """Whether the loop's repository is gone from the forge within *wait* seconds."""
-    import time
 
-    deadline = time.monotonic() + wait
-    while True:
-        if lane.get_repo(E2E_OWNER, E2E_REPO) is None:
-            return True
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(min(5.0, max(0.0, deadline - time.monotonic())))
+    def gone() -> bool | Pending:
+        return True if lane.get_repo(E2E_OWNER, E2E_REPO) is None else Pending()
+
+    try:
+        return follow(
+            None,
+            gone,
+            subject="the loop's repository",
+            interval=5.0,
+            timeout=wait,
+            quiet=None,
+            retried=(),
+        )
+    except FollowTimedOut:
+        return False
 
 
 def _rmtree(path: Path) -> None:
@@ -1575,55 +1586,67 @@ def _eat_dev_wheels(
     return git.head_sha(root)
 
 
-def _runs_patiently(
-    repo: Repository, transient: Transient, *, head_sha: str = "", subject: str
-) -> tuple[Run, ...] | None:
-    """One poll of the runs; ``None`` for a transport error within the budget.
+def _runs_followed(
+    repo: Repository,
+    read: Callable[[tuple[Run, ...]], _A | Pending],
+    *,
+    head_sha: str = "",
+    subject: str,
+    timeout: float,
+    interval: float,
+) -> _A:
+    """Poll the runs (of *head_sha*, or all) until *read* answers from them.
 
     A loaded local forge answers a runs listing in minutes, and the
-    client's timeout is shorter: the poll is retried like the ``ci``
-    verbs retry theirs, and only a spent budget is the verdict.
+    client's timeout is shorter: an unreadable poll is retried as the
+    ``ci`` verbs retry theirs, and only a spent budget or the deadline
+    is the verdict, each failing with its words.
     """
     try:
-        runs = repo.checks.runs(head_sha=head_sha)
-    except ForgeError as error:
-        if transient.note(error):
-            fail(transient.giving_up(subject))
-        return None
-    transient.reset()
-    return runs
+        return follow(
+            repo,
+            lambda: read(repo.checks.runs(head_sha=head_sha)),
+            subject=subject,
+            interval=interval,
+            timeout=timeout,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    except FollowTimedOut as exc:
+        fail(exc.last.line or f"{subject} did not complete within {timeout:.0f}s")
 
 
 def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
     """Follow the newest run of *workflow* to its verdict; red fails verbatim."""
-    import time
-
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    deadline = time.monotonic() + timeout
-    transient = Transient(interval=5)
-    while True:
-        listed = _runs_patiently(repo, transient, subject=f"{workflow}'s runs")
-        if listed is None:
-            time.sleep(5)
-            continue
+
+    def newest_completed(listed: tuple[Run, ...]) -> Run | Pending:
         runs = [run for run in listed if run.workflow.endswith(workflow)]
         latest = max(runs, key=lambda run: run.id, default=None)
         if latest is not None and latest.status == "completed":
-            if latest.conclusion != "success":
-                fail(
-                    f"{workflow} run {latest.id} ended {latest.conclusion}:"
-                    f" {repo.web_url()}/actions/runs/{latest.id}"
-                )
-            print(f"  {workflow:<14} {latest.conclusion}")
-            RUNS.count += 1
-            return
-        if time.monotonic() >= deadline:
-            fail(
-                f"{workflow} did not complete within {timeout:.0f}s:"
-                f" {repo.web_url()}/actions"
-            )
-        time.sleep(5)
+            return latest
+        return Pending(
+            f"{workflow} did not complete within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions",
+            key="pending",
+        )
+
+    latest = _runs_followed(
+        repo,
+        newest_completed,
+        subject=f"{workflow}'s runs",
+        timeout=timeout,
+        interval=5,
+    )
+    if latest.conclusion != "success":
+        fail(
+            f"{workflow} run {latest.id} ended {latest.conclusion}:"
+            f" {repo.web_url()}/actions/runs/{latest.id}"
+        )
+    print(f"  {workflow:<14} {latest.conclusion}")
+    RUNS.count += 1
 
 
 def judge_runs(
@@ -1677,6 +1700,41 @@ def judge_runs(
     return lines
 
 
+def _jobs_settled(repo: Repository, run: Run, *, timeout: float = 600.0) -> None:
+    """Wait until every job of *run* has completed.
+
+    A job still moving past *timeout* seconds fails, named.
+    """
+
+    def settled() -> bool | Pending:
+        moving = [
+            job.name for job in repo.checks.jobs(run.id) if job.status != "completed"
+        ]
+        if not moving:
+            return True
+        return Pending(
+            f"  waiting for {moving[0]} of run {run.id} before its re-run",
+            key=", ".join(moving),
+        )
+
+    try:
+        follow(
+            repo,
+            settled,
+            subject=f"the jobs of run {run.id}",
+            interval=5,
+            timeout=timeout,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    except FollowTimedOut as exc:
+        fail(
+            f"run {run.id} ended failure but {exc.last.key} still"
+            f" moved {timeout:.0f}s later; the re-run would race it"
+        )
+
+
 def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
     """Re-run the failed jobs of every red run in *runs*; the runs re-queued.
 
@@ -1685,8 +1743,6 @@ def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
     attempt before it is judged. Returns the workflows re-run, empty
     when nothing was red.
     """
-    import time
-
     retried: list[str] = []
     for run in runs:
         if run.conclusion != "failure":
@@ -1694,22 +1750,7 @@ def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
         # A job of the old attempt still running would collect the new
         # attempt's halves: the re-run waits until every job has
         # completed, naming the one it waits on.
-        deadline = time.monotonic() + 600
-        while True:
-            moving = [
-                job.name
-                for job in repo.checks.jobs(run.id)
-                if job.status != "completed"
-            ]
-            if not moving:
-                break
-            if time.monotonic() >= deadline:
-                fail(
-                    f"run {run.id} ended failure but {', '.join(moving)} still"
-                    " moved 600s later; the re-run would race it"
-                )
-            print(f"  waiting for {moving[0]} of run {run.id} before its re-run")
-            time.sleep(5)
+        _jobs_settled(repo, run)
         repo.checks.rerun(run.id, failed_only=True)
         print(f"  re-running {run.workflow} (run {run.id}) once: it ended failure")
         retried.append(run.workflow)
@@ -1735,21 +1776,12 @@ def _watch(
     A run that ended failure is re-run once and followed again; red
     twice is the verdict.
     """
-    import time
-
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    deadline = time.monotonic() + timeout
     retried = False
-    transient = Transient(interval=interval)
-    while True:
-        listed = _runs_patiently(
-            repo, transient, head_sha=sha, subject=f"{sha[:10]}'s runs"
-        )
-        if listed is None:
-            time.sleep(interval)
-            continue
-        runs = listed
+
+    def all_completed(runs: tuple[Run, ...]) -> tuple[Run, ...] | Pending:
+        nonlocal retried
         present = {run.workflow for run in runs}
         if (
             runs
@@ -1757,16 +1789,24 @@ def _watch(
             and all(name in present for name in require)
         ):
             if retried or not _retry_red_once(repo, runs):
-                break
+                return runs
             retried = True
-        if time.monotonic() >= deadline:
-            missing = ", ".join(sorted(set(require) - present))
-            waited = f"; never appeared: {missing}" if missing else ""
-            fail(
-                f"the loop's runs did not complete within {timeout:.0f}s"
-                f"{waited}: {repo.web_url()}/actions"
-            )
-        time.sleep(interval)
+        missing = ", ".join(sorted(set(require) - present))
+        waited = f"; never appeared: {missing}" if missing else ""
+        return Pending(
+            f"the loop's runs did not complete within {timeout:.0f}s"
+            f"{waited}: {repo.web_url()}/actions",
+            key=f"{len(runs)}:{missing}",
+        )
+
+    runs = _runs_followed(
+        repo,
+        all_completed,
+        head_sha=sha,
+        subject=f"{sha[:10]}'s runs",
+        timeout=timeout,
+        interval=interval,
+    )
     RUNS.count += len(runs)
     for line in judge_runs(repo, runs, branch=branch):
         print(line)
@@ -2112,18 +2152,10 @@ def _completed_run(
     read per job on demand, since a job the run skipped has none to
     serve.
     """
-    import time
-
-    deadline = time.monotonic() + timeout
     retried = False
-    transient = Transient(interval=interval)
-    while True:
-        listed = _runs_patiently(
-            repo, transient, head_sha=sha, subject=f"{sha[:10]}'s {event} run"
-        )
-        if listed is None:
-            time.sleep(interval)
-            continue
+
+    def newest_completed(listed: tuple[Run, ...]) -> Run | Pending:
+        nonlocal retried
         runs = [
             run
             for run in listed
@@ -2132,14 +2164,22 @@ def _completed_run(
         run = max(runs, key=lambda run: run.id, default=None)
         if run is not None and run.status == "completed":
             if retried or not _retry_red_once(repo, (run,)):
-                break
+                return run
             retried = True
-        if time.monotonic() >= deadline:
-            fail(
-                f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
-                f" {repo.web_url()}/actions"
-            )
-        time.sleep(interval)
+        return Pending(
+            f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions",
+            key="pending",
+        )
+
+    run = _runs_followed(
+        repo,
+        newest_completed,
+        head_sha=sha,
+        subject=f"{sha[:10]}'s {event} run",
+        timeout=timeout,
+        interval=interval,
+    )
     RUNS.count += 1
     if run.conclusion != "success":
         print(red_jobs_text(repo, run))
@@ -2993,29 +3033,66 @@ def _release_act(root: Path, kind: str) -> None:
         if "nanobind" in member.holds():
             _require_prebuilt(repo, wave, _contract_name(root, member.name))
     served_versions = _serving_probe(root)
-    deadline = time.monotonic() + 300
     for name in names:
-        while "0.1.0" not in served_versions(name):
-            if time.monotonic() >= deadline:
-                fail(
-                    f"the wave is green but the registry never served"
-                    f" {_contract_name(root, name)} 0.1.0"
-                )
-            time.sleep(5)
+        _until(
+            functools.partial(_serves, served_versions, name),
+            timeout=300,
+            failing=(
+                "the wave is green but the registry never served"
+                f" {_contract_name(root, name)} 0.1.0"
+            ),
+        )
     # The receipt push follows the publish inside the wave, so the
     # tag gets the same patience as the serving probe.
-    deadline = time.monotonic() + 120
     for tag in tags.values():
-        while True:
-            with contextlib.suppress(git.GitError):
-                if f"refs/tags/{tag}" in git.ls_remote(root, tag, tags=True):
-                    break
-            if time.monotonic() >= deadline:
-                fail(f"served, but the receipt tag {tag} is not on the loop")
-            time.sleep(5)
+        _until(
+            functools.partial(_tag_on_remote, root, tag),
+            timeout=120,
+            failing=f"served, but the receipt tag {tag} is not on the loop",
+            retried=(git.GitError,),
+        )
         _require_receipt_protected(root, tag, kind)
     served = ", ".join(f"{_contract_name(root, name)} 0.1.0" for name in names)
     print(f"  release: {served} served, receipts {', '.join(tags.values())} cut")
+
+
+def _serves(probe: Callable[[str], Collection[str]], name: str) -> bool:
+    """Whether the registry *probe* serves *name* at the loop's release version."""
+    return "0.1.0" in probe(name)
+
+
+def _tag_on_remote(root: Path, tag: str) -> bool:
+    """Whether *tag* is on the loop's remote."""
+    return f"refs/tags/{tag}" in git.ls_remote(root, tag, tags=True)
+
+
+def _until(
+    condition: Callable[[], bool],
+    *,
+    timeout: float,
+    failing: str,
+    retried: tuple[type[Exception], ...] = (),
+) -> None:
+    """Poll *condition* every five seconds until it holds.
+
+    Past *timeout* seconds, fail with *failing*.
+    """
+
+    def holds() -> bool | Pending:
+        return True if condition() else Pending()
+
+    try:
+        follow(
+            None,
+            holds,
+            subject=failing,
+            interval=5,
+            timeout=timeout,
+            quiet=None,
+            retried=retried,
+        )
+    except (FollowTimedOut, ForgeUnreachable):
+        fail(failing)
 
 
 def _require_receipt_protected(root: Path, tag: str, kind: str = "gitea") -> None:

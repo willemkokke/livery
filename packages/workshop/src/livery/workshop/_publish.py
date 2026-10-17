@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import re
 import threading
-import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -223,17 +222,27 @@ def probe_until_served(
     An accepted upload is not a served wheel, and the tag is a
     receipt, so it waits on the probe, not the exit code.
     """
-    deadline = time.monotonic() + timeout
-    while True:
-        if version in registry.versions(name):
-            return
-        if time.monotonic() >= deadline:
-            fail(
-                f"{name} {version} was uploaded but the index never served"
-                f" it within {timeout:.0f}s; re-run the publish once the"
-                " index settles, everything already tagged is walked past"
-            )
-        time.sleep(poll)
+    from livery.workshop._verdict import FollowTimedOut, Pending, follow
+
+    def served() -> bool | Pending:
+        return True if version in registry.versions(name) else Pending()
+
+    try:
+        follow(
+            None,
+            served,
+            subject=f"{name} {version} on the index",
+            interval=poll,
+            timeout=timeout,
+            quiet=None,
+            retried=(),
+        )
+    except FollowTimedOut:
+        fail(
+            f"{name} {version} was uploaded but the index never served"
+            f" it within {timeout:.0f}s; re-run the publish once the"
+            " index settles, everything already tagged is walked past"
+        )
 
 
 def floor_probe(
