@@ -121,16 +121,24 @@ def test_every_forge_kind_emits_the_entry_script(tmp_path: Path) -> None:
         assert ".workshop-sync-receipt" in script
 
 
-def test_the_rung_step_precedes_the_entry_step(tmp_path: Path) -> None:
-    # The entry persists the cascade into the runner's environment,
-    # and a real variable outranks the shared slot: an emission taken
-    # before the rung would bake committed values in over secrets.
+def test_the_entry_step_carries_the_secrets_beside_the_matrix_python(
+    tmp_path: Path,
+) -> None:
+    # The emission the entry runs materialises the secrets into the
+    # shared slot before it reads the cascade, so the secrets are the
+    # entry step's own environment, under one env: block with the
+    # matrix leg's interpreter.
     from livery.workshop._ci_generate import generate
 
     root = _contract_root(tmp_path, "gitea")
     (root / ".repo.env").write_text("SOME_KEY=value\n")
     gate = generate(root)[".gitea/workflows/ci.yml"]
-    assert gate.index("Environment rung") < gate.index("setup.sh github")
+    entry = gate.index("- name: Enter the workspace")
+    run = gate.index("run: bash setup.sh github", entry)
+    step = gate[entry:run]
+    assert step.count("env:") == 1
+    assert "UV_PYTHON: ${{ matrix.python }}" in step
+    assert "RUNG_SOME_KEY: ${{ secrets.SOME_KEY }}" in step
 
 
 def test_the_matrix_leg_selects_its_interpreter_through_the_entry(

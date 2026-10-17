@@ -330,6 +330,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
         between: Callable[[], None] | None = None,
         point: str = "",
         safe: bool = False,
+        shard: object = None,
         changes: object = None,
     ) -> None:
         # The walk's fixers rewrite, then the hook between them and the
@@ -395,6 +396,7 @@ def test_a_test_only_delta_runs_its_packages_whole_suite_and_not_the_dependents(
         between: Callable[[], None] | None = None,
         point: str = "",
         safe: bool = False,
+        shard: object = None,
         changes: object = None,
     ) -> None:
         seen.append((tuple(p.path for p in subset), dict(tests or {})))

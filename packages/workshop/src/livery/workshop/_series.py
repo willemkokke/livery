@@ -16,6 +16,7 @@ from livery.workshop import (
     _diagnostics,
     _gate_record,
     _metrics,
+    _shard,
     _speed,
     _traces,
     _verified,
@@ -35,6 +36,7 @@ LOOP = git.Series("loop", window=200, ci_only=False, local=True)
 BASE: tuple[git.Series | git.Keyed, ...] = (
     _metrics.SERIES,
     _metrics.RUNS,
+    _shard.DURATIONS,
     _verified.SERIES,
     _speed.SERIES,
     _gate_record.SERIES,

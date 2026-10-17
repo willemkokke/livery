@@ -52,6 +52,14 @@ doc = "how many runs' traces the trace refs keep, 0 keeping none; 100 when absen
 types = ["strs"]
 doc = "the runner labels a pull request's check legs fan out to, each one [ci] runners names; every runner when absent, and a merge or a dispatch always runs them all"
 
+[contract.root.ci.pull-request-shards]
+types = ["table"]
+doc = "the shards a pull request's check leg on each runner runs as, by runner label, each one the pull request's legs fan out to; [ci] shards when absent"
+
+[contract.root.ci.pull-request-shards."*"]
+types = ["int"]
+doc = "how many shards the pull request's check leg on this runner runs as, from 1 to [ci] shards-max"
+
 [contract.root.ci.python-versions]
 types = ["strs"]
 doc = "the Pythons the CI runs, such as 3.14, or 3.14t for a free-threaded build; the root project's floor and the newest supported minor when absent, the gate running the newest alone"
@@ -98,6 +106,18 @@ doc = "the point the task runs at: gate, merge, nightly, release, or a point a p
 [contract.root.ci."schedule[]".task]
 types = ["str"]
 doc = "the task to run, by the dotted name the workspace mounts it under"
+
+[contract.root.ci.shards]
+types = ["table"]
+doc = "the shards the check leg on each runner runs as, by runner label, each one [ci] runners names, the test files split across them by their recorded seconds; one shard for a runner it does not name, and for every runner when absent"
+
+[contract.root.ci.shards."*"]
+types = ["int"]
+doc = "how many shards the check leg on this runner runs as, from 1 to [ci] shards-max"
+
+[contract.root.ci.shards-max]
+types = ["int"]
+doc = "the most shards a runner's check leg may run as, which a count in [ci] shards or [ci] pull-request-shards stays within; 4 when absent"
 
 [contract.root.ci.speed-marks]
 types = ["bool"]
@@ -1200,6 +1220,16 @@ combine = "livery.workshop._queries:merged"
 [queries.checkout-inputs]
 level = "workspace"
 combine = "livery.workshop._ci_generate:checkout_inputs"
+
+# How the gate job folds a file a check leg's shards each left on their
+# per-run refs into the platform leg's one file, by the file's name:
+# each listed extension answers for the files its leg entry leaves, a
+# function called with the shards' files in shard order that returns
+# the folded file, or raises ValueError naming what differs. A file two
+# answers fold refuses; a file nobody folds is red by name in the fold.
+[queries."ci.fold"]
+level = "workspace"
+combine = "livery.workshop._queries:merged"
 
 # The base's templates, in the grammar an extension declares one in
 # under the same table of its extension.toml; their files live under

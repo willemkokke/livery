@@ -28,7 +28,7 @@ own with ``Query("docs.members")``.
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast
@@ -236,6 +236,33 @@ class RequirementWriter(Protocol):
         ...
 
 
+class Folder(Protocol):
+    """Fold one file a check leg's shards each left into the platform leg's one file.
+
+    An extension answers the ``ci.fold`` query with one folder per file
+    its leg entry leaves in the leg's spool, by the file's name. The
+    gate job calls it with the shards' files, in shard order, each as
+    the per-run ref holds it, and puts what it returns on the platform
+    leg's ref under the same name, where the judges read it as one
+    leg's file.
+    """
+
+    def __call__(self, shards: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+        """The one file of the platform leg, from *shards*' files.
+
+        Args:
+            shards: The file as each shard left it, in shard order.
+
+        Returns:
+            The folded file.
+
+        Raises:
+            ValueError: When the shards' files cannot be one leg's,
+                naming what differs; the fold is red with it.
+        """
+        ...
+
+
 #: The modules that declare the package's public API, by import path:
 #: what a type-completeness step verifies.
 PUBLIC_MODULES: Query[tuple[str, ...]] = Query("public-modules")
@@ -311,6 +338,12 @@ JOB_BUILT_MEMBERS: Query[Mapping[str, str]] = Query("job-built-members")
 #: The inputs the listed extensions add to the checkout step of the
 #: rendered GitHub and Gitea workflows, each name to its value.
 CHECKOUT_INPUTS: Query[Mapping[str, str]] = Query("checkout-inputs")
+
+#: How the gate job folds a file a check leg's shards each left into the
+#: platform leg's one file, by the file's name: one folder per file the
+#: listed extensions' leg entries leave. A file two extensions fold
+#: refuses; a file nobody folds is red by name in the fold.
+FOLDERS: Query[Mapping[str, Folder]] = Query("ci.fold")
 
 
 @functools.cache

@@ -15,10 +15,13 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery import git
+
+if TYPE_CHECKING:
+    from livery.workshop._shard import Shard
 
 #: The variable the job runner sets for every entry it spawns, naming
 #: the check leg (``check-ubuntu-latest-3.14``): the key of the leg's
@@ -95,6 +98,25 @@ class RunContext:
     leg: str = ""
     head_ref: str = ""
     labels: tuple[str, ...] = ()
+
+    @property
+    def shard(self) -> Shard:
+        """The shard the leg runs as, read from the end of `leg`; one of one without.
+
+        ``check-windows-latest-3.14-2of4`` runs as the second of four
+        shards; ``check-ubuntu-latest-3.14``, and an empty leg, as the
+        one shard of one. The label is the only source, so the shard
+        and the leg cannot disagree. A [livery.workshop.Shard][].
+
+        Raises:
+            ValueError: When the label ends in a shard spelling outside
+                the form, such as ``0of2``, naming it.
+        """
+        # Imported here: the shard module opens the state store through
+        # this one, so a module-level import would be a cycle.
+        from livery.workshop._shard import shard_of
+
+        return shard_of(self.leg)
 
 
 def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:

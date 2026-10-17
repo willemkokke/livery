@@ -207,6 +207,30 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
     assert row["total_ms"] == 4640.0
 
 
+def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
+    trace = _trace(
+        tmp_path / "fm-profile.json",
+        tasks={"check": 4640.0},
+        tests={
+            "packages/forge/tests/test_a.py::test_one": 1000.0,
+            "packages/forge/tests/test_a.py::test_two": 250.0,
+            "packages/workshop/tests/test_b.py::test_three": 20.0,
+            # The workspace's own suite is no package, and still a file.
+            "tests/test_root.py::test_outside": 100.0,
+        },
+    )
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    # Three phases each: 3750 ms, 60 ms and 300 ms, to a tenth of a second.
+    assert row["files"] == {
+        "packages/forge/tests/test_a.py": 3.8,
+        "packages/workshop/tests/test_b.py": 0.1,
+        "tests/test_root.py": 0.3,
+    }
+    # The package sums stand beside it, as before.
+    assert row["packages"]["forge"] == {"tests_ms": 3750.0, "tests": 2}
+
+
 # --- the collect: refusals first ----------------------------------------------
 
 
@@ -264,6 +288,59 @@ def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(
         {"test": "packages/forge/tests/t.py::slow", "s": 4.0},
         {"test": "packages/forge/tests/t.py::quick", "s": 0.1},
     ]
+
+
+def test_a_shard_file_that_is_not_a_record_fails_the_legs_write_by_name(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    shard = work / _shard.SHARD_FILE
+    shard.parent.mkdir(parents=True)
+    shard.write_text("not json")
+    _lines, why = _metrics.put_leg(
+        work, RUN, job=JOB, label="check-a-2of4", trace=trace
+    )
+    assert why.startswith(f"{_shard.SHARD_FILE} does not parse")
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+
+
+def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
+    work: Path, tmp_path: Path
+) -> None:
+    from datetime import UTC, datetime
+
+    from livery.workshop import _shard
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
+    row, why = _metrics.RUNS.series(RUN.run_id, "check-a").row(
+        state_store(work), _metrics.ROW_FILE
+    )
+    assert why == "" and row is not None and "shard" not in row.data
+    before = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+    _shard.leave_shard(
+        work,
+        shard=_shard.Shard(2, 4),
+        digest="ab" * 32,
+        files=["b.py", "a.py"],
+        rows=["r1.json"],
+        before=before,
+    )
+    label = "check-a-2of4"
+    assert _metrics.put_leg(work, RUN, job=JOB, label=label, trace=trace)[1] == ""
+    row, why = _metrics.RUNS.series(RUN.run_id, label).row(
+        state_store(work), _metrics.ROW_FILE
+    )
+    assert why == "" and row is not None
+    assert row.data["shard"] == {
+        "shard": "2of4",
+        "digest": "ab" * 32,
+        "files": ["b.py", "a.py"],
+        "rows": ["r1.json"],
+        "before": before.isoformat(),
+    }
 
 
 def test_the_per_run_family_spells_the_janitors_prefix_and_safe_refs() -> None:
@@ -539,6 +616,74 @@ def test_collect_records_every_job_and_the_runs_wall(
     assert "\n  run\n" in text and "\n  docs\n" in text and "\n  gate\n" in text
     assert "\n  deploy\n" not in text
     assert _metrics._metrics({"jobs": {}}) == {}
+
+
+def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+    from livery.workshop._verified import write_marker
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    # The gate's marker beside the traces names the leg the rows are
+    # keyed by. A leg without tests writes no durations row; a leg with
+    # tests writes one under its platform leg, named as the run's file.
+    write_marker(tmp_path, "full", leg="check-a")
+    bare = _trace(tmp_path / "bare.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job="gate", label="gate", trace=bare)[1] == ""
+    tests = {
+        "packages/forge/tests/test_a.py::test_x": 1000.0,
+        "packages/forge/tests/test_b.py::test_y": 500.0,
+    }
+    full = _trace(tmp_path / "full.json", tasks={"check": 100.0}, tests=tests)
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=full)[1] == ""
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    series = _shard.DURATIONS.series("check-a")
+    assert f"  {series.ref}: 2 file(s) recorded for run {RUN.run_id}" in lines
+    assert not any(
+        line.startswith(f"  {_shard.DURATIONS.series('gate').ref}") for line in lines
+    )
+    found = series.rows(state_store(work))
+    assert not found.failed and len(found.rows) == 1
+    assert found.rows[0].name == _metrics.run_file(RUN.run_id)
+    assert found.rows[0].data["run"] == RUN.run_id
+    assert found.rows[0].data["files"] == {
+        "packages/forge/tests/test_a.py": 3.0,
+        "packages/forge/tests/test_b.py": 1.5,
+    }
+    assert _shard.DURATIONS.series("gate").rows(state_store(work)).rows == ()
+
+
+def test_collect_leaves_the_durations_to_the_fold_for_one_shards_row(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _shard
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    tests = {"packages/forge/tests/test_a.py::test_x": 1000.0}
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0}, tests=tests)
+    from datetime import UTC, datetime
+
+    _shard.leave_shard(
+        work,
+        shard=_shard.Shard(1, 2),
+        digest="ab" * 32,
+        files=["packages/forge/tests/test_a.py"],
+        rows=[],
+        before=datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    label = "check-a-1of2"
+    assert _metrics.put_leg(work, RUN, job=JOB, label=label, trace=trace)[1] == ""
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert (
+        f"  {JOB}: one shard's row; the platform's folded row carries the durations"
+        in lines
+    )
+    assert _shard.DURATIONS.series("check-a").rows(state_store(work)).rows == ()
 
 
 def test_collect_finds_a_pull_requests_run_under_the_events_head(

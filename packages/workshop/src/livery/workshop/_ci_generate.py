@@ -37,18 +37,75 @@ from livery.workshop._points import (
     job_seams,
     points,
     pull_request_runners,
+    shard_counts,
 )
 from livery.workshop._pythons import gate_pythons, python_matrix
+from livery.workshop._shard import Shard
 
 if TYPE_CHECKING:
     from livery.workshop._composition import Lookup
 
-#: Pinned action shas, one place; version comments ride each use.
-CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
-SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1"
-#: The cache action the GitHub lane restores and saves through: the tool
-#: store and uv's cache, each keyed by its lock with a prefix fallback.
-CACHE = "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0"
+
+def _pinned(repo: str, commit: str, version: str) -> str:
+    """One ``uses:`` value: *repo* at *commit*, with the *version* the commit is."""
+    return f"{repo}@{commit} # {version}"
+
+
+#: The actions the emitted jobs use, by forge, each pinned to a commit
+#: with its version beside it. Keyed by forge because each forge's
+#: runners prove their own majors: this repository's CI proves
+#: GitHub's, the loop proves Gitea's on the v4 line. A bump moves with
+#: its proof. The pin table and nothing else says which commit a job
+#: runs, so a rendered ``uses:`` never names a moving tag.
+ACTIONS: dict[str, dict[str, str]] = {
+    "github": {
+        "checkout": _pinned(
+            "actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"
+        ),
+        "upload": _pinned(
+            "actions/upload-artifact",
+            "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+            "v7.0.1",
+        ),
+        "download": _pinned(
+            "actions/download-artifact",
+            "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+            "v8.0.1",
+        ),
+        "setup-uv": _pinned(
+            "astral-sh/setup-uv", "20cfd1bf945f4377ade1205e4dbc17946fc9a30d", "v10.0.1"
+        ),
+        # The cache action the jobs restore and save through: the tool
+        # store, uv's cache and conan's home, each keyed by its lock
+        # with a prefix fallback.
+        "cache": _pinned(
+            "actions/cache", "0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"
+        ),
+        "upload-pages": _pinned(
+            "actions/upload-pages-artifact",
+            "7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
+            "v4.0.0",
+        ),
+        "deploy-pages": _pinned(
+            "actions/deploy-pages", "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e", "v4.0.5"
+        ),
+    },
+    "gitea": {
+        "checkout": _pinned(
+            "actions/checkout", "11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"
+        ),
+        "upload": _pinned(
+            "actions/upload-artifact",
+            "ea165f8d65b6e75b540449e92b4886f43607fa02",
+            "v4.6.2",
+        ),
+        "download": _pinned(
+            "actions/download-artifact",
+            "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+            "v4.3.0",
+        ),
+    },
+}
 #: The tool store's home on a GitHub job: the data directory the entry
 #: places under the runner's temp, the working drive, and the store as
 #: its `toolroom`. Literal here because the step runs before any verb
@@ -59,15 +116,13 @@ STORE_HOME = "${{ runner.temp }}/footman/toolroom"
 #: `livery.workshop._env_tasks.runner_placements` export, so the cache
 #: step and every conan the job runs agree on one directory.
 CONAN_HOME = "${{ runner.temp }}/conan"
-UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
-DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
 
 
 def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str, Any]:
     """What the emitters read: the contract's CI facts, matrix derived.
 
-    Runners, the required context, and the forge kind come from
-    ``workshop.toml``; the Python matrix from the root
+    Runners, the shards per runner, the required context, and the
+    forge kind come from ``workshop.toml``; the Python matrix from the root
     ``pyproject.toml``'s floor and the workshop's newest supported
     minor; the uv pin from the lock; what a job installs, where it
     deploys and the runners it fans out to from the functions the job
@@ -82,13 +137,21 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
+    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+    narrowed = pull_request_runners(ci)
+    shards, pull_request_shards = _shard_facts(ci, runners, narrowed)
     return {
         "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
         # What the listed extensions add to the checkout step, such as
         # fetching the objects a git filter keeps outside the repository.
         "checkout_inputs": dict(answer(root, CHECKOUT_INPUTS)),
-        "runners": list(ci.get("runners") or ["ubuntu-latest"]),
-        "pull_request_runners": pull_request_runners(ci),
+        "runners": runners,
+        "pull_request_runners": narrowed,
+        # The shards per runner label, one for a runner the tables do
+        # not name: every event's over every runner, and a pull
+        # request's over its runners.
+        "shards": shards,
+        "pull_request_shards": pull_request_shards,
         "required_context": str(ci.get("required-context", "gate")),
         "python_versions": python_matrix(root),
         "gate_pythons": gate_pythons(root),
@@ -106,51 +169,29 @@ def _facts(root: Path, everything: tuple[Point, ...] | None = None) -> dict[str,
         "seams": job_seams(root, everything),
         "job_runners": job_runners(root, everything),
         # The committed .repo.env's keys: the offline, deterministic
-        # list of which secrets the rung step may carry into a job.
+        # list of which secrets the entry step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
     }
 
 
-def _rung_step(answers: dict[str, Any]) -> str:
-    """The environment-rung step for GitHub- and Gitea-shaped jobs.
+def _secret_lines(answers: dict[str, Any]) -> list[str]:
+    """The entry step's environment lines: each declared key's secret, prefixed.
 
     Each key the committed ``.repo.env`` declares may arrive as a CI
-    secret; the matching secrets land in a runner-local file, 0600,
-    that the cascade reads as the shared slot
+    secret; the entry step carries it as ``RUNG_<KEY>``, and the
+    emission the entry runs writes the non-empty ones into a
+    runner-local file the cascade reads as the shared slot
     (``WORKSHOP_SHARED_ENV_FILE``). Non-empty values only, so an
     absent secret cannot mask a committed value, and a fork PR with
-    no secrets behaves exactly like a machine without a shared file.
-    Never the whole secrets store: ``toJSON(secrets)`` would hand
-    every job and every third-party action the lot. Empty when the
-    workspace declares no keys.
-
-    Rung before entry, always: the entry step persists the cascade's
-    values into the runner's environment, and a real environment
-    variable outranks the shared slot, so an emission taken before
-    the rung would bake the committed values in over the secrets.
+    no secrets behaves like a machine without a shared file. Never
+    the whole secrets store: ``toJSON(secrets)`` would hand every job
+    and every third-party action the lot. Empty when the workspace
+    declares no keys.
     """
+    from livery.workshop._envfile import RUNG_PREFIX
+
     keys = [str(key) for key in answers.get("env_keys", [])]
-    if not keys:
-        return ""
-    env_lines = "".join(
-        f"          RUNG_{key}: ${{{{ secrets.{key} }}}}\n" for key in keys
-    )
-    writes = "".join(
-        f'          if [ -n "$RUNG_{key}" ]; then'
-        f' printf \'{key}=%s\\n\' "$RUNG_{key}" >> "$rung"; fi\n'
-        for key in keys
-    )
-    return (
-        "      - name: Environment rung\n"
-        "        env:\n"
-        f"{env_lines}"
-        "        run: |\n"
-        '          rung="${RUNNER_TEMP:-$(mktemp -d)}/repo-shared.env"\n'
-        '          : > "$rung"\n'
-        '          chmod 600 "$rung"\n'
-        f"{writes}"
-        '          echo "WORKSHOP_SHARED_ENV_FILE=$rung" >> "$GITHUB_ENV"\n'
-    )
+    return [f"{RUNG_PREFIX}{key}: ${{{{ secrets.{key} }}}}" for key in keys]
 
 
 def _setup_uv_step(answers: dict[str, Any]) -> str:
@@ -164,7 +205,7 @@ def _setup_uv_step(answers: dict[str, Any]) -> str:
     across drives.
     """
     pin = str(answers.get("uv_pin", ""))
-    lines = [f"      - uses: {SETUP_UV}", "        with:"]
+    lines = [f"      - uses: {ACTIONS['github']['setup-uv']}", "        with:"]
     if pin:
         lines.append(f'          version: "{pin}"')
     lines.append("          enable-cache: false")
@@ -183,7 +224,7 @@ def _store_cache_step() -> str:
     the tools run from and not the artifacts they were extracted from.
     """
     return (
-        f"      - uses: {CACHE}\n"
+        f"      - uses: {ACTIONS['github']['cache']}\n"
         "        with:\n"
         f"          path: {STORE_HOME}\n"
         "          key: tools-${{ runner.os }}-${{ runner.arch }}"
@@ -208,7 +249,7 @@ def _conan_cache_step() -> str:
     # is one level deeper.
     recipes = "packages/*/conanfile.py', 'packages/*/*/conanfile.py"
     return (
-        f"      - uses: {CACHE}\n"
+        f"      - uses: {ACTIONS['github']['cache']}\n"
         "        with:\n"
         f"          path: {CONAN_HOME}\n"
         "          key: conan-${{ runner.os }}-${{ runner.arch }}"
@@ -286,21 +327,24 @@ DRIVER_DIST = "livery-workshop"
 """The distribution a re-dispatched wave may pin as its driver."""
 
 
-def _enter_step(*, matrix_python: bool = False) -> str:
+def _enter_step(answers: dict[str, Any], *, matrix_python: bool = False) -> str:
     """The entry step: ``setup.sh github`` persists the emission.
 
     Every step after it calls the runner and the venv tools bare,
     from the persisted PATH. ``UV_PYTHON`` selects the matrix leg's
-    interpreter for the entry sync where a matrix exists.
+    interpreter for the entry sync where a matrix exists, and the
+    declared keys' secrets ride the step's environment as
+    ``RUNG_<KEY>`` for the emission to materialise into the shared
+    slot.
     """
-    env = (
-        "        env:\n          UV_PYTHON: ${{ matrix.python }}\n"
-        if matrix_python
-        else ""
-    )
+    lines: list[str] = []
+    if matrix_python:
+        lines.append("UV_PYTHON: ${{ matrix.python }}")
+    lines.extend(_secret_lines(answers))
+    env = "        env:\n" + "".join(f"          {line}\n" for line in lines)
     return (
         "      - name: Enter the workspace\n"
-        + env
+        + (env if lines else "")
         + "        run: bash setup.sh github\n"
     )
 
@@ -371,11 +415,120 @@ def _event_filter(point: Point) -> str:
     return " || ".join(f"github.event_name == '{event}'" for event in point.events)
 
 
-def _narrows(answers: dict[str, Any]) -> bool:
-    """Whether a pull request's check legs run on fewer runners than every other event."""
+def _shard_facts(
+    ci: dict[str, Any], runners: Sequence[str], narrowed: Sequence[str]
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The shards per runner label: every event's, and a pull request's.
+
+    Read as [livery.workshop.check_shards][] and
+    [livery.workshop.pull_request_shards][] read them, so the matrix
+    and the leg labels agree: ``[ci] shards`` over every runner, one
+    for a runner it does not name; ``[ci] pull-request-shards`` over
+    the pull request's runners, *narrowed*, or every event's counts for
+    those runners while that key is absent. A count outside the
+    contract refuses here, through `shard_counts`, before a line
+    renders.
+    """
+    shards = shard_counts(ci, key="shards", runners=runners, listed="[ci] runners")
+    if ci.get("pull-request-shards") is None:
+        return shards, {runner: shards[runner] for runner in narrowed}
+    listed = (
+        "[ci] pull-request-runners"
+        if ci.get("pull-request-runners") is not None
+        else "[ci] runners"
+    )
+    pull = shard_counts(ci, key="pull-request-shards", runners=narrowed, listed=listed)
+    return shards, pull
+
+
+def _runners(answers: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Every event's runner labels, and a pull request's."""
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
     narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
-    return narrowed != runners
+    return runners, narrowed
+
+
+def _shards(
+    answers: dict[str, Any], key: str, runners: Sequence[str]
+) -> dict[str, int]:
+    """The shards per runner the fact *key* holds, one for a runner it does not name."""
+    counts: Mapping[str, Any] = answers.get(key) or {}
+    return {runner: int(counts.get(runner, 1)) for runner in runners}
+
+
+def _split(counts: Mapping[str, int]) -> bool:
+    """Whether any runner in *counts* runs as more than one shard."""
+    return any(count > 1 for count in counts.values())
+
+
+def _carries_shards(answers: dict[str, Any]) -> bool:
+    """Whether the check matrix names a shard on every entry.
+
+    It does when any runner runs as more than one shard on any event:
+    the matrix is then ``include`` entries, each with its shard, on the
+    check job or in both of the legs job's literals, and the one call
+    passes the shard on every event.
+    """
+    runners, narrowed = _runners(answers)
+    return _split(_shards(answers, "shards", runners)) or _split(
+        _shards(answers, "pull_request_shards", narrowed)
+    )
+
+
+def _narrows(answers: dict[str, Any]) -> bool:
+    """Whether a pull request's check legs differ from every other event's.
+
+    They do when the pull request runs on fewer runners, or when a
+    runner it runs on runs as another number of shards.
+    """
+    runners, narrowed = _runners(answers)
+    if narrowed != runners:
+        return True
+    shards = _shards(answers, "shards", runners)
+    pull = _shards(answers, "pull_request_shards", narrowed)
+    return pull != {runner: shards[runner] for runner in narrowed}
+
+
+def _entries(
+    runners: Sequence[str], pythons: Sequence[str], counts: Mapping[str, int]
+) -> list[tuple[str, str, str]]:
+    """One ``(os, python, shard)`` per matrix entry, in that order, each naming its shard.
+
+    A runner with a count of one has its entry with ``1of1``, so every
+    entry carries the key and the call reads it on every leg.
+    """
+    entries: list[tuple[str, str, str]] = []
+    for runner in runners:
+        count = counts.get(runner, 1)
+        for python in pythons:
+            for index in range(1, count + 1):
+                entries.append((runner, python, str(Shard(index, count))))
+    return entries
+
+
+def _literal(
+    runners: Sequence[str],
+    pythons: Sequence[str],
+    counts: Mapping[str, int],
+    *,
+    sharded: bool,
+) -> str:
+    """One matrix as the JSON literal the legs job holds.
+
+    The ``include`` shape when *sharded*, the ``os`` and ``python``
+    lists otherwise.
+    """
+    matrix: dict[str, Any] = (
+        {
+            "include": [
+                {"os": os_label, "python": python, "shard": shard}
+                for os_label, python, shard in _entries(runners, pythons, counts)
+            ]
+        }
+        if sharded
+        else {"os": list(runners), "python": list(pythons)}
+    )
+    return json.dumps(matrix, separators=(",", ":"))
 
 
 def _legs_job(answers: dict[str, Any]) -> str:
@@ -389,20 +542,25 @@ def _legs_job(answers: dict[str, Any]) -> str:
     the file carries two literals and which event takes which: a pull
     request takes the narrowed one unless it carries
     [livery.workshop.EVERY_RUNNER_LABEL][], and every other event takes
-    the full one. The job checks nothing out and enters nothing, so it
-    costs seconds.
+    the full one. Both literals are ``include`` entries, each naming
+    its shard, when any runner runs as more than one shard on either
+    event, and the ``os`` and ``python`` lists otherwise. The job checks
+    nothing out and enters nothing, so it costs seconds.
     """
     from livery.workshop._points import EVERY_RUNNER_LABEL
 
-    runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
-    narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
-    versions = json.dumps(
-        [str(version) for version in answers.get("gate_pythons", ["3.11"])],
-        separators=(",", ":"),
+    runners, narrowed = _runners(answers)
+    pythons = [str(version) for version in answers.get("gate_pythons", ["3.11"])]
+    sharded = _carries_shards(answers)
+    full = _literal(
+        runners, pythons, _shards(answers, "shards", runners), sharded=sharded
     )
-    axes = '{{"os":{},"python":{}}}'
-    full = axes.format(json.dumps(runners, separators=(",", ":")), versions)
-    pull = axes.format(json.dumps(narrowed, separators=(",", ":")), versions)
+    pull = _literal(
+        narrowed,
+        pythons,
+        _shards(answers, "pull_request_shards", narrowed),
+        sharded=sharded,
+    )
     narrowed_event = (
         "github.event_name == 'pull_request' && !contains("
         f"github.event.pull_request.labels.*.name, '{EVERY_RUNNER_LABEL}')"
@@ -427,14 +585,20 @@ def _legs_job(answers: dict[str, Any]) -> str:
     )
 
 
-def _call_step(prog: str, point: Point, job: Job) -> str:
-    """The one call: ``ci.run`` for the point and job, the matrix facts passed."""
+def _call_step(prog: str, point: Point, job: Job, *, shard: bool = False) -> str:
+    """The one call: ``ci.run`` for the point and job, the matrix facts passed.
+
+    *shard* passes the entry's shard too, on a ``legs`` matrix whose
+    entries carry one.
+    """
     call = f"{prog} ci.run --point={point.name} --job={job.name}"
     if job.matrix in ("legs", "declared"):
+        passed = '          --shard="${{ matrix.shard }}"\n' if shard else ""
         return (
             "        run: >-\n"
             f"          {call}\n"
             '          --os="${{ matrix.os }}" --python="${{ matrix.python }}"\n'
+            + passed
         )
     if job.matrix == "pythons":
         return (
@@ -509,7 +673,7 @@ def _checkout_step(
     *inputs* are what the listed extensions add to it, each written
     before the inputs the job's declaration sets.
     """
-    action = CHECKOUT if forge == "github" else "actions/checkout@v4"
+    action = ACTIONS[forge]["checkout"]
     with_lines = [
         f"          {name}: {value}" for name, value in (inputs or {}).items()
     ]
@@ -551,7 +715,7 @@ def _collect_step(
     """
     if not job.collects:
         return ""
-    action = DOWNLOAD if forge == "github" else "actions/download-artifact@v4"
+    action = ACTIONS[forge]["download"]
     tolerant = "        continue-on-error: true\n" if condition else ""
     return (
         f"      - uses: {action}\n" + _if_line(condition) + tolerant + "        with:\n"
@@ -571,7 +735,7 @@ def _publish_step(
     """
     if not job.publishes:
         return ""
-    action = UPLOAD if forge == "github" else "actions/upload-artifact@v4"
+    action = ACTIONS[forge]["upload"]
     name = job.publishes + ("-${{ matrix.os }}" if matrix else "")
     return (
         f"      - uses: {action}\n" + _if_line(condition) + "        with:\n"
@@ -611,10 +775,10 @@ _PAGES_GRANT = """    permissions:
       cancel-in-progress: false
 """
 
-_PAGES_UPLOAD = "      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0\n"
+_PAGES_UPLOAD = f"      - uses: {ACTIONS['github']['upload-pages']}\n"
 
-_PAGES_DEPLOY = """      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+_PAGES_DEPLOY = f"""      - id: deployment
+        uses: {ACTIONS["github"]["deploy-pages"]}
 """
 
 
@@ -709,17 +873,30 @@ def _actions_job(
         if job.environment:
             lines.append(f"    environment: {job.environment}\n")
     if job.matrix == "legs":
-        pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
+        gate = [str(version) for version in answers.get("gate_pythons", ["3.11"])]
         if _narrows(answers):
             lines.append(
                 "    strategy:\n      fail-fast: false\n"
                 "      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}\n"
                 "    runs-on: ${{ matrix.os }}\n"
             )
+        elif _carries_shards(answers):
+            # One entry per os, python and shard: the forge names each
+            # job by the entry's values in order, ``check (windows-latest,
+            # 3.14, 2of4)``, so the job carries no name of its own.
+            lines.append("    strategy:\n      fail-fast: false\n      matrix:\n")
+            lines.append("        include:\n")
+            counts = _shards(answers, "shards", runners)
+            for os_label, python, shard in _entries(runners, gate, counts):
+                lines.append(
+                    f'          - {{os: {os_label}, python: "{python}", shard: {shard}}}\n'
+                )
+            lines.append("    runs-on: ${{ matrix.os }}\n")
         else:
             lines.append(
                 "    strategy:\n      fail-fast: false\n      matrix:\n"
-                f"        os: [{_csv(runners)}]\n        python: [{pythons}]\n"
+                f"        os: [{_csv(runners)}]\n"
+                f"        python: [{_csv(gate, quoted=True)}]\n"
                 "    runs-on: ${{ matrix.os }}\n"
             )
     elif job.matrix == "pythons":
@@ -759,19 +936,27 @@ def _actions_job(
                 condition=_condition(point, other),
             )
         )
-    lines.append(_rung_step(answers))
     lines.append(_installs_step(_installs(answers, point, job, joins)))
     if forge == "github":
         lines.append(_store_cache_step())
         if job.conan_cache:
             lines.append(_conan_cache_step())
     lines.append(
-        _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
+        _enter_step(
+            answers, matrix_python=job.matrix in ("legs", "pythons", "declared")
+        )
     )
     lines.append(_driver_step(prog, point, forge=forge))
     lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
     lines.append(_call_env(job, forge=forge))
-    lines.append(_call_step(prog, point, job))
+    lines.append(
+        _call_step(
+            prog,
+            point,
+            job,
+            shard=job.matrix == "legs" and _carries_shards(answers),
+        )
+    )
     lines.append(_publish_step(job, forge=forge, matrix=bool(job.matrix)))
     for other, joined in joins:
         condition = _condition(point, other)
@@ -892,11 +1077,14 @@ def _gitlab_job(
 
     One executor, one image: a ``legs`` matrix is one leg on the first
     runner's label and the first gate Python, so its rows key the same
-    leg the union expects; a ``pythons`` or ``runners`` matrix is one
-    job. A job deploying through the ``pages`` seam is GitLab Pages'
-    own: a job named ``pages`` publishing ``public/``. A job that
-    pushes, or writes the store, rewrites origin with the push token
-    first, since the job token cannot push.
+    leg the union expects, and it runs as the shards ``[ci] shards``
+    gives the first runner through ``parallel: matrix``, each passing
+    its ``SHARD``; the one document serves every event, so a pull
+    request's counts are not read. A ``pythons`` or ``runners`` matrix
+    is one job. A job deploying through the ``pages`` seam is GitLab
+    Pages' own: a job named ``pages`` publishing ``public/``. A job
+    that pushes, or writes the store, rewrites origin with the push
+    token first, since the job token cannot push.
     """
     joins = _joins_of(point, job, everything)
     packages = " ".join(_installs(answers, point, job, joins))
@@ -910,6 +1098,10 @@ def _gitlab_job(
         f"  stage: {stage}\n",
         f"  image: {image}\n",
     ]
+    count = _shards(answers, "shards", [first])[first] if job.matrix == "legs" else 1
+    if count > 1:
+        spelled = ", ".join(f'"{Shard(index, count)}"' for index in range(1, count + 1))
+        lines.append(f"  parallel:\n    matrix:\n      - SHARD: [{spelled}]\n")
     needs = _needs(point, job, answers, everything)
     if needs:
         lines.append(f"  needs: [{', '.join(needs)}]\n")
@@ -954,6 +1146,8 @@ def _gitlab_job(
     if job.matrix == "legs":
         python = str(next(iter(answers.get("gate_pythons", ["3.11"]))))
         call += f' --os="{first}" --python="{python}"'
+        if count > 1:
+            call += ' --shard="$SHARD"'
     elif job.matrix == "declared":
         call += f' --os="{job.runners[0]}" --python="{job.pythons[0]}"'
     elif job.matrix == "pythons":
