@@ -202,8 +202,25 @@ def _undeployed(tool: str) -> str:
 
 @pytest.mark.usefixtures("faked_host")
 @pytest.mark.parametrize(
-    ("compiler_id", "compiler", "named"),
-    [("Intel", "/opt/intel/bin/icpx", "Intel"), ("", "", "is unknown")],
+    ("compiler_id", "compiler", "says"),
+    [
+        (
+            "Intel",
+            "/opt/intel/bin/icpx",
+            r"acme-native: the gate build's compiler Intel has no coverage"
+            r" measurer; configure the gate build with a compiler of one of the"
+            r" families AppleClang, Clang, GNU, MSVC$",
+        ),
+        (
+            "",
+            "",
+            r"acme-native: the gate build names no C\+\+ compiler, so no coverage"
+            r" measurer can be chosen: CMake names it in"
+            r" build/gate/CMakeFiles/\*/CMakeCXXCompiler\.cmake when it configures,"
+            r" and no such file names one; configure the gate build with"
+            r" `\S+ build\.configure`$",
+        ),
+    ],
     ids=["unknown-family", "not-configured"],
 )
 def test_a_measured_run_built_by_a_compiler_without_a_measurer_refuses_leaving_no_part(
@@ -211,13 +228,14 @@ def test_a_measured_run_built_by_a_compiler_without_a_measurer_refuses_leaving_n
     monkeypatch: pytest.MonkeyPatch,
     compiler_id: str,
     compiler: str,
-    named: str,
+    says: str,
 ) -> None:
     package = _measured(tmp_path, compiler_id, compiler)
     earlier = write_part(tmp_path, package.path, {}, "gcov")
     ctest = _Ctest()
     monkeypatch.setattr(tools, "ctest", ctest)
-    with pytest.raises(Failed, match=f"compiler {named}"):
+    # The refusal says what was looked for and what to do, in one sentence.
+    with pytest.raises(Failed, match=says):
         _cmake.test(package, tmp_path)
     assert ctest.runs
     assert not earlier.exists()

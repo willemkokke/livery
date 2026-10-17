@@ -225,9 +225,13 @@ def test_a_cobertura_report_s_malformed_entries_are_passed_over() -> None:
         '<method><lines><line number="2" hits="1"/></lines></method>'
         '<method name="lineless" signature="()"><lines/></method>'
         '<method name="f(int)" signature="(int)">'
-        '<lines><line number="2" hits="1"/></lines></method>'
+        '<lines><line number="2" hits="1"/><line number="two" hits="1"/></lines>'
+        "</method>"
         "</methods>"
-        '<lines><line hits="4"/><line number="2" hits="1"/></lines>'
+        # A line without a number, and one whose number is no number, are
+        # passed over in the class's lines as in a method's.
+        '<lines><line hits="4"/><line number="2" hits="1"/>'
+        '<line number="x7" hits="9"/></lines>'
         "</class></classes></package></packages></coverage>"
     )
     readings = _readings.from_cobertura(report)

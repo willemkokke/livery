@@ -453,8 +453,10 @@ def _cobertura_class(klass: ElementTree.Element) -> Reading:
     """One class of a Cobertura report, read."""
     found = Reading()
     for row in klass.iter("line"):
-        number = row.get("number")
-        if number is None:
+        # A line without a number, or whose number is no number, names no
+        # line to count, as the methods below read it.
+        number = row.get("number", "")
+        if not number.isdigit():
             continue
         line = int(number)
         found.lines[line] = max(found.lines.get(line, 0), int(row.get("hits", "0")))
