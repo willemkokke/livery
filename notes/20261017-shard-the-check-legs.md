@@ -453,7 +453,7 @@ Acceptance:
 |---|---|
 | counts set by hand in phase 2 | `fm ci.balance --write`, phase 3 |
 | the mode, `pull-request-runners` on linux | runners decided per change, later |
-| the first shard's slice as heavy as the others' | #1818, the head start of the unsharded steps' time |
+| the first shard's slice as heavy as the rest | #1818, a head start for its steps |
 | `files` as the name of a shard's items | #1820, the `items` rename |
 
 ## Decision record
