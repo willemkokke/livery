@@ -37,11 +37,12 @@ from livery.extensions.mkdocstrings._pages import (
     declared_paths,
     documented,
     pages,
+    pages_run,
     sources,
     write_reference,
 )
 from livery.footman import Failed
-from livery.workshop import Package, discover_packages
+from livery.workshop import Package, PhaseContext, discover_packages
 from livery.workshop._steps import StepRecord, steps_by_name
 from livery.workshop.testing import CLAUSES, Clause, Subject
 
@@ -370,7 +371,9 @@ def test_mkdocstrings_conforms(clause: Clause, tmp_path: Path) -> None:
 # Then the pages, fallbacks first.
 
 
-def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
+def test_a_srcless_package_has_no_api(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     import shutil
 
     root = _workspace(tmp_path)
@@ -380,6 +383,10 @@ def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
     assert sources(bare) == []
     assert write_reference(bare) == []
     assert "packages/bare/src" not in zensical_config(root)
+    # The docs phase's step writes nothing for it, and says no count.
+    pages_run(PhaseContext(root=root, packages=(bare,), package=bare))
+    assert not (bare.directory / "docs" / API_DIR).exists()
+    assert "API pages" not in capsys.readouterr().out
 
 
 def test_a_root_with_no_init_starts_at_the_first_module_the_package_owns(

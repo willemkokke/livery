@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from extensions_mkdocstrings_workspace import fake_extensions
 from livery.extensions.mkdocstrings._refs import (
     Reference,
+    _declined,
+    _docstring_line,
     docrefs_run,
     docstring_references,
+    namespaces,
     reference_problems,
 )
 from livery.footman import Failed
@@ -266,6 +272,71 @@ def test_a_reference_to_an_object_a_page_renders_passes(
 ) -> None:
     root = _workspace(tmp_path)
     assert _problems(root, f"See [{reference}][].") == []
+
+
+def test_the_step_passes_a_workspace_whose_every_reference_links(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    user = root / "packages" / "thing" / "src" / "acme" / "thing" / "_user.py"
+    user.write_text('"""See [acme.thing.Widget][]."""\n')
+    docrefs_run(PhaseContext(root=root, packages=()))
+
+
+def test_only_a_directory_or_a_module_with_a_python_name_is_a_namespace(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    for directory in ("acme", "not-a-name"):
+        (src / directory).mkdir(parents=True)
+    for file in ("tool.py", "py.typed", "two-words.py"):
+        (src / file).write_text("")
+    assert namespaces([src]) == {"acme", "tool"}
+
+
+def test_a_path_whose_every_prefix_names_no_module_is_not_declined(
+    tmp_path: Path,
+) -> None:
+    class Collection:
+        """A collection whose one name is a class, and no module."""
+
+        def get_member(self, name: str) -> SimpleNamespace:
+            if name == "acme":
+                return SimpleNamespace(is_alias=False, is_module=False)
+            raise KeyError(name)
+
+    assert not _declined(Collection(), "acme.gone.Thing", [tmp_path], (KeyError,))
+    # With no member declining, nothing is looked up.
+    assert not _declined(None, "acme.gone.Thing", [], (KeyError,))
+
+
+#: A function's source, compiled as if a named file held it.
+MADE = 'def made() -> None:\n    """Made at run time."""\n'
+
+
+def _made_in(source: Path) -> Callable[..., object]:
+    """The function `MADE` defines, its code naming *source* as its file."""
+    namespace: dict[str, Any] = {}
+    exec(compile(MADE, str(source), "exec"), namespace)
+    made: Callable[..., object] = namespace["made"]
+    return made
+
+
+def test_a_function_whose_docstring_has_no_place_in_a_source_has_none(
+    tmp_path: Path,
+) -> None:
+    # A builtin has no code to place.
+    assert _docstring_line(len, {}) is None
+    # A source that cannot be read places nothing.
+    assert _docstring_line(_made_in(tmp_path / "gone.py"), {}) is None
+    # A source without that function at that line places nothing.
+    other = tmp_path / "other.py"
+    other.write_text("X = 1\n")
+    assert _docstring_line(_made_in(other), {}) is None
+    # Its own source places it on its docstring's line.
+    own = tmp_path / "own.py"
+    own.write_text(MADE)
+    assert _docstring_line(_made_in(own), {}) == (str(own.resolve()), 2)
 
 
 def test_a_task_docstring_naming_an_object_a_page_renders_passes(
