@@ -1,8 +1,9 @@
 # Shard the check legs across runners, and carry coverage across a change
 
-Status: written 2026-10-17; phase 1 in progress (#1744 merged, #1743 and
-#1745 submitted); phase 2's vocabulary (#1749) and the balancer's table
-(#1747) built ahead.
+Status: phase 1 complete 2026-10-17 (#1744, #1745, #1743 merged; the loop
+pass green on the `shards` environment, 6 scenarios). Phase 2 in review:
+parts 1 to 6 built as #1749, #1763, #1764, #1762, #1772 and #1771, part
+7 (#1777) building. Phase 3's table, `fm ci.balance`, merged ahead (#1747).
 
 ## The prompt (Willem)
 
@@ -351,6 +352,14 @@ Acceptance:
   loop's e2e lines pin the union's carried-across-a-change line.
 - The plan's status line names phase 1 complete, in the same change.
 
+Phase 1 landed 2026-10-17 as #1751 (the per-platform proof), #1754
+(the label and `fm submit --every-runner`, the governance pass run so
+the label exists on this repository) and #1756 (the carry). The loop
+runs one runner, so it cannot show the carry across a change with an
+absent leg; the union tests prove that, and the first GitHub run under
+`[ci] pull-request-runners = ["ubuntu-latest"]` is its live proof,
+which waits for the mode to be switched on.
+
 ### Phase 2: the shard axis, the slice and the fold
 
 Deliverables:
@@ -473,6 +482,13 @@ Acceptance:
   `cache save`, which writes `pkglist.json` at a fixed name in the
   system temp directory (#1755). A red conan publish test beside
   another running gate is that race.
+- 2026-10-17, the loop: the shared `e2e` environment was recreated by
+  another session under two passes; the phase 1 pass ran on an
+  environment of its own, `fm ci.e2e --env=shards`, and passed.
+- 2026-10-17, found live: the coverage store's janitor test reads a
+  failed fetch and a dropped ref alike (#1773); a Windows-only red on
+  one dispatched run did not repeat. GitHub started no pull request
+  run for one pushed head; a dispatched gate run stood in.
 
 ## Open
 
