@@ -87,6 +87,12 @@ class RunContext:
             names them (GitLab: ``CI_MERGE_REQUEST_LABELS``); empty on
             a push, on a payload that does not name them, or when the
             runner did not say.
+        attempt: Which attempt of the run this is, as the runner
+            counts them from 1 (GitHub's and Gitea's
+            ``GITHUB_RUN_ATTEMPT``); a rerun of some or all jobs is the
+            next attempt. Empty on GitLab, and when the runner did not
+            say. A shard records it, so the gate job's fold can tell
+            shards of two attempts apart.
     """
 
     forge: str
@@ -98,6 +104,7 @@ class RunContext:
     leg: str = ""
     head_ref: str = ""
     labels: tuple[str, ...] = ()
+    attempt: str = ""
 
     @property
     def shard(self) -> Shard:
@@ -269,6 +276,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get(LEG_VARIABLE, ""),
             _event_head_ref(env),
             _event_labels(env),
+            env.get("GITHUB_RUN_ATTEMPT", ""),
         )
     if env.get("GITLAB_CI") == "true":
         source = env.get("CI_PIPELINE_SOURCE", "")

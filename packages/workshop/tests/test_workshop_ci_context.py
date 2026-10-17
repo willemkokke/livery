@@ -99,6 +99,24 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
     assert gitlab == _ci_context.RunContext("gitlab", "42", "push", "main")
 
 
+def test_the_run_context_attempt_is_the_runners_and_empty_elsewhere() -> None:
+    # Without the variable the attempt is empty, so a record written
+    # before attempts were recorded reads the same as one outside them.
+    base = {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_EVENT_NAME": "push"}
+    first = _ci_context.run_context(base)
+    assert first is not None and first.attempt == ""
+    rerun = _ci_context.run_context({**base, "GITHUB_RUN_ATTEMPT": "2"})
+    assert rerun is not None and rerun.attempt == "2"
+    gitea = _ci_context.run_context(
+        {**base, "GITEA_ACTIONS": "true", "GITHUB_RUN_ATTEMPT": "3"}
+    )
+    assert gitea is not None and gitea.forge == "gitea" and gitea.attempt == "3"
+    gitlab = _ci_context.run_context(
+        {"GITLAB_CI": "true", "CI_PIPELINE_ID": "42", "GITHUB_RUN_ATTEMPT": "2"}
+    )
+    assert gitlab is not None and gitlab.attempt == ""
+
+
 def test_the_run_context_shard_is_the_legs_and_one_without_a_label() -> None:
     from livery.workshop import Shard
 

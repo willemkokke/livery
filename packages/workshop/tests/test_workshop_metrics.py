@@ -453,6 +453,7 @@ def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
         "rows": ["r1.json"],
         "before": before.isoformat(),
         "suites": ["packages/b"],
+        "attempt": "",
     }
 
 

@@ -949,6 +949,29 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     ]
 
 
+def test_the_sharded_legs_are_each_split_platform_once_or_none(tmp_path: Path) -> None:
+    # Without a contract nothing is split; a count of one splits nothing.
+    assert _points.sharded_legs(tmp_path) == []
+    contract = tmp_path / "workshop.toml"
+    head = (
+        "[workspace]\nextensions = []\n\n[ci]\n"
+        'runners = ["ubuntu-latest", "windows-latest"]\npython-versions = ["3.14"]\n'
+    )
+    contract.write_text(head + 'shards = { "windows-latest" = 1 }\n')
+    assert _points.sharded_legs(tmp_path) == []
+    # A platform either key splits counts once, in matrix order.
+    contract.write_text(
+        head
+        + 'shards = { "windows-latest" = 2 }\n'
+        + 'pull-request-runners = ["ubuntu-latest", "windows-latest"]\n'
+        + 'pull-request-shards = { "windows-latest" = 3, "ubuntu-latest" = 2 }\n'
+    )
+    assert _points.sharded_legs(tmp_path) == [
+        "check-windows-latest-3.14",
+        "check-ubuntu-latest-3.14",
+    ]
+
+
 @pytest.mark.usefixtures("coverage_jobs")
 def test_the_runner_names_the_shard_in_the_label_the_display_and_the_check_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -1213,6 +1213,54 @@ def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
     assert left() == ((a,), files_digest((a, b)), ("packages/one",))
 
 
+def test_every_run_of_the_step_takes_its_files_from_one_partition_of_the_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    # The gate runs one member and the workspace's own tests; the top-up
+    # then runs another member and the workspace's tests again. Packed
+    # per run, the second set would split the workspace's tests apart
+    # from the first, and two shards would run one file. Packed once
+    # over every test file the workspace holds, a file has one shard
+    # whichever run of the step reaches it.
+    _watch(monkeypatch)
+    _workspace(tmp_path, '["pytest", "python"]')
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    (c,) = _tests_of(two, "test_c.py")
+    (tmp_path / "tests").mkdir()
+    for name in ("test_w1.py", "test_w2.py"):
+        (tmp_path / "tests" / name).write_text("")
+    w1, w2 = "tests/test_w1.py", "tests/test_w2.py"
+    durations = {a: 10.0, b: 1.0, c: 1.0, w1: 5.0, w2: 5.0}
+    whole = partition((a, b, c, w1, w2), durations, 2)
+    step = registry.step_for("test.pytest")
+    ran: list[set[str]] = []
+    digests: list[str] = []
+    for index in (1, 2):
+        _sharded(
+            monkeypatch, durations=durations, rows=("r1.json",), leg=f"{LEG}-{index}of2"
+        )
+        (tmp_path / pytest_slice.SETS_FILE).unlink(missing_ok=True)
+        for subset in ((one,), (two,)):
+            step.run(
+                PhaseContext(
+                    root=tmp_path,
+                    packages=(one, two),
+                    subset=subset,
+                    shard=Shard(index, 2),
+                )
+            )
+        record, why = read_shard(tmp_path)
+        assert why == "" and record is not None
+        ran.append(set(record.files))
+        digests.append(record.digest)
+        # Each shard runs its own slice of the one partition, and no more.
+        assert set(record.files) <= set(whole[index - 1])
+    assert not ran[0] & ran[1]
+    assert ran[0] | ran[1] == {a, b, c, w1, w2}
+    assert digests[0] == digests[1]
+
+
 def test_the_top_up_runs_through_the_step_and_is_sliced_by_the_same_partition(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
