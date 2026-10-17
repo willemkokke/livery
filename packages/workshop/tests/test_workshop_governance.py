@@ -657,7 +657,9 @@ def test_the_forge_doctor_names_the_ladder_and_the_owner_verdicts(
     assert "drop it from the contract" in standing[0].fix and standing[0].repair is None
 
 
-def test_the_rung_step_carries_declared_keys_only(tmp_path: Path) -> None:
+def test_the_entry_step_carries_declared_keys_only(tmp_path: Path) -> None:
+    # The secrets are the entry step's environment, data the emission
+    # reads; no step of the job tests or writes them in shell.
     from livery.workshop._ci_generate import generate
 
     root = _contract_root(tmp_path, "gitea", runners=["host-linux"])
@@ -667,23 +669,54 @@ def test_the_rung_step_carries_declared_keys_only(tmp_path: Path) -> None:
     )
     files = generate(root)
     release = files[".gitea/workflows/release.yml"]
-    assert "Environment rung" in release
-    assert "RUNG_PYTHON_PUBLISH_INDEX: ${{ secrets.PYTHON_PUBLISH_INDEX }}" in release
-    assert 'if [ -n "$RUNG_PYTHON_REGISTRY_URL" ]' in release
-    assert "WORKSHOP_SHARED_ENV_FILE" in release
+    entry = release.index("- name: Enter the workspace")
+    run = release.index("run: bash setup.sh github", entry)
+    step = release[entry:run]
+    assert "RUNG_PYTHON_PUBLISH_INDEX: ${{ secrets.PYTHON_PUBLISH_INDEX }}" in step
+    assert "RUNG_PYTHON_REGISTRY_URL: ${{ secrets.PYTHON_REGISTRY_URL }}" in step
     for content in files.values():
+        assert "Environment rung" not in content
+        assert 'if [ -n "$RUNG_' not in content
+        assert "WORKSHOP_SHARED_ENV_FILE" not in content
         # The whole-store dump would hand every job the lot.
         assert "toJSON(secrets)" not in content
-    # An undeclared secret is invisible to the rung by construction.
+    # An undeclared secret is invisible to the entry by construction.
     assert "FORGE_ADMIN_TOKEN" not in release
 
 
-def test_no_rung_step_without_declared_keys(tmp_path: Path) -> None:
+def test_no_secret_rides_the_entry_without_declared_keys(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
 
     root = _contract_root(tmp_path, "github")
     for content in generate(root).values():
-        assert "Environment rung" not in content
+        assert "RUNG_" not in content
+
+
+def test_every_action_a_rendered_file_uses_is_pinned_to_a_commit(
+    tmp_path: Path,
+) -> None:
+    # A tag moves; a commit does not. Both forges' files name a
+    # commit with its version beside it, from the one pin table.
+    import re
+
+    from livery.workshop._ci_generate import ACTIONS, generate
+
+    pinned = re.compile(
+        r"\s+(- )?uses: ([\w.-]+/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+)"
+    )
+    for kind in ("github", "gitea"):
+        root = _contract_root(tmp_path, kind, runners=["host-linux"])
+        used: set[str] = set()
+        for path, content in generate(root).items():
+            for line in content.splitlines():
+                if "uses:" in line:
+                    match = pinned.fullmatch(line)
+                    assert match, f"{kind} {path}: {line.strip()}"
+                    used.add(match.group(2))
+        # Every pin a file names is the forge's own table's, and the
+        # checkout, which every job starts with, is among them.
+        assert used <= set(ACTIONS[kind].values()), (kind, used)
+        assert ACTIONS[kind]["checkout"] in used
 
 
 def test_ambient_tokens_mount_as_forge_token(tmp_path: Path) -> None:

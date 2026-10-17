@@ -1006,7 +1006,7 @@ def test_an_absent_rung_cannot_mask_the_committed_value(tmp_path: Path) -> None:
     root = tmp_path / "ws"
     root.mkdir()
     (root / ".repo.env").write_text("PYTHON_PUBLISH_INDEX=committed\n")
-    # The emitted step writes non-empty values only; a job with no
+    # The emission writes non-empty values only; a job with no
     # secrets points the slot at an empty file.
     rung = tmp_path / "runner" / "repo-shared.env"
     rung.parent.mkdir()
@@ -1018,6 +1018,85 @@ def test_an_absent_rung_cannot_mask_the_committed_value(tmp_path: Path) -> None:
         environ={"WORKSHOP_SHARED_ENV_FILE": str(rung)},
     )
     assert stack.values["PYTHON_PUBLISH_INDEX"] == "committed"
+
+
+def test_the_rung_refuses_a_runner_without_a_temp_and_a_secret_with_a_line_break(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._env_tasks import rung_file
+
+    with pytest.raises(_FAILURES) as caught:
+        rung_file({"RUNG_PYPI_TOKEN": "s3cret"})
+    assert "RUNNER_TEMP" in str(caught.value)
+    with pytest.raises(_FAILURES) as caught:
+        rung_file({"RUNG_PYPI_TOKEN": "s3cret", "RUNNER_TEMP": str(tmp_path / "gone")})
+    assert "RUNNER_TEMP" in str(caught.value)
+    with pytest.raises(_FAILURES) as caught:
+        rung_file({"RUNG_PYPI_TOKEN": "two\nlines", "RUNNER_TEMP": str(tmp_path)})
+    assert "PYPI_TOKEN" in str(caught.value) and "line break" in str(caught.value)
+    assert not (tmp_path / "repo-shared.env").exists()
+
+
+def test_an_entry_carrying_no_key_writes_no_rung_and_empty_keys_an_empty_one(
+    tmp_path: Path,
+) -> None:
+    # Without a RUNG_ key the step carries no secret, and the slot is
+    # left where the cascade puts it. Keys that all arrive empty (a
+    # fork's pull request) still point the slot at an empty file, so a
+    # self-hosted runner's own shared file is never read.
+    from livery.workshop._env_tasks import rung_file
+
+    assert rung_file({"RUNNER_TEMP": str(tmp_path), "RUNG_": "x"}) is None
+    assert not (tmp_path / "repo-shared.env").exists()
+    rung = rung_file({"RUNNER_TEMP": str(tmp_path), "RUNG_PYPI_TOKEN": ""})
+    assert rung is not None and rung == tmp_path / "repo-shared.env"
+    assert rung.read_text() == ""
+
+
+def test_the_github_emission_materialises_the_entry_steps_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The entry step hands each declared key's secret on as RUNG_<KEY>.
+    # The emission writes the non-empty ones into the shared slot's
+    # file, owner-readable, reads the cascade through it, persists the
+    # file's path and the plain values, never a secret-named one, and
+    # a key that arrived empty keeps its committed value.
+    from livery.workshop import _env_tasks
+
+    root = _contract(tmp_path, "github")
+    (root / ".repo.env").write_text(
+        "PYTHON_PUBLISH_INDEX=committed\n"
+        "PYTHON_REGISTRY_URL=committed-url\n"
+        "PYPI_TOKEN=\n"
+    )
+    monkeypatch.setattr(
+        "livery.workshop._extensions.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    env_file = tmp_path / "env"
+    runner_temp = tmp_path / "_temp"
+    runner_temp.mkdir()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.delenv("GITHUB_PATH", raising=False)
+    monkeypatch.delenv("WORKSHOP_SHARED_ENV_FILE", raising=False)
+    monkeypatch.setenv("RUNNER_TEMP", str(runner_temp))
+    monkeypatch.setenv("RUNG_PYTHON_PUBLISH_INDEX", "from-secret # kept")
+    monkeypatch.setenv("RUNG_PYTHON_REGISTRY_URL", "")
+    monkeypatch.setenv("RUNG_PYPI_TOKEN", "s3cret")
+    out = _env_tasks.env_emit("posix", github=True)
+    rung = runner_temp / "repo-shared.env"
+    assert rung.read_text() == (
+        'PYPI_TOKEN=s3cret\nPYTHON_PUBLISH_INDEX="from-secret # kept"\n'
+    )
+    if sys.platform != "win32":
+        assert rung.stat().st_mode & 0o777 == 0o600
+    persisted = env_file.read_text().splitlines()
+    assert f"WORKSHOP_SHARED_ENV_FILE={rung}" in persisted
+    assert "PYTHON_PUBLISH_INDEX=from-secret # kept" in persisted
+    assert "PYTHON_REGISTRY_URL=committed-url" in persisted
+    assert not any(line.startswith("PYPI_TOKEN=") for line in persisted)
+    assert "export PYTHON_PUBLISH_INDEX=" in out
 
 
 def test_env_set_ci_writes_through_the_protocol(

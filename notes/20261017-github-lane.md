@@ -63,12 +63,12 @@ Measured on `origin/main` at `849b3d388`, 2026-10-17.
 - Releases as a target (#810, `notes/20260927-releases-as-a-target.md`)
   is not started; #811's first shape, a python package published to
   its repository's releases, waits on its phase 2.
-- The CI render privileges GitHub in three ways the fleet would carry
-  into every example: Gitea's checkout, upload and download actions
-  are `@v4` where GitHub's are SHA-pinned; the matrix pick by event
-  and the per-secret rung shell are decisions in YAML (#286 rules
-  against); the pages deploy and the token fallback render for GitHub
-  alone.
+- The CI render pins every action it uses to a commit, by forge
+  (`livery.workshop._ci_generate.ACTIONS`), and hands the declared
+  secrets to the entry step for `fm env.emit --github` to write into
+  the shared slot (#1778). It still privileges GitHub in one way the
+  fleet would carry into every example: the pages deploy and the token
+  fallback render for GitHub alone.
 
 ## Ground-truth contracts (do not violate)
 
@@ -159,19 +159,23 @@ across forges in phase 7.
 Each phase lands gate-green and mergeable alone. Exceptional paths are
 tested before happy paths.
 
-### Phase 1: the declaration, the status verb, and the render's three asymmetries
+### Phase 1: the declaration, the status verb, and the render's asymmetries
 
 Deliverables: the fleet table and its schema fragment; `fm fleet.status`
 over the declared examples, printing "not born" for each today; Gitea's
-actions pinned by SHA like GitHub's, in one pin table keyed by forge;
-the matrix pick by event and the rung's per-secret shell moved behind
-`fm ci.run` with the event passed as a fact. Acceptance, refusals
-first:
+actions pinned by commit like GitHub's, in one pin table keyed by forge
+(`livery.workshop._ci_generate.ACTIONS`); the secrets handed to the
+entry step's environment as `RUNG_<KEY>` and written into the shared
+slot by `fm env.emit --github`, so no job carries a rung step or a
+per-secret shell line. The matrix pick by event stays as rendered data:
+the contract's two runner lists and which event takes which (decision
+record, 2026-10-17). Acceptance, refusals first:
 
 - `test_a_fleet_entry_naming_an_unknown_template_refuses_naming_the_installed_ones`,
   `test_a_fleet_entry_naming_an_unknown_forge_refuses`.
 - `fm fleet.status` exits 0 and names each declared example as not born.
-- `fm sync` renders this repository's CI files with no `@v4` and no
+- `test_every_action_a_rendered_file_uses_is_pinned_to_a_commit`;
+  `fm sync` renders this repository's CI files with no `@v4` and no
   `if [ -n "$RUNG_` line; `git diff --exit-code` after a second sync.
 - The loop's develop set passes (`fm ci.e2e --scenario=develop`).
 
@@ -255,6 +259,12 @@ comparison across forges runs. Acceptance: #811's.
 - Willem, 2026-10-17, by intent: the GitHub lane is the third piece
   after one follow() and the loop on rows; keep going, merge on green
   with good coverage, release where progress needs it.
+- Mine, 2026-10-17: the matrix pick by event stays in the rendered
+  file. A verb in its place needs an entered job before every check
+  leg on every run, and the entry alone measures 11 s to 28 s per job
+  (`fm ci.timings`, this repository). The file carries the contract's
+  two runner lists and which event takes which; the decision is the
+  contract's. Reversed the day a legs job can enter for free.
 - Mine, 2026-10-17, for Willem to rule: the fleet is the e2e tooling's,
   declared in this repository's contract (open item 1); github.com
   first, the other two in phase 6; a machine user's token before an
