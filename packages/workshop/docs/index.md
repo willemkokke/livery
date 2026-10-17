@@ -1947,7 +1947,12 @@ the commit it checked out and takes the median per item; a row the
 store stamped at or after that time reaches no shard, so every shard
 of a run reads the same rows whatever lands while the run is in
 flight. A series that cannot be read is printed as the reason and the
-leg runs as one shard of one; an absent series reads as no rows.
+leg runs as one shard of one; an absent series reads as no rows. A
+shard reads the `verified` record under the same bound, for the tree
+its change is measured from and for the skip on a proved tree: a row
+another run stamps while the shards start counts for all of them or
+for none, so they measure from one tree and skip together. An
+unsharded leg reads the whole record.
 
 `fm store.ls` lists them with what each holds; `fm store.show
 <series>` prints a series' rows newest first through the same reader

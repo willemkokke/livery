@@ -351,10 +351,13 @@ def _proved(
         "t", "5", "a" * 40, "full", ("check-a",), branch="feat/x"
     )
     monkeypatch.setattr(
-        "livery.workshop._quality.verified_already", lambda root, leg="": proved
+        "livery.workshop._quality.verified_already",
+        lambda root, leg="", before=None: proved,
     )
     monkeypatch.setattr(_verified, "tree_id", lambda root, ref="HEAD": "t")
-    monkeypatch.setattr(_verified, "record", lambda root, tree: (proved, ""))
+    monkeypatch.setattr(
+        _verified, "record", lambda root, tree, before=None: (proved, "")
+    )
     monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
     return root, (x, y), _measured(monkeypatch)
 
@@ -447,7 +450,9 @@ def test_a_proved_tree_whose_verified_row_is_unread_asks_mains_record_alone(
     # The row naming the branch whose run proved the tree cannot be read
     # once the gate has run: the leg reads main's record, and says why.
     monkeypatch.setattr(
-        _verified, "record", lambda root, tree: (None, "the store is unreachable")
+        _verified,
+        "record",
+        lambda root, tree, before=None: (None, "the store is unreachable"),
     )
     assert coverage_leg.top_up(root, packages, marker) == marker
     assert reads == [("check-a", "main")]

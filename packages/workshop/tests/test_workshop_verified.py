@@ -201,13 +201,13 @@ def test_the_gate_runs_when_the_record_cannot_decide_or_names_a_narrowed_tree(
 ) -> None:
     monkeypatch.setattr(
         "livery.workshop._verified.record",
-        lambda root, tree: (None, "the record could not be read: down"),
+        lambda root, tree, before=None: (None, "the record could not be read: down"),
     )
     assert not _quality.verified_already(work)
     assert "could not be read: down; running the gate" in capsys.readouterr().out
     monkeypatch.setattr(
         "livery.workshop._verified.record",
-        lambda root, tree: (
+        lambda root, tree, before=None: (
             _verified.Verified(tree, "5", "c" * 40, _verified.AFFECTED, ()),
             "",
         ),
@@ -385,7 +385,7 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
             "livery.workshop._verified.record",
-            lambda root, tree: (
+            lambda root, tree, before=None: (
                 _verified.Verified(tree, "5", "c" * 40, _verified.AFFECTED, ()),
                 "",
             ),
@@ -397,7 +397,10 @@ def test_a_narrowed_run_stays_unstamped_without_a_verified_base(work: Path) -> N
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
             "livery.workshop._verified.record",
-            lambda root, tree: (None, "the record could not be read: down"),
+            lambda root, tree, before=None: (
+                None,
+                "the record could not be read: down",
+            ),
         )
         line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     assert line.startswith("  verified: no stamp")
@@ -490,6 +493,42 @@ DISPLAY = {
 def _leg(label: str) -> _ci_context.RunContext:
     """Main's push run as the entries of the check leg *label* see it."""
     return dataclasses.replace(RUN, leg=label)
+
+
+def test_a_row_stamped_after_the_bound_proves_nothing_and_skips_nothing(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The shards of a leg read the record under one bound; a row another
+    # run stamps while they start counts for all of them or for none.
+    from datetime import UTC, datetime, timedelta
+
+    tree = _verified.tree_id(work)
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=(UBUNTU,)) == ""
+    now = datetime.now(UTC)
+    earlier, later = now - timedelta(hours=1), now + timedelta(hours=1)
+    # Under a bound before the stamp the row is not there, for the step
+    # base and for the skip alike; under one after it, it is.
+    assert _verified.proved(work, UBUNTU, before=earlier) == ({}, "")
+    assert _verified.record(work, tree, before=earlier) == (None, "")
+    assert _quality.verified_already(work, leg=UBUNTU, before=earlier) is None
+    rows, why = _verified.proved(work, UBUNTU, before=later)
+    assert why == "" and set(rows) == {tree}
+    assert _quality.verified_already(work, leg=UBUNTU, before=later) is not None
+    # Without a bound every row counts; an unstamped or unparsable stamp
+    # never counts under one.
+    assert set(_verified.proved(work, UBUNTU)[0]) == {tree}
+    assert _verified.written_before("", None)
+    assert not _verified.written_before("", later)
+    assert not _verified.written_before("not a time", later)
+    assert _verified.written_before(
+        "2026-10-17T10:00:00", datetime(2026, 10, 18, tzinfo=UTC)
+    )
+    # The bound is the checkout's committer time on a sharded leg, and
+    # none on an unsharded one, which cannot disagree with itself.
+    bound = datetime(2026, 10, 17, 19, 0, tzinfo=UTC)
+    monkeypatch.setattr("livery.workshop._quality.checkout_time", lambda root: bound)
+    assert _quality._shared_bound(work, _leg(f"{UBUNTU}-2of3")) == bound
+    assert _quality._shared_bound(work, _leg(UBUNTU)) is None
 
 
 def test_a_full_row_naming_another_platforms_leg_proves_nothing_for_this_one(
@@ -667,13 +706,19 @@ def test_a_full_row_naming_the_platform_proves_the_tree_for_each_of_its_shards(
         "livery.workshop._quality._leg_plan",
         lambda root, base, run: pytest.fail("ran"),
     )
+    # A shard reads the record under its checkout's committer time; the
+    # run's commit is younger than the row that proved its tree.
+    from datetime import UTC, datetime, timedelta
+
+    after = datetime.now(UTC) + timedelta(hours=1)
+    monkeypatch.setattr("livery.workshop._quality.checkout_time", lambda root: after)
     _quality.check()
     assert leg_scope(work) == LegScope("verified", leg=shard)
     marker, why = _shard.read_shard(work)
     assert why == "" and marker is not None
     assert marker.shard == _shard.Shard(2, 2) and marker.items == ()
     assert marker.rows == () and marker.digest == _shard.files_digest(())
-    assert marker.before == _shard.checkout_time(work)
+    assert marker.before == after
     # One shard of one leaves no record.
     (work / _shard.SHARD_FILE).unlink()
     monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: _leg(UBUNTU))

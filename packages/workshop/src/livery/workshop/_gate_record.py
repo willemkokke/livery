@@ -375,7 +375,14 @@ def _fewest(
     return best
 
 
-def leg_plan(root: Path, *, base: str, branch: str, leg: str = "") -> Plan:
+def leg_plan(
+    root: Path,
+    *,
+    base: str,
+    branch: str,
+    leg: str = "",
+    before: datetime | None = None,
+) -> Plan:
     """Where a CI check leg measures its change from; the reflex's rule on CI's record.
 
     The candidates are the merge base with *base*, HEAD's first-parent
@@ -392,7 +399,10 @@ def leg_plan(root: Path, *, base: str, branch: str, leg: str = "") -> Plan:
     has not moved far, or the base branch's tip. With none, or a
     record that cannot be read, the step is taken from the merge base
     (`MERGE_BASE`), and *why* says so, naming the leg. Without a merge
-    base the mode is ``full``.
+    base the mode is ``full``. With *before*, the record's rows count
+    only when the store stamped them before it
+    ([livery.workshop._verified.written_before][]), so the shards of a
+    leg, which share the bound, measure from one tree.
     """
     from livery.git import remote_snapshot
     from livery.workshop import _verified
@@ -407,7 +417,7 @@ def leg_plan(root: Path, *, base: str, branch: str, leg: str = "") -> Plan:
     except git.GitError:
         merged = None
     with remote_snapshot(state_store(root), fetch=("verified",)):
-        rows, unread = _verified.proved(root, leg)
+        rows, unread = _verified.proved(root, leg, before=before)
     candidates = [merge_base, *git.first_parent_trees(root, REACH)]
     rebuilt = _rebuilt(root, rows, branch) if merged is not None else []
     best = _fewest(

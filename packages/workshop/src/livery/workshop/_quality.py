@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Annotated
 from livery import git
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from livery.workshop._gate_record import Plan
     from livery.workshop._influence import Changes
     from livery.workshop._verified import Verified
@@ -241,7 +243,9 @@ def ci_changes(root: Path) -> Changes | None:
     return Changes(root, paths, before)
 
 
-def verified_already(root: Path, leg: str = "") -> Verified | None:
+def verified_already(
+    root: Path, leg: str = "", *, before: datetime | None = None
+) -> Verified | None:
     """The record's full row for this tree and *leg*, or ``None`` to run the gate.
 
     Prints the run that proved it when it does, and the reason when
@@ -251,7 +255,9 @@ def verified_already(root: Path, leg: str = "") -> Verified | None:
     legs and not *leg* is named, and the gate runs: a row proves its
     tree for the platforms that ran it. With *leg* empty any full
     entry counts. Never skips on anything but a full entry for this
-    exact tree. The row names the branch whose run proved it.
+    exact tree. The row names the branch whose run proved it. With
+    *before*, an entry stamped at or after it reads as absent, so the
+    shards of a leg skip together or run together.
     """
     from livery.workshop import _verified
 
@@ -260,7 +266,7 @@ def verified_already(root: Path, leg: str = "") -> Verified | None:
     except git.GitError as error:
         print(f"  verified: this checkout has no tree id ({error}); running the gate")
         return None
-    found, why = _verified.record(root, tree)
+    found, why = _verified.record(root, tree, before=before)
     if why:
         print(f"  verified: {why}; running the gate")
         return None
@@ -280,6 +286,20 @@ def verified_already(root: Path, leg: str = "") -> Verified | None:
     return found
 
 
+def _shared_bound(root: Path, run: RunContext) -> datetime | None:
+    """The bound every shard of this leg reads CI's record under; ``None`` unsharded.
+
+    The committer time of the commit the leg checked out, which every
+    shard of the run checks out alike, and a rerun too: a row another
+    run writes while the shards start counts for all of them or for
+    none, so they measure from one tree and skip together. An unsharded
+    leg reads the whole record, as one leg cannot disagree with itself.
+    """
+    if run.shard.count <= 1:
+        return None
+    return checkout_time(root)
+
+
 def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
     """Where this CI leg measures its change from, said in one line.
 
@@ -293,7 +313,13 @@ def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
     from livery.workshop._gate_record import Plan
 
     git.fetch(root)
-    step = _gate_record.leg_plan(root, base=base, branch=run.head_ref, leg=run.leg)
+    step = _gate_record.leg_plan(
+        root,
+        base=base,
+        branch=run.head_ref,
+        leg=run.leg,
+        before=_shared_bound(root, run),
+    )
     if run.event == "push" and step.mode == _gate_record.MERGE_BASE:
         # On the pushed branch the merge base is HEAD itself, and a step
         # from it would judge nothing: a push with no proved tree in
@@ -653,7 +679,9 @@ def _run_check(
         from livery.git import remote_snapshot
 
         with remote_snapshot(state_store(root_for_ci), fetch=("verified",)):
-            proved = verified_already(root_for_ci, leg=run.leg)
+            proved = verified_already(
+                root_for_ci, leg=run.leg, before=_shared_bound(root_for_ci, run)
+            )
             if proved is not None:
                 _verified.write_marker(root_for_ci, _verified.VERIFIED, leg=run.leg)
                 return
