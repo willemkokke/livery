@@ -1406,6 +1406,12 @@ absence.
   number, refuses naming the key and the runner. A shard's label is
   its platform leg, `check-<os>-<python>`, with `-<i>of<n>` at the
   end; the platform leg keys every record below the gate job's fold.
+  `fm ci.run --shard=<i>of<n>` runs one shard of a leg: the shard ends
+  the label every entry reads in `WORKSHOP_LEG` and the job's display
+  name, `check (<os>, <python>, <i>of<n>)`, which the forge lists the
+  job by, and the `check` entry runs `fm check --shard=<i>of<n>`. A
+  leg that runs as one shard of one carries no shard in its label or
+  its display name, and its `check` entry runs `fm check` bare.
   Each shard partitions the run's test files by the platform leg's
   `durations` rows: longest first, each file into the shard with the
   least summed seconds, ties by name, a file no row names at the

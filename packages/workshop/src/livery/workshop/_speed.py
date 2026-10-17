@@ -90,7 +90,9 @@ SLOWEST = 10
 #: The tests that grew most a warning prints.
 GROWN = 5
 
-_DISPLAY = re.compile(r"^(?P<job>[^ (]+) \((?P<os>[^,]+), (?P<python>[^)]+)\)$")
+_DISPLAY = re.compile(
+    r"^(?P<job>[^ (]+) \((?P<os>[^,]+), (?P<python>[^,)]+)(?:, (?P<shard>[^)]+))?\)$"
+)
 
 
 def drop_marks(root: Path) -> list[str]:
@@ -122,13 +124,16 @@ def drop_marks(root: Path) -> list[str]:
 def leg_label(display: str) -> str:
     """The leg label of a matrix job's display name; a plain name stands.
 
-    ``check (ubuntu-latest, 3.14)`` is the leg ``check-ubuntu-latest-3.14``,
-    the spelling the job runner gives every entry it spawns.
+    ``check (ubuntu-latest, 3.14)`` is the leg ``check-ubuntu-latest-3.14``
+    and ``check (windows-latest, 3.14, 2of4)`` the shard leg
+    ``check-windows-latest-3.14-2of4``, the spelling the job runner gives
+    every entry it spawns.
     """
     match = _DISPLAY.match(display)
     if match is None:
         return display
-    return f"{match['job']}-{match['os']}-{match['python']}"
+    parts = (match["job"], match["os"], match["python"], match["shard"])
+    return "-".join(part for part in parts if part)
 
 
 def leg_of(job: str, row: Mapping[str, Any]) -> str:

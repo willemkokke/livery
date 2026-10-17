@@ -871,15 +871,21 @@ def ci_run(
     job: Annotated[str, doc("the point's job this runner executes")],
     os: Annotated[str, doc("the matrix runner label, on a matrix job")] = "",
     python: Annotated[str, doc("the matrix python, on a matrix job")] = "",
+    shard: Annotated[
+        str, doc("the leg's shard, <i>of<n>, on a check leg the contract splits")
+    ] = "",
 ) -> None:
     """Run one job of a point: every task scheduled there, in order.
 
     The one verb the emitted workflows call, once per job. What the
     job does is data: the workshop's builtin schedule plus the
     contract's ``[[ci.schedule]]`` entries. A push to main promotes
-    the gate to the merge point, so the shell spells no decision. A
-    person may run a job by hand; the tasks that only CI may do
-    refuse or fail open on their own.
+    the gate to the merge point, so the shell spells no decision. On
+    a check leg the contract splits, ``--shard=2of4`` names the shard
+    this job runs as: it ends the leg's label and the job's display
+    name, and the walk runs that shard's share; without it the job
+    runs as one shard of one. A person may run a job by hand; the
+    tasks that only CI may do refuse or fail open on their own.
     """
     from livery.workshop._points import run_point
 
@@ -887,7 +893,7 @@ def ci_run(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     try:
-        run_point(root, point, job, os_label=os, python=python)
+        run_point(root, point, job, os_label=os, python=python, shard=shard)
     finally:
         note = sweep_tool_store()
         if note:
