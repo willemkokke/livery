@@ -5,7 +5,9 @@
 ### Fixed
 
 - The release rehearsal passes and leaves its tree as it found it by @willemkokke
+- The extensions' entry modules carry their version, and rehearsals check it by @willemkokke
 
 ### Changed
 
 - Python leaves the workshop wheel, which now ships the base alone by @willemkokke
+
