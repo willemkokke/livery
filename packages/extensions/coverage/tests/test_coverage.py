@@ -898,6 +898,18 @@ def test_a_size_from_a_million_bytes_shows_in_megabytes() -> None:
     assert coverage_leg.shown_size(2_345_678) == "2.3 MB"
 
 
+def test_a_size_that_rounds_to_a_thousand_kilobytes_shows_in_megabytes() -> None:
+    # The boundary: the last size that shows in kilobytes, then the first
+    # that rounds up to a thousand of them, which shows as a megabyte.
+    assert coverage_leg.shown_size(999_949) == "999.9 KB"
+    assert coverage_leg.shown_size(999_950) == "1.0 MB"
+    assert coverage_leg.shown_size(999_999) == "1.0 MB"
+    # Every size up to a megabyte and past it shows under a thousand.
+    for count in range(999_900, 1_000_100):
+        shown = coverage_leg.shown_size(count)
+        assert float(shown.split()[0]) < 1000, shown
+
+
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
     for name in (
         "GITHUB_EVENT_PATH",

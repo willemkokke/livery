@@ -193,10 +193,15 @@ def shown_sizes(unit: Unit) -> str:
 
 
 def shown_size(count: int) -> str:
-    """*count* bytes as a line shows them: ``1.3 MB``, ``412.0 KB``."""
-    if count >= 1_000_000:
+    """*count* bytes as a line shows them: ``1.3 MB``, ``412.0 KB``.
+
+    The unit is chosen on the rounded figure, so a size that rounds to
+    a thousand kilobytes shows as ``1.0 MB``.
+    """
+    kilobytes = f"{count / 1_000:.1f}"
+    if float(kilobytes) >= 1_000:
         return f"{count / 1_000_000:.1f} MB"
-    return f"{count / 1_000:.1f} KB"
+    return f"{kilobytes} KB"
 
 
 def _leave_leg(root: Path, marker: LegScope, units: dict[str, Unit]) -> None:
