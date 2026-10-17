@@ -1378,6 +1378,19 @@ absence.
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+- A pull request's check legs run on the runners
+  `[ci] pull-request-runners` names, every runner when the key is
+  absent; a push to main, a dispatch and the nightly run every runner
+  `[ci] runners` names. The rendered gate workflow carries both lists
+  as literals and a `legs` job picks one by the event, computing
+  nothing. A pull request that changes a line only another platform
+  reaches is red by name on a narrowed run: `fm submit --every-runner`
+  labels it `ci:every-runner` through the forge, the label starts a
+  run (the workflow runs on `labeled`), and the `legs` job takes the
+  full list while the label is there. A person sets the same label on
+  the forge by hand. The repository's configuration creates the label
+  (`fm workflow.configure`), and the coverage union expects every leg
+  from a labelled pull request.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,

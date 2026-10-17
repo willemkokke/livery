@@ -718,6 +718,17 @@ def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
     assert config.require_pipeline_success is True
     assert config.squash_only is True
     assert config.min_approvals is None  # no owners: no requirement
+    # The label `submit --every-runner` sets is part of the repository's
+    # configuration, so the forge carries it before any submit asks.
+    from livery.forge import Label
+
+    assert config.labels == (
+        Label(
+            name="ci:every-runner",
+            color="1d76db",
+            description="the gate runs every runner for this pull request",
+        ),
+    )
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
     assert contract_config(tmp_path).required_contexts == ("gate",)
 

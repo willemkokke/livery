@@ -30,16 +30,18 @@ ABSENT = "absent"
 def expected_legs(root: Path, run: RunContext) -> tuple[list[str], list[str]]:
     """The check legs the gate produces, and the ones *run*'s event runs.
 
-    A pull request runs the legs ``[ci] pull-request-runners`` names;
-    every other event runs them all. Both empty without a root
-    contract, as a test workspace may be.
+    A pull request runs the legs ``[ci] pull-request-runners`` names,
+    unless it carries [livery.workshop.EVERY_RUNNER_LABEL][]; every
+    other event runs them all. Both empty without a root contract, as
+    a test workspace may be.
     """
-    from livery.workshop import check_legs, pull_request_legs
+    from livery.workshop import EVERY_RUNNER_LABEL, check_legs, pull_request_legs
 
     if not (root / "workshop.toml").is_file():
         return [], []
     every = check_legs(root)
-    due = pull_request_legs(root) if run.event == "pull_request" else every
+    narrowed = run.event == "pull_request" and EVERY_RUNNER_LABEL not in run.labels
+    due = pull_request_legs(root) if narrowed else every
     return every, due
 
 

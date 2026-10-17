@@ -425,6 +425,7 @@ EXPORTS: dict[str, list[str]] = {
         "Category",
         "Changes",
         "DISTRIBUTIONS",
+        "EVERY_RUNNER_LABEL",
         "EXECUTABLES",
         "Edge",
         "HUMAN",

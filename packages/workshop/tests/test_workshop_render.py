@@ -91,6 +91,11 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     triggers = _triggers(doc)
     assert set(triggers) == {"pull_request", "push", "workflow_dispatch"}
     assert triggers["push"] == {"branches": ["main"]}
+    # A label set after the push starts a run of its own, so the legs
+    # job reads it: labeled joins the default pull request types.
+    assert triggers["pull_request"] == {
+        "types": ["opened", "synchronize", "reopened", "labeled"]
+    }
     jobs = doc["jobs"]
     # The release dispatch and the site's publish are the gate job's
     # entries on a push; GitHub's pages seam alone adds the forge's
@@ -685,19 +690,28 @@ def test_pull_request_runners_narrow_the_check_legs_on_a_pull_request_alone(
 ) -> None:
     skip_unless_installed("docs")
     root = _root_narrowing(tmp_path, kind, '["ubuntu-latest"]')
-    jobs = _doc(generate(root)[f".{kind}/workflows/ci.yml"])["jobs"]
-    # A legs job holds both matrices as literals, the event picks one,
-    # and the check job reads it from the output: GitHub starts no run
-    # for a workflow whose matrix axis is itself an expression.
+    rendered = generate(root)[f".{kind}/workflows/ci.yml"]
+    jobs = _doc(rendered)["jobs"]
+    # A legs job holds both matrices as literals, the event and the
+    # ci:every-runner label pick one, and the check job reads it from
+    # the output: GitHub starts no run for a workflow whose matrix axis
+    # is itself an expression. The YAML computes nothing: a pull
+    # request without the label takes the narrowed literal, a labelled
+    # one and every other event the full one.
     assert list(jobs)[:2] == ["legs", "check"]
     assert jobs["legs"]["runs-on"] == "ubuntu-latest"
     assert jobs["legs"]["outputs"] == {"matrix": "${{ steps.legs.outputs.matrix }}"}
     (step,) = jobs["legs"]["steps"]
     assert step["env"]["LEGS"] == (
         "${{ github.event_name == 'pull_request'"
+        " && !contains(github.event.pull_request.labels.*.name, 'ci:every-runner')"
         ' && \'{"os":["ubuntu-latest"],"python":["3.13","3.14"]}\''
         ' || \'{"os":["ubuntu-latest","macos-latest"],"python":["3.13","3.14"]}\' }}'
     )
+    # The comment above the job says what the two literals are and
+    # what picks one, label included.
+    assert "# The check legs' matrix, two literals" in rendered
+    assert "without the ci:every-runner" in rendered
     assert step["run"] == 'echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"'
     assert jobs["check"]["needs"] == ["legs"]
     assert (

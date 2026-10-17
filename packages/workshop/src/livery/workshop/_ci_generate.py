@@ -386,9 +386,14 @@ def _legs_job(answers: dict[str, Any]) -> str:
     environment, the event picks one, and the check job reads it with
     ``fromJSON`` from the output: the one documented shape for a matrix
     decided when the run starts. The decision is still the contract's;
-    the file carries two literals and which event takes which. The job
-    checks nothing out and enters nothing, so it costs seconds.
+    the file carries two literals and which event takes which: a pull
+    request takes the narrowed one unless it carries
+    [livery.workshop.EVERY_RUNNER_LABEL][], and every other event takes
+    the full one. The job checks nothing out and enters nothing, so it
+    costs seconds.
     """
+    from livery.workshop._points import EVERY_RUNNER_LABEL
+
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
     narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
     versions = json.dumps(
@@ -398,15 +403,26 @@ def _legs_job(answers: dict[str, Any]) -> str:
     axes = '{{"os":{},"python":{}}}'
     full = axes.format(json.dumps(runners, separators=(",", ":")), versions)
     pull = axes.format(json.dumps(narrowed, separators=(",", ":")), versions)
+    narrowed_event = (
+        "github.event_name == 'pull_request' && !contains("
+        f"github.event.pull_request.labels.*.name, '{EVERY_RUNNER_LABEL}')"
+    )
     return (
-        "  legs:\n"
+        _comment(
+            "The check legs' matrix, two literals: a pull request's runners"
+            f" and every runner. A pull request without the {EVERY_RUNNER_LABEL}"
+            " label takes the first, every other run the second, and the"
+            " check job reads the pick from this job's output.",
+            "  ",
+        )
+        + "  legs:\n"
         f"    runs-on: {runners[0]}\n"
         "    outputs:\n"
         "      matrix: ${{ steps.legs.outputs.matrix }}\n"
         "    steps:\n"
         "      - id: legs\n"
         "        env:\n"
-        f"          LEGS: ${{{{ github.event_name == 'pull_request' && '{pull}' || '{full}' }}}}\n"
+        f"          LEGS: ${{{{ {narrowed_event} && '{pull}' || '{full}' }}}}\n"
         '        run: echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"\n'
     )
 
@@ -795,7 +811,11 @@ def _actions_workflow(
         if not owners:
             continue
         if event == "pull_request":
-            lines.append("  pull_request:\n")
+            # The default types plus labeled: a label a verb or a person
+            # sets starts a run, whose legs job reads it.
+            lines.append(
+                "  pull_request:\n    types: [opened, synchronize, reopened, labeled]\n"
+            )
         elif event == "push":
             lines.append("  push:\n    branches: [main]\n")
         elif event == "schedule":

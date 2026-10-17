@@ -25,7 +25,7 @@ from itertools import islice
 from typing import Any
 from urllib.parse import quote
 
-from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._errors import ForgeError, Unsupported, refuse_unknown_labels
 from livery.forge._http import JsonClient, Opener
 from livery.forge._protocol import (
     Checks,
@@ -684,6 +684,9 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         merged_sha=str(
             data.get("merge_commit_sha") or data.get("merged_commit_id") or ""
         ),
+        labels=tuple(
+            str(label.get("name", "")) for label in (data.get("labels") or [])
+        ),
     )
 
 
@@ -911,6 +914,21 @@ class _GiteaPullRequests:
             f"{self._base}/issues/{number}/comments",
             method="POST",
             data={"body": body},
+        )
+
+    def add_labels(self, number: int, names: tuple[str, ...]) -> None:
+        """Put *names* on pull request *number* (the issue labels API).
+
+        Gitea keys the write by label id, so the names resolve through
+        the repository's labels first, and a stranger is refused by
+        name before the write; nothing is created.
+        """
+        ids = _label_ids(self._client, self._base)
+        refuse_unknown_labels(names, ids, self._base)
+        self._client.request(
+            f"{self._base}/issues/{number}/labels",
+            method="POST",
+            data={"labels": [ids[name] for name in names]},
         )
 
 
@@ -1240,12 +1258,7 @@ class _GiteaIssues:
     ) -> Issue:
         """Open an issue; label names resolve to ids at this boundary."""
         ids = _label_ids(self._client, self._base)
-        missing = [label for label in labels if label not in ids]
-        if missing:
-            raise ForgeError(
-                f"labels do not exist on the repository: {', '.join(missing)}."
-                " Configure them first."
-            )
+        refuse_unknown_labels(labels, ids, self._base)
         data = self._client.request(
             f"{self._base}/issues",
             method="POST",

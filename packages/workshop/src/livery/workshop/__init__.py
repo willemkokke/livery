@@ -106,7 +106,9 @@ branch whose run proved the checkout's tree, a
 [livery.workshop.VerifiedBranch][], is what
 [livery.workshop.verified_branch][] reads. The check legs the gate produces
 are [livery.workshop.check_legs][], and those a pull request's run
-produces are [livery.workshop.pull_request_legs][]. Of a set of
+produces are [livery.workshop.pull_request_legs][], unless the pull
+request carries [livery.workshop.EVERY_RUNNER_LABEL][], when its run
+produces every leg. Of a set of
 units, each a member's suite or the workspace's own tests at
 [livery.workshop.WORKSPACE_TESTS][], [livery.workshop.tested][] keeps
 those a test step runs. Whether a package holds the extension of the
@@ -213,6 +215,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import workspace_suite as workspace_suite
     from livery.workshop._phases import PhaseContext as PhaseContext
     from livery.workshop._phases import run_phase as run_phase
+    from livery.workshop._points import EVERY_RUNNER_LABEL as EVERY_RUNNER_LABEL
     from livery.workshop._points import check_legs as check_legs
     from livery.workshop._points import pull_request_legs as pull_request_legs
     from livery.workshop._prose import AGENT as AGENT
@@ -278,6 +281,7 @@ __all__ = [
     "COMPILE_COMMANDS",
     "CURRENT_VERSION",
     "DISTRIBUTIONS",
+    "EVERY_RUNNER_LABEL",
     "EXECUTABLES",
     "HUMAN",
     "JOB_BUILT_MEMBERS",
@@ -406,6 +410,7 @@ _EXPORTS: dict[str, str] = {
     "LegScope": "livery.workshop._verified",
     "VerifiedBranch": "livery.workshop._verified",
     "category_of": "livery.workshop._categories",
+    "EVERY_RUNNER_LABEL": "livery.workshop._points",
     "check_legs": "livery.workshop._points",
     "holds_runtime_language": "livery.workshop._packages",
     "leave_leg_file": "livery.workshop._metrics",
