@@ -1288,7 +1288,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-pytest"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/pytest" }
 dependencies = [
     { name = "livery-workshop" },
