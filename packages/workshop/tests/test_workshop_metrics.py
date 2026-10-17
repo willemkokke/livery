@@ -982,3 +982,50 @@ def test_the_record_puts_the_jobs_half_from_its_box_collects_and_drops_when_last
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
     assert entry["jobs"]["nightly (3.14)"]["tasks"] == {"check": 4.0, "doctor": 1.0}
     assert entry["jobs"]["nightly (3.13)"]["tasks"] == {"check": 50.0}
+
+
+def test_the_collect_and_the_drop_fail_open_when_the_forge_refuses_the_question(
+    work: Path, tmp_path: Path
+) -> None:
+    # A job with no forge credential, one that only builds, pushes its
+    # half and cannot read the run's jobs back: the row carries the
+    # halves alone and names the refusal, and the drop keeps the refs.
+    from typing import Any, cast
+
+    from livery.forge import ForgeError, Repository
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Any, ...]:
+            raise ForgeError(
+                "HTTP 401 on GET /runs: invalid username, password or token"
+            )
+
+        def jobs(self, run_id: int) -> tuple[Any, ...]:
+            raise AssertionError("never asked without a run")
+
+    class _Repo:
+        checks = _Checks()
+
+    repo = cast(Repository, cast(Any, _Repo()))
+    trace = _trace(tmp_path / "t.json", tasks={"nanobind.wheels": 16000.0})
+    assert (
+        _metrics.put_leg(work, RUN, job="wheels", label="wheels", trace=trace)[1] == ""
+    )
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert any(
+        "the forge could not be asked for its jobs (HTTP 401" in line for line in lines
+    )
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in lines
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
+    assert entry["jobs"]["wheels"]["tasks"] == {"nanobind.wheels": 16000.0}
+    lines = _metrics.drop_halves(
+        work, repo, RUN, sha="b" * 40, job="wheels", writers=()
+    )
+    assert (
+        lines[-1] == f"  run {RUN.run_id}: the forge's jobs are unknown; the refs stay"
+    )
+    assert (
+        git.read(state_store(work), _metrics.run_ref(RUN, "wheels")).files is not None
+    )

@@ -442,19 +442,33 @@ def _forge_jobs(
     pull request's merge sha, say) still yields the newest run for
     the sha, named as a substitution.
     """
+    from livery.forge import ForgeError
+
     lines: list[str] = []
     head = run.head_sha or sha
-    runs = repo.checks.runs(head_sha=head)
-    forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
-    if forge_run is None and runs:
-        forge_run = runs[0]
-        lines.append(
-            f"  run {run.run_id}: not among the forge's runs for {head[:12]};"
-            f" using the newest, run {forge_run.id}"
+    try:
+        runs = repo.checks.runs(head_sha=head)
+        forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
+        if forge_run is None and runs:
+            forge_run = runs[0]
+            lines.append(
+                f"  run {run.run_id}: not among the forge's runs for {head[:12]};"
+                f" using the newest, run {forge_run.id}"
+            )
+        jobs = (
+            {job.name: job for job in repo.checks.jobs(forge_run.id)}
+            if forge_run
+            else {}
         )
-    jobs = (
-        {job.name: job for job in repo.checks.jobs(forge_run.id)} if forge_run else {}
-    )
+    except ForgeError as error:
+        # A job without a forge credential (one that only builds) can
+        # push its half and read nothing back: the record stays a
+        # record, never a verdict, so the question's refusal is a line.
+        lines.append(
+            f"  run {run.run_id}: the forge could not be asked for its jobs"
+            f" ({error}); the rows carry their trace halves alone"
+        )
+        return None, {}, lines
     return forge_run, jobs, lines
 
 
@@ -498,7 +512,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     head = run.head_sha or sha
     forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
     lines.extend(looked)
-    if forge_run is None:
+    if forge_run is None and not looked:
         lines.append(
             f"  run {run.run_id}: the forge lists no such run for {head[:12]};"
             " the rows carry their trace halves alone"
@@ -603,9 +617,7 @@ def drop_halves(
     forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
     lines.extend(looked)
     if forge_run is None:
-        lines.append(
-            f"  run {run.run_id}: the forge lists no such run; the per-run refs stay"
-        )
+        lines.append(f"  run {run.run_id}: the forge's jobs are unknown; the refs stay")
         return lines
     waiting = sorted(
         f"{name}: {found.conclusion or found.status}"
