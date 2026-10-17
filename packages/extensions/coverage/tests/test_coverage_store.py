@@ -426,6 +426,24 @@ def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
     assert legs == [] and why.endswith("the remote could not be listed")
 
 
+def test_a_shards_label_reads_its_platforms_record(work: Path) -> None:
+    from dataclasses import replace
+
+    from livery.extensions.coverage._leg import unrecorded
+
+    base, top = _packages(work)
+    key = coverage_record.closure_id(work, (base, top), base)
+    fresh = {"packages/base": _unit("packages/base", closure=key)}
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    # The record is the platform leg's, the key the gate job's fold
+    # writes under; a shard reads it by its own label.
+    held = coverage_record.recorded(work, leg=f"{LEG}-2of2")
+    assert not held.failed and held.units == fresh
+    assert held == coverage_record.recorded(work, leg=LEG)
+    shard = replace(RUN, leg=f"{LEG}-2of2")
+    assert unrecorded(work, shard, (base, top), (base,), bases=("main",)) == ()
+
+
 def test_a_row_of_the_old_schema_is_a_miss_and_the_unit_is_measured_afresh(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
