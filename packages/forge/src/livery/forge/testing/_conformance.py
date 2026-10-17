@@ -490,6 +490,48 @@ def _pr_comment(driver: ForgeDriver) -> None:
         raise AssertionError("commenting on a missing pull request must raise")
 
 
+def _pr_labels(driver: ForgeDriver) -> None:
+    """Labels land on the pull request once; a stranger and a missing number refuse."""
+    repo = driver.fresh_repo()
+    driver.push(repo.owner, repo.name, "feature")
+    pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: labels", "")
+    assert pr.labels == ()
+    # The refusals first. A label the repository does not carry is
+    # named, and nothing is written: GitHub and GitLab would otherwise
+    # create it on the write.
+    try:
+        repo.pr.add_labels(pr.number, ("ci:every-runner",))
+    except ForgeError as exc:
+        assert "ci:every-runner" in str(exc)
+    else:
+        raise AssertionError("a label the repository does not carry must be refused")
+    unlabelled = repo.pr.get(pr.number)
+    assert unlabelled is not None
+    assert unlabelled.labels == ()
+    repo.configure(
+        RepoConfig(
+            labels=(
+                Label(
+                    name="ci:every-runner",
+                    color="1d76db",
+                    description="the gate runs every runner for this pull request",
+                ),
+            )
+        )
+    )
+    try:
+        repo.pr.add_labels(pr.number + 999, ("ci:every-runner",))
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("labelling a missing pull request must raise")
+    repo.pr.add_labels(pr.number, ("ci:every-runner",))
+    repo.pr.add_labels(pr.number, ("ci:every-runner",))  # idempotent re-run
+    got = repo.pr.get(pr.number)
+    assert got is not None
+    assert got.labels == ("ci:every-runner",)
+
+
 def _armable(driver: ForgeDriver) -> Repository:
     """A fresh repository configured so arming is available.
 
@@ -1033,6 +1075,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("pr-title-close-reopen", _pr_title_close_reopen),
     Scenario("pr-merge-now", _pr_merge_now),
     Scenario("pr-comment", _pr_comment),
+    Scenario("pr-labels", _pr_labels),
     Scenario("arm-disarm", _arm_disarm, requires=("auto_merge",)),
     Scenario(
         "armed-pr-merges-on-green",

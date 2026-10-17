@@ -376,6 +376,69 @@ def test_the_fake_names_every_missing_subject() -> None:
         here.pr.update_body(1, "b")
     with pytest.raises(ForgeError, match="no issue"):
         here.issue.comment(1, "b")
+    with pytest.raises(ForgeError, match="no pull request"):
+        here.pr.add_labels(1, ())
+
+
+def test_add_labels_refuses_an_unknown_label_by_name_and_writes_nothing() -> None:
+    # The refusal on every backend: the repository's labels are read,
+    # the stranger is named, and no write follows, since GitHub and
+    # GitLab would create the label on the write. Each cassette holds
+    # the listing alone, so a write would be an unrecorded request.
+    github_opener = ReplayOpener(
+        Cassette(
+            [
+                _exchange(
+                    "GET",
+                    "https://api.github.com/repos/acme/ws/labels?page=1&per_page=50",
+                    200,
+                    '[{"name": "bug"}]',
+                )
+            ]
+        )
+    )
+    github = GithubForge("https://api.github.com", token="t", opener=github_opener)
+    with pytest.raises(ForgeError, match="ci:every-runner") as caught:
+        github.repository("acme", "ws").pr.add_labels(5, ("bug", "ci:every-runner"))
+    assert caught.value.status == 422
+    assert "bug" not in str(caught.value).partition("labels do not exist")[2]
+    github_opener.verify_exhausted()
+
+    gitea_opener = ReplayOpener(
+        Cassette(
+            [
+                _exchange(
+                    "GET",
+                    "http://g.invalid/api/v1/repos/acme/ws/labels?page=1&limit=50",
+                    200,
+                    '[{"id": 3, "name": "bug"}]',
+                )
+            ]
+        )
+    )
+    gitea = GiteaForge("http://g.invalid/api/v1", token="t", opener=gitea_opener)
+    with pytest.raises(ForgeError, match="ci:every-runner") as caught:
+        gitea.repository("acme", "ws").pr.add_labels(5, ("ci:every-runner",))
+    assert caught.value.status == 422
+    gitea_opener.verify_exhausted()
+
+    gitlab_opener = ReplayOpener(
+        Cassette(
+            [
+                _exchange(
+                    "GET",
+                    f"{_GL}/projects/acme%2Fws/labels?page=1&per_page=50",
+                    200,
+                    '[{"id": 3, "name": "bug"}]',
+                )
+            ]
+        )
+    )
+    gitlab = GitlabForge(_GL, token="t", opener=gitlab_opener)
+    with pytest.raises(ForgeError, match="ci:every-runner") as caught:
+        gitlab.repository("acme", "ws").pr.add_labels(5, ("ci:every-runner",))
+    assert caught.value.status == 422
+    gitlab_opener.verify_exhausted()
 
 
 # --- a created project's default branch, and the published merge hold ---------

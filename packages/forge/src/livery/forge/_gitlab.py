@@ -33,7 +33,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._errors import ForgeError, Unsupported, refuse_unknown_labels
 from livery.forge._http import JsonClient, Opener
 from livery.forge._protocol import (
     Checks,
@@ -704,16 +704,7 @@ class _GitlabRepository:
 
     def _ensure_labels(self, labels: tuple[Label, ...]) -> None:
         """Create or update each label by name; none are ever deleted."""
-        existing = {
-            str(label["name"]): int(label["id"])
-            for label in self._client.paginate(
-                lambda page: (
-                    self._client.request(f"{self._base}/labels?page={page}&per_page=50")
-                    or []
-                ),
-                subject=f"{self._base}/labels",
-            )
-        }
+        existing = _label_ids(self._client, self._base)
         for label in labels:
             body = {
                 "name": label.name,
@@ -828,6 +819,17 @@ class _GitlabRepository:
         )
 
 
+def _label_ids(client: JsonClient, base: str) -> dict[str, int]:
+    """The project's labels, name to id, complete or raising."""
+    return {
+        str(label["name"]): int(label["id"])
+        for label in client.paginate(
+            lambda page: client.request(f"{base}/labels?page={page}&per_page=50") or [],
+            subject=f"{base}/labels",
+        )
+    }
+
+
 def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
     """GitLab's merge request JSON, normalised; the number is the iid.
 
@@ -854,6 +856,7 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         merged_sha=str(
             data.get("squash_commit_sha") or data.get("merge_commit_sha") or ""
         ),
+        labels=tuple(str(label) for label in (data.get("labels") or [])),
     )
 
 
@@ -1173,6 +1176,20 @@ class _GitlabPullRequests:
             f"{self._base}/merge_requests/{number}/notes",
             method="POST",
             data={"body": body},
+        )
+
+    def add_labels(self, number: int, names: tuple[str, ...]) -> None:
+        """Put *names* on merge request *number* (``add_labels`` on the update).
+
+        GitLab creates a label it does not know when one is added to a
+        merge request, so the project's labels are read first and a
+        stranger is refused by name before the write.
+        """
+        refuse_unknown_labels(names, _label_ids(self._client, self._base), self._base)
+        self._client.request(
+            f"{self._base}/merge_requests/{number}",
+            method="PUT",
+            data={"add_labels": ",".join(names)},
         )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Container
+
 
 class ForgeError(Exception):
     """Raised when a forge operation fails.
@@ -34,6 +36,26 @@ class ForgeError(Exception):
         self.method = method
         self.endpoint = endpoint
         self.detail = detail
+
+
+def refuse_unknown_labels(
+    names: tuple[str, ...], known: Container[str], base: str
+) -> None:
+    """Raise [livery.forge.ForgeError][] naming the labels *base* lacks among *names*.
+
+    Every backend asks this before it writes a label onto an issue or a
+    pull request: GitHub and GitLab create a label they do not know on
+    such a write, and Gitea takes ids, which an unknown name has none
+    of, so the one refusal by name is made here, before anything is
+    written. Nothing is raised when every name is in *known*.
+    """
+    missing = [name for name in names if name not in known]
+    if missing:
+        raise ForgeError(
+            f"labels do not exist on {base}: {', '.join(missing)}."
+            " Configure them first.",
+            status=422,
+        )
 
 
 class RateLimited(ForgeError):

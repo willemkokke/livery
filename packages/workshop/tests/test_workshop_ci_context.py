@@ -208,6 +208,89 @@ def test_a_gitlab_merge_request_pipeline_answers_the_pull_request_payload() -> N
     }
 
 
+def test_the_run_context_labels_are_empty_without_a_labelled_payload(
+    tmp_path: Path,
+) -> None:
+    # The fallbacks first: no payload, a payload that does not parse, a
+    # pull request payload without the key, and one whose labels are
+    # not a list all read as no labels, and nothing is raised.
+    base = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_RUN_ID": "7",
+        "GITHUB_EVENT_NAME": "pull_request",
+    }
+    missing = _ci_context.run_context(
+        {**base, "GITHUB_EVENT_PATH": str(tmp_path / "none")}
+    )
+    assert missing is not None and missing.labels == ()
+    junk = tmp_path / "event.json"
+    junk.write_text("{not json")
+    broken = _ci_context.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
+    assert broken is not None and broken.labels == ()
+    junk.write_text(json.dumps({"pull_request": {"head": {"sha": "a" * 40}}}))
+    keyless = _ci_context.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
+    assert keyless is not None and keyless.labels == ()
+    junk.write_text(json.dumps({"pull_request": {"labels": "ci:every-runner"}}))
+    odd = _ci_context.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
+    assert odd is not None and odd.labels == ()
+    # A push has no pull request, on GitHub and on GitLab alike.
+    push = _ci_context.run_context(
+        {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_EVENT_NAME": "push"}
+    )
+    assert push is not None and push.labels == ()
+    gitlab_push = _ci_context.run_context(
+        {"GITLAB_CI": "true", "CI_PIPELINE_ID": "42", "CI_PIPELINE_SOURCE": "push"}
+    )
+    assert gitlab_push is not None and gitlab_push.labels == ()
+    assert _ci_context.run_context({}) is None
+
+
+def test_the_run_context_labels_are_the_pull_requests_on_each_forge(
+    tmp_path: Path,
+) -> None:
+    # GitHub and Gitea write each label as an object in the payload;
+    # GitLab carries the names comma-joined in one variable.
+    payload = tmp_path / "event.json"
+    payload.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "head": {"sha": "b" * 40, "ref": "feat/x"},
+                    "labels": [
+                        {"name": "kind/feat", "color": "0000ee"},
+                        {"name": "ci:every-runner"},
+                        {"color": "no-name"},
+                    ],
+                }
+            }
+        )
+    )
+    for forge_env in ({}, {"GITEA_ACTIONS": "true"}):
+        found = _ci_context.run_context(
+            {
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_RUN_ID": "7",
+                "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_EVENT_PATH": str(payload),
+                **forge_env,
+            }
+        )
+        assert found is not None
+        assert found.labels == ("kind/feat", "ci:every-runner")
+    gitlab = _ci_context.run_context(
+        {
+            "GITLAB_CI": "true",
+            "CI_PIPELINE_ID": "42",
+            "CI_PIPELINE_SOURCE": "merge_request_event",
+            "CI_MERGE_REQUEST_IID": "7",
+            "CI_MERGE_REQUEST_LABELS": "kind/feat, ci:every-runner,,",
+        }
+    )
+    assert gitlab is not None
+    assert gitlab.event == "pull_request"
+    assert gitlab.labels == ("kind/feat", "ci:every-runner")
+
+
 def test_the_event_payload_is_none_when_missing_junk_or_not_an_object(
     tmp_path: Path,
 ) -> None:

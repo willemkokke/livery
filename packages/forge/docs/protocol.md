@@ -113,6 +113,7 @@ reached on (see `quirks.md`).
 | `reviews(number)` | the submitted review verdicts; drafts never arrive |
 | `schedule_events(number)` | the merge-scheduling history, oldest first; capability-gated (`schedule_events`) |
 | `comment(number, body)` | the evidence channel |
+| `add_labels(number, names)` | puts the named labels on the pull request, idempotent; a name the repository does not carry is refused by name before anything is written, on every backend, since GitHub and GitLab would otherwise create it. `PullRequest.labels` reads them back |
 
 The arming contract: pushing to an armed pull request races the
 server-side merge, and the merge can take the pre-push head. Disarm,

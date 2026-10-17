@@ -8,6 +8,7 @@ name: ci
 # request alone, so every event spells the same call.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
   workflow_dispatch:

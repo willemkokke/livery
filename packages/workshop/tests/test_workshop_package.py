@@ -82,6 +82,7 @@ def test_the_surface_is_declared() -> None:
         "CURRENT_VERSION",
         "DISTRIBUTIONS",
         "DURATIONS",
+        "EVERY_RUNNER_LABEL",
         "EXECUTABLES",
         "HUMAN",
         "JOB_BUILT_MEMBERS",

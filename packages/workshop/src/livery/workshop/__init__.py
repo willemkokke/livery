@@ -106,7 +106,9 @@ branch whose run proved the checkout's tree, a
 [livery.workshop.VerifiedBranch][], is what
 [livery.workshop.verified_branch][] reads. The check legs the gate produces
 are [livery.workshop.check_legs][], and those a pull request's run
-produces are [livery.workshop.pull_request_legs][]; split into the
+produces are [livery.workshop.pull_request_legs][], unless the pull
+request carries [livery.workshop.EVERY_RUNNER_LABEL][], when its run
+produces every leg; split into the
 shards the contract gives each runner they are
 [livery.workshop.check_shards][] and
 [livery.workshop.pull_request_shards][], each shard spelled by a
@@ -227,6 +229,7 @@ if TYPE_CHECKING:
     from livery.workshop._packages import workspace_suite as workspace_suite
     from livery.workshop._phases import PhaseContext as PhaseContext
     from livery.workshop._phases import run_phase as run_phase
+    from livery.workshop._points import EVERY_RUNNER_LABEL as EVERY_RUNNER_LABEL
     from livery.workshop._points import check_legs as check_legs
     from livery.workshop._points import check_shards as check_shards
     from livery.workshop._points import pull_request_legs as pull_request_legs
@@ -306,6 +309,7 @@ __all__ = [
     "CURRENT_VERSION",
     "DISTRIBUTIONS",
     "DURATIONS",
+    "EVERY_RUNNER_LABEL",
     "EXECUTABLES",
     "HUMAN",
     "JOB_BUILT_MEMBERS",
@@ -446,6 +450,7 @@ _EXPORTS: dict[str, str] = {
     "LegScope": "livery.workshop._verified",
     "VerifiedBranch": "livery.workshop._verified",
     "category_of": "livery.workshop._categories",
+    "EVERY_RUNNER_LABEL": "livery.workshop._points",
     "check_legs": "livery.workshop._points",
     "check_shards": "livery.workshop._points",
     "pull_request_shards": "livery.workshop._points",

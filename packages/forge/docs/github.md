@@ -46,7 +46,10 @@ answers for the running install.
   redirect this package ever follows.
 - Pull requests and issues share the number space and the issue
   endpoints; listings filter pull requests out and `issue.get` on a
-  pull request's number answers None.
+  pull request's number answers None. `pr.add_labels` writes through
+  the issue labels endpoint, which creates a label it does not know,
+  so the repository's labels are read first and a stranger is refused
+  by name before the write.
 - `issue.search` matches text client-side over the complete listing:
   GitHub's search API indexes asynchronously, and a probe that can
   miss what was just created is not a probe. Issue listings

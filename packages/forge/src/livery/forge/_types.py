@@ -245,6 +245,9 @@ class PullRequest:
             the base afterwards: the base's own runs are filed under
             this commit, and nothing on the pull request itself names
             it.
+        labels: The label names on the pull request, as
+            [livery.forge.PullRequests.add_labels][] sets them and a
+            person sets them on the forge.
     """
 
     number: int
@@ -258,6 +261,7 @@ class PullRequest:
     url: str = ""
     author: str = ""
     merged_sha: str = ""
+    labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

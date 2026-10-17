@@ -221,6 +221,20 @@ class PullRequests(Protocol):
         """
         ...
 
+    def add_labels(self, number: int, names: tuple[str, ...]) -> None:
+        """Put the labels *names* on pull request *number*.
+
+        Adds to the labels the pull request carries; a name already on
+        it stays, so a re-run is the recovery procedure. Every name must
+        already be a label of the repository: one that is not raises
+        [livery.forge.ForgeError][] naming it, before anything is
+        written, on every backend. Ensure the labels exist first with
+        [livery.forge.Repository.configure][]. A number that names no
+        pull request raises [livery.forge.ForgeError][] with status
+        404.
+        """
+        ...
+
 
 class Checks(Protocol):
     """One repository's CI: the combined verdict, runs, jobs, and logs.

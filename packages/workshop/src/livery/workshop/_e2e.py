@@ -38,6 +38,14 @@ from livery.footman import fail
 from livery.forge import ForgeError
 from livery.workshop._ci_context import state_store
 from livery.workshop._ci_tasks import ci
+from livery.workshop._e2e_rows import (
+    RunFacts,
+    marks,
+    record_units,
+    run_facts,
+    verified_by,
+    verified_tree,
+)
 from livery.workshop._series import LOOP
 from livery.workshop._verdict import FollowTimedOut, ForgeUnreachable, Pending, follow
 
@@ -104,19 +112,6 @@ class Current:
 #: The environment of the running pass. `ci.e2e` sets it from
 #: `--env` before anything reads the forge; the tests set it by hand.
 CURRENT = Current()
-
-
-def with_label(lines: tuple[str, ...]) -> tuple[str, ...]:
-    """*lines* with the hosted runner's name replaced by the pass's label.
-
-    The proofs are written against `ubuntu-latest`, the name a born
-    workspace's contract carries; on an environment whose runner has
-    its own label, the emitted jobs and the coverage legs carry that
-    label instead, and the proof reads the same lines with it.
-    """
-    if CURRENT.label == "ubuntu-latest":
-        return lines
-    return tuple(line.replace("ubuntu-latest", CURRENT.label) for line in lines)
 
 
 #: The variables that make the workshop read a process as a CI run: a
@@ -1594,13 +1589,16 @@ def _runs_followed(
     subject: str,
     timeout: float,
     interval: float,
+    timed_out: Callable[[Pending], str],
 ) -> _A:
     """Poll the runs (of *head_sha*, or all) until *read* answers from them.
 
     A loaded local forge answers a runs listing in minutes, and the
     client's timeout is shorter: an unreadable poll is retried as the
     ``ci`` verbs retry theirs, and only a spent budget or the deadline
-    is the verdict, each failing with its words.
+    is the verdict, each failing with its words. *read* answers a
+    pending whose key says what it still waits for; at the deadline
+    *timed_out* turns the last one into the failure's words.
     """
     try:
         return follow(
@@ -1614,7 +1612,7 @@ def _runs_followed(
     except ForgeUnreachable as exc:
         fail(exc.line.strip())
     except FollowTimedOut as exc:
-        fail(exc.last.line or f"{subject} did not complete within {timeout:.0f}s")
+        fail(timed_out(exc.last))
 
 
 def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
@@ -1627,11 +1625,7 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
         latest = max(runs, key=lambda run: run.id, default=None)
         if latest is not None and latest.status == "completed":
             return latest
-        return Pending(
-            f"{workflow} did not complete within {timeout:.0f}s:"
-            f" {repo.web_url()}/actions",
-            key="pending",
-        )
+        return Pending(key="pending")
 
     latest = _runs_followed(
         repo,
@@ -1639,6 +1633,10 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
         subject=f"{workflow}'s runs",
         timeout=timeout,
         interval=5,
+        timed_out=lambda _last: (
+            f"{workflow} did not complete within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions"
+        ),
     )
     if latest.conclusion != "success":
         fail(
@@ -1751,6 +1749,9 @@ def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
         # attempt's halves: the re-run waits until every job has
         # completed, naming the one it waits on.
         _jobs_settled(repo, run)
+        # The re-run keeps the latest attempt's logs alone, so the first
+        # attempt's failure is said here or nowhere.
+        print(red_jobs_text(repo, run))
         repo.checks.rerun(run.id, failed_only=True)
         print(f"  re-running {run.workflow} (run {run.id}) once: it ended failure")
         retried.append(run.workflow)
@@ -1792,11 +1793,13 @@ def _watch(
                 return runs
             retried = True
         missing = ", ".join(sorted(set(require) - present))
-        waited = f"; never appeared: {missing}" if missing else ""
-        return Pending(
+        return Pending(key=missing)
+
+    def never_completed(last: Pending) -> str:
+        waited = f"; never appeared: {last.key}" if last.key else ""
+        return (
             f"the loop's runs did not complete within {timeout:.0f}s"
-            f"{waited}: {repo.web_url()}/actions",
-            key=f"{len(runs)}:{missing}",
+            f"{waited}: {repo.web_url()}/actions"
         )
 
     runs = _runs_followed(
@@ -1806,6 +1809,7 @@ def _watch(
         subject=f"{sha[:10]}'s runs",
         timeout=timeout,
         interval=interval,
+        timed_out=never_completed,
     )
     RUNS.count += len(runs)
     for line in judge_runs(repo, runs, branch=branch):
@@ -1851,6 +1855,21 @@ def _align_main(root: Path) -> None:
         with contextlib.suppress(git.GitError):
             git.delete_branch(root, name)
         print(f"  pruned pass-owned branch: {name}")
+
+
+def _main_settled(root: Path, kind: str) -> None:
+    """Wait until main's push run at the aligned tip has completed.
+
+    The loop cuts its next branch right after a merge, and the one
+    runner may run the new pull request's check job before main's push
+    job has written main's record; a leg then reads a record that holds
+    nothing and measures every suite afresh. The push run is waited for
+    here, so what a branch's leg reuses is on the record before the leg
+    reads it. A red push run fails the pass as any red run does.
+    """
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    _completed_run(repo, git.head_sha(root), event="push")
 
 
 def _fresh_branch(root: Path, name: str) -> None:
@@ -2166,11 +2185,7 @@ def _completed_run(
             if retried or not _retry_red_once(repo, (run,)):
                 return run
             retried = True
-        return Pending(
-            f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
-            f" {repo.web_url()}/actions",
-            key="pending",
-        )
+        return Pending(key="pending")
 
     run = _runs_followed(
         repo,
@@ -2179,6 +2194,10 @@ def _completed_run(
         subject=f"{sha[:10]}'s {event} run",
         timeout=timeout,
         interval=interval,
+        timed_out=lambda _last: (
+            f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions"
+        ),
     )
     RUNS.count += 1
     if run.conclusion != "success":
@@ -2190,38 +2209,137 @@ def _completed_run(
     return run, repo.checks.jobs(run.id)
 
 
-def _require_lines(
-    repo: Repository,
-    run: Run,
-    jobs: tuple[Job, ...],
-    job: str,
-    needed: tuple[str, ...],
-    *,
-    forbidden: tuple[str, ...] = (),
+def _log_says(
+    repo: Repository, run: Run, jobs: tuple[Job, ...], job: str, line: str
 ) -> None:
-    """Fail unless the log of the job whose name starts with *job* has every line.
+    """Fail unless the log of the job whose name starts with *job* carries *line*.
 
-    *forbidden* names lines the log must not carry: a proof of what a
-    leg skipped reads the same as a proof of what it ran.
+    The one read of a job's log the loop keeps: the publish job's word
+    on whether it collected what the wheels job built has no row until
+    conan's per-host artifact (phase 13 of the destination note), which
+    the destination's temporary table names.
     """
     found = next((item for item in jobs if item.name.startswith(job)), None)
     if found is None:
         fail(f"run {run.id} has no {job} job: {repo.web_url()}/actions/runs/{run.id}")
-    log = repo.checks.job_log(found.id)
-    needed = with_label(needed)
-    forbidden = with_label(forbidden)
-    missing = [line for line in needed if line not in log]
-    if missing:
+    if line not in repo.checks.job_log(found.id):
         fail(
-            f"run {run.id}'s {job} job did not say {missing};"
+            f"run {run.id}'s {job} job did not say {line!r};"
             f" {repo.web_url()}/actions/runs/{run.id}"
         )
-    present = [line for line in forbidden if line in log]
-    if present:
+
+
+def _require_scope(
+    run: Run,
+    facts: RunFacts,
+    *,
+    scope: str,
+    packages: Collection[str] = (),
+    composed: bool | None = None,
+) -> None:
+    """Fail unless *run*'s check leg recorded *scope* over *packages*.
+
+    *composed* says whether the leg must name the tree it measured from
+    (a narrowed gate) or must not; None leaves it unjudged.
+    """
+    leg = facts.job("check")
+    if leg.scope != scope or set(leg.packages) != set(packages):
         fail(
-            f"run {run.id}'s {job} job said {present}, which the proof forbids;"
-            f" {repo.web_url()}/actions/runs/{run.id}"
+            f"run {run.id}: the check leg's row says {leg.scope} over"
+            f" {sorted(leg.packages) or 'no package'}, expected {scope} over"
+            f" {sorted(packages) or 'no package'}; {run.url}"
         )
+    if composed is not None and bool(leg.base_tree) != composed:
+        named = (
+            f"names base tree {leg.base_tree[:12]}"
+            if leg.base_tree
+            else "names no base tree"
+        )
+        fail(
+            f"run {run.id}: the check leg's row {named}, expected"
+            f" {'one' if composed else 'none'}; {run.url}"
+        )
+
+
+def _require_judged(run: Run, facts: RunFacts, percents: Mapping[str, float]) -> None:
+    """Fail unless the gate job's coverage section judged exactly *percents*."""
+    if facts.coverage != dict(percents):
+        fail(
+            f"run {run.id}: the gate job judged {facts.coverage}, expected"
+            f" {dict(percents)}; {run.url}"
+        )
+
+
+def _require_record(
+    root: Path,
+    run: Run,
+    base: str,
+    leg: str,
+    *,
+    fresh: Collection[str],
+    carried: Collection[str],
+) -> None:
+    """Fail unless *base*'s record on *leg* holds the units as measured.
+
+    *fresh* were measured by *run*; *carried* by another run.
+    """
+    units = record_units(root, base, leg)
+    expected = set(fresh) | set(carried)
+    if set(units) != expected:
+        fail(
+            f"run {run.id}: {base}'s record on {leg} holds {sorted(units)},"
+            f" expected {sorted(expected)}"
+        )
+    stale = [unit for unit in fresh if units[unit].run != str(run.id)]
+    remeasured = [unit for unit in carried if units[unit].run == str(run.id)]
+    if stale or remeasured:
+        fail(
+            f"run {run.id}: {base}'s record on {leg} was to measure {sorted(fresh)}"
+            f" afresh and carry {sorted(carried)}; measured by another run:"
+            f" {stale}; measured again: {remeasured}"
+        )
+
+
+def _require_verified(
+    root: Path, run: Run, *, composed: bool, branch: str = ""
+) -> None:
+    """Fail unless *run* stamped its tree as asked: composed or not, naming *branch*."""
+    entry = verified_by(root, run.id)
+    if bool(entry.base_tree) != composed:
+        rests = "rests on no base"
+        if entry.base_tree:
+            rests = f"rests on {entry.base_tree[:12]}"
+        fail(
+            f"run {run.id}: the verified row of tree {entry.tree[:12]} {rests},"
+            f" expected {'a composed row' if composed else 'a full row'}"
+        )
+    if branch and entry.branch != branch:
+        fail(
+            f"run {run.id}: the verified row of tree {entry.tree[:12]} names branch"
+            f" {entry.branch!r}, expected {branch!r}"
+        )
+
+
+def _require_mark(
+    root: Path, package: str, *, value: float, kind: str, by: str = ""
+) -> None:
+    """Fail unless *package*'s mark is *value* of *kind*, and set by *by* when given."""
+    current = marks(root).get(package)
+    if current is None:
+        fail(f"no mark on the store for {package}")
+    if current.value != value or current.kind != kind or (by and current.by != by):
+        fail(
+            f"{package}'s mark is {current.value} ({current.kind} by {current.by}),"
+            f" expected {value} ({kind}{' by ' + by if by else ''})"
+        )
+
+
+def _units(root: Path) -> tuple[list[str], bool]:
+    """The newborn's units: its members' paths, and whether its own tests are one."""
+    from livery.workshop._packages import discover_packages, workspace_suite
+
+    members = [package.path for package in discover_packages(root)]
+    return members, workspace_suite(root) is not None
 
 
 def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
@@ -2243,12 +2361,12 @@ def _require_prebuilt(repo: Repository, run: Run, distribution: str) -> None:
             f"run {run.id}'s publish job ended {publish.conclusion or publish.status};"
             f" {repo.web_url()}/actions/runs/{run.id}"
         )
-    _require_lines(
+    _log_says(
         repo,
         run,
         jobs,
         "publish",
-        (f"prebuilt: {distribution}: the run collected what the wheels job built",),
+        f"prebuilt: {distribution}: the run collected what the wheels job built",
     )
     print(
         f"  release: the wave published the wheels the wheels job built for"
@@ -2265,63 +2383,39 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     lands the same tree on main, so main's push run finds it on the
     record, skips the gate, measures nothing, and its union takes
     every unit from the setup branch's record and copies it into
-    main's. A skipped leg reddening the union, passing it with
-    nothing counted, or measuring what the branch already measured
-    is the failure this proof exists for.
+    main's. The rows say so: the check leg's scope is ``verified``,
+    the tree's verified row names the setup branch, main's record
+    holds every unit measured by another run, and the gate job judged
+    each member. A skipped leg reddening the union, passing it with
+    nothing counted, or measuring what the branch already measured is
+    the failure this proof exists for.
     """
     _align_main(root)
     head = git.head_sha(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     from livery.workshop._new_project import _SETUP_BRANCH
+    from livery.workshop._verified import tree_id
 
-    run, logs = _completed_run(repo, head, event="push")
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "check",
-        ("skipping the gate",),
-        forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
-    )
+    run, _jobs = _completed_run(repo, head, event="push")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="verified")
+    proved = verified_tree(root, tree_id(root, head))
+    if proved.branch != _SETUP_BRANCH:
+        fail(
+            f"run {run.id}: main's tree is proved by a row naming {proved.branch!r},"
+            f" expected {_SETUP_BRANCH!r}, the branch whose record main copies"
+        )
     # The units main's union reuses are the ones the workspace has at
     # this point: its members and its own tests. A fresh birth has
     # neither yet (the members and the tests land through their own
     # pull requests afterwards), and then the union has no unit and
-    # judges nothing, which the run says in as many words.
-    from livery.workshop._packages import discover_packages, workspace_suite
-
-    members = [package.path for package in discover_packages(root)]
-    units = [*members, *(["tests"] if workspace_suite(root) is not None else [])]
-    record = (
-        f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree it proved"
-    )
-    if units:
-        expected = [
-            record,
-            *(
-                f"coverage: {unit} on check-ubuntu-latest-3.14: reused from run"
-                for unit in units
-            ),
-            *(f"coverage {path}: 100.0% (" for path in members),
-            f"coverage: the union of 0 leg(s) and {len(units)} reused suite(s)",
-            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {len(units)}"
-            " carried, 0 removed",
-        ]
-    else:
-        expected = [
-            record,
-            "coverage: leg check-ubuntu-latest-3.14 ran 'verified': no suite, no data",
-            "coverage: no unit to union; nothing judged",
-        ]
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "gate",
-        tuple(expected),
-        forbidden=("unjudged this run",),
-    )
+    # judges nothing.
+    members, tests = _units(root)
+    units = [*members, *(["tests"] if tests else [])]
+    leg = facts.job("check").leg
+    _require_record(root, run, "main", leg, fresh=(), carried=units)
+    _require_judged(run, facts, dict.fromkeys(members, 100.0))
     print(
         f"  verified skip: proven on main's run {run.id}; the gate skipped,"
         f" nothing was measured, and main copied {_SETUP_BRANCH}'s record"
@@ -2404,17 +2498,19 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     wires the workspace, the release stamps the manifest), so their
     legs pay the full gate by the affected rule. This one rewrites a
     test file inside ``loop-echo`` and nothing else, lands it through
-    the loop's gate, and reads the run's logs: the check leg must say
-    it narrowed against main to that one member and put that member's
-    suite on its ref, and the gate job's union must judge both
-    members, the other one reused from main's record, write the
-    branch's own record, and compose its stamp with main's verified
-    tree. Main's push run after the squash then skips the gate on
-    that composed row, measures nothing, and copies the branch's
-    record into main's. Re-run on a pass-owned branch with main's tip
-    as the stamp, so the diff is never empty.
+    the loop's gate, and reads the rows: the check leg narrowed to
+    that one member against main; the branch's record holds that
+    member measured by this run and the others carried from main's;
+    the gate job judged every member; the ratchet member's mark, which
+    the pass accepted down to 90, is back at 100 by this run; and the
+    stamp composed with main's verified tree. Main's push run after
+    the squash then skips the gate on that composed row, measures
+    nothing, and copies the branch's record into main's. Re-run on a
+    pass-owned branch with main's tip as the stamp, so the diff is
+    never empty.
     """
     _fresh_branch(root, "chore/scoped-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     probe = root / "packages" / "loop-echo" / "tests" / "test_scoped_leg.py"
     probe.write_text(
@@ -2442,98 +2538,60 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         git.fetch(root, prune=True)
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
-    from livery.workshop._packages import workspace_suite
-
     # The workspace's own tests are a unit once the tests leg landed
     # them, and the member's change moves their closure, so the leg
-    # runs them too; a fresh birth has none, and every count is one
-    # fewer.
-    tests = workspace_suite(root) is not None
-    units = 4 if tests else 3
+    # runs them too; a fresh birth has none.
+    members, tests = _units(root)
+    others = [path for path in members if path != "packages/loop-echo"]
+    fresh = ["packages/loop-echo", *(["tests"] if tests else [])]
+    judged = dict.fromkeys(members, 100.0)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _completed_run(repo, head, event="pull_request")
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "check",
-        (
-            "affected-legs: the scoped gate against origin/main",
-            "affected: packages/loop-echo",
-            "coverage store: packages/loop-echo stored for closure",
-            *(("coverage store: tests stored for closure",) if tests else ()),
-        ),
-        forbidden=(
-            "affected: packages/loop-cpp",
-            "packages/loop-echo, packages/loop-native",
-            "coverage store: packages/loop-cpp runs",
-            "coverage store: packages/loop-native runs",
-        ),
+    run, _jobs = _completed_run(repo, head, event="pull_request")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="affected", packages=fresh, composed=True)
+    leg = facts.job("check").leg
+    _require_record(root, run, "chore/scoped-leg", leg, fresh=fresh, carried=others)
+    _require_judged(run, facts, judged)
+    _require_mark(
+        root,
+        f"packages/{RATCHET_MEMBER}",
+        value=100.0,
+        kind="ratchet",
+        by=f"run {run.id}",
     )
-    # The union takes the one member the leg ran from the leg and the
-    # others from the store, and judges every one.
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "gate",
-        (
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
-            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (mark 90.0% accept by",
-            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            "accepted: the loop proves an accepted lowering",
-            "new mark: 100.0%",
-            "coverage: the union of 1 leg(s) and 2 reused suite(s)",
-            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14:"
-            f" {units - 2} fresh, 2 carried, 0 removed",
-            "speed packages/loop-echo on check-ubuntu-latest-3.14: ",
-            "recorded as proved green by run",
-            " on top of tree ",
-            "is not a release branch: nothing to check",
-        ),
-        forbidden=("unjudged this run", "not recorded:"),
-    )
+    _require_verified(root, run, composed=True, branch="chore/scoped-leg")
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
-        " packages/loop-echo; the union reused loop-native and loop-cpp from"
-        " main's record"
-        " and wrote the branch's; the stamp composed with main's tree)"
+        " packages/loop-echo; the union reused the other members from main's"
+        " record and wrote the branch's; the mark ratcheted; the stamp"
+        " composed with main's tree)"
     )
     # The narrowed run rested on main's verified tree, so its stamp
     # composed naming the branch, and main's push after the squash
     # skips the gate, measures nothing, and copies the branch's
     # record, every unit at the closures the squash lands.
+    from livery.workshop._verified import tree_id
+
     landed = git.head_sha(root)
-    run, logs = _completed_run(repo, landed, event="push")
-    _require_lines(
-        repo,
+    run, _jobs = _completed_run(repo, landed, event="push")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="verified")
+    proved = verified_tree(root, tree_id(root, landed))
+    if proved.branch != "chore/scoped-leg":
+        fail(
+            f"run {run.id}: main's tree is proved by a row naming {proved.branch!r},"
+            " expected 'chore/scoped-leg', the branch whose record main copies"
+        )
+    _require_record(
+        root,
         run,
-        logs,
-        "check",
-        ("skipping the gate", " on top of tree "),
-        forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
+        "main",
+        leg,
+        fresh=(),
+        carried=[*members, *(["tests"] if tests else [])],
     )
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "gate",
-        (
-            "coverage record: main takes chore/scoped-leg's record for the tree"
-            " it proved",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
-            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            f"coverage: the union of 0 leg(s) and {units} reused suite(s)",
-            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {units}"
-            " carried, 0 removed",
-        ),
-        forbidden=("unjudged this run",),
-    )
+    _require_judged(run, facts, judged)
     print(
         f"  composed skip: proven on main's run {run.id} after the member-only"
         " squash; nothing was measured, and main copied the branch's record"
@@ -2554,6 +2612,7 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     skipped, is the failure this proof exists for.
     """
     _align_main(root)
+    _main_settled(root, kind)
     before = git.head_sha(root)
     git.switch_new(root, "chore/unproven-push", f"{before}~1")
     probe = root / "packages" / "loop-native" / "tests" / "test_unproven_push.py"
@@ -2578,38 +2637,25 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     landed = git.head_sha(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _completed_run(repo, landed, event="push")
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "check",
-        (
-            "affected-legs: the scoped gate from the record's nearest proved tree",
-            "since tree ",
-            "affected: packages/loop-native",
-        ),
-        forbidden=(
-            "skipping the gate",
-            "everything runs",
-            "affected: packages/loop-echo",
-            "affected: packages/loop-cpp",
-        ),
+    run, _jobs = _completed_run(repo, landed, event="push")
+    facts = run_facts(root, run.id)
+    _require_scope(
+        run, facts, scope="affected", packages=["packages/loop-native"], composed=True
     )
-    _require_lines(
-        repo,
+    members, tests = _units(root)
+    carried = [path for path in members if path != "packages/loop-native"]
+    if tests:
+        carried.append("tests")
+    _require_record(
+        root,
         run,
-        logs,
-        "gate",
-        (
-            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
-            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-native: 100.0%",
-            "recorded as proved green by run",
-            " on top of tree ",
-        ),
-        forbidden=("unjudged this run", "not recorded:"),
+        "main",
+        facts.job("check").leg,
+        fresh=["packages/loop-native"],
+        carried=carried,
     )
+    _require_judged(run, facts, dict.fromkeys(members, 100.0))
+    _require_verified(root, run, composed=True)
     print(
         f"  unproven push: proven on main's run {run.id}; the leg measured from the"
         " previous push's tree, ran loop-native alone, and the stamp composed"
@@ -2622,12 +2668,13 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     The change is one markdown file under ``notes/`` and nothing
     else, landed through the loop's gate on a pass-owned branch with
     main's tip as the stamp so the diff is never empty. The check
-    leg must say nothing is affected because only prose changed and
-    skip its gate; the gate job must reuse every unit from the store,
-    judge every member, and compose the stamp with main's verified
-    tree, so main's push run after the squash skips too.
+    leg's row says nothing was affected; the branch's record holds
+    every unit carried from main's; the gate job judged every member;
+    the stamp composed with main's verified tree, so main's push run
+    after the squash skips too.
     """
     _fresh_branch(root, "chore/prose-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     note = root / "notes" / "loop-prose.md"
     note.parent.mkdir(exist_ok=True)
@@ -2649,50 +2696,24 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     _align_main(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _completed_run(repo, head, event="pull_request")
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "check",
-        (
-            "affected-legs: the scoped gate against origin/main",
-            "nothing affected: only prose and site files changed (1 file(s)"
-            " under notes/, markdown, the root docs/ tree, or zensical.toml);"
-            " the gate skips",
-        ),
-        forbidden=("affected: packages/", "coverage store: packages/"),
+    run, _jobs = _completed_run(repo, head, event="pull_request")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="nothing", composed=True)
+    members, tests = _units(root)
+    units = [*members, *(["tests"] if tests else [])]
+    _require_record(
+        root, run, "chore/prose-leg", facts.job("check").leg, fresh=(), carried=units
     )
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "gate",
-        (
-            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
-            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
-            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (",
-            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            "coverage: the union of 0 leg(s) and 4 reused suite(s)",
-            "coverage record: chore/prose-leg/check-ubuntu-latest-3.14: 0 fresh,"
-            " 4 carried, 0 removed",
-            "recorded as proved green by run",
-            " on top of tree ",
-        ),
-        forbidden=("unjudged this run",),
-    )
+    _require_judged(run, facts, dict.fromkeys(members, 100.0))
+    _require_verified(root, run, composed=True, branch="chore/prose-leg")
     print(
         f"  prose leg: proven on a note-only pull request (run {run.id}: the"
         " check leg skipped, the union reused every unit from main's record"
         " and wrote the branch's, the stamp composed)"
     )
     landed = git.head_sha(root)
-    run, logs = _completed_run(repo, landed, event="push")
-    _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
+    run, _jobs = _completed_run(repo, landed, event="push")
+    _require_scope(run, run_facts(root, run.id), scope="verified")
     print(f"  composed skip: proven on main's run {run.id} after the note-only squash")
 
 
@@ -2700,15 +2721,18 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     """Prove a change under the workspace's own tests runs that unit alone.
 
     A new test file under the root ``tests/`` and nothing else: the
-    check leg must narrow to the workspace tests, run and store them
-    as a unit, and leave every member's suite to the record; the
-    union judges every member from main's record, writes the branch's
-    record with the one fresh unit, and the stamp composes with main's
-    tree. Re-run on a pass-owned branch with main's tip as the stamp.
+    check leg's row says it narrowed to the workspace tests; the
+    branch's record holds that unit measured by this run and every
+    member carried from main's; the gate job judged every member; the
+    stamp composed with main's tree. Re-run on a pass-owned branch
+    with main's tip as the stamp.
     """
     _fresh_branch(root, "chore/tests-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     probe = root / "tests" / "test_tests_leg.py"
+    # A fresh newborn has no workspace tests yet: this file is the first.
+    probe.parent.mkdir(exist_ok=True)
     probe.write_text(
         '"""A workspace-tests change: the loop proves the tests leg on it."""\n'
         "\n"
@@ -2731,53 +2755,28 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     _align_main(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _completed_run(repo, head, event="pull_request")
-    _require_lines(
-        repo,
+    run, _jobs = _completed_run(repo, head, event="pull_request")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="affected", packages=["tests"], composed=True)
+    members, _tests = _units(root)
+    _require_record(
+        root,
         run,
-        logs,
-        "check",
-        (
-            "affected-legs: the scoped gate against origin/main",
-            "affected: tests",
-            "coverage store: tests stored for closure",
-        ),
-        forbidden=(
-            "affected: packages/",
-            "coverage store: packages/loop-echo stored",
-            "coverage store: packages/loop-native stored",
-            "coverage store: packages/loop-cpp stored",
-        ),
+        "chore/tests-leg",
+        facts.job("check").leg,
+        fresh=["tests"],
+        carried=members,
     )
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "gate",
-        (
-            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
-            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (",
-            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
-            "coverage: the union of 1 leg(s) and 3 reused suite(s)",
-            "coverage record: chore/tests-leg/check-ubuntu-latest-3.14: 1 fresh,"
-            " 3 carried, 0 removed",
-            "recorded as proved green by run",
-            " on top of tree ",
-        ),
-        forbidden=("unjudged this run", "coverage: tests on check-ubuntu-latest-3.14"),
-    )
+    _require_judged(run, facts, dict.fromkeys(members, 100.0))
+    _require_verified(root, run, composed=True, branch="chore/tests-leg")
     print(
         f"  tests leg: proven on a workspace-tests pull request (run {run.id}: the"
         " check leg ran the workspace tests alone, the union reused every member"
         " from main's record, the stamp composed)"
     )
     landed = git.head_sha(root)
-    run, logs = _completed_run(repo, landed, event="push")
-    _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
+    run, _jobs = _completed_run(repo, landed, event="push")
+    _require_scope(run, run_facts(root, run.id), scope="verified")
     print(f"  composed skip: proven on main's run {run.id} after the tests-leg squash")
 
 
@@ -2804,13 +2803,9 @@ def _prove_nightly(root: Path, kind: str) -> None:
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, "nightly", limit=1)[0]
     jobs = repo.checks.jobs(run.id)
-    _require_lines(
-        repo,
-        run,
-        jobs,
-        "nightly",
-        ("verifying ", " passes its own tests from site-packages"),
-    )
+    # The nightly's job writes no row of its own yet (#1748), so the
+    # verification's own line is the proof it ran.
+    _log_says(repo, run, jobs, "nightly", " passes its own tests from site-packages")
     print(
         f"  nightly: proven by hand (run {run.id}: dispatched, followed to green,"
         " the scheduled verification ran, and the point read back green)"
@@ -2845,18 +2840,7 @@ def _prove_dispatched_gate(root: Path, kind: str) -> None:
             f"the newest gate run {run.id} is a {run.event} run, not the"
             f" dispatched one: {run.url}"
         )
-    jobs = repo.checks.jobs(run.id)
-    _require_lines(
-        repo,
-        run,
-        jobs,
-        "check",
-        (
-            "dispatched: the whole gate, the verified record set aside",
-            "affected-legs: a workflow_dispatch run pays the full gate",
-        ),
-        forbidden=("affected-legs: the scoped gate against", "skipping the gate"),
-    )
+    _require_scope(run, run_facts(root, run.id), scope="full")
     print(
         f"  gate: proven by hand (run {run.id}: dispatched, followed to green,"
         " the full gate ran, and the point read back green)"
@@ -2890,15 +2874,15 @@ def _prove_contributed_point(root: Path, kind: str) -> None:
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, CONTRIBUTED_POINT, root)[0]
     jobs = repo.checks.jobs(run.id)
-    _require_lines(
+    # The point's job writes no row of its own yet (#1748), so the
+    # task's own line is the proof it ran.
+    _log_says(
         repo,
         run,
         jobs,
         CONTRIBUTED_POINT,
-        (
-            f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: extensions"
-            f" (packages/{CONTRIBUTING_MEMBER})",
-        ),
+        f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: extensions"
+        f" (packages/{CONTRIBUTING_MEMBER})",
     )
     print(
         f"  {CONTRIBUTED_POINT}: proven by hand (run {run.id}: the contributed"

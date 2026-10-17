@@ -16,7 +16,7 @@ from typing import Annotated
 import livery.footman as footman
 from livery import git
 from livery.footman import doc, fail, group, suggest
-from livery.forge import Forge, RepoConfig, Repository
+from livery.forge import Forge, Label, RepoConfig, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._extensions import workspace_root
 from livery.workshop._workflow_state import (
@@ -212,6 +212,7 @@ def contract_config(root: Path) -> RepoConfig:
     codeowners file alone, which is what the forge can honour.
     """
     from livery.workshop._governance import governance_config
+    from livery.workshop._points import EVERY_RUNNER_LABEL
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
@@ -233,6 +234,15 @@ def contract_config(root: Path) -> RepoConfig:
         require_pipeline_success=True,
         min_approvals=approvals.min_approvals,
         require_codeowner_review=approvals.require_codeowner_review,
+        # The label `submit --every-runner` sets, so a forge that
+        # refuses a label it does not carry has it before any submit.
+        labels=(
+            Label(
+                name=EVERY_RUNNER_LABEL,
+                color="1d76db",
+                description="the gate runs every runner for this pull request",
+            ),
+        ),
     )
 
 

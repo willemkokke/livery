@@ -20,7 +20,7 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.forge import ForgeError, Repository, Run, StateFilter
+from livery.forge import ForgeError, Label, RepoConfig, Repository, Run, StateFilter
 from livery.forge.testing import FakeForge
 from livery.workshop import _stack
 from livery.workshop._ci_tasks import cancel_flow, rerun_flow, status_flow
@@ -150,6 +150,55 @@ def test_a_second_submit_reuses_the_pr(rig: tuple[FakeForge, Path]) -> None:
     assert first == second
     repo = _repo(fake)
     assert len([p for p in [repo.pr.get(first)] if p]) == 1
+
+
+def test_every_runner_refuses_by_name_after_the_pull_request_exists(
+    rig: tuple[FakeForge, Path],
+) -> None:
+    # The refusal first: a repository without the label cannot carry it
+    # on a pull request, and the forge's words name the label. The pull
+    # request is open by then, so a re-run labels that one.
+    fake, root = rig
+    with pytest.raises(_FAILURES) as caught:
+        _submit(fake, root, armed=False, follow_to_verdict=False, every_runner=True)
+    assert "ci:every-runner" in str(caught.value)
+    assert "workflow.configure" in str(caught.value)
+    pr = _repo(fake).pr.find_by_head("feat/1-first")
+    assert pr is not None
+    assert pr.labels == ()
+
+
+def test_every_runner_labels_the_pull_request_once(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, root = rig
+    _repo(fake).configure(
+        RepoConfig(labels=(Label(name="ci:every-runner", color="1d76db"),))
+    )
+    first = _submit(fake, root, armed=False, follow_to_verdict=False, every_runner=True)
+    out = capsys.readouterr().out
+    assert (
+        "  every runner: labelled ci:every-runner; the gate runs every runner for"
+        " this pull request" in out
+    )
+    pr = _repo(fake).pr.get(first)
+    assert pr is not None
+    assert pr.labels == ("ci:every-runner",)
+    # A second submit of the same branch reuses the pull request and
+    # labels it again without a second label; without the flag the
+    # label stays.
+    (root / "work.txt").write_text("more\n")
+    _git(root, "commit", "-am", "feat: more work")
+    second = _submit(
+        fake, root, armed=False, follow_to_verdict=False, every_runner=True
+    )
+    assert second == first
+    (root / "work.txt").write_text("even more\n")
+    _git(root, "commit", "-am", "feat: even more work")
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    pr = _repo(fake).pr.get(first)
+    assert pr is not None
+    assert pr.labels == ("ci:every-runner",)
 
 
 def test_an_unarmed_green_submit_parks_cleanly(rig: tuple[FakeForge, Path]) -> None:

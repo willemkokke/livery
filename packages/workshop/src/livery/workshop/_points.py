@@ -1538,6 +1538,16 @@ def asked_tasks(root: Path, point: str, only: str) -> tuple[str, ...]:
     return asked
 
 
+#: The label a pull request carries so the gate runs every runner for
+#: it, where ``[ci] pull-request-runners`` names fewer. `fm submit
+#: --every-runner` sets it through the forge, and a person sets it on
+#: the forge by hand; the gate workflow runs on ``labeled``, its legs
+#: job picks the full matrix while the label is there, and the coverage
+#: union expects every leg. The repository configuration creates the
+#: label (`fm workflow.configure`).
+EVERY_RUNNER_LABEL = "ci:every-runner"
+
+
 def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     """The runners a pull request's check legs fan out to.
 

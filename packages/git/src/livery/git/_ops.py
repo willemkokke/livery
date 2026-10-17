@@ -997,6 +997,27 @@ def file_at(root: Path, ref: str, path: str) -> str:
         return _objects.blob_text(repo, found)
 
 
+def blob_at(root: Path, digest: str) -> str:
+    """The text of the blob *digest* names in the object store; empty when none.
+
+    *digest* is a full blob id, forty hex digits. The blob is read by
+    its id alone, so a content no tree names any more, one a change
+    replaced, is still read while the object store holds it. Empty
+    when the store holds no such object, when *digest* is no full id,
+    and when the id names a tree or a commit.
+
+    Raises:
+        GitError: When *root* is not inside a repository.
+    """
+    if not _FULL_SHA.match(digest):
+        return ""
+    with _opened(root) as repo:
+        sha = digest.encode("ascii")
+        if not _objects.holds(repo, sha):
+            return ""
+        return _objects.blob_text(repo, sha)
+
+
 def commit_message(root: Path, ref: str) -> str:
     """*ref*'s full commit message, subject and body."""
     with _opened(root) as repo:

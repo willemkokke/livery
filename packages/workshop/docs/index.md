@@ -1378,6 +1378,19 @@ absence.
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+- A pull request's check legs run on the runners
+  `[ci] pull-request-runners` names, every runner when the key is
+  absent; a push to main, a dispatch and the nightly run every runner
+  `[ci] runners` names. The rendered gate workflow carries both lists
+  as literals and a `legs` job picks one by the event, computing
+  nothing. A pull request that changes a line only another platform
+  reaches is red by name on a narrowed run: `fm submit --every-runner`
+  labels it `ci:every-runner` through the forge, the label starts a
+  run (the workflow runs on `labeled`), and the `legs` job takes the
+  full list while the label is there. A person sets the same label on
+  the forge by hand. The repository's configuration creates the label
+  (`fm workflow.configure`), and the coverage union expects every leg
+  from a labelled pull request.
 - A runner's check leg runs as the shards the contract gives it.
   `[ci] shards` maps a runner label to a count, one for a runner it
   does not name, so `shards = { "windows-latest" = 4 }` splits the
@@ -1624,6 +1637,33 @@ machine's clock is not a leg they were taken on, so `fm check` on a
 machine prints each package's summed time and reads no mark, and
 `fm speed.judge` is unavailable outside CI. `fm ci.timings` shows
 the marks beside the timings.
+
+## Balancing the check legs
+
+`fm ci.balance` reads the same timing rows and proposes how many
+runners each platform's tests should be split over, so every
+platform's check leg ends at about the same time. Per platform, a
+runner and a Python, it takes the newest ten rows whose check jobs
+ran the full gate and succeeded, folds the shards of one platform
+into one reading, and takes the medians of four measures: the fixed
+setup F, every step the forge timed except the call; the longest gate
+step that is not the test step, O; the summed test time S over every
+package; and the parallelism p the test step reached, S over its
+wall. It predicts the leg's wall at n shards as F + max(O, S / (p n)),
+since the first shard runs the unsplit steps beside its slice, and
+the runner seconds as about n F + S / p + O, and prints both for every
+count up to `--max`, 4 by default. The slowest platform takes the
+largest count whose every added shard saved at least its own setup;
+every other platform takes the smallest count whose wall is within
+15% of the slowest platform's, or the cap, named. The pull request
+counts follow the same rule over `[ci] pull-request-runners` when that
+list is shorter than `[ci] runners`. The proposal prints as the TOML
+`[ci] shards` and `[ci] pull-request-shards` would hold, with the
+predicted wall of the slowest leg beside its wall at one shard. A
+platform with fewer than three such rows keeps its count and is
+named, and a store that cannot be read prints why and proposes
+nothing. The verb changes nothing: a count lands in the contract by
+pull request.
 
 ## The state store
 

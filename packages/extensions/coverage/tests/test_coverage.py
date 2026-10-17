@@ -1498,6 +1498,36 @@ def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branch
     )
 
 
+def test_the_due_legs_follow_the_event_and_the_every_runner_label(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import RunContext
+
+    # Without a root contract both lists are empty, as a test workspace.
+    run = RunContext("github", "7", "pull_request", "refs/pull/1/merge")
+    assert coverage_union.expected_legs(tmp_path, run) == ([], [])
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.14"\n'
+    )
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\n\n[ci]\nrunners = ["a", "b"]\npull-request-runners = ["b"]\n'
+    )
+    every = ["check-a-3.14", "check-b-3.14"]
+    # A pull request is due the narrowed legs; one carrying the label
+    # is due every leg, as a push is.
+    assert coverage_union.expected_legs(tmp_path, run) == (every, ["check-b-3.14"])
+    labelled = RunContext(
+        "github",
+        "7",
+        "pull_request",
+        "refs/pull/1/merge",
+        labels=("kind/feat", "ci:every-runner"),
+    )
+    assert coverage_union.expected_legs(tmp_path, labelled) == (every, every)
+    push = RunContext("github", "8", "push", "refs/heads/main")
+    assert coverage_union.expected_legs(tmp_path, push) == (every, every)
+
+
 def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1533,6 +1563,127 @@ def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
         ("feat/x", "check-a", ["packages/x"], []),
         ("feat/x", "check-b", ["packages/x"], []),
     ]
+
+
+def _committed(root: Path, name: str, content: bytes) -> None:
+    """Make *root* a repository whose one commit holds *content* at *name*.
+
+    The bytes are written as given, so the blob git stores has the
+    digest the line format computes, whatever the platform's line
+    endings.
+    """
+    (root / name).write_bytes(content)
+    identity = ("-c", "user.name=tester", "-c", "user.email=tester@example.invalid")
+    for args in (
+        ("init", "-q"),
+        ("add", "--", name),
+        (*identity, "commit", "-q", "-m", "chore: seed"),
+    ):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
+def _carried_across(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    old: bytes,
+    new: bytes,
+    recorded: list[int],
+    fresh: list[int],
+) -> tuple[Package, str, list[tuple[str, str, list[str], list[str]]]]:
+    """A pull request on one of two legs, over a file changed from *old* to *new*.
+
+    Main's record of the leg that does not run measured *old*, where
+    *recorded* ran, and *old* is committed so the union can read it by
+    its digest; the leg that ran measured *new*, where *fresh* ran. The
+    package's floor is 100.
+    """
+    x = _suite(tmp_path, "x")
+    (x.directory / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "livery-x"\n[coverage]\nfloor = 100\n'
+    )
+    source = _name(tmp_path, "x")
+    _committed(tmp_path, source, old)
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setattr(
+        coverage_union,
+        "expected_legs",
+        lambda root, run: (["check-a", "check-b"], ["check-a"]),
+    )
+    held = coverage_record.Record(
+        {"packages/x": _unit(tmp_path, "packages/x", {source: recorded})}
+    )
+    (tmp_path / source).write_bytes(new)
+    ran = _unit(tmp_path, "packages/x", {source: fresh})
+    written = _union(
+        monkeypatch, [_leg("check-a", "full", units={"packages/x": ran})], held=held
+    )
+    return x, source, written
+
+
+def test_a_leg_a_pull_request_does_not_run_carries_its_reading_across_a_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.extensions.coverage._format import digest
+
+    # The change inserts a line above the two lines main's record of
+    # the absent leg measured; the leg that ran measured the first
+    # three lines of the new content.
+    old = b"a = 1\nb = 2\nc = 3\nd = 4\n"
+    new = b"z = 0\n" + old
+    x, source, written = _carried_across(
+        tmp_path, monkeypatch, old=old, new=new, recorded=[3, 4], fresh=[1, 2, 3]
+    )
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        f"  coverage: {source}: carried the reading of packages/x by coverage.py"
+        f" 7.16.2 on CPython 3.14 at content {digest(old)[:12]} across the"
+        " change: 2 of 2 measured line(s) kept, 0 dropped\n"
+    ) in out
+    assert (
+        "  coverage: 1 file(s) unioned from 2 part(s), 1 reading(s) carried across"
+        " a change, written to " in out
+    )
+    merged = _unioned(tmp_path)[source]
+    assert merged.entry.digest == digest(new)
+    # Lines 3 and 4 of the old content are lines 4 and 5 of the new.
+    assert merged.entry.executed == {1, 2, 3, 4, 5}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    coverage_floors.enforce_coverage(tmp_path, (x,))
+    assert written == [
+        ("feat/x", "check-a", ["packages/x"], []),
+        ("feat/x", "check-b", ["packages/x"], []),
+    ]
+
+
+def test_a_carried_reading_on_the_line_the_change_touched_is_dropped_and_red(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.extensions.coverage._format import digest
+
+    # The one line main's record of the absent leg reached is the line
+    # the change edits: nothing stands in for it, by name.
+    old = b"a = 1\nb = 2\nc = 3\nd = 4\n"
+    new = b"a = 1\nb = 2\nc = 3\nd = 40\n"
+    x, source, _ = _carried_across(
+        tmp_path, monkeypatch, old=old, new=new, recorded=[4], fresh=[1, 2, 3]
+    )
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        f"  coverage: {source}: carried the reading of packages/x by coverage.py"
+        f" 7.16.2 on CPython 3.14 at content {digest(old)[:12]} across the"
+        " change: 0 of 1 measured line(s) kept, 1 dropped\n"
+    ) in out
+    assert _unioned(tmp_path)[source].entry.executed == {1, 2, 3}
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 75.0}
+    with pytest.raises(
+        _FAILURES, match=r"packages/x: 75\.0% is below the committed floor of 100\.0%"
+    ):
+        coverage_floors.enforce_coverage(tmp_path, (x,))
 
 
 def test_a_leg_a_pull_request_does_not_run_carries_a_changed_suite_at_its_older_closure(
