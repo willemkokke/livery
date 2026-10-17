@@ -134,7 +134,7 @@ def test_a_wave_that_already_failed_at_the_squash_is_not_dispatched_again(
 
 
 def test_a_failed_wave_the_forge_filed_elsewhere_is_known_by_its_own_record(
-    rig: tuple[FakeForge, Path],
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A merge landing between the dispatch and the run moves the base's
     # tip, so the forge files the wave under the new tip; the wave
@@ -142,6 +142,14 @@ def test_a_failed_wave_the_forge_filed_elsewhere_is_known_by_its_own_record(
     from livery.workshop._ci_context import state_store
     from livery.workshop._traces import ABOUT
 
+    # The wave's own record is a series only a CI run writes, so the
+    # test runs as one wherever it runs, a desk or a release leg
+    # included; the runner's own payload and refs are scrubbed.
+    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "1013")
     fake, root = rig
     squash = _stamp(root, fake, ("thing", "1.2.0"))
     fake.settle(OWNER, NAME, squash)
