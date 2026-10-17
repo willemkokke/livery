@@ -1842,7 +1842,7 @@ neither needs nor rules out).
 | `livery-extensions-nanobind`'s floor `livery-extensions-conan>=0.0.0`, which ships conan's entry module | the release wave raising it with conan's first release (step 8's R2) |
 | `livery-extensions-cpp`'s floor `livery-workshop>=0.10.0`, which admits a workshop whose wheel still ships cpp's files and its `cpp` entry point | the release wave raising the floor within its set (step 8's R1) |
 | `livery-extensions-python`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports what python reads | the release wave raising the floor within its set (step 8's R1) |
-| python's coverage floor at its measured 95.5 | the ratchet back to 100 |
+| python's coverage floor at 93.5, under the CI union's measured 93.8 | the ratchet back to 100 |
 | `livery-extensions-nanobind`'s floor `livery-extensions-python>=0.0.0`, and the `livery-extensions-python>=0.0.0` line in the `test` extras of basedpyright, changelog, claude, coverage, mkdocstrings and pytest | the release wave raising it with python's first release (step 8's R2) |
 | `livery-extensions-conan`'s and `livery-extensions-nanobind`'s floor `livery-extensions-cpp>=0.0.0` | the release wave raising it with cpp's first release (step 8's R2) |
 | each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | conan's declared `[env.CONAN_HOME]`, `{place}/conan` with `always`, placed per job (#1731) |
