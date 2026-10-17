@@ -145,6 +145,30 @@ def test_every_form_of_a_reach_is_seen_with_its_line(tmp_path: Path) -> None:
     }
 
 
+def test_a_private_read_through_a_value_or_an_unimported_name_is_not_seen(
+    tmp_path: Path,
+) -> None:
+    # The scan reads names, not types: what a call returns, and a name
+    # no import binds, lead to no distribution.
+    (tmp_path / "workshop.toml").write_text(
+        "[workspace]\nextensions = []\n", encoding="utf-8"
+    )
+    _member(tmp_path, "alpha", ["acme.alpha"], {"acme/alpha/__init__.py": ""})
+    _member(
+        tmp_path,
+        "beta",
+        ["acme.beta"],
+        {
+            "acme/beta/__init__.py": (
+                "import acme.alpha as alpha\n\n"
+                "alpha.current()._secret\n"
+                "local._private\n"
+            )
+        },
+    )
+    assert _reaches(RuleContext(tmp_path, discover_packages(tmp_path))) == {}
+
+
 def test_a_distribution_reaches_its_own_privates_freely(tmp_path: Path) -> None:
     # gamma ships in beta's wheel, so its reach into beta is no reach.
     reaches = _reaches(_reaching(tmp_path))

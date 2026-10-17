@@ -13,6 +13,7 @@ from pathlib import Path
 
 from extensions_docs_api_pages import write_api_pages
 from livery.extensions.docs._llms import (
+    _nav_pages,
     first_sentence,
     llms_files,
     page_url,
@@ -76,6 +77,25 @@ def test_a_page_with_no_prose_has_no_description(tmp_path: Path) -> None:
     assert first_sentence("# Only a title\n", "https://s.example/", "a.md") == ""
 
 
+def test_front_matter_is_not_the_description() -> None:
+    text = "---\ntitle: Guide\n---\n# Guide\n\nThe guide's prose.\n"
+    assert first_sentence(text, "https://s.example/", "guide.md") == (
+        "The guide's prose."
+    )
+
+
+def test_the_description_ends_with_its_paragraph() -> None:
+    site = "https://s.example/"
+    # A blank line ends the paragraph: the next one never joins it.
+    wrapped = "The first paragraph\nwraps onto a second line\n\nThe next one.\n"
+    assert first_sentence(wrapped, site, "a.md") == (
+        "The first paragraph wraps onto a second line"
+    )
+    # Structure right after the prose ends it too.
+    listed = "A lead-in with no full stop\n- a list item\n"
+    assert first_sentence(listed, site, "a.md") == "A lead-in with no full stop"
+
+
 # Defect class: relative links that 404 against the site root.
 
 
@@ -93,6 +113,27 @@ def test_a_directory_index_publishes_at_the_directory() -> None:
     assert page_url(site, "index.md") == site
     assert page_url(site, "guide/index.md") == f"{site}guide/"
     assert page_url(site, "guide/page.md") == f"{site}guide/page/"
+
+
+def test_a_site_address_without_a_closing_slash_links_below_it(
+    tmp_path: Path,
+) -> None:
+    root = _mounted(
+        _workspace(
+            tmp_path, docs_table='[docs]\nsite-url = "https://docs.acme.example/home"\n'
+        )
+    )
+    index, _full = llms_files(root)
+    assert "- [Home](https://docs.acme.example/home/): The home page's prose." in index
+
+
+def test_a_nav_entry_that_names_no_page_lists_nothing() -> None:
+    nav: list[object] = [
+        "stray",
+        {"Guide": "guide.md", "Odd": 3},
+        {"Group": [{"Deep": "group/deep.md"}]},
+    ]
+    assert _nav_pages(nav) == [("Guide", "guide.md"), ("Deep", "group/deep.md")]
 
 
 # Defect class: raw snippet directives. The fallback first.
@@ -126,6 +167,19 @@ def test_the_full_file_excludes_the_machine_sections(tmp_path: Path) -> None:
     assert "[1.0.0]" not in full
     assert "_generated/api" not in full
     assert "_generated/releases" not in full
+
+
+def test_the_release_view_is_indexed_and_kept_out_of_the_full_file(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.docs._site import generate_release_pages
+
+    root = _mounted(_workspace(tmp_path))
+    # A checkout without tags: the view's landing page says so.
+    assert generate_release_pages(root) == ["index.md"]
+    index, full = llms_files(root)
+    assert "- [Releases](/releases/): No release tags in this checkout." in index
+    assert "No release tags" not in full
 
 
 def test_the_files_land_at_the_site_root(tmp_path: Path) -> None:

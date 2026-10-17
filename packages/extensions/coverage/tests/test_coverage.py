@@ -511,6 +511,89 @@ def test_the_preview_skips_a_measured_module_the_disk_no_longer_has(
     assert measured == {"packages/thing": 50.0}
 
 
+def test_a_union_file_that_does_not_read_refuses_naming_it(tmp_path: Path) -> None:
+    from livery.extensions.coverage._parts import UNION
+
+    package = _package(tmp_path, "thing", "[coverage]\nfloor = 1\n")
+    (tmp_path / UNION).parent.mkdir(parents=True)
+    for text, words in (
+        ("{not json", "the union does not parse"),
+        ("[]", "holds no parts and units; a union writes both"),
+        ('{"parts": []}', "holds no parts and units; a union writes both"),
+    ):
+        (tmp_path / UNION).write_text(text)
+        with pytest.raises(_FAILURES) as caught:
+            coverage_floors.measured_coverage(tmp_path, (package,))
+        assert f"coverage: {UNION}: {words}" in str(caught.value)
+
+
+def test_the_preview_reads_without_a_reduced_part_of_another_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install_meter(tmp_path, monkeypatch)
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.meter", "coverage"]\n'
+    )
+    x = _package(tmp_path, "x", "[coverage]\nfloor = 1\n")
+    name = _name(tmp_path, "x")
+    # Two of the module's four lines ran.
+    read = part(tmp_path, "packages/x", {name: [1, 2]})
+    meter(tmp_path, left=[{**read, "format": 2}, read])
+    assert coverage_floors.measured_coverage(tmp_path, (x,)) == {"packages/x": 50.0}
+    assert (
+        "  coverage: the arcs measurer's data on this machine: a part of format 2;"
+        " this workshop reads format 3; the figure reads without it\n"
+    ) in capsys.readouterr().out
+    # A part of this version off the format refuses, naming the key.
+    off = part(tmp_path, "packages/x", {name: [1]})
+    off["files"][name]["hits"] = "1-9"
+    meter(tmp_path, left=[off])
+    with pytest.raises(
+        _FAILURES,
+        match=(
+            r"coverage: the arcs measurer's data on this machine:"
+            r' files\["packages/x/src/livery/x/mod\.py"\]\.hits: names lines that'
+            r" are no statements: 5-9"
+        ),
+    ):
+        coverage_floors.measured_coverage(tmp_path, (x,))
+
+
+def test_the_preview_and_the_verdict_pass_over_what_no_floor_judges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._packages import workspace_suite
+
+    # No tests and no floor: nothing judges the package, whatever it measures.
+    bare = _package(tmp_path, "bare")
+    ratcheted = _package(tmp_path, "ratcheted", '[coverage]\nfloor = "auto-ratchet"\n')
+    floored = _package(tmp_path, "floored", "[coverage]\nfloor = 90\n")
+    (tmp_path / "tests").mkdir()
+    unit = workspace_suite(tmp_path)
+    assert unit is not None
+    measured = {
+        "packages/bare": 10.0,
+        "packages/ratcheted": 80.0,
+        "packages/floored": 95.0,
+        "tests": 5.0,
+    }
+    monkeypatch.setattr(
+        coverage_floors, "measured_coverage", lambda root, packages, **_kw: measured
+    )
+    coverage_floors.report_coverage(tmp_path, (bare, ratcheted, floored, unit))
+    lines = capsys.readouterr().out.splitlines()
+    # The workspace's own tests are a unit of the union, never a package
+    # with a floor.
+    assert [line.split(":")[0] for line in lines] == [
+        "  coverage packages/ratcheted",
+        "  coverage packages/floored",
+    ]
+    assert lines[0].endswith("(the mark on the store judges the CI union)")
+    assert coverage_floors.enforce_coverage(tmp_path, (bare, floored)) == measured
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split(":")[0] for line in lines] == ["  coverage packages/floored"]
+
+
 def test_a_python_figure_is_coverage_py_s_own_total(tmp_path: Path) -> None:
     _measured_by_pytest(tmp_path)
     package = _package(tmp_path, "thing")
@@ -788,6 +871,44 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     write_marker(tmp_path, VERIFIED, leg="check-a")
     coverage_leg.gather_leg(tmp_path, ())
     assert put[1]["scope"] == "verified" and put[1]["units"] == {}
+
+
+def test_a_workspace_with_no_packages_leaves_nothing_outside_ci(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+) -> None:
+    from livery.workshop._verified import FULL, write_marker
+
+    _own_tests(tmp_path)
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
+    put = _capture_leaves(monkeypatch)
+    write_marker(tmp_path, FULL, leg="check-a")
+    coverage_leg.gather_leg(tmp_path, ())
+    out = capsys.readouterr().out
+    assert "no packages to measure" in out
+    assert "0 unit(s) measured; outside CI nothing is stored" in out
+    assert put == []
+
+
+def test_a_size_from_a_million_bytes_shows_in_megabytes() -> None:
+    assert coverage_leg.shown_size(999_000) == "999.0 KB"
+    assert coverage_leg.shown_size(1_000_000) == "1.0 MB"
+    assert coverage_leg.shown_size(2_345_678) == "2.3 MB"
+
+
+def test_a_size_that_rounds_to_a_thousand_kilobytes_shows_in_megabytes() -> None:
+    # The boundary: the last size that shows in kilobytes, then the first
+    # that rounds up to a thousand of them, which shows as a megabyte.
+    assert coverage_leg.shown_size(999_949) == "999.9 KB"
+    assert coverage_leg.shown_size(999_950) == "1.0 MB"
+    assert coverage_leg.shown_size(999_999) == "1.0 MB"
+    # Every size up to a megabyte and past it shows under a thousand.
+    for count in range(999_900, 1_000_100):
+        shown = coverage_leg.shown_size(count)
+        assert float(shown.split()[0]) < 1000, shown
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
@@ -1214,6 +1335,21 @@ def test_a_union_with_no_leg_on_the_runs_refs_refuses_naming_the_run(
         _FAILURES, match=r"could not be read \(the remote could not be listed\)"
     ):
         coverage_union.combine_union(tmp_path, ())
+
+
+def test_a_run_with_no_unit_to_union_judges_nothing_and_writes_no_union(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.extensions.coverage._parts import UNION
+
+    # A workspace with no package and no tests of its own: a leg that
+    # skipped leaves nothing to merge.
+    _in_ci(monkeypatch, "gate")
+    written = _union(monkeypatch, [_leg("check-a", "verified")])
+    assert coverage_union.combine_union(tmp_path, ()) == ()
+    assert "coverage: no unit to union; nothing judged" in capsys.readouterr().out
+    assert not (tmp_path / UNION).exists()
+    assert written == []
 
 
 def test_a_leg_without_its_file_its_label_or_a_known_scope_refuses_by_name(
@@ -2102,6 +2238,138 @@ def test_a_push_of_an_unnamed_tree_carries_from_main_alone_and_writes_nothing_ne
     # Every row came from main itself: nothing to write back.
     assert written == []
     assert "coverage record: main/check-a: unchanged, 2 carried" in out
+
+
+def test_two_legs_a_pull_request_does_not_run_carry_their_readings_across_a_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = b"a = 1\nb = 2\nc = 3\nd = 4\n"
+    new = b"z = 0\n" + old
+    x, source, written = _carried_across(
+        tmp_path, monkeypatch, old=old, new=new, recorded=[3, 4], fresh=[1, 2, 3]
+    )
+    # Two spared legs, each carried from main's one record of the old
+    # content.
+    monkeypatch.setattr(
+        coverage_union,
+        "expected_legs",
+        lambda root, run: (["check-a", "check-b", "check-c"], ["check-a"]),
+    )
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert (
+        "  coverage: 1 file(s) unioned from 3 part(s), 2 reading(s) carried across"
+        " a change, written to " in capsys.readouterr().out
+    )
+    assert _unioned(tmp_path)[source].entry.executed == {1, 2, 3, 4, 5}
+    assert [leg for _base, leg, *_ in written] == ["check-a", "check-b", "check-c"]
+
+
+def test_a_record_that_cannot_be_read_numbers_no_row_and_the_write_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = _name(tmp_path, "x")
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    fresh = _unit(tmp_path, "packages/x", {source: [1, 2, 3, 4]})
+    legs = [_leg("check-a", "full", units={"packages/x": fresh})]
+    likes: list[list[str]] = []
+    # Main's record holds x: the branch's first row numbers as main's.
+    mains = coverage_record.Record({"packages/x": fresh})
+    _union(monkeypatch, legs, held=mains, likes=likes)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    # Main's record cannot be read: nothing to number by, and the
+    # branch's record is written all the same.
+    down = coverage_record.Record({}, failed=True, reason="remote down")
+    written = _union(monkeypatch, legs, held=down, likes=likes)
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert likes == [["packages/x"], []]
+    assert written == [("feat/x", "check-a", ["packages/x"], [])]
+
+
+def test_a_run_writes_its_record_unless_origin_moved_its_branch_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = _name(tmp_path, "x")
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    leg = _leg(
+        "check-a",
+        "full",
+        units={"packages/x": _unit(tmp_path, "packages/x", {source: [1, 2, 3, 4]})},
+    )
+    # The store stands in for the rest; origin's answer is this test's.
+    moved_on = coverage_union._moved_on
+    written = _union(monkeypatch, [leg])
+    monkeypatch.setattr(coverage_union, "_moved_on", moved_on)
+    heads = {"feat/x": "b" * 40}
+
+    def _unreachable(root: Path, *refs: str, **_kwargs: object) -> None:
+        raise git.GitError("origin is gone")
+
+    # The fallback first: an origin the run cannot ask never withholds
+    # the write.
+    monkeypatch.setattr(git, "fetch", _unreachable)
+    monkeypatch.setattr(git, "remote_head", lambda root, branch: heads[branch])
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert written == [("feat/x", "check-a", ["packages/x"], [])]
+    # Origin's head of the branch moved on past this run's: the newer
+    # run writes.
+    fetched: list[Path] = []
+    monkeypatch.setattr(
+        git, "fetch", lambda root, *refs, **_kwargs: fetched.append(root)
+    )
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert len(written) == 1 and fetched == [tmp_path]
+    assert (
+        "coverage record: feat/x's head moved on to bbbbbbbbbbbb since this run's"
+        " aaaaaaaaaaaa; not written, the newer run writes" in capsys.readouterr().out
+    )
+    # Origin holds this run's head: the run writes.
+    heads["feat/x"] = "a" * 40
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    assert len(written) == 2
+
+
+def test_a_push_whose_verified_row_cannot_be_read_carries_from_main_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = _name(tmp_path, "x")
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    mains = coverage_record.Record(
+        {"packages/x": _unit(tmp_path, "packages/x", {source: [1, 2, 3, 4]})}
+    )
+    branchs = coverage_record.Record(
+        {"packages/x": _unit(tmp_path, "packages/x", {source: [1]}, run="6")}
+    )
+    written = _union(
+        monkeypatch,
+        [_leg("check-a", "verified")],
+        held=mains,
+        records={"feat/x": branchs},
+        proved="feat/x",
+    )
+    monkeypatch.setattr(
+        _verified, "record", lambda root, tree: (None, "the store is unreachable")
+    )
+    assert coverage_union.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        "coverage record: the verified row could not be read (the store is"
+        " unreachable)" in out
+    )
+    # The branch's record is never asked: x comes from main's, run 7.
+    assert (
+        "coverage: packages/x on check-a: reused from run 7 (1 files), main's"
+        " record" in out
+    )
+    assert written == []
 
 
 def test_the_union_of_two_legs_covers_what_each_left_uncovered(

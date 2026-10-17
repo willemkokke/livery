@@ -83,3 +83,21 @@ def test_speed_lines_on_a_check_leg_print_the_sums_beside_the_marks(
     lines = speed_lines(work, sums, leg=LEG)
     assert lines[0].startswith("  speed marks: not read (")
     assert lines[1] == "  speed packages/forge: 12.3s over 45 tests (mark unknown)"
+
+
+def test_speed_sums_that_cannot_be_read_print_nothing_and_a_bad_entry_is_skipped(
+    tmp_path: Path,
+) -> None:
+    # The fallbacks first: a file that is no JSON, a list, and an empty
+    # table say nothing about a package.
+    sums = tmp_path / "speed.json"
+    for text in ("not json", "[]", "{}"):
+        sums.write_text(text)
+        assert speed_lines(tmp_path, sums) == []
+    # An entry that is no table is skipped, and the others print.
+    sums.write_text(
+        json.dumps({"packages/broken": 3, "packages/forge": {"seconds": 2.0}})
+    )
+    assert speed_lines(tmp_path, sums) == [
+        "  speed packages/forge: 2.0s over 0 tests (judged on the CI legs)"
+    ]

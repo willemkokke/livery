@@ -28,9 +28,8 @@ floor = "0.12.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately. The CI union's measured
-# value of the suites that moved here with the extension.
-floor = 93.5
+# suite grows, lower it only deliberately.
+floor = 100
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.

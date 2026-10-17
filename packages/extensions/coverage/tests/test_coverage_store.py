@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -980,6 +982,202 @@ def test_the_record_keeps_one_file_s_fixed_facts_once_and_drops_what_no_row_name
     # The janitor counts the rows alone.
     lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
     assert f"  {coverage_record.record_ref(LEG)}: 1 row(s), within its bounds" in lines
+
+
+def test_a_record_whose_fixed_facts_cannot_be_read_fails_with_the_reason(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = _unit("packages/base", lines={"packages/base/src/b.py": "1-2"})
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": base})
+        == ""
+    )
+    (facts,) = _facts_files(work)
+    rows = git.Series.rows
+
+    # The rows read; the read of the facts they name finds the remote gone.
+    def _facts_unread(
+        self: git.Series,
+        store: git.StateStore,
+        *,
+        only: Callable[[str], bool] | None = None,
+    ) -> git.Rows:
+        if only is not None and only(facts):
+            return git.Rows((), failed=True, reason="the remote hung up")
+        return rows(self, store, only=only)
+
+    monkeypatch.setattr(git.Series, "rows", _facts_unread)
+    held = coverage_record.recorded(work, leg=LEG)
+    assert held.failed and held.reason == "the remote hung up" and held.units == {}
+
+
+def test_a_fixed_facts_file_that_does_not_parse_skips_the_rows_naming_it(
+    work: Path,
+) -> None:
+    base = _unit("packages/base", lines={"packages/base/src/b.py": "1-2"})
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": base})
+        == ""
+    )
+    (facts,) = _facts_files(work)
+    ref = coverage_record.record_ref(LEG)
+    assert git.put(state_store(work), ref, {facts: "not json"}, message="garble") == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    # Its row is a miss, measured afresh, and named for the next write.
+    assert held.units == {} and not held.failed
+    (skipped,) = held.skipped
+    assert skipped.name == "packages-base.json"
+    assert f"the record holds no {facts}" in skipped.why
+
+
+def test_a_fresh_row_naming_fixed_facts_no_unit_holds_refuses_the_write(
+    work: Path,
+) -> None:
+    base = _unit("packages/base", lines={"packages/base/src/b.py": "1-2"})
+    (name,) = base.named
+    why = coverage_record.put_record(
+        work, RUN, leg=LEG, fresh={"packages/base": replace(base, facts={})}
+    )
+    assert why == (
+        f"refusing: the rows name the fixed facts {name} of content that was not"
+        " read, which no unit holds"
+    )
+    assert coverage_record.recorded(work, leg=LEG) == coverage_record.Record({})
+
+
+def test_a_kept_row_that_is_no_unit_answers_nothing_and_a_write_keeps_it(
+    work: Path, tmp_path: Path
+) -> None:
+    base = _unit("packages/base", closure="c" * 64)
+    assert (
+        coverage_record.put_record(work, RUN, leg=LEG, fresh={"packages/base": base})
+        == ""
+    )
+    closure = "d" * 64
+    name = coverage_record.kept_name("packages/base", closure, datetime.now(UTC))
+    odd = json.dumps({"schema": coverage_record.SCHEMA, "unit": "packages/base"})
+    ref = coverage_record.record_ref(LEG)
+    assert git.put(state_store(work), ref, {name: odd}, message="odd") == ""
+    held = coverage_record.recorded(work, leg=LEG)
+    assert [kept.name for kept in held.kept] == [name]
+    assert held.at("packages/base", closure) is None
+    # A write reads the kept rows that stay for the facts they name: a
+    # store that cannot answer refuses it.
+    origin = _git(work, "remote", "get-url", "origin").strip()
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    why = coverage_record.put_record(work, RUN, leg=LEG, fresh={}, held=held)
+    assert why.startswith(f"refusing: main's kept rows on {LEG} could not be read (")
+    assert why.endswith("), so the fixed facts they name are unknown")
+    # Read, the row that is no unit names no facts, and it stays its day.
+    _git(work, "remote", "set-url", "origin", origin)
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh={}, held=held) == ""
+    again = coverage_record.recorded(work, leg=LEG)
+    assert again.units == {"packages/base": base}
+    assert [kept.name for kept in again.kept] == [name]
+
+
+def test_a_kept_row_that_cannot_be_read_gives_way_to_an_older_one() -> None:
+    closure = "c" * 64
+    now = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    older = _unit("packages/base", closure=closure, run="1")
+    newest = coverage_record.kept_name("packages/base", closure, now)
+    earlier = coverage_record.kept_name(
+        "packages/base", closure, now - timedelta(hours=2)
+    )
+    record = coverage_record.Record(
+        {},
+        kept=(coverage_record.Kept(newest), coverage_record.Kept(earlier, older)),
+        read_kept=lambda name: None,
+    )
+    assert record.at("packages/base", closure) == older
+    # A kept row named for the closure that holds another closure's
+    # measurement answers nothing.
+    astray = coverage_record.Record(
+        {},
+        kept=(coverage_record.Kept(newest, _unit("packages/base", closure="d" * 64)),),
+    )
+    assert astray.at("packages/base", closure) is None
+
+
+def test_a_unit_whose_part_holds_no_file_table_names_no_file() -> None:
+    unit = coverage_record.Unit(
+        "packages/base", "a" * 64, "1013", "b" * 40, ({"format": 3, "files": []},)
+    )
+    assert unit.files == ()
+
+
+def test_a_closure_holds_a_package_two_dependants_share_once(tmp_path: Path) -> None:
+    base = _package(tmp_path, "base")
+    left = _package(tmp_path, "left", ("base",))
+    right = _package(tmp_path, "right", ("base",))
+    top = _package(tmp_path, "top", ("left", "right"))
+    packages = (base, left, right, top)
+    assert coverage_record.closure(packages, top) == (base, left, right, top)
+    assert coverage_record.closure(packages, left) == (base, left)
+
+
+def test_a_legs_file_without_a_units_table_or_with_a_row_that_is_no_unit_holds_none(
+    work: Path,
+) -> None:
+    from livery.workshop._metrics import RUNS
+
+    half = RUNS.series(RUN.run_id, LEG)
+    for units in (["packages/base"], {"packages/base": {"unit": "packages/base"}}):
+        row = {"leg": LEG, "scope": "full", "units": units}
+        assert (
+            half.put(state_store(work), {coverage_record.RUN_FILE: row}, message="x")
+            == ""
+        )
+        legs, why = coverage_record.run_legs(work, RUN)
+        assert why == ""
+        assert [(leg.label, leg.scope, leg.units, leg.why) for leg in legs] == [
+            (LEG, "full", {}, "")
+        ]
+
+
+def test_a_part_naming_no_list_of_tests_adds_none_to_the_run_contexts() -> None:
+    # A part whose measurer names no name is filed under the empty one.
+    unit = coverage_record.Unit(
+        "packages/base",
+        "a" * 64,
+        "1013",
+        "b" * 40,
+        (
+            {"measurer": {"name": "coverage.py"}, "contexts": "t1"},
+            {"measurer": "coverage.py", "contexts": ["t2", 3]},
+            {"measurer": {"name": 7}, "contexts": ["t3"]},
+        ),
+    )
+    assert coverage_record.run_contexts([{"packages/base": unit}]) == {
+        "packages/base": {"": {"t2", "t3"}}
+    }
+
+
+def test_a_row_whose_contexts_are_no_numbering_numbers_nothing(work: Path) -> None:
+    # Main's row of top names its tests as no list, and once more twice.
+    like = coverage_record.Unit(
+        "packages/top",
+        "a" * 64,
+        "1013",
+        "b" * 40,
+        (
+            {"measurer": {"name": "coverage.py"}, "contexts": "t9"},
+            {"measurer": {"name": "coverage.py"}, "contexts": ["t9", "t9"]},
+        ),
+    )
+    fresh = _tested("packages/top", ["t9", "", "t3"], {1: {1}, 2: {0}, 3: {2}})
+    why = coverage_record.put_record(
+        work,
+        RUN,
+        leg=LEG,
+        fresh={"packages/top": fresh},
+        numbered_like={"packages/top": like},
+    )
+    assert why == ""
+    # Its own contexts, sorted, number the row.
+    row = coverage_record.recorded(work, leg=LEG).units["packages/top"]
+    assert row.parts[0]["contexts"] == ["", "t3", "t9"]
+    assert _tests_of(row) == {1: {""}, 2: {"t9"}, 3: {"t3"}}
 
 
 def test_each_write_numbers_the_tests_as_the_row_it_replaces(work: Path) -> None:

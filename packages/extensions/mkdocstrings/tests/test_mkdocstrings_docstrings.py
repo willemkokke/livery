@@ -61,6 +61,19 @@ def test_an_undocumented_assignment_is_seen_as_such(tmp_path: Path) -> None:
     assert assignment_docstrings(src) == {"A", "B"}
 
 
+def test_a_string_under_a_statement_that_binds_no_name_documents_nothing(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "mod.py").write_text(
+        'import os\n"""Under an import."""\n\n'
+        'os.sep: str = "/"\n"""Under an attribute."""\n\n'
+        'os.name = "posix"\n"""Under another attribute."""\n'
+    )
+    assert assignment_docstrings(src) == set()
+
+
 def test_an_undocumented_export_is_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -131,6 +144,12 @@ def test_a_member_without_a_package_is_passed_over(tmp_path: Path) -> None:
     member = tmp_path / "packages" / "native"
     (member / "src").mkdir(parents=True)
     (member / "src" / "geometry.cpp").write_text("int x;\n")
+    assert undocumented_exports(tmp_path, [member]) == []
+
+
+def test_a_member_without_a_source_tree_is_passed_over(tmp_path: Path) -> None:
+    member = tmp_path / "packages" / "docs-only"
+    (member / "docs").mkdir(parents=True)
     assert undocumented_exports(tmp_path, [member]) == []
 
 

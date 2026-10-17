@@ -69,11 +69,12 @@ def install(venv: Path, python: str, requirement: str, index: str) -> int:
     so the package can only come from the index.
     """
     import livery.toolroom.tools as toolroom
+    from livery.workshop import venv_python
 
     made = toolroom.uv.opts(nofail=True)("venv", str(venv), "--python", python)
     if made.code != 0:
         return made.code
-    args = ["pip", "install", "--python", str(venv / "bin" / "python")]
+    args = ["pip", "install", "--python", str(venv_python(venv))]
     if index:
         args += ["--index", index]
     args += [requirement, "pytest", "pytest-xdist"]
@@ -83,8 +84,9 @@ def install(venv: Path, python: str, requirement: str, index: str) -> int:
 def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
     """Prove the import comes from site-packages, then run the member's tests."""
     from livery.footman import run
+    from livery.workshop import venv_python
 
-    python = str(venv / "bin" / "python")
+    python = str(venv_python(venv))
     probe = run(
         [
             python,

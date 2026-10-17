@@ -300,6 +300,63 @@ def test_a_package_no_measurement_reaches_states_the_absence(
     assert not stale.exists()
 
 
+def test_a_workspace_where_no_package_declares_a_report_draws_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    core = tmp_path / "packages" / "core"
+    core.mkdir(parents=True)
+    (core / "workshop.toml").write_text('extensions = ["python"]\nname = "acme-core"\n')
+    (core / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
+
+    def _never(*_args: object, **_kwargs: object) -> list[str]:
+        raise AssertionError("no data is read for pages no package declares")
+
+    monkeypatch.setattr(_pages, "render_coverage_pages", _never)
+    assert _render_pages(tmp_path) == []
+    assert _redraw_pages(tmp_path) == []
+
+
+def test_a_reading_at_other_content_beside_one_at_the_checkout_s_is_left_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    _left(
+        root,
+        Part(".", COVERAGE_PY, {MODULE: _entry(root)}),
+        Part("tests", COVERAGE_PY, {MODULE: _entry(root, digest="0" * 40)}),
+    )
+    assert _render_pages(root) == ["core"]
+    assert (
+        f"  coverage: {MODULE}: left out the reading of tests by coverage.py 7.16.2"
+        " on CPython 3.14 at content 000000000000; the union keeps the one of ."
+    ) in capsys.readouterr().out
+    # The page draws the reading at the checkout's content.
+    tree = root / "packages/core/htmlcov"
+    (row, _total) = read_page(tree / "index.html").rows
+    assert read_page(tree / row["href"]).notice == ""
+
+
+def test_a_part_left_in_the_workspace_of_another_version_is_named_and_one_unread_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path, monkeypatch)
+    _left(root, Part(".", COVERAGE_PY, {MODULE: _entry(root)}))
+    left = leave_part(root, "packages/native", {"packages/native/src/x.cpp": {1: 1}})
+    earlier = json.loads(left.read_text())
+    left.write_text(json.dumps({**earlier, "format": 2}))
+    assert _render_pages(root) == ["core"]
+    assert (
+        "packages-native.json: a part of format 2; this workshop reads format 3;"
+        " the pages draw without it\n"
+    ) in capsys.readouterr().out
+    left.write_text("{not json")
+    with pytest.raises(
+        _FAILURES, match=r"coverage: .*packages-native\.json: the part does not parse"
+    ):
+        _render_pages(root)
+
+
 # --- the floor each index states ---------------------------------------------
 
 
@@ -488,6 +545,37 @@ def test_main_s_record_is_drawn_from_the_parts_the_legs_stored(
         ),
     ):
         _redraw_pages(root)
+
+
+def test_main_s_record_is_drawn_from_the_parts_holding_the_drawn_packages_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, '["docs", "coverage"]')
+    far = Entry(digest="", statements=frozenset({1}), counts={1: 1})
+    # A part with no file table, beside one of another package's files
+    # alone: neither is read for core's pages.
+    unfiled = _unit("packages/odd", Part("packages/odd", COVERAGE_PY, {}))
+    unfiled.parts[0]["files"] = []
+    held = {
+        "check-a": {
+            "packages/core": _unit(
+                "packages/core",
+                Part("packages/core", COVERAGE_PY, {MODULE: _entry(root)}),
+            ),
+            "packages/far": _unit(
+                "packages/far",
+                Part("packages/far", COVERAGE_PY, {"packages/far/x.py": far}),
+            ),
+            "packages/odd": unfiled,
+        }
+    }
+    monkeypatch.setattr(_pages, "_stored", lambda root: (held, []))
+    assert _redraw_pages(root) == ["core"]
+    index = read_page(root / "packages/core/htmlcov/index.html")
+    assert [row["File"] for row in index.rows] == [MODULE, "Total"]
+    assert index.notes[0] == (
+        "Measured on check-a, from main's coverage record: 3 unit(s) from 1 run(s)."
+    )
 
 
 def test_each_line_s_tests_are_drawn_from_the_parts_main_s_record_stores(
@@ -703,6 +791,35 @@ def _drawn(
     return _render.Drawn(
         name, Merged(measurer, entry, ("packages/core",)), text, entry.digest
     )
+
+
+def test_an_unrun_stretch_past_a_line_or_on_a_line_that_never_ran_marks_nothing() -> (
+    None
+):
+    entry = Entry(
+        digest="",
+        statements=frozenset({1, 2}),
+        counts={1: 1},
+        ranges=(Range(1, 5, 1, 7, 0), Range(2, 1, 2, 3, 0), Range(3, 1, 3, 2, 0)),
+    )
+    # Line 1 ran and has two characters: its stretch from column 5 holds
+    # none of them. Line 2 never ran, and the text has no line 3.
+    assert _render.unrun_marks(entry, "ab\ncd\n") == {}
+
+
+def test_two_unrun_stretches_that_meet_are_drawn_as_one() -> None:
+    drawn = _render.highlighted("notes.nolexer", "abcdef\n", {1: [(0, 2), (2, 4)]})
+    assert drawn == ['<span class="nr">abcd</span>ef']
+
+
+def test_a_token_kind_without_a_class_of_its_own_takes_its_parent_s() -> None:
+    from pygments.token import Name
+
+    assert _render._token_class(Name.Function.Livery) == "nf"
+
+
+def test_a_text_without_a_final_newline_keeps_its_last_line() -> None:
+    assert _render.source_lines("a = 1\r\nb = 2") == ["a = 1", "b = 2"]
 
 
 def test_a_counting_measurer_s_branches_and_counts_are_drawn_by_number(

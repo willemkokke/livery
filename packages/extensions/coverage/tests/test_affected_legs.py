@@ -423,6 +423,68 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     assert measured == LegScope("measured", ("packages/y", "tests"), "check-a")
 
 
+def test_a_proved_tree_whose_verified_row_is_unread_asks_mains_record_alone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+) -> None:
+    root, packages, ran = _proved(tmp_path, monkeypatch)
+    every = {
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, ())
+        for path in ("packages/x", "packages/y", "tests")
+    }
+    reads: list[tuple[str, str]] = []
+
+    def _every(root: Path, *, leg: str, base: str = "main") -> coverage_record.Record:
+        reads.append((leg, base))
+        return coverage_record.Record(every)
+
+    monkeypatch.setattr(coverage_record, "recorded", _every)
+    _quality.check()
+    marker = leg_scope(root)
+    assert marker.scope == "verified"
+    # The row naming the branch whose run proved the tree cannot be read
+    # once the gate has run: the leg reads main's record, and says why.
+    monkeypatch.setattr(
+        _verified, "record", lambda root, tree: (None, "the store is unreachable")
+    )
+    assert coverage_leg.top_up(root, packages, marker) == marker
+    assert reads == [("check-a", "main")]
+    assert ran == []
+    assert (
+        "  coverage store: the verified row is unread (the store is unreachable);"
+        " main's record alone\n"
+    ) in capsys.readouterr().out
+
+
+def test_a_leg_outside_ci_or_after_a_full_gate_measures_nothing_more(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n", '["python"]')
+    x = _member(root, "x")
+    ran = _measured(monkeypatch)
+
+    def _never(root: Path, *, leg: str, base: str = "main") -> coverage_record.Record:
+        raise AssertionError("no record is asked")
+
+    monkeypatch.setattr(coverage_record, "recorded", _never)
+    # A machine's run has no record to read, whatever its gate narrowed.
+    narrowed = LegScope("affected", ("packages/x",), "check-a")
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: None
+    )
+    assert coverage_leg.top_up(root, (x,), narrowed) == narrowed
+    # A full gate on a check leg already ran every suite.
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context",
+        lambda environ=None: _run("push", ""),
+    )
+    full = LegScope("full", leg="check-a")
+    assert coverage_leg.top_up(root, (x,), full) == full
+    assert ran == []
+
+
 # --- what a leg brings from the store ------------------------------------------
 
 

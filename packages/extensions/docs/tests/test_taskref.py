@@ -13,11 +13,14 @@ from pathlib import Path
 import pytest
 
 from livery.extensions.docs._taskref import (
+    _addresses,
     advertised_providers,
     committed_nav_block,
     generate_task_reference,
     provider_tree,
+    task_reference_run,
 )
+from livery.workshop import PhaseContext
 from livery.workshop._packages import discover_packages
 
 
@@ -61,6 +64,55 @@ def test_a_package_without_the_table_provides_nothing(tmp_path: Path) -> None:
     assert advertised_providers(bare) == []
     core = next(p for p in discover_packages(root) if p.directory.name == "core")
     assert advertised_providers(core) == ["acme.core"]
+
+
+def test_a_package_without_a_project_file_provides_nothing(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    # A package that holds no python needs no project file.
+    (root / "packages" / "core" / "workshop.toml").write_text(
+        'extensions = []\nname = "acme-core"\n'
+    )
+    (root / "packages" / "core" / "pyproject.toml").unlink()
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    assert advertised_providers(core) == []
+
+
+def test_a_workspace_whose_packages_advertise_no_tasks_renders_nothing(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    (root / "packages" / "core" / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n'
+    )
+    assert generate_task_reference(root) == []
+    # The step runs green and writes nothing: no alias tree, no pages.
+    task_reference_run(PhaseContext(root=root, packages=(), step="docs.task-reference"))
+    assert not (root / "docs" / "tasks").exists()
+    assert not (root / "packages/core/docs/_generated").exists()
+
+
+def test_a_provider_without_tasks_gets_no_section_and_its_old_aliases_go(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.docs import _taskref
+
+    root = _workspace(tmp_path)
+    stale = root / "docs" / "tasks" / "gone.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("An alias a removed task left.\n")
+    tree: dict[str, object] = {"help": "", "groups": {}, "tasks": {}}
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    assert generate_task_reference(root) == []
+    assert list((root / "docs" / "tasks").iterdir()) == []
+    assert not (root / "packages/core/docs/_generated/tasks").exists()
+
+
+def test_an_address_list_passes_over_a_group_that_is_no_table() -> None:
+    tree: dict[str, object] = {
+        "tasks": {"sync": _row()},
+        "groups": {"docs": {"tasks": {"build": _row()}}, "odd": "not a group"},
+    }
+    assert _addresses(tree) == ["sync", "docs.build"]
 
 
 def test_a_missing_runner_refuses_with_the_remedy(
@@ -229,6 +281,26 @@ def test_the_reference_renders_the_advertised_tree_whole(
     before = (root / "packages/core/docs/nav.toml").read_bytes()
     generate_task_reference(root)
     assert (root / "packages/core/docs/nav.toml").read_bytes() == before
+
+
+def test_a_provider_whose_tree_holds_no_tables_renders_an_empty_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.extensions.docs import _taskref
+
+    root = _workspace(tmp_path)
+    # Groups and tasks that are no tables: nothing to page, no alias,
+    # and the section keeps its overview.
+    tree: dict[str, object] = {"help": "", "groups": ["docs"], "tasks": "sync"}
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    assert generate_task_reference(root) == ["core"]
+    tasks = root / "packages/core/docs/_generated/tasks"
+    assert [path.name for path in tasks.iterdir()] == ["index.md"]
+    assert (tasks / "index.md").read_text() == "# Task reference\n\n"
+    nav = (root / "packages/core/docs/_generated/nav.tasks.toml").read_text()
+    assert '    { "Overview" = "_generated/tasks/index.md" },' in nav
+    assert "_generated/tasks/docs" not in nav and "sync" not in nav
+    assert list((root / "docs" / "tasks").iterdir()) == []
 
 
 def test_a_shared_verb_declared_twice_runs_once(

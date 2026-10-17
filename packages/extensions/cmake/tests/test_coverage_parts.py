@@ -106,6 +106,153 @@ def test_each_measurers_reading_reduces_to_lines() -> None:
     assert _cmake.measurer_for("MSVC") == "msvc"
 
 
+def test_gcov_output_without_a_document_reads_as_no_file() -> None:
+    assert _readings.from_gcov_json("") == {}
+    assert _readings.from_gcov_json(" \n") == {}
+    # A blank line between two documents is no document.
+    assert _lines(_readings.from_gcov_json(GCOV + "\n\n" + GCOV)) == {
+        "../../src/x.cpp": {3: 4, 4: 0}
+    }
+
+
+def test_a_gcov_document_s_malformed_entries_are_passed_over() -> None:
+    printed = json.dumps(
+        {
+            "files": [
+                "not a file",
+                {"file": "", "lines": []},
+                {"file": "rowless.cpp", "lines": "none"},
+                {
+                    "file": "x.cpp",
+                    "lines": [
+                        "not a row",
+                        {"count": 3},
+                        {
+                            "line_number": 2,
+                            "count": 1,
+                            "branches": ["not a branch", {"count": 1}],
+                        },
+                    ],
+                    "functions": [
+                        "not a function",
+                        {"name": "", "start_line": 3},
+                        {"name": "unplaced", "start_line": 0},
+                        {
+                            "name": "_Z1fv",
+                            "demangled_name": "f()",
+                            "start_line": 2,
+                            "end_line": 1,
+                            "execution_count": 1,
+                        },
+                    ],
+                },
+            ]
+        }
+    )
+    readings = _readings.from_gcov_json(printed)
+    assert list(readings) == ["x.cpp"]
+    read = readings["x.cpp"]
+    assert read.lines == {2: 1}
+    assert list(read.branches.values()) == [(1, "")]
+    # A function ends on its first line at the earliest.
+    assert read.functions == {("f()", 2): (2, 1)}
+
+
+def test_an_llvm_export_s_malformed_entries_are_passed_over() -> None:
+    export = {
+        "data": [
+            "not an export",
+            {
+                "files": [
+                    "not a file",
+                    {"segments": []},
+                    {
+                        "filename": "x.cpp",
+                        "segments": [
+                            [1, 1, 1, True, True, False],
+                            [1, 9, 0, False, False, False],
+                        ],
+                        "branches": ["not a branch", [1, 2, 3], [1, 2, 1, 8, 1, 0]],
+                    },
+                ],
+                "functions": [
+                    "not a function",
+                    # A code region, then a macro's call on the same
+                    # stretch: the code region's count stands alone.
+                    {
+                        "name": "f",
+                        "count": 1,
+                        "filenames": ["x.cpp", "m.h"],
+                        "regions": [[1, 1, 1, 9, 5, 0, 0, 0], [1, 1, 1, 9, 3, 0, 1, 1]],
+                    },
+                    # Every region in another file: no body in its own.
+                    {
+                        "name": "g",
+                        "count": 2,
+                        "filenames": ["x.cpp", "y.h"],
+                        "regions": [[4, 1, 4, 9, 2, 1, 0, 0]],
+                    },
+                ],
+            },
+        ]
+    }
+    readings = _readings.from_llvm_json(json.dumps(export))
+    assert set(readings) == {"x.cpp", "y.h"}
+    read = readings["x.cpp"]
+    assert read.lines == {1: 1}
+    assert read.branches == {(1, 0): (1, ""), (1, 1): (0, "")}
+    assert read.ranges == {(1, 1, 1, 9): 5}
+    assert read.functions == {("f", 1): (1, 1)}
+    assert readings["y.h"].ranges == {(4, 1, 4, 9): 2}
+    assert readings["y.h"].functions == {}
+
+
+def test_readings_without_a_function_ask_no_demangler() -> None:
+    def _never(names: list[str]) -> list[str]:
+        raise AssertionError(f"the demangler was asked: {names}")
+
+    readings = {"x.cpp": Reading(lines={1: 1})}
+    _readings.demangle(readings, _never)
+    assert readings["x.cpp"].functions == {}
+
+
+def test_a_cobertura_report_s_malformed_entries_are_passed_over() -> None:
+    # No <sources>: a relative file name stays as the report gives it.
+    report = (
+        '<?xml version="1.0"?><coverage><packages><package name="p"><classes>'
+        '<class name="nameless"><lines><line number="1" hits="1"/></lines></class>'
+        '<class name="x.cpp" filename="src/x.cpp"><methods>'
+        '<method><lines><line number="2" hits="1"/></lines></method>'
+        '<method name="lineless" signature="()"><lines/></method>'
+        '<method name="f(int)" signature="(int)">'
+        '<lines><line number="2" hits="1"/><line number="two" hits="1"/></lines>'
+        "</method>"
+        "</methods>"
+        # A line without a number, and one whose number is no number, are
+        # passed over in the class's lines as in a method's.
+        '<lines><line hits="4"/><line number="2" hits="1"/>'
+        '<line number="x7" hits="9"/></lines>'
+        "</class></classes></package></packages></coverage>"
+    )
+    readings = _readings.from_cobertura(report)
+    assert list(readings) == ["src/x.cpp"]
+    read = readings["src/x.cpp"]
+    assert read.lines == {2: 1}
+    # A name that carries its parameters takes no signature twice.
+    assert read.functions == {("f(int)", 2): (2, None)}
+
+
+def test_a_file_its_measurer_instruments_no_line_of_has_no_statements(
+    tmp_path: Path,
+) -> None:
+    measured = {"packages/n/src/x.h": Reading(lines={0: 3}, excluded={2, 3})}
+    path = _readings.write_part(tmp_path, "packages/n", measured, "llvm")
+    entry = read_part(path, tmp_path).files["packages/n/src/x.h"]
+    assert entry.statements == set()
+    assert entry.counts == {}
+    assert entry.excluded == {2, 3}
+
+
 def _lcov_lines(text: str) -> dict[int, int]:
     """The ``DA:`` lines of an lcov trace of one file: each line's count."""
     found: dict[int, int] = {}

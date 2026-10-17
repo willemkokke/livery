@@ -107,6 +107,20 @@ def test_outside_a_workspace_nothing_links(
     assert capsys.readouterr().err == ""
 
 
+@pytest.mark.parametrize("site", [None, ""])
+def test_without_a_site_address_nothing_links(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    site: str | None,
+) -> None:
+    # No address to put before a task's page, and nothing to name: the
+    # site's address is optional.
+    _workspace(tmp_path, monkeypatch, site=site)
+    assert _linked().docs_url is None
+    assert capsys.readouterr().err == ""
+
+
 # Then the order: the configured template, the workspace's, the site's.
 
 

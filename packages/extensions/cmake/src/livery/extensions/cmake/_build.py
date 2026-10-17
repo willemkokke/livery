@@ -351,11 +351,19 @@ def test(
         measured = _measure_msvc(package, argv, env, names)
     else:
         _run_ctest(package, argv, env, names)
+        if not compiler_id:
+            fail(
+                f"{package.name}: the gate build names no C++ compiler, so no"
+                " coverage measurer can be chosen: CMake names it in"
+                f" {GATE_BUILD_DIR}/CMakeFiles/*/CMakeCXXCompiler.cmake when it"
+                " configures, and no such file names one; configure the gate"
+                f" build with `{footman.prog()} build.configure`"
+            )
         if not family:
             fail(
-                f"{package.name}: the gate build's compiler"
-                f" {compiler_id or 'is unknown'} has no coverage measurer; the"
-                f" families are {', '.join(sorted(FAMILIES))}"
+                f"{package.name}: the gate build's compiler {compiler_id} has no"
+                " coverage measurer; configure the gate build with a compiler of"
+                f" one of the families {', '.join(sorted(FAMILIES))}"
             )
         measured = (
             _measure_gcov(package, compiler)

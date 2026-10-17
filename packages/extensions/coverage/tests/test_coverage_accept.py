@@ -1,18 +1,26 @@
-"""The verbs a person runs: every refusal first, then what each does.
+"""The coverage verbs: every refusal first, then what each does.
 
 ``fm coverage.enforce`` judges the floors of the workspace it runs in;
-``fm coverage.accept`` writes the row that lowers a mark.
+``fm coverage.accept`` writes the row that lowers a mark. The hidden
+``coverage.leg`` and ``coverage.union``, which CI runs, gather a leg's
+parts and judge the run's union.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
+from livery import git
+from livery.extensions.coverage import _floors as coverage_floors
+from livery.extensions.coverage import _leg as coverage_leg
 from livery.extensions.coverage import _marks as coverage_marks
 from livery.extensions.coverage import _tasks as coverage_tasks
+from livery.extensions.coverage import _union as coverage_union
+from livery.workshop import LegScope, RunContext
 from livery.workshop._packages import Package
 
 
@@ -146,8 +154,6 @@ def test_a_verb_outside_a_workspace_refuses_naming_the_missing_contract(
 def test_coverage_enforce_judges_the_packages_of_the_workspace_it_runs_in(
     rig: tuple[Package, Package], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from livery.extensions.coverage import _floors as coverage_floors
-
     seen: list[tuple[Path, tuple[str, ...]]] = []
     monkeypatch.setattr(
         coverage_floors,
@@ -158,3 +164,109 @@ def test_coverage_enforce_judges_the_packages_of_the_workspace_it_runs_in(
     )
     coverage_tasks.coverage_enforce()
     assert seen == [(tmp_path, ("packages/x", "packages/y"))]
+
+
+# --- the verbs CI runs --------------------------------------------------------
+
+
+def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A runner's own environment would make this a CI run: scrubbed,
+    # so the test reads the same on a runner as on a desk.
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_the_leg_gathers_its_parts_under_the_scope_its_top_up_measured(
+    rig: tuple[Package, Package], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gate = LegScope("affected", ("packages/x",), "check-a")
+    widened = LegScope("affected", ("packages/x", "packages/y"), "check-a")
+    monkeypatch.setattr("livery.workshop.leg_scope", lambda root: gate)
+    topped: list[tuple[Path, tuple[str, ...], LegScope]] = []
+    gathered: list[tuple[Path, tuple[str, ...], LegScope | None]] = []
+
+    def _top_up(
+        root: Path, packages: tuple[Package, ...], marker: LegScope
+    ) -> LegScope:
+        topped.append((root, tuple(package.path for package in packages), marker))
+        return widened
+
+    def _gather(
+        root: Path, packages: tuple[Package, ...], *, marker: LegScope | None = None
+    ) -> None:
+        gathered.append((root, tuple(package.path for package in packages), marker))
+
+    monkeypatch.setattr(coverage_leg, "top_up", _top_up)
+    monkeypatch.setattr(coverage_leg, "gather_leg", _gather)
+    coverage_tasks.coverage_leg()
+    assert topped == [(tmp_path, ("packages/x", "packages/y"), gate)]
+    assert gathered == [(tmp_path, ("packages/x", "packages/y"), widened)]
+
+
+def test_the_union_outside_ci_refuses_and_lists_no_store(
+    rig: tuple[Package, Package], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _outside_ci(monkeypatch)
+
+    def _no_listing(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("outside CI there is no run's refs to list")
+
+    monkeypatch.setattr("livery.git.remote_snapshot", _no_listing)
+    assert "outside CI there is no run" in _refusal(coverage_tasks.coverage_union)
+
+
+def test_the_union_reads_inside_one_listing_and_leaves_the_rounded_figures(
+    rig: tuple[Package, Package],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    x, _y = rig
+    run = RunContext("gitea", "7", "push", "refs/heads/main", leg="gate")
+    monkeypatch.setattr("livery.workshop.ci_run", lambda: run)
+    events: list[str] = []
+    fetched: list[tuple[str, ...]] = []
+
+    @contextmanager
+    def _snapshot(store: object, *, fetch: Iterable[str] = ()) -> Iterator[None]:
+        fetched.append(tuple(fetch))
+        events.append("listed")
+        yield None
+        events.append("closed")
+
+    judged: tuple[Package, ...] = (x,)
+
+    def _combine(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
+        events.append("unioned")
+        return judged
+
+    enforced: list[tuple[str, ...]] = []
+
+    def _enforce(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
+        enforced.append(tuple(package.path for package in packages))
+        return {"packages/x": 87.6543}
+
+    left: list[tuple[Path, str, dict[str, float], str]] = []
+
+    def _leave(
+        root: Path, name: str, packages: Mapping[str, float], *, unit: str = ""
+    ) -> str:
+        left.append((root, name, dict(packages), unit))
+        return "the coverage section"
+
+    monkeypatch.setattr("livery.git.remote_snapshot", _snapshot)
+    monkeypatch.setattr(coverage_union, "combine_union", _combine)
+    monkeypatch.setattr(coverage_floors, "enforce_coverage", _enforce)
+    monkeypatch.setattr("livery.workshop.leave_section", _leave)
+    coverage_tasks.coverage_union()
+    # One listing holds the run's refs and main's record, around the union:
+    # main's run names no head branch.
+    assert fetched == [("run/7/", git.NAMESPACE + "coverage/main/")]
+    assert events == ["listed", "unioned", "closed"]
+    assert enforced == [("packages/x",)]
+    assert left == [(tmp_path, "coverage", {"packages/x": 87.65}, "%")]
+    assert "  the coverage section\n" in capsys.readouterr().out
+    # A union with nothing to judge enforces nothing and leaves no section.
+    judged = ()
+    coverage_tasks.coverage_union()
+    assert enforced == [("packages/x",)] and len(left) == 1
