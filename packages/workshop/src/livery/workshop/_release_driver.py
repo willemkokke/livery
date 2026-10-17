@@ -219,30 +219,44 @@ def rollback_prepare(
 ) -> None:
     """Restore exactly the files prepare writes; never raises.
 
-    The error being unwound is the one worth seeing, so this cleans
-    quietly: each member's changelog, contract, and version files
-    return to HEAD, and so do the files the stamp phase *reported*
-    raising floors in (relative to *root*), the set's manifest and the
-    workspace lock the stamp refreshed. Each restore reads HEAD, never
-    the index: a commit that failed (a signing agent that refused) has
-    already staged every change, and a restore from the index would
-    keep them.
+    The error being unwound is the one worth seeing, so this raises
+    nothing of its own: each member's changelog, contract and version
+    files return to HEAD, and so do the files the stamp phase
+    *reported* raising floors in (relative to *root*), the set's
+    manifest and the workspace lock the stamp refreshed. One of these
+    files on disk that HEAD lacks is one prepare created, as a first
+    release's changelog and manifest are, and it is removed, so the
+    switch back to the base does not carry it along. Each restore reads
+    HEAD, never the index: a commit that failed (a signing agent that
+    refused) has already staged every change, and a restore from the
+    index would keep them. Each path the rollback could not put back is
+    printed with the reason, and the other paths are put back all the
+    same.
+    """
+    for path, reason in _put_back(root, _prepare_paths(root, members, reported)):
+        print(f"  the rollback could not restore {path}: {reason}")
+
+
+def _prepare_paths(
+    root: Path, members: tuple[Package, ...], reported: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """The paths prepare may write for *members*, each once, from *root*.
+
+    The files the stamp phase *reported* raising floors in, then each
+    member's changelog, its contract and the files its set's stamp
+    writes a version into, then the workspace lock and the set's
+    manifest, with forward slashes. The rollback puts back exactly
+    these, and the local act refuses while one of them has changes of
+    its own, so the two read the same list.
     """
     from livery.workshop._contract import CONTRACT
     from livery.workshop._publish import MANIFEST
 
-    paths = [name for name in dict.fromkeys(reported) if (root / name).is_file()]
+    paths = [Path(name).as_posix() for name in reported]
     for package in members:
         base = package.directory.relative_to(root)
-        # Only files the member actually has: one pathspec absent
-        # from HEAD refuses the whole checkout, taking every other
-        # restore down with it (the same trap the lock note below
-        # names). prepare edits existing files, so presence on disk
-        # is the right filter.
         paths.extend(
-            str(base / name)
-            for name in ("CHANGELOG.md", CONTRACT)
-            if (package.directory / name).is_file()
+            (base / name).as_posix() for name in ("CHANGELOG.md", CONTRACT)
         )
         # Every file the set's stamp writes a version into. A set that
         # cannot name them restores the rest regardless.
@@ -250,20 +264,80 @@ def rollback_prepare(
             paths.extend(
                 home.relative_to(root).as_posix()
                 for home in _lifecycle.version_files(package)
-                if home.is_file()
             )
-    git.restore(root, *paths)
-    # The lock the stamp refreshed and the manifest, each restored
-    # alone: a file HEAD lacks in the same pathspec would refuse the
-    # whole checkout, taking every other restore down with it.
-    for alone in ("uv.lock", MANIFEST):
-        git.restore(root, alone)
-    # A first release's manifest has no HEAD to return to: it goes, so
-    # the switch back to the base does not carry it along.
-    if not git.tracks(root, f"HEAD:{MANIFEST}"):
-        with contextlib.suppress(git.GitError):
-            git.unstage(root, MANIFEST)
-        (root / MANIFEST).unlink(missing_ok=True)
+    paths.extend(("uv.lock", MANIFEST))
+    return tuple(dict.fromkeys(paths))
+
+
+def _require_unchanged(root: Path, members: tuple[Package, ...]) -> None:
+    """Refuse while a path prepare may write has changes of its own, naming each.
+
+    The rollback returns each of those paths to HEAD and deletes one
+    HEAD lacks, so an uncommitted edit there, or a file a person made
+    there by hand, would be lost. A change anywhere else in the tree
+    does not refuse.
+
+    Raises:
+        Failed: naming each such path, modified, staged, deleted or
+            untracked, and saying to commit or stash it first.
+    """
+    out = git.run(
+        root,
+        "status",
+        "--porcelain",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        *_prepare_paths(root, members),
+    )
+    fields = out.split("\0")
+    changed: list[str] = []
+    index = 0
+    while index < len(fields):
+        record = fields[index]
+        index += 1
+        if len(record) < 4:
+            continue
+        changed.append(record[3:])
+        if record[0] in "RC":
+            # A rename or a copy names the path it came from next.
+            index += 1
+    if changed:
+        listed = "".join(f"\n  {path}" for path in sorted(set(changed)))
+        fail(
+            "the local act writes these files and then restores them from"
+            f" HEAD, so the changes they have now would be lost:{listed}\n"
+            "Commit or stash them first, then run it again."
+        )
+
+
+def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Return each of *paths* to HEAD; each path that failed, with the reason.
+
+    A path HEAD has is checked out from HEAD. A path HEAD lacks that
+    is on disk is taken out of the index and deleted. A path in
+    neither is left alone. The paths HEAD has are checked out in one
+    call, and only when git refuses that call is each checked out
+    alone: git refuses the whole call for one bad path, so the one
+    path git refuses never stops the rest.
+    """
+    tracked: list[str] = []
+    failed: list[tuple[str, str]] = []
+    for path in paths:
+        try:
+            if git.tracks(root, f"HEAD:{path}"):
+                tracked.append(path)
+            elif (root / path).is_file():
+                git.unstage(root, path)
+                (root / path).unlink()
+        except (git.GitError, OSError) as error:
+            failed.append((path, str(error)))
+    if tracked and git.restore(root, *tracked):
+        for path in tracked:
+            refused = git.restore(root, path)
+            if refused:
+                failed.append((path, refused))
+    return failed
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
@@ -881,7 +955,11 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     never asked because nothing leaves the machine. The derivation
     reads origin's receipts, fetched first, so it names the versions
     the armed act would ([livery.workshop._release_driver.fresh_receipts][]).
+    Before any of it, the act refuses while a file it would write has
+    changes of its own, since the restore would discard them; a change
+    anywhere else in the tree is left alone.
     """
+    _require_unchanged(root, members)
     fresh_receipts(root)
     plans = derive_plans(root, members)
     print("  act: local; nothing leaves this machine")

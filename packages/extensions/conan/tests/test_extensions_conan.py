@@ -205,6 +205,17 @@ def test_a_sync_over_one_package_holding_conan_makes_the_profile_once(
 # --- its own distribution -----------------------------------------------------
 
 
+def _floor_cut(requirement: str) -> str:
+    """*requirement* with its floor's version written ``<floor>``.
+
+    A release raises a floor on a member released beside it to that
+    member's new version, so the value is the release's to move. The
+    name, the floor's presence and the marker stay as the wheel wrote
+    them.
+    """
+    return re.sub(r">=\s*\d[^\s,;]*", ">=<floor>", requirement)
+
+
 def test_its_own_distribution_ships_conan_and_the_workshop_wheel_none() -> None:
     from livery.workshop._extensions import declaration, shipping_distribution
 
@@ -224,13 +235,14 @@ def test_its_own_distribution_ships_conan_and_the_workshop_wheel_none() -> None:
     shipped = shipping_distribution("livery.extensions.conan")
     assert shipped is not None and shipped.name == "livery-extensions-conan"
     # The extension it requires, cpp, ships in a distribution of its
-    # own, which this wheel requires beside the workshop's.
+    # own, which this wheel requires beside the workshop's, each at a
+    # floor.
     required = importlib.metadata.requires("livery-extensions-conan") or []
     assert [
-        line
+        _floor_cut(line)
         for line in required
         if line.startswith(("livery-workshop", "livery-extensions-cpp"))
-    ] == ["livery-extensions-cpp>=0.0.0", "livery-workshop>=0.10.0"]
+    ] == ["livery-extensions-cpp>=<floor>", "livery-workshop>=<floor>"]
     declared = declaration("conan")
     assert declared is not None
     # conan packages C and C++.

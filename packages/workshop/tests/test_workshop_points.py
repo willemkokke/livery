@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.footman import Failed
 from livery.workshop import _points
 
 # The coverage leg and the union are the coverage extension's, added as
@@ -1001,6 +1002,96 @@ def test_the_check_legs_are_one_per_runner_and_gate_python(tmp_path: Path) -> No
         "check-macos-latest-3.13",
         "check-macos-latest-3.14",
     ]
+
+
+def _sharded(tmp_path: Path, ci: str) -> Path:
+    return _root(
+        tmp_path, '\n[ci]\nrunners = ["a", "b"]\npython-versions = ["3.14"]\n' + ci
+    )
+
+
+@pytest.mark.parametrize(
+    ("ci", "said"),
+    [
+        ("shards = { c = 2 }\n", r"\[ci\] shards names c, which \[ci\] runners"),
+        ("shards = { a = 0 }\n", r"\[ci\] shards gives a 0; a count is at least 1"),
+        ("shards = { a = 5 }\n", r"\[ci\] shards gives a 5, above the cap of 4"),
+        (
+            "shards-max = 2\nshards = { a = 3 }\n",
+            r"\[ci\] shards gives a 3, above the cap of 2",
+        ),
+        ("shards-max = 0\n", r"\[ci\] shards-max is 0; the cap is at least 1"),
+        ('shards = { a = "two" }\n', r"shards.*two"),
+        (
+            'pull-request-runners = ["b"]\npull-request-shards = { a = 2 }\n',
+            r"\[ci\] pull-request-shards names a, which \[ci\] pull-request-runners",
+        ),
+    ],
+)
+def test_a_shard_count_outside_the_contract_refuses_naming_the_key_and_the_runner(
+    tmp_path: Path, ci: str, said: str
+) -> None:
+    root = _sharded(tmp_path, ci)
+    with pytest.raises(Failed, match=said):
+        if "pull-request" in ci:
+            _points.pull_request_shards(root)
+        else:
+            _points.check_shards(root)
+
+
+def test_a_shard_count_that_is_no_whole_number_refuses_by_name() -> None:
+    # The pure reader, for a table the contract's judge never saw.
+    with pytest.raises(Failed, match=r"\[ci\] shards gives a 'two', which is not"):
+        _points.shard_counts(
+            {"shards": {"a": "two"}}, key="shards", runners=["a"], listed="[ci] runners"
+        )
+    with pytest.raises(Failed, match=r"\[ci\] shards gives a True, which is not"):
+        _points.shard_counts(
+            {"shards": {"a": True}}, key="shards", runners=["a"], listed="[ci] runners"
+        )
+    with pytest.raises(Failed, match=r"\[ci\] shards is \[1, 2\]; it is a table"):
+        _points.shard_counts(
+            {"shards": [1, 2]}, key="shards", runners=["a"], listed="[ci] runners"
+        )
+    with pytest.raises(Failed, match=r"\[ci\] shards-max is 'four', which is not"):
+        _points.shards_max({"shards-max": "four"})
+
+
+def test_the_shard_legs_are_the_check_legs_split_as_the_contract_says(
+    tmp_path: Path,
+) -> None:
+    # Without the key every runner is one shard: the legs are the check legs.
+    root = _sharded(tmp_path, "")
+    assert _points.check_shards(root) == _points.check_legs(root)
+    assert _points.pull_request_shards(root) == _points.pull_request_legs(root)
+    root = _sharded(tmp_path, "shards = { b = 3 }\n")
+    assert _points.check_shards(root) == [
+        "check-a-3.14",
+        "check-b-3.14-1of3",
+        "check-b-3.14-2of3",
+        "check-b-3.14-3of3",
+    ]
+    # A pull request's legs take [ci] shards while pull-request-shards is absent.
+    assert _points.pull_request_shards(root) == _points.check_shards(root)
+    root = _sharded(
+        tmp_path,
+        'shards = { b = 3 }\npull-request-runners = ["b"]\n'
+        "pull-request-shards = { b = 2 }\n",
+    )
+    assert _points.check_shards(root)[1:] == [
+        "check-b-3.14-1of3",
+        "check-b-3.14-2of3",
+        "check-b-3.14-3of3",
+    ]
+    assert _points.pull_request_shards(root) == [
+        "check-b-3.14-1of2",
+        "check-b-3.14-2of2",
+    ]
+    # A count of one spells the platform leg itself, and the cap is the
+    # contract's to raise.
+    root = _sharded(tmp_path, "shards-max = 6\nshards = { a = 1, b = 6 }\n")
+    assert _points.check_shards(root)[:2] == ["check-a-3.14", "check-b-3.14-1of6"]
+    assert len(_points.check_shards(root)) == 7
 
 
 def test_a_job_keeps_one_trace_of_every_entry_it_ran(

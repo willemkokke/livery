@@ -1440,6 +1440,26 @@ absence.
   the forge by hand. The repository's configuration creates the label
   (`fm workflow.configure`), and the coverage union expects every leg
   from a labelled pull request.
+- A runner's check leg runs as the shards the contract gives it.
+  `[ci] shards` maps a runner label to a count, one for a runner it
+  does not name, so `shards = { "windows-latest" = 4 }` splits the
+  Windows leg into `check-windows-latest-3.14-1of4` to `4of4` and
+  leaves every other runner one leg; `[ci] pull-request-shards` holds
+  the counts for a pull request's legs, judged against its runners,
+  and `[ci] shards` applies when it is absent; `[ci] shards-max` caps
+  every count, 4 when absent. The keys hold the counts the check legs'
+  shard list is derived from: `livery.workshop.check_shards` names the
+  gate's shard legs and `livery.workshop.pull_request_shards` a pull
+  request's, and a key that names a runner the runner lists do not
+  hold, a count below 1 or above the cap, or one that is not a whole
+  number, refuses naming the key and the runner. A shard's label is
+  its platform leg, `check-<os>-<python>`, with `-<i>of<n>` at the
+  end; the platform leg keys every record below the gate job's fold.
+  Each shard partitions the run's test files by the platform leg's
+  `durations` rows: longest first, each file into the shard with the
+  least summed seconds, ties by name, a file no row names at the
+  row's median, so every shard of a run computes the same partition
+  and every file lands in exactly one shard.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
@@ -1672,6 +1692,33 @@ machine prints each package's summed time and reads no mark, and
 `fm speed.judge` is unavailable outside CI. `fm ci.timings` shows
 the marks beside the timings.
 
+## Balancing the check legs
+
+`fm ci.balance` reads the same timing rows and proposes how many
+runners each platform's tests should be split over, so every
+platform's check leg ends at about the same time. Per platform, a
+runner and a Python, it takes the newest ten rows whose check jobs
+ran the full gate and succeeded, folds the shards of one platform
+into one reading, and takes the medians of four measures: the fixed
+setup F, every step the forge timed except the call; the longest gate
+step that is not the test step, O; the summed test time S over every
+package; and the parallelism p the test step reached, S over its
+wall. It predicts the leg's wall at n shards as F + max(O, S / (p n)),
+since the first shard runs the unsplit steps beside its slice, and
+the runner seconds as about n F + S / p + O, and prints both for every
+count up to `--max`, 4 by default. The slowest platform takes the
+largest count whose every added shard saved at least its own setup;
+every other platform takes the smallest count whose wall is within
+15% of the slowest platform's, or the cap, named. The pull request
+counts follow the same rule over `[ci] pull-request-runners` when that
+list is shorter than `[ci] runners`. The proposal prints as the TOML
+`[ci] shards` and `[ci] pull-request-shards` would hold, with the
+predicted wall of the slowest leg beside its wall at one shard. A
+platform with fewer than three such rows keeps its count and is
+named, and a store that cannot be read prints why and proposes
+nothing. The verb changes nothing: a count lands in the contract by
+pull request.
+
 ## The state store
 
 Every row the workshop keeps across runs is a row of the state
@@ -1722,6 +1769,7 @@ package each, which `fm ci.timings` renders as a trend.
 | --- | --- | --- | --- |
 | `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
+| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
@@ -1729,6 +1777,17 @@ package each, which `fm ci.timings` renders as a trend.
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `fetched` (local) | when origin's namespace was last mirrored into `refs/workshop-origin/*`, and how many refs | 1 | `fm sync`, `fm start` |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
+
+The `durations` family is one series per platform leg,
+`check-<os>-<python>`, one row per run, `{"run": "<id>", "files":
+{"<path>": <seconds>}}`, the newest thirty kept; a series of a leg the
+matrix no longer produces is the janitor's to drop. A shard of that
+leg reads the newest five rows stamped before the committer time of
+the commit it checked out and takes the median per file; a row the
+store stamped at or after that time reaches no shard, so every shard
+of a run reads the same rows whatever lands while the run is in
+flight. A series that cannot be read is printed as the reason and the
+leg runs as one shard of one; an absent series reads as no rows.
 
 `fm store.ls` lists them with what each holds; `fm store.show
 <series>` prints a series' rows newest first through the same reader

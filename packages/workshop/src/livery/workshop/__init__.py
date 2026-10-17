@@ -108,7 +108,21 @@ branch whose run proved the checkout's tree, a
 are [livery.workshop.check_legs][], and those a pull request's run
 produces are [livery.workshop.pull_request_legs][], unless the pull
 request carries [livery.workshop.EVERY_RUNNER_LABEL][], when its run
-produces every leg. Of a set of
+produces every leg; split into the
+shards the contract gives each runner they are
+[livery.workshop.check_shards][] and
+[livery.workshop.pull_request_shards][], each shard spelled by a
+[livery.workshop.Shard][] at the end of its label, which
+[livery.workshop.platform_leg][] and [livery.workshop.shard_of][]
+split. A shard's share of the test files is what
+[livery.workshop.partition][] packs from the medians
+[livery.workshop.read_durations][] takes over the platform leg's rows
+in the [livery.workshop.DURATIONS][] family, bounded by
+[livery.workshop.checkout_time][]; the set it partitioned has the
+digest [livery.workshop.files_digest][], and the shard leaves what it
+ran with [livery.workshop.leave_shard][], a
+[livery.workshop.ShardMarker][] that [livery.workshop.read_shard][]
+reads back. Of a set of
 units, each a member's suite or the workspace's own tests at
 [livery.workshop.WORKSPACE_TESTS][], [livery.workshop.tested][] keeps
 those a test step runs. Whether a package holds the extension of the
@@ -217,7 +231,9 @@ if TYPE_CHECKING:
     from livery.workshop._phases import run_phase as run_phase
     from livery.workshop._points import EVERY_RUNNER_LABEL as EVERY_RUNNER_LABEL
     from livery.workshop._points import check_legs as check_legs
+    from livery.workshop._points import check_shards as check_shards
     from livery.workshop._points import pull_request_legs as pull_request_legs
+    from livery.workshop._points import pull_request_shards as pull_request_shards
     from livery.workshop._prose import AGENT as AGENT
     from livery.workshop._prose import HUMAN as HUMAN
     from livery.workshop._prose import Prose as Prose
@@ -246,6 +262,17 @@ if TYPE_CHECKING:
     from livery.workshop._registries import registry as registry
     from livery.workshop._release_notes import ReleaseNotes as ReleaseNotes
     from livery.workshop._release_notes import release_notes as release_notes
+    from livery.workshop._shard import DURATIONS as DURATIONS
+    from livery.workshop._shard import Shard as Shard
+    from livery.workshop._shard import ShardMarker as ShardMarker
+    from livery.workshop._shard import checkout_time as checkout_time
+    from livery.workshop._shard import files_digest as files_digest
+    from livery.workshop._shard import leave_shard as leave_shard
+    from livery.workshop._shard import partition as partition
+    from livery.workshop._shard import platform_leg as platform_leg
+    from livery.workshop._shard import read_durations as read_durations
+    from livery.workshop._shard import read_shard as read_shard
+    from livery.workshop._shard import shard_of as shard_of
     from livery.workshop._speed import SPEED_FILE_VARIABLE as SPEED_FILE_VARIABLE
     from livery.workshop._speed import SpeedMark as SpeedMark
     from livery.workshop._speed import speed_marks as speed_marks
@@ -281,6 +308,7 @@ __all__ = [
     "COMPILE_COMMANDS",
     "CURRENT_VERSION",
     "DISTRIBUTIONS",
+    "DURATIONS",
     "EVERY_RUNNER_LABEL",
     "EXECUTABLES",
     "HUMAN",
@@ -311,6 +339,8 @@ __all__ = [
     "ReleaseNotes",
     "RequirementWriter",
     "RunContext",
+    "Shard",
+    "ShardMarker",
     "SourceReferences",
     "SpeedMark",
     "ToolReceipt",
@@ -320,6 +350,8 @@ __all__ = [
     "build_release",
     "category_of",
     "check_legs",
+    "check_shards",
+    "checkout_time",
     "ci_changes",
     "ci_run",
     "contributions_for",
@@ -327,6 +359,7 @@ __all__ = [
     "discover_release",
     "extension_names",
     "extension_set",
+    "files_digest",
     "fix_files",
     "forge_repository",
     "forge_token",
@@ -337,13 +370,19 @@ __all__ = [
     "is_example",
     "leave_leg_file",
     "leave_section",
+    "leave_shard",
     "leg_scope",
     "nearest_extensions",
     "neighbours",
     "order_topologically",
+    "partition",
+    "platform_leg",
     "pull_request_legs",
+    "pull_request_shards",
     "python_matrix",
     "read_contract",
+    "read_durations",
+    "read_shard",
     "registry",
     "release_notes",
     "release_tag",
@@ -356,6 +395,7 @@ __all__ = [
     "scoped_suite",
     "scripts_dir",
     "selected_files",
+    "shard_of",
     "shipped_content",
     "speed_marks",
     "state_store",
@@ -412,6 +452,19 @@ _EXPORTS: dict[str, str] = {
     "category_of": "livery.workshop._categories",
     "EVERY_RUNNER_LABEL": "livery.workshop._points",
     "check_legs": "livery.workshop._points",
+    "check_shards": "livery.workshop._points",
+    "pull_request_shards": "livery.workshop._points",
+    "DURATIONS": "livery.workshop._shard",
+    "Shard": "livery.workshop._shard",
+    "ShardMarker": "livery.workshop._shard",
+    "checkout_time": "livery.workshop._shard",
+    "files_digest": "livery.workshop._shard",
+    "leave_shard": "livery.workshop._shard",
+    "partition": "livery.workshop._shard",
+    "platform_leg": "livery.workshop._shard",
+    "read_durations": "livery.workshop._shard",
+    "read_shard": "livery.workshop._shard",
+    "shard_of": "livery.workshop._shard",
     "holds_runtime_language": "livery.workshop._packages",
     "leave_leg_file": "livery.workshop._metrics",
     "leave_section": "livery.workshop._metrics",

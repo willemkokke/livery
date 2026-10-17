@@ -207,6 +207,30 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
     assert row["total_ms"] == 4640.0
 
 
+def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
+    trace = _trace(
+        tmp_path / "fm-profile.json",
+        tasks={"check": 4640.0},
+        tests={
+            "packages/forge/tests/test_a.py::test_one": 1000.0,
+            "packages/forge/tests/test_a.py::test_two": 250.0,
+            "packages/workshop/tests/test_b.py::test_three": 20.0,
+            # The workspace's own suite is no package, and still a file.
+            "tests/test_root.py::test_outside": 100.0,
+        },
+    )
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    # Three phases each: 3750 ms, 60 ms and 300 ms, to a tenth of a second.
+    assert row["files"] == {
+        "packages/forge/tests/test_a.py": 3.8,
+        "packages/workshop/tests/test_b.py": 0.1,
+        "tests/test_root.py": 0.3,
+    }
+    # The package sums stand beside it, as before.
+    assert row["packages"]["forge"] == {"tests_ms": 3750.0, "tests": 2}
+
+
 # --- the collect: refusals first ----------------------------------------------
 
 
@@ -421,7 +445,11 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
         ),
         Step("Gate", "success", "2026-09-09T00:49:37Z", "2026-09-09T00:49:42Z"),
     )
-    trace = _trace(tmp_path / "t.json", tasks={"check": 4100.0})
+    trace = _trace(
+        tmp_path / "t.json",
+        tasks={"check": 4100.0},
+        steps=[{"name": "test.pytest", "tid": 1, "ts": 1500.0, "dur": 2_000_000}],
+    )
     assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
@@ -436,6 +464,10 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
         {"name": "Gate", "ms": 5000.0},
     ]
     assert job["tasks"] == {"check": 4100.0}
+    # The steps a task ran ride under their task's address, so a
+    # reader of the run's file sees the gate's steps, the test step
+    # among them.
+    assert job["task_steps"] == {"check/test.pytest": 2000.0}
     assert entry["created_at"] == "2026-09-09T00:49:13Z"
     assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 

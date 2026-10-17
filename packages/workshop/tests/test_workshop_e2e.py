@@ -1358,25 +1358,19 @@ def test_a_proof_waits_only_until_its_deadline_and_reads_its_event_alone() -> No
         _e2e._completed_run(repo, _SHA, event="pull_request", timeout=0)
 
 
-def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
+def test_the_one_log_read_names_the_job_it_cannot_find_and_the_line_it_misses() -> None:
+    # The publish job's prebuilt line is the one fact a proof still reads
+    # from a log, until conan's per-host artifact gives it a row.
     fake, repo = _proof_rig()
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
     run, logs = _e2e._completed_run(repo, _SHA, event="push")
     assert [job.name for job in logs] == ["gate"]
     with pytest.raises(_FAILURES, match="has no check job"):
-        _e2e._require_lines(repo, run, logs, "check", ("x",))
-    with pytest.raises(_FAILURES, match=r"did not say \['absent line'\]"):
-        _e2e._require_lines(
-            repo, run, logs, "gate", ("concluded success", "absent line")
-        )
-    _e2e._require_lines(repo, run, logs, "gate", ("concluded success",))
-    with pytest.raises(
-        _FAILURES, match=r"said \['concluded success'\], which the proof"
-    ):
-        _e2e._require_lines(
-            repo, run, logs, "gate", (), forbidden=("concluded success", "absent")
-        )
+        _e2e._log_says(repo, run, logs, "check", "x")
+    with pytest.raises(_FAILURES, match="did not say 'absent line'"):
+        _e2e._log_says(repo, run, logs, "gate", "absent line")
+    _e2e._log_says(repo, run, logs, "gate", "concluded success")
 
 
 # The release act's proof that the wave published the wheels the wheels
@@ -1576,16 +1570,7 @@ def test_a_host_environment_is_the_lane_s_alias_the_forge_and_the_workspace_s_ho
     assert home == tmp_path / "workshop-e2e" / "scratch" / "gitea"
     # The alias requirement is the docker rig's; a localhost URL needs none.
     _e2e._require_host_alias("gitea")  # pyright: ignore[reportPrivateUsage]
-    # The proofs read their lines with the environment's label in place
-    # of the hosted name.
-    pinned = ("coverage record: main/check-ubuntu-latest-3.14: 0 fresh",)
-    assert _e2e.with_label(pinned) == (
-        "coverage record: main/check-scratch-macos-arm-01-3.14: 0 fresh",
-    )
     monkeypatch.setattr(_e2e, "CURRENT", _e2e.Current())
-    assert _e2e.with_label(("check-ubuntu-latest-3.14",)) == (
-        "check-ubuntu-latest-3.14",
-    )
     lane = _e2e._lane("gitea")  # pyright: ignore[reportPrivateUsage]
     assert lane.alias == "http://gitea:3000"
     home = _e2e._loop_home("gitea")  # pyright: ignore[reportPrivateUsage]

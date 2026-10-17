@@ -248,8 +248,10 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
 
     The trace is the Chrome trace the profiled gate wrote: every
     task's slice (its request address and duration), the lane waits,
-    and each pytest phase of every test as a slice of its own. A
-    missing or unreadable trace is a reason, never a row.
+    and each pytest phase of every test as a slice of its own. The
+    row's ``files`` is the seconds each test file took, every phase of
+    every test in it summed, to a tenth. A missing or unreadable trace
+    is a reason, never a row.
     """
     if not trace.is_file():
         return None, f"no trace at {trace}: the gate did not run under --profile"
@@ -267,6 +269,9 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     packages: dict[str, dict[str, float]] = defaultdict(
         lambda: {"tests_ms": 0.0, "tests": 0}
     )
+    # Every phase of every test, summed per test file: what a shard
+    # partitions the next run's files by.
+    files: dict[str, float] = defaultdict(float)
     calls: list[tuple[float, str]] = []
     begins: list[float] = []
     ends: list[float] = []
@@ -286,6 +291,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         elif cat == "lane":
             waits[name.removeprefix("lane: ")] += _ms(event)
         elif cat.startswith("test."):
+            files[name.split("::", 1)[0]] += _ms(event)
             package = _package_of(name)
             if package:
                 packages[package]["tests_ms"] = round(
@@ -308,6 +314,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         "task_steps": dict(sorted(steps.items())),
         "waits_ms": {name: round(ms, 1) for name, ms in sorted(waits.items())},
         "packages": dict(sorted(packages.items())),
+        "files": {path: round(ms / 1000.0, 1) for path, ms in sorted(files.items())},
         "slowest": [
             {"test": name, "s": round(ms / 1000.0, 2)} for ms, name in calls[:SLOWEST]
         ],
@@ -506,6 +513,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         row: dict[str, Any] = {
             "total_ms": half.get("total_ms"),
             "tasks": half.get("tasks", {}),
+            "task_steps": half.get("task_steps", {}),
             "waits_ms": half.get("waits_ms", {}),
             "packages": half.get("packages", {}),
             "slowest": half.get("slowest", []),

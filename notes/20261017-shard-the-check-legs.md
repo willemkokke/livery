@@ -1,6 +1,9 @@
 # Shard the check legs across runners, and carry coverage across a change
 
-Status: written 2026-10-17; phase 1 in progress.
+Status: phase 1 complete 2026-10-17 (#1744, #1745, #1743 merged; the loop
+pass green on the `shards` environment, 6 scenarios). Phase 2 in review:
+parts 1 to 6 built as #1749, #1763, #1764, #1762, #1772 and #1771, part
+7 (#1777) building. Phase 3's table, `fm ci.balance`, merged ahead (#1747).
 
 ## The prompt (Willem)
 
@@ -251,14 +254,20 @@ store, window 30, one row per run, `{"run": <id>, "files":
 {<path>: <seconds>}}`, written by the gate job from the shards' rows,
 each shard's row carrying the per-file sums `put_leg` reads from its
 trace beside the per-package sums it reads today. A shard reads the
-rows written before its run's `created_at`, which the forge names
-for the run, and takes the median per file over the newest five. A
-run with no row runs unsharded on the first shard and says so, and
-the gate job proves that too.
+rows stamped before the committer time of the commit it checked out
+(`livery.workshop.checkout_time`), and takes the median per file over
+the newest five. Every shard of a run checks out the same commit, so
+the bound is the same for all of them without a call to the forge; on
+a pull request the forge makes that merge commit when the run starts,
+and on a push or a dispatch the commit is older, which only makes the
+bound conservative. A run with no row runs unsharded on the first
+shard and says so, and the gate job proves that too.
 
-The marker a leg leaves (`fm-gate.json`) gains `shard`, the digest of
-the test-file set it partitioned, the files it ran, and the row it
-read. The gate job folds the shards of a platform into one leg before
+Each shard leaves `.workshop/fm-shard.json` beside the gate's marker
+(`livery.workshop.leave_shard`): its shard, the digest of the
+test-file set it partitioned, the files it ran, the rows it read and
+the bound it read them under. The gate job folds the shards of a
+platform into one leg before
 the union, the stamp and the marks read: one scope, one file set, one
 row, the parts of every shard concatenated per unit, the package sums
 added. A platform whose shards disagree, or one of whose shards left
@@ -343,6 +352,14 @@ Acceptance:
   loop's e2e lines pin the union's carried-across-a-change line.
 - The plan's status line names phase 1 complete, in the same change.
 
+Phase 1 landed 2026-10-17 as #1751 (the per-platform proof), #1754
+(the label and `fm submit --every-runner`, the governance pass run so
+the label exists on this repository) and #1756 (the carry). The loop
+runs one runner, so it cannot show the carry across a change with an
+absent leg; the union tests prove that, and the first GitHub run under
+`[ci] pull-request-runners = ["ubuntu-latest"]` is its live proof,
+which waits for the mode to be switched on.
+
 ### Phase 2: the shard axis, the slice and the fold
 
 Deliverables:
@@ -417,7 +434,7 @@ Acceptance:
 | temporary | replaced by |
 |---|---|
 | counts set by hand in phase 2 | `fm ci.balance --write`, phase 3 |
-| the mode, `pull-request-runners` on linux | the runners decided per change, an extension |
+| the mode, `pull-request-runners` on linux | runners decided per change, later |
 
 ## Decision record
 
@@ -446,6 +463,32 @@ Acceptance:
   forge, since rows named by run id do not order a write that lands
   between two shards' reads; the proof in the gate job catches the
   rest.
+- 2026-10-17, the agent, building phase 2's vocabulary (#1749): the
+  pin is the committer time of the commit the leg checked out, not
+  the run's `created_at`. A check leg has no forge credential the
+  design can rely on, and the checkout gives every shard the same
+  bound without a network call; on a pull request the forge makes the
+  merge commit when the run starts. This replaces the entry above.
+- 2026-10-17, the agent: `fm ci.balance` is built ahead of phase 2
+  (#1747), as the table and the proposal alone, since it shares no
+  file with phase 2; the contract keys, `--write`, `--submit` and the
+  nightly entry wait for the matrix to read the counts. Its live read
+  found that the newest timing rows carried no per-step durations (the
+  gate job's collect dropped them; fixed there) and that a leg's trace
+  holds no span for the test step, nor for the basedpyright steps
+  (issue filed), so the balancer reads the test wall only once the
+  trace records it; its F and S read correctly from live rows.
+- 2026-10-17, found live: two gates on one machine race on conan's
+  `cache save`, which writes `pkglist.json` at a fixed name in the
+  system temp directory (#1755). A red conan publish test beside
+  another running gate is that race.
+- 2026-10-17, the loop: the shared `e2e` environment was recreated by
+  another session under two passes; the phase 1 pass ran on an
+  environment of its own, `fm ci.e2e --env=shards`, and passed.
+- 2026-10-17, found live: the coverage store's janitor test reads a
+  failed fetch and a dropped ref alike (#1773); a Windows-only red on
+  one dispatched run did not repeat. GitHub started no pull request
+  run for one pushed head; a dispatched gate run stood in.
 
 ## Open
 

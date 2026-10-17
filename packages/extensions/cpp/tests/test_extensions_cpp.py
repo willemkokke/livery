@@ -10,6 +10,7 @@ gives, and the dev wheels of the loop.
 from __future__ import annotations
 
 import importlib.metadata
+import re
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,17 @@ def skip_unless_installed(*extensions: str) -> None:
             f"{name} ({_extensions.distribution_of(name)})" for name in missing
         )
         pytest.skip(f"not installed here: {named}")
+
+
+def _floor_cut(requirement: str) -> str:
+    """*requirement* with its floor's version written ``<floor>``.
+
+    A release raises a floor on a member released beside it to that
+    member's new version, so the value is the release's to move. The
+    name, the floor's presence and the marker stay as the wheel wrote
+    them.
+    """
+    return re.sub(r">=\s*\d[^\s,;]*", ">=<floor>", requirement)
 
 
 def _workspace(root: Path, members: dict[str, str]) -> Path:
@@ -238,11 +250,12 @@ def test_its_own_distribution_ships_cpp_and_the_workshop_wheel_none() -> None:
     shipped = shipping_distribution("livery.extensions.cpp")
     assert shipped is not None and shipped.name == "livery-extensions-cpp"
     # At runtime it requires the workshop, whose queries it answers, and
-    # nothing else; its suite reads footman beside it.
+    # nothing else; its suite reads footman beside it. Each carries a
+    # floor.
     required = importlib.metadata.requires("livery-extensions-cpp") or []
-    assert required == [
-        "livery-workshop>=0.10.0",
-        "livery-footman>=0.60.0 ; extra == 'test'",
+    assert [_floor_cut(line) for line in required] == [
+        "livery-workshop>=<floor>",
+        "livery-footman>=<floor> ; extra == 'test'",
     ]
     declared = declaration("cpp")
     assert declared is not None
