@@ -2112,7 +2112,10 @@ def _ensure_members(root: Path, members: Sequence[str] = ()) -> None:
                 + "[[ci.point]]\n"
                 + f'name = "{CONTRIBUTED_POINT}"\n'
                 + 'task = "extensions"\n'
-                + 'runners = ["ubuntu-latest"]\n'
+                # The environment's runner, as the root's runners name
+                # it: the hosted label on the docker rig, the host
+                # runner's own label in host mode.
+                + f'runners = ["{CURRENT.label}"]\n'
             )
         member.write_text(body, "utf-8")
     # The baseline is a render input: cliff.toml was rendered before
