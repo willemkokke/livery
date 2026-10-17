@@ -347,8 +347,24 @@ def test_nanobind_declares_its_key_its_job_and_its_verb() -> None:
     assert declared.requires == ("python", "cpp", "conan")
     assert declared.plugin == "livery.extensions.nanobind"
     assert declared.tools == ("cmake", "ninja", "conan", "cmake_conan")
-    # Its one step builds a package's release, which the gate never runs.
+    # Its steps stamp and build a package's release, which the gate never
+    # runs.
     assert declared.additions.steps == ()
+    (stamp,) = declared.phases["stamp"]
+    assert (stamp.name, str(stamp.run)) == (
+        "stamp.nanobind",
+        "livery.extensions.nanobind._stamp:stamp",
+    )
+    assert (stamp.reads, stamp.provides) == (
+        ("version", "floors"),
+        (("changed", "strs"),),
+    )
+    # One step of a package reports what the stamp changed, so python's
+    # and conan's stamp steps go where nanobind is held.
+    assert [address for address, _reason in stamp.deletes] == [
+        "python:stamp.python",
+        "conan:stamp.conan",
+    ]
     (build,) = declared.phases["build"]
     assert (build.name, str(build.run), build.isolated) == (
         "build.nanobind",
@@ -358,11 +374,10 @@ def test_nanobind_declares_its_key_its_job_and_its_verb() -> None:
     assert (build.reads, build.provides) == (("epoch",), (("dist", "path"),))
     assert [address for address, _reason in build.deletes] == [
         "python:build.python",
-        "conan:stamp.conan",
         "conan:build.conan",
         "conan:publish.conan",
     ]
-    assert list(declared.phases) == ["build"]
+    assert list(declared.phases) == ["stamp", "build"]
     # The members its wheels job builds, a question about the workspace,
     # and the venv's line an editor's configure of the module reads.
     assert declared.queries == {

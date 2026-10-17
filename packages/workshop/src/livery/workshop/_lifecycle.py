@@ -113,26 +113,77 @@ def current_version(package: Package) -> str:
 
 
 def version_files(package: Package) -> tuple[Path, ...]:
-    """Every file a version may be written into.
+    """Every file the stamp phase's steps may write into: a version, or a floor.
 
-    A caller that writes a version for one build keeps these files
-    first, then restores them. Empty for a package whose set names
-    none.
+    A caller that stamps for one build keeps these files first, then
+    restores them. Empty for a package whose set names none. The floors
+    the base raises are in the package's own contract, which is not
+    among them.
     """
     from livery.workshop._queries import VERSION_FILES, answer
 
     return tuple(answer(package, VERSION_FILES))
 
 
-def stamp(package: Package, root: Path, version: str) -> list[str]:
-    """Write *version* into *package*'s version files; the files it changed.
+def stamp(
+    package: Package,
+    root: Path,
+    version: str,
+    *,
+    floors: Mapping[str, str] | None = None,
+) -> list[str]:
+    """Write *version* and raise *package*'s floors in its manifests; the files changed.
+
+    The stamp phase's steps write the version into their own manifests,
+    and raise there each floor a manifest declares on one of *floors*:
+    the members released with *package*, each by its path, to the
+    version it releases at. The base raises the floor of each
+    ``[[depends]]`` edge of the package's contract on one of them.
+    Without *floors* no floor moves, as for a member released alone.
+    Each file is named relative to the package's directory.
 
     Raises:
         Failed: naming the package, its set and the phase, when no
             extension of the set adds a step to the stamp phase.
     """
-    ctx = _served(package, "stamp", root, {"version": version})
-    return list(cast("list[str]", _provided(ctx, "changed", (list, tuple))))
+    given = dict(floors or {})
+    ctx = _served(package, "stamp", root, {"version": version, "floors": given})
+    changed = list(cast("list[str]", _provided(ctx, "changed", (list, tuple))))
+    if _raise_depends_floors(package, given):
+        from livery.workshop._contract import CONTRACT
+
+        changed.append(CONTRACT)
+    return changed
+
+
+def _raise_depends_floors(package: Package, floors: Mapping[str, str]) -> bool:
+    """Raise each ``[[depends]]`` floor of *package*'s contract on one of *floors*.
+
+    A text edit, so the contract keeps its comments and layout: the
+    ``floor`` of the edge whose ``path`` names the member takes its
+    version. Whether the contract changed.
+    """
+    import re
+
+    from livery.workshop._contract import CONTRACT
+
+    contract = package.directory / CONTRACT
+    if not floors or not contract.is_file():
+        return False
+    text = original = contract.read_text("utf-8")
+    for path, version in floors.items():
+        if path == package.path:
+            continue
+        text = re.sub(
+            rf'(path = "{re.escape(path)}"[^[]*?floor = ")[^"]+(")',
+            rf"\g<1>{version}\g<2>",
+            text,
+            flags=re.S,
+        )
+    if text == original:
+        return False
+    contract.write_text(text, encoding="utf-8")
+    return True
 
 
 def publish(

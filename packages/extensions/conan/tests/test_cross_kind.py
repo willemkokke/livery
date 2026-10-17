@@ -204,22 +204,94 @@ def test_a_package_listing_nanobind_reads_both_ecosystems_requirements(
     assert declared["acme-geometry"] == "[>=0.1.0]"
 
 
-def test_bump_set_floors_moves_the_conan_range(tmp_path: Path) -> None:
+def test_the_set_s_floors_move_the_conan_range_in_a_consumer_s_recipe(
+    tmp_path: Path,
+) -> None:
     from livery.workshop._release_driver import MemberPlan, bump_set_floors
 
     skip_unless_installed("nanobind")
-    _library(tmp_path)
+    # The library names a reference, so it releases a version; the
+    # python member's recipe is a consumer's, which names none.
+    _member(
+        tmp_path,
+        "geometry",
+        contract_tail=LIBRARY,
+        files={
+            "conanfile.py": (
+                'requires = ()\nname = "acme-geometry"\nversion = "0.1.0"\n'
+            )
+        },
+    )
     ext_dir = _extension(tmp_path, conan_ref="acme-geometry/[>=0.1.0]", floor="0.1.0")
+    (ext_dir / "pyproject.toml").write_text(
+        '[project]\nname = "acme-ext"\nversion = "0.4.0"\ndependencies = []\n'
+    )
     packages = {p.name: p for p in verify_workspace(tmp_path)}
     plans = (
         MemberPlan(package=packages["acme-geometry"], version="0.2.0"),
         MemberPlan(package=packages["acme-ext"], version="0.5.0"),
     )
     changed = bump_set_floors(tmp_path, plans)
-    assert "packages/ext/conanfile.py" in changed
+    # nanobind's stamp raises the recipe's range through conan, and the
+    # base the contract's floor, so the lint stays green.
+    assert sorted(changed) == [
+        "packages/ext/conanfile.py",
+        "packages/ext/workshop.toml",
+    ]
     assert (
         'requires = "acme-geometry/[>=0.2.0]"' in (ext_dir / "conanfile.py").read_text()
     )
-    # The contract floor moved with it, so the lint stays green.
     assert 'floor = "0.2.0"' in (ext_dir / "workshop.toml").read_text()
     verify_workspace(tmp_path)
+
+
+def test_conan_s_stamp_raises_a_floor_in_a_recipe_that_names_a_reference(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import _lifecycle
+
+    skip_unless_installed("cmake", "conan")
+    _member(
+        tmp_path,
+        "geometry",
+        contract_tail=LIBRARY,
+        files={
+            "conanfile.py": (
+                'requires = ()\nname = "acme-geometry"\nversion = "0.1.0"\n'
+            )
+        },
+    )
+    shapes = _member(
+        tmp_path,
+        "shapes",
+        contract_tail=LIBRARY
+        + '[[depends]]\npath = "packages/geometry"\nkind = "runtime"\n'
+        + 'floor = "0.1.0"\n',
+        files={
+            "conanfile.py": (
+                'requires = ("acme-geometry/[>=0.1.0]",)\nname = "acme-shapes"\n'
+                'version = "0.3.0"\n'
+            )
+        },
+    )
+    packages = {p.name: p for p in verify_workspace(tmp_path)}
+    shaped = packages["acme-shapes"]
+    # Released alone, the stamp moves no floor.
+    assert _lifecycle.stamp(shaped, tmp_path, "0.3.0") == []
+    changed = _lifecycle.stamp(
+        shaped, tmp_path, "0.4.0", floors={"packages/geometry": "0.2.0"}
+    )
+    assert changed == ["conanfile.py", "workshop.toml"]
+    recipe = (shapes / "conanfile.py").read_text()
+    assert '"acme-geometry/[>=0.2.0]"' in recipe
+    assert 'version = "0.4.0"' in recipe
+    assert 'floor = "0.2.0"' in (shapes / "workshop.toml").read_text()
+    verify_workspace(tmp_path)
+    # A recipe that names none of the floors changes nothing for them.
+    geometry = packages["acme-geometry"]
+    assert (
+        _lifecycle.stamp(
+            geometry, tmp_path, "0.1.0", floors={"packages/shapes": "0.4.0"}
+        )
+        == []
+    )

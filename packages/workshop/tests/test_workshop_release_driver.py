@@ -121,9 +121,19 @@ def test_order_topologically_puts_dependencies_first(
     assert [p.directory.name for p in ordered] == ["core", "tool"]
 
 
-def test_floors_rise_within_the_set_in_both_homes(
+def test_a_member_released_alone_moves_no_floor(
     workspace: tuple[FakeForge, Path],
 ) -> None:
+    _fake, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    assert bump_set_floors(root, (MemberPlan(packages["tool"], "0.3.0"),)) == []
+    assert git.is_clean(root)
+
+
+def test_floors_rise_within_the_set_through_the_stamp_phase(
+    workspace: tuple[FakeForge, Path],
+) -> None:
+    skip_unless_installed("python")
     _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     plans = (
@@ -132,12 +142,17 @@ def test_floors_rise_within_the_set_in_both_homes(
     )
     changed = bump_set_floors(root, plans)
     tool = root / "packages" / "tool"
-    assert '"livery-core>=0.3.0"' in (tool / "pyproject.toml").read_text()
+    # python's stamp step raises the requirement, the base the edge.
+    pyproject = (tool / "pyproject.toml").read_text()
+    assert '"livery-core>=0.3.0"' in pyproject
     assert 'floor = "0.3.0"' in (tool / "workshop.toml").read_text()
     assert sorted(changed) == [
         "packages/tool/pyproject.toml",
         "packages/tool/workshop.toml",
     ]
+    # The phase ran at the version each member declares: the release's
+    # own stamp writes the new one.
+    assert 'version = "0.2.0"' in pyproject
 
 
 def test_rollback_restores_exactly_what_prepare_writes(
@@ -158,13 +173,31 @@ def test_rollback_restores_exactly_what_prepare_writes(
     from livery.workshop._release import prepare_release
 
     prepare_release(root, "packages/core", "9.9.9")
-    bump_set_floors(
+    reported = bump_set_floors(
         root,
         (MemberPlan(members[0], "9.9.9"), MemberPlan(members[1], "9.9.9")),
     )
-    rollback_prepare(root, members)
+    assert reported
+    rollback_prepare(root, members, reported)
     after = {path: path.read_text() for path in before}
     assert after == before
+    assert git.is_clean(root)
+
+
+def test_the_rollback_restores_a_reported_file_no_version_file_names(
+    workspace: tuple[FakeForge, Path],
+) -> None:
+    # A stamp step may write a file of its own beyond the version files:
+    # the rollback restores it because the phase reported it.
+    _fake, root = workspace
+    members = resolve_set(root, ("core",))
+    own = root / "packages" / "core" / "VERSION.txt"
+    own.write_text("0.2.0\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: a file of the step's own")
+    own.write_text("9.9.9\n")
+    rollback_prepare(root, members, ["packages/core/VERSION.txt"])
+    assert own.read_text() == "0.2.0\n"
     assert git.is_clean(root)
 
 

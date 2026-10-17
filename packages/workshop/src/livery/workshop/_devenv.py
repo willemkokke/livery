@@ -5,18 +5,19 @@ brought up by name, kept until removed, and removed whole by one
 verb. Its state is one directory under the runner's data directory,
 `forge-dev/envs/<name>/`: the forge's data, the runners' registrations
 and working directories, the seed's credentials, the port it took, the
-pid files of its processes, and conan's home for a pass of the loop.
-Conan keeps its remotes and logins in its home, and a release writes a
-remote there that names the environment's forge, so the pass's home
-goes with the environment. A job's conan home is its own, under the
-runner's temporary directory for that job, which the runner creates in
-its working directory and removes after the job. The caches every
-environment shares, the tool store, uv's cache and footman's data for
-the jobs, live beside them in `forge-dev/cache/`, and removing an
-environment removes none of them. A new environment is warm from its
-first job, except for conan: every job starts with an empty conan home
-and builds its conan packages again, and so does the first pass on a
-new environment.
+pid files of its processes, and what a pass of the loop places there:
+each variable an extension declares with a directory of its own
+(``{place}`` in its ``[env]`` table). A tool's home placed there, say
+one that keeps the remotes a release writes, names the environment's
+forge and goes with the environment. A job's own placement is under
+the runner's temporary directory for that job, which the runner
+creates in its working directory and removes after the job. The caches
+every environment shares, the tool store, uv's cache and footman's
+data for the jobs, live beside them in `forge-dev/cache/`, and removing
+an environment removes none of them. A new environment is warm from
+its first job, except for what a job places in its own directory: every
+job starts without it, and so does the first pass on a new
+environment.
 
 A removal takes the whole directory or refuses. A part this user may
 not remove, such as a file a build container left owned by root, is
@@ -52,7 +53,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -186,19 +187,26 @@ class Environment:
         """Runner *number*'s directory."""
         return self.runners_dir / f"{number:02d}"
 
-    @property
-    def conan_home(self) -> Path:
-        """Conan's home for a pass of the loop on this environment.
+    def variables(
+        self, extensions: Iterable[str], environ: Mapping[str, str]
+    ) -> dict[str, str]:
+        """The variables *extensions* declare, placed for a pass on this environment.
 
-        The pass and every process it starts run conan with it. A
-        release writes the ``workshop`` remote into the home conan runs
-        with, naming this environment's forge, so the home is in the
-        environment's directory and goes with it. Each job a runner
-        takes has a home of its own under the job's temporary
-        directory, which `setup.sh github` places, so no two of the
-        pass and its jobs run conan on one cache at the same time.
+        Each by name, to the value it takes against *environ*: one
+        *environ* carries wins unless the declaration says ``always``,
+        and a value naming ``{place}`` takes this environment's
+        directory, so what the pass and the processes it starts keep
+        there goes with the environment. Each job a runner takes places
+        its own under the job's temporary directory, which
+        `setup.sh github` names, so no two of the pass and its jobs
+        share one.
+
+        Raises:
+            Failed: when two of *extensions* declare one variable.
         """
-        return self.directory / "conan"
+        from livery.workshop._variables import declared_variables, placed
+
+        return placed(declared_variables(extensions), str(self.directory), environ)
 
     def values(self) -> dict[str, str]:
         """The env file's pairs; empty when there is none yet."""
@@ -466,12 +474,11 @@ def app_ini(env: Environment, port: int) -> str:
 def runner_config(env: Environment, number: int, *, capacity: int = 4) -> str:
     """The runner's configuration: the rig's shared caches, in every job's environment.
 
-    Conan's home is not among them. Conan's cache takes one process at
-    a time and the runner takes *capacity* jobs at once, so each job
-    keeps its own home under the temporary directory the runner creates
-    for it, where `setup.sh github` places it, whatever ``CONAN_HOME``
-    the job inherits. That home goes with the job, and with it the
-    ``workshop`` remote a release the job runs writes there.
+    A variable an extension declares with a directory of its own is not
+    among them: the runner takes *capacity* jobs at once, so each job
+    places it under the temporary directory the runner creates for it,
+    where `setup.sh github` places it, whatever value the job inherits.
+    It goes with the job.
     """
     from livery.footman import directory_variable
 

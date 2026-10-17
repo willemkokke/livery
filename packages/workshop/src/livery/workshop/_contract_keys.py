@@ -104,10 +104,11 @@ def _parsed(path: Path) -> dict[str, Any]:
 
 #: The top-level tables of ``extension.toml`` that ``[for.<target>]``
 #: does not take again: the extension's identity, the targets table
-#: itself, and the contract keys it owns, which no target changes, and
-#: the templates it declares, each of which names the extensions it
-#: needs in its own ``extensions``.
-_UNMIRRORED = ("extension", "for", "contract", "templates")
+#: itself, and the contract keys it owns, which no target changes; the
+#: templates it declares, each of which names the extensions it needs in
+#: its own ``extensions``; and the environment variables it needs, which
+#: do not depend on what else is listed.
+_UNMIRRORED = ("extension", "for", "contract", "templates", "env")
 
 
 @functools.cache
@@ -115,9 +116,9 @@ def base_keys() -> tuple[Declared, ...]:
     """The base's keys, read from its ``contract.toml``, in every contract.
 
     ``[for.<target>]`` in an ``extension.toml`` takes every table of
-    the file's top level again but ``[extension]``, ``[for]`` and
-    ``[contract]``, so the file declares each key once and they are
-    repeated here under ``for.*``.
+    the file's top level again but ``[extension]``, ``[for]``,
+    ``[contract]``, ``[templates]`` and ``[env]``, so the file declares
+    each key once and they are repeated here under ``for.*``.
 
     Raises:
         DeclarationError: when the file declares a key off the shape an
@@ -160,8 +161,8 @@ def _mirrored(found: tuple[Declared, ...]) -> tuple[Declared, ...]:
     """*found*'s ``extension.toml`` keys again under ``for.*``, their docs unchanged.
 
     Every key of the file's top-level tables but those of
-    ``[extension]``, ``[for]``, ``[contract]`` and ``[templates]``,
-    which no target changes.
+    ``[extension]``, ``[for]``, ``[contract]``, ``[templates]`` and
+    ``[env]``, which no target changes.
     """
     return tuple(
         replace(item, path=f"for.*.{item.path}")

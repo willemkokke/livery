@@ -31,6 +31,30 @@ such verb: list the extension in `[workspace] extensions` and run
 `fm sync`, which installs `livery-extensions-conan`, and the verb
 exists.
 
+## Conan's home
+
+conan keeps its cache, its remotes and its logins in its home, and its
+cache takes one writer at a time. The extension declares the home in
+its `extension.toml`, and the workshop places it in a directory of its
+own wherever it names one:
+
+```toml
+[env.CONAN_HOME]
+value = "{place}/conan"
+always = true
+doc = "conan's cache takes one writer at a time, so each CI job, loop pass and scale fixture keeps a home of its own"
+```
+
+On a CI job the home is `conan` under the job's own directory:
+`RUNNER_TEMP` on a GitHub or Gitea job, `.workshop` under
+`CI_PROJECT_DIR` on a GitLab one. `always` makes it beat a
+`CONAN_HOME` the runner sets for every job, since a runner may run
+several jobs at once. A pass of the loop keeps it in its development
+environment's directory, so a remote a release writes there goes with
+the environment's forge, and the scale fixture keeps it in the
+fixture's directory. On a desk nothing names a directory, and conan's
+own default stands.
+
 ## The sync
 
 Before `uv sync` installs a member whose build goes through the
@@ -64,7 +88,13 @@ tuple in refuses, and nothing is written.
 ## The release
 
 The `stamp` step writes the release's version into the recipe's
-`version` attribute. The `build` step runs `conan create`, which builds
+`version` attribute, and raises each requirement on a member released
+with the package, `"<name>/[>=<floor>]"`, to that member's version. A
+member released alone moves no floor. A python package that lists
+nanobind consumes a recipe that names no version: nanobind's own
+stamp step raises that recipe's floors through
+[livery.extensions.conan.raise_floors][], which the entry module
+serves. The `build` step runs `conan create`, which builds
 the package into the conan cache, on the build phase's isolated side;
 the gate builds on the tree side, where conan creates nothing. A
 release build saves the package out of the cache as

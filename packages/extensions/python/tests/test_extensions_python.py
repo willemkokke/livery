@@ -315,6 +315,44 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     assert record.accounted == ()
 
 
+def test_python_s_stamp_raises_a_co_member_s_floor_and_reports_the_file(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import _lifecycle
+
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["python"]\n')
+    for name, requirement in (("core", ""), ("app", '"acme-core>=0.1.0"')):
+        directory = tmp_path / "packages" / name
+        directory.mkdir(parents=True)
+        (directory / "workshop.toml").write_text(
+            f'extensions = ["python"]\nname = "acme-{name}"\n'
+        )
+        (directory / "pyproject.toml").write_text(
+            f'[project]\nname = "acme-{name}"\nversion = "0.2.0"\n'
+            f"dependencies = [{requirement}]\n"
+            "[project.optional-dependencies]\n"
+            f"test = [{requirement}]\n"
+        )
+    app = {p.name: p for p in discover_packages(tmp_path)}["acme-app"]
+    pyproject = app.directory / "pyproject.toml"
+    # Released alone, the stamp moves no floor.
+    assert _lifecycle.stamp(app, tmp_path, "0.2.0") == []
+    # With its co-member's version as a floor, every requirement on it
+    # takes the version, the dependencies and the extras alike.
+    changed = _lifecycle.stamp(
+        app, tmp_path, "0.3.0", floors={"packages/core": "0.3.0"}
+    )
+    assert changed == ["pyproject.toml"]
+    text = pyproject.read_text()
+    assert text.count('"acme-core>=0.3.0"') == 2
+    assert 'version = "0.3.0"' in text
+    # A floor on a member the pyproject does not name moves nothing.
+    assert (
+        _lifecycle.stamp(app, tmp_path, "0.3.0", floors={"packages/other": "9.0.0"})
+        == []
+    )
+
+
 def test_the_python_steps_stamp_and_publish_as_its_code_does(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

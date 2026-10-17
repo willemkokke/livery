@@ -12,6 +12,7 @@ import pytest
 
 from livery.footman import Failed
 from livery.workshop._clean import CleanPlan, clean_tree, plan_clean, render_plan
+from livery.workshop._declaration import DeclaredVariable
 from livery.workshop._env_tasks import (
     EnvDelta,
     agent_delta,
@@ -33,6 +34,7 @@ from livery.workshop._envfile import (
     quote_value,
     set_value,
 )
+from workshop_extension_fakes import fake_extensions
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -233,6 +235,36 @@ def _contract(root: Path, forge: str, *ci: str) -> Path:
     return root
 
 
+#: An extension declaring a variable in a directory of its own, as a
+#: tool whose cache takes one writer at a time does.
+DECLARING = """\
+[env.ACME_HOME]
+value = "{place}/acme"
+always = true
+doc = "acme's cache takes one writer at a time"
+"""
+
+#: The variable `DECLARING` declares, as the workshop reads it.
+ACME_HOME = DeclaredVariable(
+    "ACME_HOME",
+    "{place}/acme",
+    "acme's cache takes one writer at a time",
+    always=True,
+    extension="acme.cache",
+)
+
+
+def _declaring_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A GitHub workspace whose root lists ``acme.cache``, declaring ``ACME_HOME``."""
+    fake_extensions(tmp_path / "fakes", monkeypatch, cache=DECLARING)
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "workshop.toml").write_text(
+        '[workspace]\nextensions = ["acme.cache"]\n[forge]\nkind = "github"\n'
+    )
+    return root
+
+
 def test_the_windows_temp_policy_refuses_a_value_that_is_neither(
     tmp_path: Path,
 ) -> None:
@@ -325,7 +357,7 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
     # written names.
     from livery.workshop import _env_tasks
 
-    root = _contract(tmp_path, "github")
+    root = _declaring_root(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -336,11 +368,12 @@ def test_the_github_emission_with_a_target_persists_and_prints_the_shell_lines(
     monkeypatch.setenv("GITHUB_ENV", str(env_file))
     monkeypatch.setenv("GITHUB_PATH", str(path_file))
     monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
-    # A home the runner sets for all its jobs is not the one persisted.
-    monkeypatch.setenv("CONAN_HOME", "/rig/runner/conan")
+    # A home the runner sets for all its jobs is not the one persisted:
+    # the declaration says always.
+    monkeypatch.setenv("ACME_HOME", "/rig/runner/acme")
     out = _env_tasks.env_emit("posix", github=True)
     assert env_file.is_file() and path_file.is_file()
-    assert f"CONAN_HOME={tmp_path}/conan" in env_file.read_text().splitlines()
+    assert f"ACME_HOME={tmp_path}/acme" in env_file.read_text().splitlines()
     assert "export " in out and "PATH+" not in out
     for line in path_file.read_text().splitlines():
         assert line in out
@@ -1062,18 +1095,29 @@ def test_env_set_ci_writes_through_the_protocol(
 def test_a_job_whose_runner_names_no_temp_directory_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A job keeps conan's home in its own temp: without one there is no
+    # A job keeps a declared home in its own temp: without one there is no
     # home that is the job's alone, and the emission persists nothing.
+    # The refusal names the variable and the extension that declares it.
     with pytest.raises(_FAILURES) as caught:
-        runner_placements({"GITHUB_ACTIONS": "true"})
-    assert "this job's runner sets no RUNNER_TEMP" in str(caught.value)
+        runner_placements({"GITHUB_ACTIONS": "true"}, (ACME_HOME,))
+    assert str(caught.value) == (
+        "this job's runner sets no RUNNER_TEMP: acme.cache declares ACME_HOME"
+        " in a directory of the job's own, so run it on a runner that sets one"
+    )
     missing = tmp_path / "gone" / "_temp"
     with pytest.raises(_FAILURES) as caught:
-        runner_placements({"GITHUB_ACTIONS": "true", "RUNNER_TEMP": str(missing)})
-    assert f"RUNNER_TEMP names {missing}, which is not a directory" in str(caught.value)
+        runner_placements(
+            {"GITHUB_ACTIONS": "true", "RUNNER_TEMP": str(missing)}, (ACME_HOME,)
+        )
+    assert str(caught.value) == (
+        f"RUNNER_TEMP names {missing}, which is not a directory: acme.cache"
+        " declares ACME_HOME in it, so its runner must create it first"
+    )
+    # A set that declares no variable in a directory of its own needs none.
+    assert runner_placements({"GITHUB_ACTIONS": "true"}) == {}
     from livery.workshop import _env_tasks
 
-    root = _contract(tmp_path, "github")
+    root = _declaring_root(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "livery.workshop._extensions.workspace_root", lambda start=None: root
     )
@@ -1088,21 +1132,22 @@ def test_a_job_whose_runner_names_no_temp_directory_refuses_naming_it(
     assert not env_file.exists()
 
 
-def test_two_jobs_on_one_runner_get_two_conan_homes_whatever_the_runner_sets(
+def test_two_jobs_on_one_runner_get_two_declared_homes_whatever_the_runner_sets(
     tmp_path: Path,
 ) -> None:
-    # A runner that takes several jobs at once and sets one CONAN_HOME
-    # for all of them: each job's home is its own temp's, and uv's cache,
-    # which takes many processes at once, stays the runner's.
-    runner = {"GITHUB_ACTIONS": "true", "CONAN_HOME": "/rig/runner/conan"}
+    # A runner that takes several jobs at once and sets one ACME_HOME
+    # for all of them: the declaration says always, so each job's home is
+    # its own temp's, and uv's cache, which takes many processes at once,
+    # stays the runner's.
+    runner = {"GITHUB_ACTIONS": "true", "ACME_HOME": "/rig/runner/acme"}
     runner["UV_CACHE_DIR"] = "/rig/cache/uv"
     first, second = tmp_path / "job-1" / "tmp", tmp_path / "job-2" / "tmp"
     first.mkdir(parents=True)
     second.mkdir(parents=True)
-    one = runner_placements({**runner, "RUNNER_TEMP": str(first)})
-    other = runner_placements({**runner, "RUNNER_TEMP": str(second)})
-    assert one["CONAN_HOME"] == f"{first}/conan"
-    assert other["CONAN_HOME"] == f"{second}/conan"
+    one = runner_placements({**runner, "RUNNER_TEMP": str(first)}, (ACME_HOME,))
+    other = runner_placements({**runner, "RUNNER_TEMP": str(second)}, (ACME_HOME,))
+    assert one["ACME_HOME"] == f"{first}/acme"
+    assert other["ACME_HOME"] == f"{second}/acme"
     assert one["UV_CACHE_DIR"] == other["UV_CACHE_DIR"] == "/rig/cache/uv"
 
 
@@ -1118,11 +1163,11 @@ def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner
     assert runner_placements({}) == {}
     assert with_runner_placements(delta, {}) == delta
     temp = str(tmp_path)
-    placed = with_runner_placements(delta, {"RUNNER_TEMP": temp})
+    placed = with_runner_placements(delta, {"RUNNER_TEMP": temp}, (ACME_HOME,))
     assert placed.values == {
         "PLAIN": "1",
         "UV_CACHE_DIR": f"{temp}/uv-cache",
-        "CONAN_HOME": f"{temp}/conan",
+        "ACME_HOME": f"{temp}/acme",
         _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }
     assert placed.paths == delta.paths
@@ -1176,30 +1221,41 @@ def test_a_placement_the_job_already_sets_is_persisted_as_it_is(
     own sync and then asks for the emission: a key it set must reach
     the steps after it, with the value it set. A runner with persistent
     caches sets them for every step, and persisting the same value
-    changes nothing for it. An empty value is unset. Conan's home is
-    the exception, always the temp's
-    (`test_two_jobs_on_one_runner_get_two_conan_homes_whatever_the_runner_sets`).
+    changes nothing for it. An empty value is unset. A declared
+    variable with ``always`` is the exception, always the temp's
+    (`test_two_jobs_on_one_runner_get_two_declared_homes_whatever_the_runner_sets`),
+    and one without it keeps the job's value too.
     """
+    from dataclasses import replace
+
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     (tmp_path / "_temp").mkdir()
     temp = str(tmp_path / "_temp")
-    placed = runner_placements({"RUNNER_TEMP": temp})
+    placed = runner_placements({"RUNNER_TEMP": temp}, (ACME_HOME,))
     assert placed == {
         "UV_CACHE_DIR": f"{temp}/uv-cache",
-        "CONAN_HOME": f"{temp}/conan",
+        "ACME_HOME": f"{temp}/acme",
         _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }
     kept = runner_placements(
         {
             "RUNNER_TEMP": temp,
             "UV_CACHE_DIR": "/rig/cache/uv",
-            "CONAN_HOME": "",
+            "ACME_HOME": "",
             _paths.env_var("DATA_DIR"): f"{temp}/footman",
-        }
+        },
+        (ACME_HOME,),
     )
     assert kept == {
         "UV_CACHE_DIR": "/rig/cache/uv",
-        "CONAN_HOME": f"{temp}/conan",
+        "ACME_HOME": f"{temp}/acme",
         _paths.env_var("DATA_DIR"): f"{temp}/footman",
     }
+    shared = replace(ACME_HOME, always=False)
+    assert (
+        runner_placements(
+            {"RUNNER_TEMP": temp, "ACME_HOME": "/rig/runner/acme"}, (shared,)
+        )["ACME_HOME"]
+        == "/rig/runner/acme"
+    )

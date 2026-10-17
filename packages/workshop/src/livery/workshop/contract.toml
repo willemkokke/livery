@@ -10,8 +10,8 @@
 # string under those names is the key's own declaration.
 #
 # [for.<target>] in an extension.toml takes every table of its top level
-# again but [extension], [for] and [contract]: the composer repeats them
-# under for.*, so they are written once, below.
+# again but [extension], [for], [contract], [templates] and [env]: the
+# composer repeats them under for.*, so they are written once, below.
 #
 # The base's phases are declared at the end, under [phases.<phase>], its
 # queries under [queries.<name>], the tools it runs under [toolroom] and
@@ -546,6 +546,28 @@ doc = "the shipped files of the base and of the extensions this one requires tha
 types = ["str"]
 doc = "a shipped file of the base or of an extension this one requires, <owner>:<name>, to the reason this one deletes it"
 
+[contract.extension.env]
+types = ["table"]
+doc = "the environment variables the extension needs, by name: the workshop sets each for every fm run, in a CI job's entry, in a pass of the loop and in the scale fixture; none when absent"
+
+# One variable, by the name a shell exports it under: letters, digits
+# and underscores, not starting with a digit. Its doc key is declared
+# below, so the table carries none of its own.
+[contract.extension.env."*"]
+types = ["table"]
+
+[contract.extension.env."*".value]
+types = ["str"]
+doc = "the variable's value; {place} in it stands for a directory of the variable's own: a CI job's own directory, the development environment's for a pass of the loop, the scale fixture's; nowhere else names one, and there the variable is not set; required"
+
+[contract.extension.env."*".always]
+types = ["bool"]
+doc = "whether the value beats one the environment already carries; false when absent, and the environment's value wins"
+
+[contract.extension.env."*".doc]
+types = ["str"]
+doc = "what the variable is for, which the entry script says when the value replaces the environment's; required"
+
 [contract.extension.extension]
 types = ["table"]
 doc = "the extension's identity: what it does, its workshop API version, its plugin, the extensions it requires, and what it waits for while dormant"
@@ -576,7 +598,7 @@ doc = "what the extension adds to other listed extensions, by target"
 
 [contract.extension.for."*"]
 types = ["table"]
-doc = "a target extension, by its listed name, to what this one adds while both are listed: every table the top level takes but [extension], [for] and [contract]; the files it ships under content/for/<target>/ are delivered then too"
+doc = "a target extension, by its listed name, to what this one adds while both are listed: every table the top level takes but [extension], [for], [contract], [templates] and [env]; the files it ships under content/for/<target>/ are delivered then too"
 
 [contract.extension.fragments]
 types = ["table"]
@@ -1011,8 +1033,15 @@ gated = false
 after = []
 verb = false
 
+# The stamp phase's keys: the version the release writes, and its
+# floors, each member released with the package, by its path, to the
+# version it releases at, empty for a member released alone. Each step
+# writes the version into its own manifests and raises there each floor
+# a manifest declares on one of those members; the base raises the
+# floors of the package's [[depends]] edges in its workshop.toml.
 [phases.stamp.keys]
 version = "str"
+floors = "table"
 
 [phases.publish]
 level = "package"
@@ -1083,7 +1112,9 @@ combine = "union"
 [queries.current-version]
 combine = "agreed"
 
-# Every file the stamp phase may write a version into.
+# Every file the stamp phase's steps may write into: a version, or a
+# floor on a member released with the package. The release keeps these
+# files first and restores them after a build, a failure included.
 [queries.version-files]
 combine = "union"
 

@@ -13,6 +13,18 @@ requires = ["cpp"]
 [toolroom]
 requires = ["conan"]
 
+# Conan's home, in a directory of its own wherever the workshop names
+# one: a CI job's own directory, the development environment's for a
+# pass of the loop, the scale fixture's. Conan keeps its cache, its
+# remotes and its logins there. Its cache takes one writer at a time,
+# and a runner may run several jobs at once, so the declared home beats
+# one the runner sets for every job. On a desk nothing names a
+# directory, and conan's own default stands.
+[env.CONAN_HOME]
+value = "{place}/conan"
+always = true
+doc = "conan's cache takes one writer at a time, so each CI job, loop pass and scale fixture keeps a home of its own"
+
 # The questions about a package this extension answers, from its recipe.
 # Its requirement writer writes into the recipe for a sibling that is a
 # conan package: one that holds conan and whose recipe names a reference.
@@ -38,9 +50,11 @@ registry = "livery.extensions.conan._answers:registry"
 main = "livery.extensions.conan._steps:profile"
 extensions = ["conan"]
 
+# The stamp writes the version into the recipe, and raises there each
+# requirement's floor on a member released with the package.
 [phases.stamp.conan]
 main = "livery.extensions.conan._steps:stamp"
-reads = ["version"]
+reads = ["version", "floors"]
 provides = { changed = "strs" }
 
 # The release's conan package, created in the conan cache on the build

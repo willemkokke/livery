@@ -45,11 +45,24 @@ itself, since the store's binary is linked against the host's C
 library. A build refuses a wheel tagged `none-any`: such a wheel was
 built without its extension module.
 
-The steps of python and conan that would build or release something
-else are deleted in every package whose set holds nanobind, each with
-its reason:
+The steps of python and conan that would stamp, build or release
+something else are deleted in every package whose set holds nanobind,
+each with its reason. The release's stamp is nanobind's own: it writes
+the version into `pyproject.toml` and every `__version__` and raises the
+pyproject's floors through python, and raises the recipe's floors
+through conan, since one step of a package reports the files the stamp
+changed:
 
 ```toml
+[phases.stamp.nanobind]
+main = "livery.extensions.nanobind._stamp:stamp"
+reads = ["version", "floors"]
+provides = { changed = "strs" }
+
+[phases.stamp.nanobind.deletes]
+"python:stamp.python" = "this step writes the version and the pyproject's floors through python's stamp, and raises the recipe's floors too"
+"conan:stamp.conan" = "the package's recipe names the requirements its extension module builds against and no version, and this step raises its floors through conan"
+
 [phases.build.nanobind]
 main = "livery.extensions.nanobind._build:build"
 isolated = true
@@ -58,7 +71,6 @@ provides = { dist = "path" }
 
 [phases.build.nanobind.deletes]
 "python:build.python" = "uv build writes a pure wheel, and the package's wheels are platform wheels, which this step builds with the sdist"
-"conan:stamp.conan" = "the package's recipe names the requirements its extension module builds against, and no version to stamp"
 "conan:build.conan" = "the package's recipe creates no conan package: the provider installs its requirements while the wheels build"
 "conan:publish.conan" = "the package releases its wheels, never a conan package"
 ```

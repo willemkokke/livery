@@ -4,11 +4,11 @@
 # for the distribution, cpp for the extension module's sources, and
 # conan for the provider that resolves their dependencies, which the
 # package consumes without being a conan package. What nanobind adds is
-# the build of the wheels and the sdist, the deletion of the steps of
-# python and conan that would build or release something else, the
-# tools the build runs, the release's wheels job, the key that names
-# the runners its legs run on, and the answer naming the members the
-# job builds.
+# the release's stamp across both manifests, the build of the wheels and
+# the sdist, the deletion of the steps of python and conan that would
+# stamp, build or release something else, the tools the build runs, the
+# release's wheels job, the key that names the runners its legs run on,
+# and the answer naming the members the job builds.
 
 [extension]
 description = "A python package whose extension module is C++, bound through nanobind: its platform wheels and sdist built for a release, on the runners the package names in [nanobind] wheel-platforms."
@@ -40,6 +40,21 @@ job-built-members = "livery.extensions.nanobind._ci:job_built_members"
 [queries."python.dev-group"]
 value = ["nanobind>=2.7"]
 
+# The release's stamp: the version into pyproject.toml and every
+# __version__, and each floor on a member released with the package, in
+# the pyproject and in the recipe, through python's and conan's entry
+# modules. One step of a package reports the files the phase changed,
+# so python's and conan's stamp steps are deleted in every package
+# whose set holds nanobind.
+[phases.stamp.nanobind]
+main = "livery.extensions.nanobind._stamp:stamp"
+reads = ["version", "floors"]
+provides = { changed = "strs" }
+
+[phases.stamp.nanobind.deletes]
+"python:stamp.python" = "this step writes the version and the pyproject's floors through python's stamp, and raises the recipe's floors too"
+"conan:stamp.conan" = "the package's recipe names the requirements its extension module builds against and no version, and this step raises its floors through conan"
+
 # The release's build: cibuildwheel builds and repairs the platform
 # wheels, and uv the sdist, on the build phase's isolated side. The
 # steps python and conan add that would build or release something
@@ -53,7 +68,6 @@ provides = { dist = "path" }
 
 [phases.build.nanobind.deletes]
 "python:build.python" = "uv build writes a pure wheel, and the package's wheels are platform wheels, which this step builds with the sdist"
-"conan:stamp.conan" = "the package's recipe names the requirements its extension module builds against, and no version to stamp"
 "conan:build.conan" = "the package's recipe creates no conan package: the provider installs its requirements while the wheels build"
 "conan:publish.conan" = "the package releases its wheels, never a conan package"
 

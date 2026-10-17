@@ -528,9 +528,10 @@ EXPORTS: dict[str, list[str]] = {
         "advertised_providers",
         "task_page",
     ],
-    "livery.extensions.python": ["module_docs", "run_isolated_test"],
+    "livery.extensions.python": ["module_docs", "run_isolated_test", "stamp"],
     "livery.extensions.conan": [
         "WORKSPACE_FILE",
+        "raise_floors",
         "restore_from_releases",
         "save_cache",
         "workspace_aside",

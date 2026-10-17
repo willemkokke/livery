@@ -54,6 +54,11 @@ does for this one by declaring a ``[for.<this>]`` table: until a listed
 extension does, this one is dormant
 ([livery.workshop._extensions.dormancy][]).
 
+An ``[env.<NAME>]`` table declares an environment variable the
+extension needs (``DeclaredVariable``): its ``value``, ``always``, and
+its ``doc``. A ``[for.<target>]`` table declares none, since a variable
+an extension needs does not depend on what else is listed.
+
 A step table's ``deletes`` names the steps of other extensions that
 never run for a package whose set holds this one, each
 ``<owner>:<phase>.<step>`` to the reason: the base's, or those of an
@@ -222,6 +227,45 @@ class DeclaredOutput:
 
 
 @dataclass(frozen=True)
+class DeclaredVariable:
+    """An environment variable an extension needs: an ``[env.<NAME>]`` table.
+
+    The workshop sets it for every ``fm`` run, in a CI job's entry, in a
+    pass of the loop and in the scale fixture.
+
+    Attributes:
+        name: The variable's name.
+        value: Its value, as the file spells it. ``{place}`` in it
+            stands for a directory of the variable's own, which each
+            place the variable is set in names; no other brace form is
+            taken.
+        doc: What the variable is for.
+        always: Whether the value beats one the environment already
+            carries. Without it, the environment's value wins.
+        extension: The extension that declares it.
+    """
+
+    name: str
+    value: str
+    doc: str
+    always: bool = False
+    extension: str = ""
+
+    @property
+    def placed(self) -> bool:
+        """Whether the value names ``{place}``, so it is set only where one is named."""
+        from livery.workshop._variables import PLACE_WORD
+
+        return PLACE_WORD in self.value
+
+    def render(self, place: str) -> str:
+        """The value with *place* where ``{place}`` stands."""
+        from livery.workshop._variables import PLACE_WORD
+
+        return self.value.replace(PLACE_WORD, place)
+
+
+@dataclass(frozen=True)
 class Declaration:
     """An extension's declaration file, read and judged.
 
@@ -274,6 +318,7 @@ class Declaration:
             category to the patterns it takes, relative to the package.
         templates: The templates it declares, by name, in the file's
             order.
+        env: The environment variables it needs, in the file's order.
     """
 
     extension: str
@@ -315,6 +360,7 @@ class Declaration:
     templates: dict[str, DeclaredTemplate] = field(
         default_factory=dict[str, "DeclaredTemplate"]
     )
+    env: tuple[DeclaredVariable, ...] = ()
 
 
 _LOCATED: dict[tuple[str, tuple[str, ...]], Path] = {}
@@ -378,6 +424,7 @@ _NAMED = (
     ("for", "*", "queries", "*", "value"),
     ("fragments",),
     ("for", "*", "fragments"),
+    ("env",),
 )
 
 
@@ -561,6 +608,7 @@ def _read(
             for category, patterns in data.get("categories", {}).items()
         ),
         templates=templates,
+        env=reader.variables(data),
     )
 
 
@@ -1163,6 +1211,62 @@ class _Reader:
             self.reference(table["render"], (*where, "render")),
             local=bool(table.get("local", False)),
         )
+
+    def variables(self, data: dict[str, Any]) -> tuple[DeclaredVariable, ...]:
+        """The environment variables *data*'s ``[env]`` table declares, in its order.
+
+        The schema judged the types of ``value``, ``doc`` and ``always``
+        before this read. Refuses a name no shell exports, a missing
+        ``value`` or ``doc``, an empty ``doc``, a value holding a line
+        break, and a brace form in the value other than ``{place}``,
+        naming it: so a later placeholder never changes what a declared
+        value means.
+        """
+        from livery.workshop._variables import NAME, PLACE_WORD, unanswered
+
+        found: list[DeclaredVariable] = []
+        for name, table in data.get("env", {}).items():
+            where = ("env", str(name))
+            if not NAME.fullmatch(str(name)):
+                raise self.refuse(
+                    where,
+                    "is no variable name: letters, digits and underscores, not"
+                    " starting with a digit, as a shell exports one",
+                )
+            entry = cast("dict[str, Any]", table)
+            for key, what in (
+                ("value", "the variable's value"),
+                ("doc", "what the variable is for"),
+            ):
+                if key not in entry:
+                    raise self.refuse((*where, key), f"is missing: {what}")
+            value, doc = str(entry["value"]), str(entry["doc"]).strip()
+            if not doc:
+                raise self.refuse(
+                    (*where, "doc"), "is empty: say what the variable is for"
+                )
+            if "\n" in value or "\r" in value:
+                raise self.refuse(
+                    (*where, "value"), "holds a line break, which no export can carry"
+                )
+            wrong = unanswered(value)
+            if wrong:
+                raise self.refuse(
+                    (*where, "value"),
+                    f"names {', '.join(wrong)}, which an [env] value does not"
+                    f" answer; it answers {PLACE_WORD} alone, a directory of the"
+                    " variable's own",
+                )
+            found.append(
+                DeclaredVariable(
+                    str(name),
+                    value,
+                    doc,
+                    always=bool(entry.get("always", False)),
+                    extension=self.extension,
+                )
+            )
+        return tuple(found)
 
     def shipped_for(self, data: dict[str, Any]) -> None:
         """Refuse ``content/for/<target>/`` for a target with no ``[for]`` table.
