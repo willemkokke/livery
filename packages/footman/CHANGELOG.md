@@ -13,6 +13,7 @@ versions may include breaking changes.
 - The docs extension declares a docs phase and a deploy phase, and the task reference, the package generators and coverage's pages become their steps by @willemkokke
 - Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
 - Fm sync refreshes the completion manifest in the background when it changed what is installed by @willemkokke
+- Every job of a point without a gate job records the run's row by @willemkokke
 
 ### Fixed
 

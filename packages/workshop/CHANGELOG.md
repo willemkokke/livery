@@ -19,6 +19,10 @@
 - The gate job folds a platform's shards by @willemkokke
 - Fm ci.timings shows a platform's shards beside its folded row by @willemkokke
 - Fm ci.footprint sums the runner-minutes the metrics window holds, and prices them where GitHub gives them away by @willemkokke
+- A pull request's check legs default to the first runner the contract names by @willemkokke
+- Fm sync mirrors the store's row series alone, and a read outside the mirror names the scope by @willemkokke
+- Every job of a point without a gate job records the run's row by @willemkokke
+- The loop runs its check leg as two shards by @willemkokke
 
 ### Fixed
 
@@ -33,6 +37,14 @@
 - The release rehearsal passes and leaves its tree as it found it by @willemkokke
 - Pin every action by commit and hand the secrets to the entry step by @willemkokke
 - Drop the shard key from a one-shard runner's entry in a sharded matrix by @willemkokke
+- The shard record names its suites by @willemkokke
+- The loop's watch judges the runs it caused and names a dispatched run as foreign by @willemkokke
+- The test session scrubs the leg's label from the runner's environment by @willemkokke
+- The merge point dispatches no copy of a wave that already failed at the squash by @willemkokke
+- A leg's timing row reads a gate step drawn as an async span by @willemkokke
+- The extensions' entry modules carry their version, and rehearsals check it by @willemkokke
+- A file has one shard whatever run of the test step reaches it by @willemkokke
+- A dispatch test runs as a CI run, and real-conan tests keep short homes by @willemkokke
 
 ### Changed
 
