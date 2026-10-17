@@ -158,6 +158,21 @@ required-context = "gate"
 # only while investigating.
 profile = true
 
+# The balancer, nightly: it reads the timing rows and, when a count
+# should move and the predicted wall moves by more than 10%, writes the
+# counts into `[ci] shards` and `[ci] pull-request-shards` above on the
+# day's branch, renders the workflows, and submits the change unarmed
+# for a person to merge; a day whose branch origin already holds at
+# these counts submits nothing. Once, on the first leg, before the
+# refresh: it leaves the checkout where it found it, so the refresh
+# submits from the default branch as before. Every nightly, since the
+# cadences are weekly and the nightly is daily.
+[[ci.schedule]]
+point = "nightly"
+task = "ci.balance"
+args = ["--submit"]
+once = true
+
 # toolroom's refresh, every two weeks on the nightly point: the tools'
 # new releases are observed, the stubs regenerated, and what moved is
 # committed and submitted, armed when every change only added to a

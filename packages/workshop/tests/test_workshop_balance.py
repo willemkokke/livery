@@ -1,22 +1,36 @@
-"""The balancer: the reading per platform, the prediction, and the proposal.
+"""The balancer: the reading, the prediction, the proposal, the write and the submit.
 
 The refusals and the edge cases first, then the three platforms of
-the measures section proposing 1, 3 and 4.
+the measures section proposing 1, 3 and 4; the write's refusals and
+the rewrite on text, then the submit's refusals and its happy path
+against the fake forge.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from livery import git
+from livery.footman import Failed
+from livery.forge.testing import FakeForge
 from livery.workshop import _balance, _metrics
 from livery.workshop._ci_context import state_store
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from livery.workshop._points import check_shards, pull_request_shards
+from workshop_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    seed_copier,
+    wire_pushes,
+)
+
+_FAILURES = (SystemExit, Failed)
 
 # The measures section's platforms: F, O and S in seconds, p a ratio.
 UBUNTU = _balance.Reading(
@@ -395,16 +409,20 @@ def test_an_empty_store_proposes_nothing(work: Path) -> None:
     ]
 
 
-def test_the_measures_rows_propose_one_three_and_four_through_the_store(
-    work: Path,
-) -> None:
-    _contract(work, 'pull-request-runners = ["ubuntu-latest", "macos-latest"]\n')
-    shapes = {
-        "ubuntu-latest": (31_000.0, 84_000.0, 534_000.0, 2.6),
-        "macos-latest": (74_000.0, 78_000.0, 1_231_000.0, 2.2),
-        "windows-latest": (69_000.0, 84_000.0, 2_514_000.0, 2.9),
-    }
-    files = {}
+#: The measures section's platforms as the store's rows carry them: F, O
+#: and S in milliseconds, p a ratio.
+SHAPES = {
+    "ubuntu-latest": (31_000.0, 84_000.0, 534_000.0, 2.6),
+    "macos-latest": (74_000.0, 78_000.0, 1_231_000.0, 2.2),
+    "windows-latest": (69_000.0, 84_000.0, 2_514_000.0, 2.9),
+}
+
+
+def _measures_files(
+    shapes: dict[str, tuple[float, float, float, float]],
+) -> dict[str, str]:
+    """Four full green rows of *shapes*, then an affected row and a red one."""
+    files: dict[str, str] = {}
     for n in range(1, 5):
         jobs = {
             f"check ({os}, 3.14)": _job(
@@ -423,7 +441,18 @@ def test_the_measures_rows_propose_one_three_and_four_through_the_store(
     files[_metrics.run_file("6")] = json.dumps(
         _row(6, {"check (windows-latest, 3.14)": _job(conclusion="failure")}, day=17)
     )
+    return files
+
+
+def _store(work: Path, files: dict[str, str]) -> None:
     assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
+
+
+def test_the_measures_rows_propose_one_three_and_four_through_the_store(
+    work: Path,
+) -> None:
+    _contract(work, 'pull-request-runners = ["ubuntu-latest", "macos-latest"]\n')
+    _store(work, _measures_files(SHAPES))
     lines = _balance.render(work, cap=4)
     assert lines[0] == (
         "  6 run(s) in the window, 2026-10-11 to 2026-10-17; the newest 10 full"
@@ -440,3 +469,520 @@ def test_the_measures_rows_propose_one_three_and_four_through_the_store(
     assert '  [ci] shards = { "macos-latest" = 3, "windows-latest" = 4 }' in lines
     assert '  [ci] pull-request-shards = { "macos-latest" = 3 }' in lines
     assert "  predicted run wall: 286 s for the slowest leg, from 936 s" in lines
+
+
+# --- the write: refusals first ----------------------------------------------
+
+#: A contract whose [ci] table has comments between its keys and a
+#: table after it, as this repository's does.
+CONTRACT = """\
+[workspace]
+extensions = []
+
+[forge]
+kind = "gitea"
+owner = "owner"
+
+[ci]
+# Every tier-1 platform gates.
+runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+# A pull request's legs run on two of them.
+pull-request-runners = ["ubuntu-latest", "macos-latest"]
+# The one status name branch protection requires.
+required-context = "gate"
+
+# The refresh, nightly.
+[[ci.schedule]]
+point = "nightly"
+task = "toolroom.refresh"
+once = true
+"""
+
+SHARDS_COMMENT = (
+    "# The shards each runner's check leg runs as; fm ci.balance --write sets them."
+)
+PULLS_COMMENT = (
+    "# The shards a pull request's check legs run as; fm ci.balance --write sets them."
+)
+
+
+def _contract_text(work: Path, text: str) -> None:
+    (work / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.14"\n'
+    )
+    (work / "workshop.toml").write_text(text, encoding="utf-8")
+
+
+def _lines(work: Path) -> list[str]:
+    return (work / "workshop.toml").read_text(encoding="utf-8").splitlines()
+
+
+def test_a_write_with_no_rows_writes_nothing_and_says_why(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _contract_text(work, CONTRACT)
+    before = _lines(work)
+    assert _balance.write(work, _balance.read(work)) is None
+    assert capsys.readouterr().out == "  nothing written: the record holds no row\n"
+    assert _lines(work) == before
+
+
+def test_a_write_with_too_few_rows_writes_nothing_and_says_why(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _contract_text(work, CONTRACT)
+    _store(
+        work,
+        {
+            _metrics.run_file(str(n)): json.dumps(row)
+            for n, row in enumerate(_ubuntu_rows(2), start=1)
+        },
+    )
+    before = _lines(work)
+    assert _balance.write(work, _balance.read(work)) is None
+    assert capsys.readouterr().out == (
+        "  nothing written: no platform has 3 full green rows with the test steps'"
+        " wall\n"
+    )
+    assert _lines(work) == before
+
+
+def test_a_changed_count_whose_wall_moves_within_ten_percent_writes_nothing(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # F 10 s, O 40 s, S 100 s, p 1: the walls are 110, 60, 50 and 50 s,
+    # so the proposal is 3; the contract holds 4, and the wall does not
+    # move between them. Writing 3 would only start the flapping the
+    # hysteresis is there to stop.
+    _contract_text(
+        work,
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "owner"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nshards = { "ubuntu-latest" = 4 }\n',
+    )
+    rows = _ubuntu_rows(
+        3,
+        fixed=10_000.0,
+        other={"check/typecheck.mypy": 40_000.0},
+        test_ms=100_000.0,
+        packages={"workshop": 100_000.0},
+    )
+    _store(
+        work,
+        {_metrics.run_file(str(n)): json.dumps(row) for n, row in enumerate(rows, 1)},
+    )
+    before = _lines(work)
+    balance = _balance.read(work)
+    assert balance.shards is not None
+    assert (balance.shards.current, balance.shards.proposed) == (
+        {"ubuntu-latest": 4},
+        {"ubuntu-latest": 3},
+    )
+    assert _balance.write(work, balance) is None
+    assert capsys.readouterr().out == (
+        "  nothing written: the predicted run wall moves from 50 s to 50 s,"
+        " within 10%\n"
+    )
+    assert _lines(work) == before
+
+
+def test_a_max_above_the_contracts_cap_refuses_by_name(work: Path) -> None:
+    _contract_text(work, CONTRACT)
+    _store(work, _measures_files(SHAPES))
+    with pytest.raises(_FAILURES) as caught:
+        _balance.read(work, cap=6)
+    assert str(caught.value).startswith("--max=6 is above [ci] shards-max, 4")
+
+
+def test_a_key_spelled_as_its_own_table_refuses_by_name(work: Path) -> None:
+    _contract_text(work, CONTRACT + '\n[ci.shards]\n"windows-latest" = 2\n')
+    _store(work, _measures_files(SHAPES))
+    before = _lines(work)
+    with pytest.raises(_FAILURES) as caught:
+        _balance.write(work, _balance.read(work))
+    assert "[ci] shards is not a key of the [ci] table" in str(caught.value)
+    assert _lines(work) == before
+
+
+# --- the write ----------------------------------------------------------------
+
+
+def test_a_changed_count_over_the_threshold_rewrites_the_two_keys_and_keeps_the_rest(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _contract_text(work, CONTRACT)
+    _store(work, _measures_files(SHAPES))
+    before = _lines(work)
+    written = _balance.write(work, _balance.read(work))
+    assert written == {
+        "shards": {"macos-latest": 3, "windows-latest": 4},
+        "pull-request-shards": {"macos-latest": 3},
+    }
+    at = before.index('required-context = "gate"') + 1
+    assert _lines(work) == [
+        *before[:at],
+        SHARDS_COMMENT,
+        'shards = { "macos-latest" = 3, "windows-latest" = 4 }',
+        PULLS_COMMENT,
+        'pull-request-shards = { "macos-latest" = 3 }',
+        *before[at:],
+    ]
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        '  [ci] shards: none becomes { "macos-latest" = 3, "windows-latest" = 4 }',
+        '  [ci] pull-request-shards: none becomes { "macos-latest" = 3 }',
+        "  the predicted run wall moves from 936 s to 286 s",
+    ]
+    # The contract reads back as the legs the matrix fans out to.
+    assert check_shards(work) == [
+        "check-ubuntu-latest-3.14",
+        *(f"check-macos-latest-3.14-{i}of3" for i in (1, 2, 3)),
+        *(f"check-windows-latest-3.14-{i}of4" for i in (1, 2, 3, 4)),
+    ]
+    assert pull_request_shards(work) == [
+        "check-ubuntu-latest-3.14",
+        *(f"check-macos-latest-3.14-{i}of3" for i in (1, 2, 3)),
+    ]
+    # A second write finds the contract at the counts and leaves it.
+    after = _lines(work)
+    assert _balance.write(work, _balance.read(work)) is None
+    assert capsys.readouterr().out == (
+        "  nothing written: every count is the contract's\n"
+    )
+    assert _lines(work) == after
+
+
+def test_a_count_of_one_removes_the_key_with_its_comment(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # F 100 s, O 10 s, S 150 s, p 1: a second shard saves 75 s against
+    # a setup of 100 s, so the proposal is one; the contract holds 2.
+    _contract_text(
+        work,
+        '[workspace]\nextensions = []\n\n[forge]\nkind = "gitea"\nowner = "owner"\n'
+        '\n[ci]\n# One runner.\nrunners = ["ubuntu-latest"]\n# Set by hand.\n'
+        'shards = { "ubuntu-latest" = 2 }\n# Traces on.\nprofile = true\n',
+    )
+    rows = _ubuntu_rows(
+        3,
+        fixed=100_000.0,
+        other={"check/typecheck.mypy": 10_000.0},
+        test_ms=150_000.0,
+        packages={"workshop": 150_000.0},
+    )
+    _store(
+        work,
+        {_metrics.run_file(str(n)): json.dumps(row) for n, row in enumerate(rows, 1)},
+    )
+    before = _lines(work)
+    assert _balance.write(work, _balance.read(work)) == {"shards": {}}
+    at = before.index("# Set by hand.")
+    assert _lines(work) == [*before[:at], *before[at + 2 :]]
+    assert capsys.readouterr().out.splitlines() == [
+        '  [ci] shards: { "ubuntu-latest" = 2 } becomes none',
+        "  the predicted run wall moves from 175 s to 250 s",
+    ]
+    assert check_shards(work) == ["check-ubuntu-latest-3.14"]
+
+
+def _counts(key: str, current: int, proposed: int, before: float, after: float):
+    return _balance.Counts(
+        key, ("a",), {"a": current}, {"a": proposed}, before=before, after=after
+    )
+
+
+def test_the_judge_writes_nothing_without_a_proposal_or_a_change() -> None:
+    verdict = _balance.judge(_balance.Balance([], reason="the record holds no row"))
+    assert (verdict.tables, verdict.why) == (
+        None,
+        "nothing written: the record holds no row",
+    )
+    same = _balance.Balance([], _counts("shards", 3, 3, 300.0, 300.0))
+    assert _balance.judge(same).why == "nothing written: every count is the contract's"
+
+
+def test_the_judge_reads_the_pull_request_wall_when_only_those_counts_change() -> None:
+    shards = _counts("shards", 3, 3, 300.0, 300.0)
+    moved = _balance.Balance(
+        [], shards, _counts("pull-request-shards", 1, 3, 600.0, 300.0)
+    )
+    verdict = _balance.judge(moved)
+    assert verdict.tables == {"shards": {"a": 3}, "pull-request-shards": {"a": 3}}
+    assert (verdict.what, verdict.before, verdict.after) == (
+        "pull request",
+        600.0,
+        300.0,
+    )
+    still = _balance.Balance(
+        [], shards, _counts("pull-request-shards", 2, 3, 300.0, 280.0)
+    )
+    assert _balance.judge(still).why == (
+        "nothing written: the predicted pull request wall moves from 300 s to"
+        " 280 s, within 10%"
+    )
+
+
+# --- the rewrite, on text alone ----------------------------------------------
+
+
+def test_the_rewrite_replaces_a_key_in_place_and_keeps_the_lines_around_it() -> None:
+    text = (
+        '[ci]\n# a\nrunners = [\n    "a",\n]\n# b\n'
+        'shards = {\n  "a" = 2,\n}  # by hand\n# c\nprofile = true\n'
+        '\n[[ci.schedule]]\npoint = "nightly"\n'
+    )
+    out = _balance.rewrite(text, "shards", {"a": 3})
+    assert out == text.replace(
+        'shards = {\n  "a" = 2,\n}  # by hand', 'shards = { "a" = 3 }  # by hand'
+    )
+    # The same table again is the same text.
+    assert _balance.rewrite(out, "shards", {"a": 3}) == out
+
+
+def test_the_rewrite_adds_a_missing_key_after_the_last_key_of_the_table() -> None:
+    text = (
+        '[ci]  # the table\n# a\nrunners = ["a"]\n\n# The refresh.\n'
+        '[[ci.schedule]]\npoint = "nightly"\n'
+    )
+    out = _balance.rewrite(text, "pull-request-shards", {"a": 2})
+    assert out == (
+        '[ci]  # the table\n# a\nrunners = ["a"]\n'
+        f'{PULLS_COMMENT}\npull-request-shards = {{ "a" = 2 }}\n'
+        '\n# The refresh.\n[[ci.schedule]]\npoint = "nightly"\n'
+    )
+    # A table with no key takes it right under the header.
+    assert _balance.rewrite("[ci]\n\n[x]\n", "shards", {"a": 2}) == (
+        f'[ci]\n{SHARDS_COMMENT}\nshards = {{ "a" = 2 }}\n\n[x]\n'
+    )
+
+
+def test_the_rewrite_adds_the_table_when_the_contract_has_none() -> None:
+    assert _balance.rewrite('[workspace]\nname = "x"\n', "shards", {"a": 2}) == (
+        f'[workspace]\nname = "x"\n\n[ci]\n{SHARDS_COMMENT}\nshards = {{ "a" = 2 }}\n'
+    )
+    # An absent key with an empty table is nothing to write.
+    for text in ('[workspace]\nname = "x"\n', '[ci]\nrunners = ["a"]\n'):
+        assert _balance.rewrite(text, "shards", {}) == text
+
+
+# --- the submit: refusals first ---------------------------------------------
+
+DAY = date(2026, 10, 17)
+BRANCH = "chore/balance-20261017"
+
+
+@pytest.fixture
+def forge(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[FakeForge, Any, list[Path]]:
+    """The fake forge as this workspace's, every push reaching it; gate and sync seamed.
+
+    The gate is the submit's own and runs elsewhere; the sync stands in
+    for the render, leaving a file that proves it ran before the commit.
+    """
+    fake = FakeForge()
+    fake.create_repo("owner", "scratch", private=True, description="t")
+    repo = fake.repository("owner", "scratch")
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: repo
+    )
+    wire_pushes(monkeypatch, fake, "owner", "scratch")
+    monkeypatch.setattr("livery.workshop._submit._gate", lambda *a, **k: None)
+    synced: list[Path] = []
+
+    def rendering(root: Path, **_: object) -> bool:
+        synced.append(root)
+        (root / "rendered.txt").write_text("rendered\n")
+        return True
+
+    monkeypatch.setattr("livery.workshop._sync.sync_checkout", rendering)
+    monkeypatch.chdir(work)
+    return fake, repo, synced
+
+
+def _no_forge(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refused(_root: Path) -> Any:
+        raise AssertionError("the forge was asked")
+
+    monkeypatch.setattr("livery.workshop._forge_lane.this_repository", refused)
+
+
+def test_a_submit_off_the_default_branch_refuses_by_name(
+    work: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _contract_text(work, CONTRACT)
+    _store(work, _measures_files(SHAPES))
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    git.create_branch(work, "feat/elsewhere")
+    (work / "w.txt").write_text("w\n")
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "feat: elsewhere")
+    _no_forge(monkeypatch)
+    before = _lines(work)
+    _balance.submit(work, on=DAY)
+    assert capsys.readouterr().out == (
+        "  not on origin's default branch (on feat/elsewhere): nothing is written"
+        " or submitted; the balancer submits from the default branch alone\n"
+    )
+    assert _lines(work) == before
+    assert git.current_branch(work) == "feat/elsewhere"
+    assert not git.local_branch_exists(work, BRANCH)
+
+
+def test_a_submit_with_nothing_written_opens_nothing(
+    work: Path,
+    forge: tuple[FakeForge, Any, list[Path]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, repo, synced = forge
+    _contract_text(work, CONTRACT)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    _git(work, "push", "-q", "origin", "main")
+    _balance.submit(work, on=DAY)
+    out = capsys.readouterr().out.splitlines()
+    assert out[-2:] == [
+        "  nothing written: the record holds no row",
+        "  no branch, no pull request",
+    ]
+    assert repo.pr.find_by_head(BRANCH) is None
+    assert not git.local_branch_exists(work, BRANCH)
+    assert git.current_branch(work) == "main"
+    assert synced == []
+
+
+def test_a_submit_on_a_dirty_tree_refuses_before_any_branch(
+    work: Path, forge: tuple[FakeForge, Any, list[Path]]
+) -> None:
+    _, repo, _synced = forge
+    _contract_text(work, CONTRACT)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    _git(work, "push", "-q", "origin", "main")
+    _store(work, _measures_files(SHAPES))
+    (work / "loose.txt").write_text("loose\n")
+    before = _lines(work)
+    with pytest.raises(_FAILURES) as caught:
+        _balance.submit(work, on=DAY)
+    assert str(caught.value).startswith("the working tree has uncommitted changes")
+    assert _lines(work) == before
+    assert not git.local_branch_exists(work, BRANCH)
+    assert repo.pr.find_by_head(BRANCH) is None
+
+
+def _origin_holding(work: Path, counts: str) -> None:
+    """Push the day's branch to origin holding *counts* in its contract, from main."""
+    _git(work, "switch", "-qc", BRANCH, "origin/main")
+    text = (work / "workshop.toml").read_text(encoding="utf-8")
+    anchor = 'required-context = "gate"\n'
+    assert anchor in text
+    (work / "workshop.toml").write_text(
+        text.replace(anchor, anchor + counts), encoding="utf-8"
+    )
+    _git(work, "commit", "-qam", "chore(ci): an earlier balance")
+    _git(work, "push", "-q", "origin", BRANCH)
+    _git(work, "switch", "-q", "main")
+
+
+def test_a_second_submit_the_same_day_with_the_same_counts_opens_nothing(
+    work: Path,
+    forge: tuple[FakeForge, Any, list[Path]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, repo, synced = forge
+    _contract_text(work, CONTRACT)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    _git(work, "push", "-q", "origin", "main")
+    _store(work, _measures_files(SHAPES))
+    _origin_holding(
+        work,
+        'shards = { "macos-latest" = 3, "windows-latest" = 4 }\n'
+        'pull-request-shards = { "macos-latest" = 3 }\n',
+    )
+    before = _lines(work)
+    _balance.submit(work, on=DAY)
+    out = capsys.readouterr().out.splitlines()
+    assert out[-1] == (
+        f"  the day's balance is already submitted: {BRANCH} on origin holds these"
+        " counts; nothing is written"
+    )
+    assert _lines(work) == before
+    assert git.current_branch(work) == "main"
+    assert repo.pr.find_by_head(BRANCH) is None
+    assert synced == []
+
+
+def test_a_second_submit_the_same_day_with_other_counts_refuses_by_name(
+    work: Path, forge: tuple[FakeForge, Any, list[Path]]
+) -> None:
+    _contract_text(work, CONTRACT)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    _git(work, "push", "-q", "origin", "main")
+    _store(work, _measures_files(SHAPES))
+    _origin_holding(work, 'shards = { "windows-latest" = 2 }\n')
+    with pytest.raises(_FAILURES) as caught:
+        _balance.submit(work, on=DAY)
+    assert str(caught.value) == (
+        f'{BRANCH} on origin holds other counts ([ci] shards {{ "windows-latest" = 2'
+        " }; [ci] pull-request-shards none) than this reading proposes ([ci]"
+        ' shards { "macos-latest" = 3, "windows-latest" = 4 }; [ci]'
+        ' pull-request-shards { "macos-latest" = 3 }): merge or close its pull'
+        " request, then run the balancer again; nothing is written"
+    )
+    assert git.current_branch(work) == "main"
+
+
+# --- the submit ---------------------------------------------------------------
+
+
+def test_a_due_change_is_committed_on_the_days_branch_and_submitted_unarmed(
+    work: Path,
+    forge: tuple[FakeForge, Any, list[Path]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, repo, synced = forge
+    _contract_text(work, CONTRACT)
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "chore: the contract")
+    _git(work, "push", "-q", "origin", "main")
+    _store(work, _measures_files(SHAPES))
+    main = git.head_sha(work)
+    _balance.submit(work, on=DAY)
+    out = capsys.readouterr().out.splitlines()
+    title = "chore(ci): the check legs run as macos-latest 3, windows-latest 4"
+    assert f"  on {BRANCH}" in out
+    assert "  arming: off - decided by the balancer, which never arms" in out
+    assert f"  opened PR #1: {title}" in out
+    assert "  submitted unarmed: PR #1 waits for a person" in out
+    assert out[-1] == "  back on main"
+    # The branch holds one commit on main's tip: the contract and what
+    # the sync rendered, so the sync ran before the commit.
+    assert synced == [work]
+    assert _git(work, "rev-parse", f"{BRANCH}~1").strip() == main
+    assert _git(work, "log", "-1", "--format=%s", BRANCH).strip() == title
+    assert _git(work, "log", "-1", "--format=%b", BRANCH).strip() == (
+        "the predicted run wall moves from 936 s to 286 s"
+    )
+    changed = _git(work, "show", "--name-only", "--format=", BRANCH).split()
+    assert sorted(changed) == ["rendered.txt", "workshop.toml"]
+    held = _git(work, "show", f"{BRANCH}:workshop.toml")
+    assert 'shards = { "macos-latest" = 3, "windows-latest" = 4 }' in held
+    assert 'pull-request-shards = { "macos-latest" = 3 }' in held
+    # The pull request is open and parked: never armed.
+    pr = repo.pr.find_by_head(BRANCH)
+    assert pr is not None and pr.title == title and pr.state == "open"
+    assert not pr.merged and not repo.pr.is_armed(pr.number)
+    # The checkout is back where it started, clean, with main untouched.
+    assert git.current_branch(work) == "main"
+    assert git.head_sha(work) == main
+    assert git.is_clean(work)
+    # The same day again finds the branch on origin at these counts.
+    _balance.submit(work, on=DAY)
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        f"  the day's balance is already submitted: {BRANCH} on origin holds these"
+        " counts; nothing is written"
+    )
+    assert repo.pr.find_by_head(BRANCH) is not None
+    assert pr.number == 1
