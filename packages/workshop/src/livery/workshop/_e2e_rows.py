@@ -16,6 +16,7 @@ is the coverage extension's, and the loop leaves the base with phase
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -169,19 +170,30 @@ def record_units(root: Path, base: str, leg: str) -> dict[str, UnitRow]:
     """*base*'s coverage record on *leg*: the current row of each unit, by path.
 
     A current row is named by its unit's slug alone; a kept row, named
-    by its moment and closure as well, is not a unit of the record.
-    Fails naming the ref when it cannot be read; an absent record is
-    empty.
+    by its moment and closure as well, and a fixed-facts file under
+    ``facts/`` are not units of the record. The rows are read raw and
+    four fields taken, so the loop carries neither the coverage
+    extension's schema number nor its parser. Fails naming the ref when
+    it cannot be read; an absent record is empty.
     """
     series = COVERAGE_RECORD.series(base, leg)
     store = state_store(root)
-    with git.remote_snapshot(store, fetch=(series.ref,)):
-        found = series.rows(store, only=lambda name: name.count(".") == 1)
+
+    def current(name: str) -> bool:
+        return name.count(".") == 1 and "/" not in name
+
+    with git.remote_snapshot(store, fetch=(series.name,)):
+        found = git.read(store, series.ref, only=current)
     if found.failed:
         fail(f"{series.ref} could not be read: {found.reason}")
     units: dict[str, UnitRow] = {}
-    for row in found.rows:
-        data: dict[str, Any] = row.data
+    for _name, text in sorted((found.files or {}).items()):
+        try:
+            data = json.loads(text)
+        except ValueError:
+            continue
+        if not isinstance(data, dict):
+            continue
         unit = str(data.get("unit") or "")
         if unit:
             units[unit] = UnitRow(
