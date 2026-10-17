@@ -1363,7 +1363,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-ty"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/ty" }
 dependencies = [
     { name = "livery-toolroom" },
