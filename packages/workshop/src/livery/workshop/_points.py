@@ -53,7 +53,7 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._shard import ONE, Shard
+from livery.workshop._shard import ONE, Shard, platform_leg, shard_of
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -1851,6 +1851,25 @@ def pull_request_shards(root: Path) -> list[str]:
             listed=pull_request_listed(ci),
         )
     return _shard_legs(runners, gate_pythons(root), counts)
+
+
+def sharded_legs(root: Path) -> list[str]:
+    """The platform legs the contract splits into shards, on any event.
+
+    Each platform leg once, in matrix order: one ``[ci] shards`` or
+    ``[ci] pull-request-shards`` gives above one
+    ([livery.workshop.check_shards][],
+    [livery.workshop.pull_request_shards][]). Empty without a root
+    contract. The task fails as those fail, naming the key and the
+    runner.
+    """
+    if not (root / "workshop.toml").is_file():
+        return []
+    found: dict[str, None] = {}
+    for leg in (*check_shards(root), *pull_request_shards(root)):
+        if shard_of(leg) != ONE:
+            found.setdefault(platform_leg(leg), None)
+    return list(found)
 
 
 def effective_point(point: str) -> str:

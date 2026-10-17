@@ -72,6 +72,7 @@ def _marker(
     rows: Sequence[str] = ("r1.json",),
     before: str = BEFORE,
     suites: Sequence[str] = SUITES,
+    attempt: str = "",
 ) -> dict[str, Any]:
     return {
         "shard": shard,
@@ -80,6 +81,7 @@ def _marker(
         "rows": list(rows),
         "before": before,
         "suites": list(suites),
+        "attempt": attempt,
     }
 
 
@@ -345,6 +347,90 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
         rf" \({WIN1} {re.escape(BEFORE)}, {WIN2} {re.escape(later)}\)",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
+
+
+def _attempted(work: Path, first: dict[str, Any], second: dict[str, Any]) -> None:
+    """Windows as two shards whose records are *first* and *second*."""
+    _put(work, WIN1, _row(WIN1, marker=first, files={FILES[0]: 1.0}))
+    _put(work, WIN2, _row(WIN2, marker=second, files={FILES[1]: 0.3, FILES[2]: 0.2}))
+
+
+ATTEMPTS = (
+    rf"{WINDOWS}: its shards come from different attempts of the run"
+    rf" \({WIN1} attempt 1,"
+    rf" {WIN2} attempt 2\); a rerun of some jobs partitions afresh, so rerun the"
+    r" whole run \(\S+ ci.rerun\)"
+)
+
+
+def test_shards_from_different_attempts_whose_partitions_differ_name_the_attempts(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A rerun of the failed jobs keeps the passing shards' refs from the
+    # first attempt, and the rerun shard partitions afresh: whatever
+    # differs, the refusal names the attempts and the recovery, since
+    # the partitions cannot be reconciled from here.
+    one = _marker("1of2", FILES[:1], attempt="1")
+    other = _shard.files_digest(FILES[1:])
+    cases = [
+        _marker("2of2", FILES[1:], digest=other, attempt="2"),
+        _marker("2of2", FILES[1:], suites=("packages/a",), attempt="2"),
+        _marker("2of2", FILES[1:], rows=("r2.json",), attempt="2"),
+        _marker("2of2", FILES[1:], before="2026-10-17T10:00:00+00:00", attempt="2"),
+        _marker("2of2", FILES, attempt="2"),
+        _marker("2of2", FILES[1:2], attempt="2"),
+    ]
+    for second in cases:
+        _attempted(work, one, second)
+        capsys.readouterr()
+        with pytest.raises(_FAILURES, match=ATTEMPTS):
+            _fold.fold_run(work, RUN, folders=FOLDERS)
+        out = capsys.readouterr().out
+        assert re.search(rf"^  fold: {ATTEMPTS}$", out, re.MULTILINE), out
+    # A record without an attempt reads as attempt "", which differs
+    # from a recorded one: the refusal names it as unknown.
+    _attempted(work, _marker("1of2", FILES[:1]), cases[0])
+    with pytest.raises(
+        _FAILURES, match=rf"\({WIN1} attempt unknown, {WIN2} attempt 2\)"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+
+
+def test_shards_of_one_attempt_refuse_as_before_and_of_two_attempts_fold_alike(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # One attempt, two partitions: the proof names what differs, as it
+    # does for records without an attempt.
+    other = _shard.files_digest(FILES[1:])
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="2"),
+        _marker("2of2", FILES[1:], digest=other, attempt="2"),
+    )
+    with pytest.raises(
+        _FAILURES, match=rf"{WINDOWS}: the shards partitioned different test-file sets"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="2"),
+        _marker("2of2", FILES, attempt="2"),
+    )
+    with pytest.raises(_FAILURES, match=rf"{WINDOWS}: 1 file\(s\) ran in two shards"):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    # Two attempts with one partition fold: the proof does not care
+    # about the attempt by itself.
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="1"),
+        _marker("2of2", FILES[1:], attempt="2"),
+    )
+    capsys.readouterr()
+    _fold.fold_run(work, RUN, folders={})
+    assert capsys.readouterr().out == (
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 file(s) ran\n"
+    )
+    assert _refs(work) == {_metrics.run_ref(RUN, WINDOWS)}
 
 
 def test_a_file_in_two_shards_or_in_none_refuses(work: Path) -> None:

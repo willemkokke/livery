@@ -633,7 +633,7 @@ def _run_check(
     root_for_ci = workspace_root()
     run = run_context()
     if root_for_ci is not None and run is not None:
-        _leave_empty_share(root_for_ci, shard)
+        _leave_empty_share(root_for_ci, shard, attempt=run.attempt)
     # The nightly point pays the whole gate: the record it would skip on
     # was stamped by a run that selected the gate's tests, not its own,
     # and a narrowed nightly would be no nightly. A dispatched run sets
@@ -884,7 +884,7 @@ def _current_point() -> str:
     return os.environ.get(POINT_VARIABLE, "gate")
 
 
-def _leave_empty_share(root: Path, shard: Shard) -> None:
+def _leave_empty_share(root: Path, shard: Shard, *, attempt: str = "") -> None:
     """Leave the shard's record of an empty test-file set, before the gate decides.
 
     The gate job's fold proves a platform's shards from the record each
@@ -895,7 +895,8 @@ def _leave_empty_share(root: Path, shard: Shard) -> None:
     bound, the same on every shard of the platform, so the fold folds
     the platform's skipped shards into one skipped leg. The test step's
     own record replaces it when the step runs. One shard of one leaves
-    none.
+    none. *attempt* is the run's attempt, recorded as the test step
+    records it.
     """
     if shard == ONE:
         return
@@ -906,6 +907,7 @@ def _leave_empty_share(root: Path, shard: Shard) -> None:
         files=(),
         rows=(),
         before=checkout_time(root),
+        attempt=attempt,
     )
 
 

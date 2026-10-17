@@ -1476,7 +1476,16 @@ absence.
   the gate skipped on every shard, the tree already proved or
   nothing affected, or no step that reads the shard ran. Its shards
   fold on their scopes and files alone and the fold says so; one
-  shard with a record beside one without is red by name. A run with
+  shard with a record beside one without is red by name. Each record
+  names the attempt of the run the shard ran in, as the runner counts
+  them: a rerun of the failed jobs alone keeps the per-run refs the
+  first attempt's passing shards left, and the shard that reruns
+  partitions afresh from the record as it then is, so the fold reads
+  one platform from two attempts with two partitions. Where the
+  partitions differ and the attempts differ, the refusal names the
+  attempts and says to rerun the whole run; `fm ci.rerun` does that
+  by itself whenever the contract splits a check leg, and says so in
+  one line. A run with
   no sharded platform says so and folds nothing. On GitLab a job run
   as `parallel: matrix` is listed as `check: [<i>of<n>]`, and the
   job's display name spells the shard that way.
