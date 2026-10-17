@@ -153,9 +153,12 @@ affected-legs = true
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
 required-context = "gate"
-# Every job keeps a trace of what it did, on the traces' own refs, which
-# no sync mirrors. Off is zero cost, for an installation that wants it
-# only while investigating.
+# Every job runs profiled and each check leg writes its timing row from
+# the trace ([ci] timing, on unless said otherwise). This repository
+# also pushes the traces themselves to the traces' own refs, which no
+# sync mirrors, for fm ci.profile; off, the default, keeps the rows and
+# drops the push, for an installation that wants a run's timeline only
+# while investigating.
 profile = true
 
 # The balancer, nightly: it reads the timing rows and, when a count

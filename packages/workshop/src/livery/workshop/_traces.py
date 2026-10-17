@@ -1,19 +1,27 @@
 """The legs' traces: what a run cost, kept where no sync brings it.
 
-A profiled leg pushes the trace it wrote to a namespace of its own, outside
-the one refspec a sync mirrors. A checkout pays nothing for traces nobody
-asked for, and the gate reads none of them. The file is a Chrome trace of
-that leg: every task, step and test it ran, and the wall-clock origin of its
-own clock, so one leg's timeline can be laid beside another's.
+A profiled job leaves two records, and the workspace contract prices them
+apart under ``[ci]``. ``timing``, on unless the contract says otherwise,
+runs every entry of every job profiled: each check leg writes a Chrome
+trace of every task, step and test it ran, and its timing row, kilobytes
+that `fm ci.timings`, the speed marks and `fm ci.balance` read, comes from
+that trace. ``profile``, off unless asked, pushes the trace itself,
+megabytes a leg that only `fm ci.profile` reads, to a namespace of its own,
+outside the one refspec a sync mirrors. ``profile-window`` says how many
+runs the pushed channel keeps, ``profile-into`` where an assembled file
+lands, and ``profile-keep`` how many of those files stay there. A pushed
+trace is the one a profiled run writes, so ``profile = true`` beside
+``timing = false`` refuses.
 
-The workspace contract decides, under ``[ci]``: ``profile`` whether CI
-keeps a trace of itself at all, ``profile-window`` how many runs the pushed
-channel keeps, ``profile-into`` where an assembled file lands, and
-``profile-keep`` how many of those files stay there.
+Off is zero cost rather than less. ``timing = false`` runs nothing
+profiled, writes no row and pushes nothing. With ``profile`` off the trace
+stays on the runner and goes with it, so a checkout pays nothing for traces
+nobody asked for, and the gate reads none of them. The file is a Chrome
+trace of that leg: every task, step and test it ran, and the wall-clock
+origin of its own clock, so one leg's timeline can be laid beside another's.
 
-The push is observational. A contract that says no, a trace that is not
-there, and a push origin refuses are each one printed line, and none of them
-decides a job.
+The push is observational. A trace that is not there and a push origin
+refuses are each one printed line, and none of them decides a job.
 
 [livery.workshop._traces.assemble][] reads the other way: one trace for a
 whole run, built from the forge's own job times and whatever traces the
@@ -32,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from livery import git
+from livery.footman import fail
 from livery.workshop._ci_context import (
     LEG_VARIABLE,
     RunContext,
@@ -56,20 +65,26 @@ TRACE_FILE = "trace.json"
 JOB_FILE = "job.json"
 
 #: The contract's keys, under ``[ci]``.
+TIMING_KEY = "timing"
 PROFILE_KEY = "profile"
 WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
 KEEP_KEY = "profile-keep"
 
-#: What the contract answers when it says nothing. A hundred runs is
-#: about a working week on a repository pushing twenty a day, which is
-#: what the channel is for: a Monday can still open Friday's run.
-#: Consecutive runs of one shape cost about 10 KiB each, because they
-#: delta against each other, so the bound is retention and not size.
-#: The checkout keeps fewer and for a different reason: a file there is
+#: What the contract answers when it says nothing. The timing rows
+#: are on: they are kilobytes a leg, and the timings, the speed marks
+#: and the balance read them. The push is off: a trace is megabytes a
+#: leg, every run, and only an assembled run reads it, so a workspace
+#: asks for it while investigating. A hundred runs is about a working
+#: week on a repository pushing twenty a day, which is what the channel
+#: is for: a Monday can still open Friday's run. Consecutive runs of
+#: one shape cost about 10 KiB each on the channel, because they delta
+#: against each other, so the bound is retention and not size. The
+#: checkout keeps fewer and for a different reason: a file there is
 #: plain on disk and deltas against nothing, so fifty bounds a disk
 #: rather than a ref.
-PROFILE_DEFAULT = True
+TIMING_DEFAULT = True
+PROFILE_DEFAULT = False
 WINDOW_DEFAULT = 100
 KEEP_DEFAULT = 50
 #: Beside the checkout's other records of what it did to itself: the
@@ -85,11 +100,18 @@ class Policy:
     """What the contract says about the legs' traces.
 
     Attributes:
-        legs: Whether CI keeps a trace of what it did at all. Off means
+        timing: Whether every job runs its entries profiled. On, each
+            check leg writes a trace of every task, step and test it
+            ran, and its timing row is read from that trace. Off means
             zero cost: no entry runs profiled, nothing is written on a
-            runner, nothing is pushed, nothing recorded. A run from a
-            period when it was off still assembles at the job level,
-            because that shape comes from the forge.
+            runner, no row, no push.
+        profile: Whether a job pushes the trace it wrote to the trace
+            refs, for a run to be assembled from. Off, the trace stays
+            on the runner and goes with it, and the timing row is
+            unaffected. On needs ``timing`` on, and a contract saying
+            otherwise refuses. A run from a period when it was off
+            still assembles at the job level, because that shape comes
+            from the forge.
         window: How many runs' traces the pushed channel keeps. This
             one governs what a later assembly can still read, so it
             decides how far back a chain can be built.
@@ -101,29 +123,45 @@ class Policy:
             strands no chain.
     """
 
-    legs: bool
+    timing: bool
+    profile: bool
     window: int
     into: str
     keep: int
 
 
 def policy(root: Path) -> tuple[Policy, str]:
-    """The contract's ``[ci] profile-*`` for *root*, and what it got wrong.
+    """The contract's ``[ci]`` trace keys for *root*, and what it got wrong.
 
     The contract's judge refuses a key of the wrong type. A count
     below zero or an empty path is named with what it must be, and the
     default stands for it.
+
+    Raises:
+        Failed: when ``profile`` is true beside ``timing = false``,
+            naming both keys. A pushed trace is the one a profiled run
+            writes, so the contradiction refuses here, where every
+            reader of the policy meets it once, rather than as a line
+            one reader prints and another never sees.
     """
     from livery.workshop._contract import load_contract
 
     contract = load_contract(root / "workshop.toml")
     found: dict[str, Any] = contract.get("ci") or {}
-    legs, why_legs = _flag(found, PROFILE_KEY, PROFILE_DEFAULT)
+    timing = _flag(found, TIMING_KEY, TIMING_DEFAULT)
+    profile = _flag(found, PROFILE_KEY, PROFILE_DEFAULT)
+    if profile and not timing:
+        fail(
+            f"[ci] {PROFILE_KEY} is true and [ci] {TIMING_KEY} is false; the trace"
+            f" pushed is the one a profiled run writes, so {PROFILE_KEY} = true"
+            f" implies {TIMING_KEY} = true: drop {TIMING_KEY} = false or set"
+            f" {PROFILE_KEY} = false"
+        )
     window, why_window = _count(found, WINDOW_KEY, WINDOW_DEFAULT)
     into, why_into = _text(found, INTO_KEY, INTO_DEFAULT)
     keep, why_keep = _count(found, KEEP_KEY, KEEP_DEFAULT)
-    return Policy(legs, window, into, keep), "; ".join(
-        why for why in (why_legs, why_window, why_into, why_keep) if why
+    return Policy(timing, profile, window, into, keep), "; ".join(
+        why for why in (why_window, why_into, why_keep) if why
     )
 
 
@@ -164,11 +202,9 @@ def sweep(at: Path, keep: int) -> list[str]:
     return lines
 
 
-def _flag(found: dict[str, Any], key: str, fallback: bool) -> tuple[bool, str]:
+def _flag(found: dict[str, Any], key: str, fallback: bool) -> bool:
     value = found.get(key)
-    if value is None:
-        return fallback, ""
-    return bool(value), ""
+    return fallback if value is None else bool(value)
 
 
 def _count(found: dict[str, Any], key: str, fallback: int) -> tuple[int, str]:
@@ -249,13 +285,14 @@ def push(
     `livery.workshop._traces.this_leg` answers for a caller running
     inside a leg, where the environment is the only source.
 
-    Empty when the contract asks for no traces, so a workspace that
-    wants none neither pushes nor says anything. Every other answer is
-    a line: a trace that was never written, a leg nothing named, a run
-    this is not, or origin's own refusal.
+    Empty when the contract asks for no pushed traces (``[ci] profile``,
+    off unless asked), so a workspace that wants none neither pushes nor
+    says anything. Every other answer is a line: a trace that was never
+    written, a leg nothing named, a run this is not, or origin's own
+    refusal.
     """
     kept, why = policy(root)
-    if not kept.legs:
+    if not kept.profile:
         return ""
     if why:
         return f"profile: {why}"
@@ -294,15 +331,14 @@ def about(root: Path, *, run: RunContext | None = None) -> str:
     commit the dispatch named. Then the forge's listing for the commit
     the run is about does not hold it, and only the run itself knows.
 
-    Empty when the contract asks for no traces, outside a run, and on
-    every run whose own head is the commit it checked out, which is
-    most of them. Every other answer is a line.
+    Written whatever the contract says about traces. The record is one
+    row, and more than the assembler reads it: the merge point asks
+    [livery.workshop._traces.runs_about][] for the wave of a squash the
+    forge filed under a tip that moved on, so a workspace that keeps no
+    trace still keeps this. Empty outside a run, and on every run whose
+    own head is the commit it checked out, which is most of them. Every
+    other answer is a line.
     """
-    # A key of the wrong type is named by the trace push of the same
-    # job, so this reads the switch and says nothing about the contract.
-    kept, _why = policy(root)
-    if not kept.legs:
-        return ""
     found = run or run_context()
     if found is None:
         return ""

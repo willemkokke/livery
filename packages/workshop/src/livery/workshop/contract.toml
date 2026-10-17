@@ -34,7 +34,7 @@ doc = "whether fm submit arms auto-merge when neither --armed nor WORKSHOP_AUTOM
 
 [contract.root.ci.profile]
 types = ["bool"]
-doc = "whether every CI job keeps a trace of what it ran; true when absent"
+doc = "whether every CI job pushes the trace it ran to the trace refs, for fm ci.profile to assemble a run from; false when absent, and true beside timing = false refuses"
 
 [contract.root.ci.profile-into]
 types = ["str"]
@@ -122,6 +122,10 @@ doc = "the most shards a runner's check leg may run as, which a count in [ci] sh
 [contract.root.ci.speed-marks]
 types = ["bool"]
 doc = "whether the gate judges each leg's test time against its recorded mark, a second slow run in a row going red; false when absent"
+
+[contract.root.ci.timing]
+types = ["bool"]
+doc = "whether every CI job runs its entries profiled, so each check leg writes the trace its timing row is read from; true when absent, and false beside profile = true refuses"
 
 [contract.root.ci.windows-temp]
 types = ["str"]

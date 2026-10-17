@@ -1539,15 +1539,17 @@ absence.
   no sharded platform says so and folds nothing. On GitLab a job run
   as `parallel: matrix` is listed as `check: [<i>of<n>]`, and the
   job's display name spells the shard that way.
-- A check leg pushes what it cost. The gate runs profiled, so the leg
-  writes a Chrome trace of every task, step and test it ran and pushes
-  it to a channel of its own: refs no sync mirrors and no gate reads,
-  so a checkout pays for a trace only when someone asks for one. `fm
-  ci.profile` then assembles a whole run into one timeline, and a
-  profiled local command carries the run it caused. See
-  [CI profiles](ci-profiles.md) for the file, the verbs, and the three
-  contract keys. The push is observational: origin refusing it is a
-  printed line and never a leg's verdict.
+- A check leg's gate runs profiled, so the leg writes a Chrome trace
+  of every task, step and test it ran, and its timing row is read
+  from that trace; `[ci] timing`, on unless the contract says
+  otherwise, governs the profiled run and the row. `[ci] profile`, off
+  unless asked, pushes the trace itself to a channel of its own: refs
+  no sync mirrors and no gate reads, so a checkout pays for a trace
+  only when someone asks for one. `fm ci.profile` then assembles a
+  whole run into one timeline, and a profiled local command carries
+  the run it caused. See [CI profiles](ci-profiles.md) for the file,
+  the verbs, and the contract keys. The push is observational: origin
+  refusing it is a printed line and never a leg's verdict.
 - On a GitHub-shaped workspace every job restores the tool store
   before it enters, under the runner's temp, the working drive, where
   the checkout and the venv are and where the store's links into the
