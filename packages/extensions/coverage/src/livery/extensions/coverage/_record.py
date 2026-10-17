@@ -43,8 +43,9 @@ so a test has one index in its unit's rows on every leg, and the legs'
 rows keep a line's set alike wherever the same tests reached it. Reach
 for
 `recorded` to read a record on a leg, `leave_run` to leave a leg's
-parts for its write, `run_legs` to read them in the gate job, and
-`put_record` to write the record. A read of a record parses its
+parts for its write, `fold_leg` to fold the files a platform's shards
+left into the platform leg's one, `run_legs` to read them in the gate
+job, and `put_record` to write the record. A read of a record parses its
 current rows and the facts they name alone, and names its kept rows,
 reading one only when the union asks for it.
 """
@@ -53,7 +54,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from operator import attrgetter
@@ -569,6 +570,102 @@ def leave_run(
     }
     leave_leg_file(root, RUN_FILE, row)
     return ""
+
+
+def fold_leg(shards: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Answer ``ci.fold`` for `RUN_FILE`: one platform leg's file from its *shards*'.
+
+    Each shard of a platform ran a slice of the test files and left
+    the parts of the suites it reached; together they are one leg's
+    measurement. The folded file names the platform leg
+    ([livery.workshop.platform_leg][]), the shards' one scope and
+    packages, and every unit any shard measured, its parts every
+    shard's concatenated in shard order: a unit one shard measured and
+    another did not is measured. The fixed facts are every shard's,
+    each name once, since a name is its content's digest.
+
+    Raises:
+        ValueError: When the shards' files are not one leg's, naming
+            what differs: legs of two platforms, two scopes, two
+            package lists, or a unit at two closures.
+    """
+    from livery.workshop import platform_leg
+
+    if not shards:
+        raise ValueError("no shard left its coverage file; nothing to fold")
+    legs = {str(shard.get("leg", "") or "") for shard in shards}
+    platforms = {platform_leg(leg) for leg in legs}
+    if len(platforms) > 1:
+        raise ValueError(
+            f"the files belong to {len(platforms)} platforms"
+            f" ({', '.join(sorted(platforms))}); a fold is one platform's"
+        )
+    scopes = {str(shard.get("scope", "") or "") for shard in shards}
+    if len(scopes) > 1:
+        raise ValueError(
+            f"the shards measured different scopes ({', '.join(sorted(scopes))});"
+            " a platform's shards run one gate"
+        )
+    packages = {
+        tuple(
+            sorted(str(item) for item in cast("list[Any]", shard.get("packages") or []))
+        )
+        for shard in shards
+    }
+    if len(packages) > 1:
+        shown = "; ".join(", ".join(held) or "none" for held in sorted(packages))
+        raise ValueError(
+            f"the shards named different packages ({shown}); a platform's shards"
+            " run one gate"
+        )
+    units: dict[str, dict[str, Any]] = {}
+    facts: dict[str, Any] = {}
+    for shard in shards:
+        raw_units: Any = shard.get("units")
+        if isinstance(raw_units, dict):
+            for path, raw in sorted(cast("dict[str, Any]", raw_units).items()):
+                if not isinstance(raw, dict):
+                    continue
+                entry = cast("dict[str, Any]", raw)
+                parts: Any = entry.get("parts")
+                held = units.get(path)
+                if held is None:
+                    units[path] = {**entry, "unit": path, "parts": []}
+                    held = units[path]
+                elif str(held.get("closure", "")) != str(entry.get("closure", "")):
+                    raise ValueError(
+                        f"{path} is measured at closure"
+                        f" {str(held.get('closure', ''))[:12]} by one shard and"
+                        f" {str(entry.get('closure', ''))[:12]} by another; a"
+                        " platform's shards measure one closure"
+                    )
+                if isinstance(parts, list):
+                    cast("list[Any]", held["parts"]).extend(parts)
+        raw_facts: Any = shard.get("facts")
+        if isinstance(raw_facts, dict):
+            for name, content in cast("dict[str, Any]", raw_facts).items():
+                facts.setdefault(name, content)
+    first = shards[0]
+    return {
+        "leg": next(iter(platforms)) if platforms else "",
+        "scope": next(iter(scopes)) if scopes else "",
+        "packages": list(next(iter(packages))) if packages else [],
+        "run": first.get("run", ""),
+        "forge": first.get("forge", ""),
+        "units": units,
+        "facts": facts,
+    }
+
+
+def folders(
+    root: Path,
+) -> dict[str, Callable[[Sequence[Mapping[str, Any]]], dict[str, Any]]]:
+    """Answer ``ci.fold``: the gate job folds `RUN_FILE` with `fold_leg`.
+
+    The answer is the same in every workspace, so *root* is not read.
+    """
+    del root
+    return {RUN_FILE: fold_leg}
 
 
 def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:

@@ -35,6 +35,7 @@ from typing import Any
 from livery import git
 from livery.footman import fail
 from livery.workshop._ci_context import RunContext, state_store
+from livery.workshop._shard import ONE, Shard
 
 #: The environment variable a test runner sets to the file the speed
 #: plugin writes each package's summed test time into, as JSON; with it
@@ -94,6 +95,10 @@ _DISPLAY = re.compile(
     r"^(?P<job>[^ (]+) \((?P<os>[^,]+), (?P<python>[^,)]+)(?:, (?P<shard>[^)]+))?\)$"
 )
 
+#: GitLab lists a job that runs as ``parallel: matrix`` by its key and
+#: the matrix value: ``check: [2of4]``.
+_GITLAB_DISPLAY = re.compile(r"^(?P<job>[^ :\[]+): \[(?P<shard>[^\]]+)\]$")
+
 
 def drop_marks(root: Path) -> list[str]:
     """Drop the marks series while the marks are off; the lines to print.
@@ -134,6 +139,55 @@ def leg_label(display: str) -> str:
         return display
     parts = (match["job"], match["os"], match["python"], match["shard"])
     return "-".join(part for part in parts if part)
+
+
+def display_shard(display: str) -> Shard:
+    """The shard a job's display name spells; `ONE` when it spells none.
+
+    ``check (windows-latest, 3.14, 2of4)`` on GitHub and Gitea,
+    ``check: [2of4]`` on GitLab. A tail that is not spelled
+    ``<i>of<n>`` names no shard, so a matrix with another third value
+    reads as one shard of one.
+    """
+    match = _DISPLAY.match(display) or _GITLAB_DISPLAY.match(display)
+    spelled = match["shard"] if match else None
+    if not spelled:
+        return ONE
+    try:
+        return Shard.parse(spelled)
+    except ValueError:
+        return ONE
+
+
+def platform_display(display: str) -> str:
+    """The display name of a shard's platform: *display* without its shard.
+
+    ``check (windows-latest, 3.14, 2of4)`` gives ``check (windows-latest,
+    3.14)`` and ``check: [2of4]`` gives ``check``; a name that spells no
+    shard stands. The gate job's fold names a platform's folded row by
+    it, and the collect joins that row with the forge's jobs.
+    """
+    if display_shard(display) == ONE:
+        return display
+    match = _DISPLAY.match(display)
+    if match is not None:
+        # The shard follows a comma and a space; what comes before is
+        # the platform's own name, closed again.
+        return f"{display[: match.start('shard') - 2]})"
+    gitlab = _GITLAB_DISPLAY.match(display)
+    return gitlab["job"] if gitlab is not None else display
+
+
+def forge_shard_row(job: str, row: Mapping[str, Any]) -> bool:
+    """Whether *job*'s *row* is the forge's own row of a shard: no scope, a shard named.
+
+    The gate job folds a platform's shards into one row under the
+    platform's display name, and the collect keeps the forge's rows of
+    the shards beside it for ``fm ci.timings``; those carry the forge's
+    times and no scope. The stamp and the speed judge skip them, since
+    the folded row carries what they read.
+    """
+    return "scope" not in row and display_shard(job) != ONE
 
 
 def leg_of(job: str, row: Mapping[str, Any]) -> str:
@@ -400,7 +454,8 @@ def samples(entries: list[dict[str, Any]], run_id: str) -> list[Sample]:
 
     *entries* are the timing rows newest first. The run's own entry
     is the one whose ``run`` is *run_id*; a check leg of it yields one
-    sample per package whose tests ran. The history is the same leg's
+    sample per package whose tests ran, and the forge's own row of a
+    shard (`forge_shard_row`) yields none. The history is the same leg's
     earlier entries that concluded green and ran the package's tests,
     newest first, up to one fewer than `SAMPLE`. Empty when the run
     has no entry.
@@ -414,6 +469,8 @@ def samples(entries: list[dict[str, Any]], run_id: str) -> list[Sample]:
     out: list[Sample] = []
     for job, row in sorted((current.get("jobs") or {}).items()):
         if not job.startswith("check") or not isinstance(row, dict):
+            continue
+        if forge_shard_row(job, row):
             continue
         leg = leg_of(job, row)
         now_slowest = _slowest(row)

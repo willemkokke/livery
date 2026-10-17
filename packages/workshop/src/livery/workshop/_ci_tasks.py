@@ -20,7 +20,9 @@ that store (livery.workshop._metrics), and ``ci.balance`` reads the
 same rows to predict each platform's wall at one to several shards
 and propose the counts (livery.workshop._balance); the hidden
 ``ci.metrics.collect`` is the gate job's writer ``ci.run`` schedules,
-and the hidden ``ci.leg`` is each check leg's one write of its row.
+the hidden ``ci.fold`` folds each platform's shards into one leg
+before the judges read, and the hidden ``ci.leg`` is each check leg's
+one write of its row.
 """
 
 from __future__ import annotations
@@ -1091,6 +1093,42 @@ def ci_leg(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     leg_flow(root, job=job, trace=trace)
+
+
+def fold_flow(root: Path) -> None:
+    """Fold each platform's shards on the run's refs into one leg; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._fold import fold_run
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: a platform's shards are folded by CI only")
+        return
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/",)):
+        fold_run(root, run)
+
+
+@ci.task(name="fold", hidden=True)
+def ci_fold() -> None:
+    """Fold each platform's shards into one check leg on the run's refs.
+
+    Runs in the gate job before the judges, the collect, the verdict
+    and the stamp read the run's refs. A platform whose check leg ran
+    as several shards has one ref per shard; the fold proves the
+    shards are one leg's work (one scope, one test-file set from one
+    durations row, every file in exactly one shard, every shard the
+    matrix produces present) and puts one ref under the platform
+    leg's key, the timing sums added and every other file folded by
+    the extension that leaves it, then drops the shards' refs. A
+    platform whose shards disagree, or one of whose shards left no
+    ref, is red naming the platform, the shards and what differs. A
+    run with no sharded platform says so and changes nothing.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    fold_flow(root)
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
