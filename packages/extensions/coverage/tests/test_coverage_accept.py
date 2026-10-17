@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
 from livery.extensions.coverage import _floors as coverage_floors
 from livery.extensions.coverage import _leg as coverage_leg
 from livery.extensions.coverage import _marks as coverage_marks
@@ -258,8 +259,9 @@ def test_the_union_reads_inside_one_listing_and_leaves_the_rounded_figures(
     monkeypatch.setattr(coverage_floors, "enforce_coverage", _enforce)
     monkeypatch.setattr("livery.workshop.leave_section", _leave)
     coverage_tasks.coverage_union()
-    # One listing holds the run's refs and every record, around the union.
-    assert fetched == [("run/7/", "coverage/")]
+    # One listing holds the run's refs and main's record, around the union:
+    # main's run names no head branch.
+    assert fetched == [("run/7/", git.NAMESPACE + "coverage/main/")]
     assert events == ["listed", "unioned", "closed"]
     assert enforced == [("packages/x",)]
     assert left == [(tmp_path, "coverage", {"packages/x": 87.65}, "%")]
