@@ -151,7 +151,7 @@ if TYPE_CHECKING:
     from livery.footman.testing import Runner as Runner
     from livery.footman.testing import recording as recording
 
-__version__ = "0.60.0"
+__version__ = "0.61.0"
 
 BUILTIN = ("footman.self", "footman.janitor", "footman.doctor")
 """Stock footman's built-in task providers — what a project-less `fm` offers.

@@ -5,6 +5,26 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.61.0] - 2026-10-17
+
+### Added
+
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- The docs extension declares a docs phase and a deploy phase, and the task reference, the package generators and coverage's pages become their steps by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+- Fm sync refreshes the completion manifest in the background when it changed what is installed by @willemkokke
+
+### Fixed
+
+- Credentials in command lines reach a profile trace as ***, and a test's mounts and environment writes are undone before the next test by @willemkokke
+- Untrack Finder's two .DS_Store files in footman's docs, and a workspace test refuses any tracked file the ignore rules match by @willemkokke
+
+### Changed
+
+- This repository's packages list their extensions by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+- A removed key, option, template or name has no code of its own: the ordinary refusal of an unknown one covers it by @willemkokke
+
 ## [0.60.0] - 2026-10-12
 
 ### Added
