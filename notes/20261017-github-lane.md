@@ -66,9 +66,12 @@ Measured on `origin/main` at `849b3d388`, 2026-10-17.
 - The CI render pins every action it uses to a commit, by forge
   (`livery.workshop._ci_generate.ACTIONS`), and hands the declared
   secrets to the entry step for `fm env.emit --github` to write into
-  the shared slot (#1778). It still privileges GitHub in one way the
-  fleet would carry into every example: the pages deploy and the token
-  fallback render for GitHub alone.
+  the shared slot (#1778). The two places it still differs by forge
+  are forge differences, not privileges: the site publishes through
+  pages on GitHub and a container on Gitea, and a pushing job's
+  checkout falls back to the job token on GitHub alone, because
+  Gitea's protected receipt tags whitelist one identity, the lane's
+  `FORGE_TOKEN`, so its job token could check out but never push them.
 
 ## Ground-truth contracts (do not violate)
 
@@ -265,6 +268,12 @@ comparison across forges runs. Acceptance: #811's.
   (`fm ci.timings`, this repository). The file carries the contract's
   two runner lists and which event takes which; the decision is the
   contract's. Reversed the day a legs job can enter for free.
+- Mine, 2026-10-17: the checkout token stays as rendered. Gitea's
+  receipt tags are protected under a single whitelist that names the
+  lane's identity, so a fallback to the job token would move a
+  missing `FORGE_TOKEN` from the checkout to the receipt push, later
+  and with a less direct message; GitHub's fallback serves a
+  repository whose rulesets let the job token push.
 - Mine, 2026-10-17, for Willem to rule: the fleet is the e2e tooling's,
   declared in this repository's contract (open item 1); github.com
   first, the other two in phase 6; a machine user's token before an
