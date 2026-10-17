@@ -190,9 +190,13 @@ class StepRecord:
             judges every file its claims reach and no other, and a
             tool with per-file ignores renders its ignores from them.
         flags: The command-line flags the step reads, from `FLAGS`:
-            ``point`` for a step that selects tests by CI point. A
-            generated verb offers the flags its steps declare, and
-            ``--fix`` with ``--safe-fix`` where a step has a fix mode.
+            ``point`` for a step that selects tests by CI point,
+            ``shard`` for a step that runs its share of a sharded
+            check leg, and so runs on every shard; a step without it
+            runs on the first shard alone
+            ([livery.workshop._steps.on_this_shard][]). A generated
+            verb offers the flags its steps declare, and ``--fix``
+            with ``--safe-fix`` where a step has a fix mode.
         arguments: Whether the step hands the tool it wraps the words
             after ``--`` on its own verb (``fm test.pytest -- -k name``),
             which it reads from [livery.workshop.PhaseContext][]'s
@@ -267,8 +271,10 @@ class StepRecord:
 _STEPS: dict[str, StepRecord] = {}
 
 
-#: The command-line flags a step may read, beyond the fix modes.
-FLAGS = ("point",)
+#: The command-line flags a step may read, beyond the fix modes:
+#: ``point``, the CI point whose tests the step selects, and ``shard``,
+#: the shard of a sharded check leg the step runs its share of.
+FLAGS = ("point", "shard")
 
 
 def register_step(record: StepRecord) -> None:
@@ -774,6 +780,7 @@ def _run_named(
     fix: bool = False,
     safe_fix: bool = False,
     point: str = "",
+    shard: str = "",
 ) -> None:
     from livery.workshop import _quality
 
@@ -781,7 +788,13 @@ def _run_named(
     if arguments and refusal:
         fail(refusal)
     _quality.run_steps(
-        names, paths, fix=fix, safe_fix=safe_fix, point=point, arguments=arguments
+        names,
+        paths,
+        fix=fix,
+        safe_fix=safe_fix,
+        point=point,
+        shard=shard,
+        arguments=arguments,
     )
 
 
@@ -797,23 +810,63 @@ _SafeFix = Annotated[bool, doc("fix, removing no code: safe for an edit in fligh
 _Point = Annotated[
     str, doc("select this CI point's tests: gate, merge, nightly, release")
 ]
+_Shard = Annotated[
+    str, doc("run this shard's share of a sharded check leg: <i>of<n>, such as 2of4")
+]
 
 
 def _verb(
     select: Callable[[], tuple[str, ...]],
     *,
     fixes: bool,
-    reads_point: bool,
+    flags: frozenset[str],
     what: str,
     refusal: str = "",
 ) -> Callable[..., None]:
     """A verb over the steps *select* names, offering exactly the flags they read.
 
-    ``--fix`` and ``--safe-fix`` where a step can fix, ``--point``
-    where one reads the point; the paths narrow the run to those files.
-    The words after ``--`` reach the step's tool, unless *refusal*
-    says why this verb takes none.
+    ``--fix`` and ``--safe-fix`` where a step can fix, ``--point`` and
+    ``--shard`` where one reads them (*flags*, from `FLAGS`); the
+    paths narrow the run to those files. The words after ``--`` reach
+    the step's tool, unless *refusal* says why this verb takes none.
+    One body per set of flags, because footman reads a verb's flags
+    from its signature, and a signature is written, not computed.
     """
+
+    def run(
+        paths: tuple[str, ...],
+        *,
+        fix: bool = False,
+        safe_fix: bool = False,
+        point: str = "",
+        shard: str = "",
+    ) -> None:
+        _run_named(
+            select(),
+            paths,
+            refusal=refusal,
+            fix=fix,
+            safe_fix=safe_fix,
+            point=point,
+            shard=shard,
+        )
+
+    def bare(*paths: _Paths) -> None:
+        run(paths)
+
+    def with_point(*paths: _Paths, point: _Point = "") -> None:
+        run(paths, point=point)
+
+    def with_shard(*paths: _Paths, shard: _Shard = "") -> None:
+        run(paths, shard=shard)
+
+    def with_point_and_shard(
+        *paths: _Paths, point: _Point = "", shard: _Shard = ""
+    ) -> None:
+        run(paths, point=point, shard=shard)
+
+    def with_fix(*paths: _Paths, fix: _Fix = False, safe_fix: _SafeFix = False) -> None:
+        run(paths, fix=fix, safe_fix=safe_fix)
 
     def with_fix_and_point(
         *paths: _Paths,
@@ -821,28 +874,36 @@ def _verb(
         safe_fix: _SafeFix = False,
         point: _Point = "",
     ) -> None:
-        _run_named(
-            select(), paths, refusal=refusal, fix=fix, safe_fix=safe_fix, point=point
-        )
+        run(paths, fix=fix, safe_fix=safe_fix, point=point)
 
-    def with_fix(*paths: _Paths, fix: _Fix = False, safe_fix: _SafeFix = False) -> None:
-        _run_named(select(), paths, refusal=refusal, fix=fix, safe_fix=safe_fix)
+    def with_fix_and_shard(
+        *paths: _Paths,
+        fix: _Fix = False,
+        safe_fix: _SafeFix = False,
+        shard: _Shard = "",
+    ) -> None:
+        run(paths, fix=fix, safe_fix=safe_fix, shard=shard)
 
-    def with_point(*paths: _Paths, point: _Point = "") -> None:
-        _run_named(select(), paths, refusal=refusal, point=point)
+    def with_fix_point_and_shard(
+        *paths: _Paths,
+        fix: _Fix = False,
+        safe_fix: _SafeFix = False,
+        point: _Point = "",
+        shard: _Shard = "",
+    ) -> None:
+        run(paths, fix=fix, safe_fix=safe_fix, point=point, shard=shard)
 
-    def bare(*paths: _Paths) -> None:
-        _run_named(select(), paths, refusal=refusal)
-
-    chosen: Callable[..., None] = (
-        with_fix_and_point
-        if fixes and reads_point
-        else with_fix
-        if fixes
-        else with_point
-        if reads_point
-        else bare
-    )
+    bodies: dict[tuple[bool, bool, bool], Callable[..., None]] = {
+        (False, False, False): bare,
+        (False, True, False): with_point,
+        (False, False, True): with_shard,
+        (False, True, True): with_point_and_shard,
+        (True, False, False): with_fix,
+        (True, True, False): with_fix_and_point,
+        (True, False, True): with_fix_and_shard,
+        (True, True, True): with_fix_point_and_shard,
+    }
+    chosen = bodies[(fixes, "point" in flags, "shard" in flags)]
     chosen.__doc__ = what
     _MADE.add(chosen)
     return chosen
@@ -945,7 +1006,7 @@ def generate_verbs(into: Group | None = None) -> None:
                 _verb(
                     _steps_of(phase),
                     fixes=any(r.fix is not None for r in steps.values()),
-                    reads_point=any("point" in r.flags for r in steps.values()),
+                    flags=frozenset(f for r in steps.values() for f in r.flags),
                     what=f"Run every {phase} step, over the named paths or the"
                     " workspace.",
                     refusal=arguments_refusal(f"{prog()} {phase}", steps.values()),
@@ -960,7 +1021,7 @@ def generate_verbs(into: Group | None = None) -> None:
                 _verb(
                     _one_step(record.name),
                     fixes=record.fix is not None,
-                    reads_point="point" in record.flags,
+                    flags=frozenset(record.flags),
                     what=f"Run the {record.name} step alone, over the named paths"
                     " or the workspace"
                     + (
@@ -1360,6 +1421,27 @@ def with_files(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
             else where
         )
         print(f"  {name}: no file it reads in {said}; not run")
+    return tuple(kept)
+
+
+def on_this_shard(names: tuple[str, ...], ctx: PhaseContext) -> tuple[str, ...]:
+    """*names* less the steps this shard leaves to the first shard, each said.
+
+    A step that declares ``shard`` among its flags runs on every shard
+    of a sharded check leg and runs its share, the shard in its
+    context's ``shard``. A step that does not runs whole, so it runs
+    on the first shard alone: on any other shard it is left out, and a
+    line says so. On the first shard, and on a run that is one shard
+    of one, every step stays and nothing is said.
+    """
+    if ctx.shard.first:
+        return names
+    kept: list[str] = []
+    for name in names:
+        if "shard" in _STEPS[name].flags:
+            kept.append(name)
+            continue
+        print(f"  {name}: left to the first shard (this leg is {ctx.shard})")
     return tuple(kept)
 
 

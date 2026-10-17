@@ -804,7 +804,8 @@ step of the test phase and `fm test.pytest` the one, over the named
 paths or the workspace. A verb offers exactly the flags its steps
 read: `--fix` and `--safe-fix` where a step can fix, `--point` where
 one selects tests by CI point, so `fm test --point=nightly` runs the
-nightly's tests and `fm test.ctest` offers no point at all. A phase
+nightly's tests and `fm test.ctest` offers no point at all, and
+`--shard` where one runs its share of a sharded check leg. A phase
 whose verb already exists is served by it: `fm provenance` is the
 provenance phase's verb.
 
@@ -1281,7 +1282,17 @@ absence.
   selects a CI point's tests. A named path that is no file or
   directory in the workspace refuses, since checking nothing there
   would pass; the steps pass nothing through to a tool, so a tool's
-  own arguments after `--` refuse the same way. On a machine the gate
+  own arguments after `--` refuse the same way. `--shard=<i>of<n>`
+  runs one shard of a sharded check leg: a step that declares `shard`
+  among its flags runs on every shard and runs its share, and every
+  other step runs whole on the first shard alone, so a shard other
+  than the first leaves those steps out and prints one line for each,
+  `<phase>.<step>: left to the first shard (this leg is <i>of<n>)`.
+  On the first shard every step runs and nothing is printed. Inside
+  CI the leg's label ends in the shard, `check-ubuntu-latest-3.14-2of3`,
+  so the legs pass no flag. A sharded run on a machine records no tree
+  as proved, since a share of the gate ran; a shard outside the form,
+  `0of2`, refuses naming it. On a machine the gate
   is the reflex:
   it runs what the working tree changed since the nearest tree this
   checkout's own green gates proved (the one with the fewest changed
