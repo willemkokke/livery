@@ -658,7 +658,7 @@ def test_a_full_row_naming_the_platform_proves_the_tree_for_each_of_its_shards(
     assert why == "" and set(rows) == {tree}
     assert _quality.verified_already(work, leg=shard) == found
     # The shard's gate skips on it, leaves the verified marker, and
-    # leaves the record of an empty test-file set for the gate job's
+    # leaves the record of an empty set for the gate job's
     # fold, since no test step runs to leave one.
     (work / "workshop.toml").write_text("[workspace]\nextensions = []\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
@@ -671,7 +671,7 @@ def test_a_full_row_naming_the_platform_proves_the_tree_for_each_of_its_shards(
     assert leg_scope(work) == LegScope("verified", leg=shard)
     marker, why = _shard.read_shard(work)
     assert why == "" and marker is not None
-    assert marker.shard == _shard.Shard(2, 2) and marker.files == ()
+    assert marker.shard == _shard.Shard(2, 2) and marker.items == ()
     assert marker.rows == () and marker.digest == _shard.files_digest(())
     assert marker.before == _shard.checkout_time(work)
     # One shard of one leaves no record.

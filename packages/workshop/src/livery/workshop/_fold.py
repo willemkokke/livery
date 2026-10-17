@@ -16,9 +16,9 @@ The proof is the plan's first ground-truth contract: nothing is assumed
 from a shard that did not write. A platform's shards fold only when
 every shard the matrix produces left a ref with a row and the record of
 what it partitioned, every row names one scope, every record names one
-test-file set and one list of durations rows read under one bound, no
-test file ran in two shards, and the files the shards ran are together
-the set they partitioned. Anything else is red by name: the platform,
+item set and one list of durations rows read under one bound, no item
+ran in two shards, and the items the shards ran are together the set
+they partitioned. Anything else is red by name: the platform,
 the shards and what differs. A shard whose record says it ran as one
 shard of one fell open on the record and ran the whole set; when every
 shard of the platform did, the first stands for the platform. A
@@ -32,8 +32,8 @@ are a rerun of some jobs: the refusal names the attempts and says to
 rerun the whole run.
 
 The folded row is the first shard's timing row (its tasks, steps and
-waits) with every shard's package sums added and its seconds per test
-file merged, keyed by the platform leg and named by the platform's own
+waits) with every shard's package sums added and its seconds per item
+merged, keyed by the platform leg and named by the platform's own
 display name ([livery.workshop._speed.platform_display][]), with the
 shards listed under ``shard``. Every other file of the shards' refs
 folds through the ``ci.fold`` query ([livery.workshop._queries.FOLDERS][]):
@@ -72,7 +72,7 @@ from livery.workshop._shard import (
 )
 from livery.workshop._speed import leg_label, platform_display
 
-#: How many files a refusal names before it counts the rest.
+#: How many items a refusal names before it counts the rest.
 NAMED = 5
 
 
@@ -305,7 +305,7 @@ def _fold_platform(
             f" shard(s); {len(shards)} ref(s) a failed drop left behind dropped"
         )
         return
-    chosen, files, whole_set, unpartitioned = _prove(platform, shards, wanted)
+    chosen, items, whole_set, unpartitioned = _prove(platform, shards, wanted)
     row = _folded_row(platform, chosen, shards)
     folded_files = _fold_files(platform, chosen, folders)
     why = RUNS.series(run.run_id, platform).put(
@@ -321,7 +321,7 @@ def _fold_platform(
     for ref in shards:
         _drop(store, ref.ref)
     print(
-        f"  fold: {platform}: {len(shards)} shard(s) folded, {len(files)} file(s) ran"
+        f"  fold: {platform}: {len(shards)} shard(s) folded, {len(items)} item(s) ran"
     )
     if whole_set:
         print(
@@ -330,7 +330,7 @@ def _fold_platform(
         )
     if unpartitioned:
         print(
-            f"  fold: {platform}: no shard partitioned test files ({unpartitioned});"
+            f"  fold: {platform}: no shard partitioned items ({unpartitioned});"
             " folded without a partition"
         )
 
@@ -400,19 +400,17 @@ def _prove(
     the label's, a shard the matrix produces that left no ref (or,
     without a matrix, an index of the records' count that did, or of
     the labels' count when no shard left a record), the shards' scopes,
-    their file sets, their suites, their durations rows, their bounds,
-    and the files:
-    a file in two shards, or a union whose digest is not the set's.
-    Where the partitions disagree and the shards' records name two
-    attempts of the run, the refusal names the attempts instead
-    (`_refuse_attempts`). A
-    record of one shard of one says the shard fell open on the record
-    and ran the whole set; every shard of the platform must have, and
-    each one's files must be the set, and then the first is folded
-    alone.
+    their item sets, their suites, their durations rows, their bounds,
+    and the items: an item in two shards, or a union whose digest is
+    not the set's. Where the partitions disagree and the shards'
+    records name two attempts of the run, the refusal names the
+    attempts instead (`_refuse_attempts`). A record of one shard of one
+    says the shard fell open on the record and ran the whole set; every
+    shard of the platform must have, and each one's items must be the
+    set, and then the first is folded alone.
 
     Returns:
-        The shards to fold, the files they ran, whether each ran the
+        The shards to fold, the items they ran, whether each ran the
         whole set, and the shards' one scope when no shard left a
         record, so the shards partitioned nothing and the proof ends
         at their scopes; empty when they partitioned.
@@ -504,7 +502,7 @@ def _prove(
         _refuse_attempts(platform, markers)
         shown = ", ".join(f"{label} {digest[:12]}" for label, digest in digests.items())
         fail(
-            f"{platform}: the shards partitioned different test-file sets ({shown});"
+            f"{platform}: the shards partitioned different item sets ({shown});"
             " a platform's shards partition one set"
         )
     suites = {label: marker.suites for label, marker in markers.items()}
@@ -550,17 +548,17 @@ def _prove(
         )
     if whole_set:
         for ref in whole_set:
-            own = files_digest(markers[ref.label].files)
+            own = files_digest(markers[ref.label].items)
             if own != recorded:
                 fail(
                     f"{platform}: {ref.label} says it ran the whole set, and its"
-                    f" files' digest {own[:12]} is not the set's {recorded[:12]}"
+                    f" items' digest {own[:12]} is not the set's {recorded[:12]}"
                 )
-        return [whole_set[0]], set(markers[whole_set[0].label].files), True, ""
+        return [whole_set[0]], set(markers[whole_set[0].label].items), True, ""
     seen: dict[str, str] = {}
     twice: list[str] = []
     for ref in shards:
-        for name in markers[ref.label].files:
+        for name in markers[ref.label].items:
             if name in seen:
                 twice.append(f"{name} ({seen[name]} and {ref.label})")
             else:
@@ -569,17 +567,17 @@ def _prove(
         _refuse_attempts(platform, markers)
         rest = f" and {len(twice) - NAMED} more" if len(twice) > NAMED else ""
         fail(
-            f"{platform}: {len(twice)} file(s) ran in two shards:"
-            f" {', '.join(twice[:NAMED])}{rest}; every file lands in exactly one"
+            f"{platform}: {len(twice)} item(s) ran in two shards:"
+            f" {', '.join(twice[:NAMED])}{rest}; every item lands in exactly one"
             " shard"
         )
     together = files_digest(seen)
     if together != recorded:
         _refuse_attempts(platform, markers)
         fail(
-            f"{platform}: the files the shards ran together have digest"
+            f"{platform}: the items the shards ran together have digest"
             f" {together[:12]}, and the set they partitioned has {recorded[:12]}:"
-            " a file of the set ran in no shard"
+            " an item of the set ran in no shard"
         )
     return shards, set(seen), False, ""
 
@@ -618,12 +616,12 @@ def _folded_row(
     """The platform's one timing row from *chosen*'s rows, listing *shards*.
 
     The first chosen shard's row stands, its tasks, steps, waits and
-    wall as they are; the package sums and the seconds per test file
-    are every chosen shard's added, the slowest tests every chosen
+    wall as they are; the package sums and the seconds per item are
+    every chosen shard's added, the slowest tests every chosen
     shard's, slowest first; the row is named by the platform's display
     name and keyed by the platform leg under ``scope.leg``; ``shard``
     records the set's digest, its suites, the rows and the bound the
-    shards read, and each shard's label, job, row stamp, file count,
+    shards read, and each shard's label, job, row stamp, item count,
     wall and package sums. Shards that left no record partitioned
     nothing: the digest, the suites, the rows and the bound are empty.
     """
@@ -632,7 +630,7 @@ def _folded_row(
     packages: dict[str, dict[str, float | int]] = defaultdict(
         lambda: {"tests_ms": 0.0, "tests": 0}
     )
-    per_file: dict[str, float] = defaultdict(float)
+    per_item: dict[str, float] = defaultdict(float)
     slowest: list[dict[str, Any]] = []
     for ref in chosen:
         row = ref.row or {}
@@ -650,10 +648,10 @@ def _folded_row(
             packages[str(name)]["tests"] = int(packages[str(name)]["tests"]) + (
                 tests if isinstance(tests, int) else 0
             )
-        files: Any = row.get("files")
-        for path, seconds in files.items() if isinstance(files, dict) else ():
+        timed: Any = row.get("items")
+        for name, seconds in timed.items() if isinstance(timed, dict) else ():
             if isinstance(seconds, int | float):
-                per_file[str(path)] = round(per_file[str(path)] + float(seconds), 1)
+                per_item[str(name)] = round(per_item[str(name)] + float(seconds), 1)
         slow: Any = row.get("slowest")
         if isinstance(slow, list):
             slowest.extend(item for item in slow if isinstance(item, dict))
@@ -666,7 +664,7 @@ def _folded_row(
         {
             "job": platform_display(str(first.get("job", ""))),
             "packages": dict(sorted(packages.items())),
-            "files": dict(sorted(per_file.items())),
+            "items": dict(sorted(per_item.items())),
             "slowest": slowest[:SLOWEST],
             "scope": {**(scope if isinstance(scope, dict) else {}), "leg": platform},
             "shard": {
@@ -681,7 +679,7 @@ def _folded_row(
                         "leg": ref.label,
                         "job": str((ref.row or {}).get("job", "")),
                         "when": ref.stamp,
-                        "files": len(ref.marker.files) if ref.marker else 0,
+                        "items": len(ref.marker.items) if ref.marker else 0,
                         "total_ms": (ref.row or {}).get("total_ms"),
                         "packages": (ref.row or {}).get("packages", {}),
                     }

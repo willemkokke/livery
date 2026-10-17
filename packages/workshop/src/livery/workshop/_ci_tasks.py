@@ -273,7 +273,7 @@ def ci_rerun(
 
     The failed jobs alone by default; the whole run under
     ``--no-failed-only``, and whenever the contract splits a check leg
-    into shards, since a rerun of one shard partitions the test files
+    into shards, since a rerun of one shard partitions the items
     afresh and the gate job's fold refuses shards of two attempts.
     """
     repo, root = _resolved()
@@ -1143,8 +1143,8 @@ def ci_fold() -> None:
     Runs in the gate job before the judges, the collect, the verdict
     and the stamp read the run's refs. A platform whose check leg ran
     as several shards has one ref per shard; the fold proves the
-    shards are one leg's work (one scope, one test-file set from one
-    durations row, every file in exactly one shard, every shard the
+    shards are one leg's work (one scope, one item set from one
+    durations row, every item in exactly one shard, every shard the
     matrix produces present) and puts one ref under the platform
     leg's key, the timing sums added and every other file folded by
     the extension that leaves it, then drops the shards' refs. A

@@ -1041,15 +1041,15 @@ names first, the same way.
 | Name | First release |
 | --- | --- |
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
-| `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
-| `livery-extensions-python` | step 8's release wave; the package exists since step 8's P8b (#1734) |
+| `livery-extensions-cmake` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-python` | step 8: shipped 2026-10-17, release PR #1832 |
 | `livery-extensions-unreal` | 11b |
-| `livery-extensions-cpp` | step 8's release wave; the package exists since step 8's P7 (#1733) |
-| `livery-extensions-conan` | step 8's release wave; the package exists since step 8's P6b (#1727) |
-| `livery-extensions-nanobind` | step 8's release wave; the package exists since step 8's P5b (#1723) |
-| `livery-extensions-mkdocstrings` | step 8's release wave; the package exists since step 8's P2b (#1708) |
-| `livery-extensions-docs` | step 8's release wave; the package exists since step 8's P3b (#1712) |
-| `livery-extensions-coverage` | step 8's release wave; the package exists since step 8's P4b (#1718) |
+| `livery-extensions-cpp` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-conan` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-nanobind` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-mkdocstrings` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-docs` | step 8: shipped 2026-10-17, release PR #1832 |
+| `livery-extensions-coverage` | step 8: shipped 2026-10-17, release PR #1832 |
 | `livery-extensions-housekeeping`, `-doxygen` | 12b and 12c |
 | `livery-lodge` | 15 |
 
@@ -1061,8 +1061,9 @@ Debt from the claim, an out-of-band one (the workshop's rules):
 
 - [ ] Each placeholder `0.0.0.dev0` is yanked once its package's first
   release lands; a name that never releases keeps its yanked
-  placeholder. `livery-extensions-changelog` and
-  `livery-extensions-claude` have released, so theirs can go now.
+  placeholder. `livery-extensions-changelog`, `livery-extensions-claude`
+  and step 8's eight (cmake, conan, coverage, cpp, docs, mkdocstrings,
+  nanobind, python) have released, so theirs can go now.
 - [ ] Each project's trusted publisher for `livery-name-claims` is
   removed; the repository is deleted already (2026-10-09).
 
@@ -1391,7 +1392,7 @@ extension's distribution, is built after N1 and before P1b merges.
 #1653 (built): no code refuses or rewrites a removed spelling that
 remained after N1.
 
-8. **Each extension leaves the workshop wheel** for its own
+8. **Each extension leaves the workshop wheel** (complete 2026-10-17) for its own
    distribution, its tests with it, released under the names claimed
    on 2026-10-09. What the extension reads from the base becomes the
    base's public API in the same move (decision record, 2026-10-13).
@@ -1459,6 +1460,9 @@ remained after N1.
    `livery-extensions-python` 0.0.0, and nanobind's wheel requires it:
    the workshop wheel ships the base alone, `livery/workshop/` and no
    extension entry point.
+   The release of 2026-10-17 (release PR #1832) published each moved
+   extension's first release, 0.0.0, beside workshop 0.11.0, and
+   raised every floor within the set.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1839,6 +1843,16 @@ neither needs nor rules out).
 | `livery-extensions-nanobind`'s floor `livery-extensions-conan>=0.0.0`, which ships conan's entry module | the release wave raising it with conan's first release (step 8's R2) |
 | `livery-extensions-cpp`'s floor `livery-workshop>=0.10.0`, which admits a workshop whose wheel still ships cpp's files and its `cpp` entry point | the release wave raising the floor within its set (step 8's R1) |
 | `livery-extensions-python`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports what python reads | the release wave raising the floor within its set (step 8's R1) |
+| mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
+| docs' coverage floor at its measured 91 | the ratchet back to 100 |
+| cmake's coverage floor at its measured 86.5 | the ratchet back to 100 |
+| coverage's coverage floor at its measured 96 | the ratchet back to 100 |
+| nanobind's coverage floor at its measured 84: the Linux container branch and the native build run only in the armed tests | the ratchet back to 100 |
+| python's coverage floor at 93.5, under the CI union's measured 93.8 | the ratchet back to 100 |
+| each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | conan's declared `[env.CONAN_HOME]`, `{place}/conan` with `always`, placed per job (#1731) |
+| the conan home of a development environment, a loop pass and the scale fixture, in the base's `_devenv`, `_e2e` and `_scale` | the same declaration, placed per environment, loop pass and fixture (#1731) |
+| the release driver's `conanfile.py` floor bump and its rollback, in `_release_driver` | python's and conan's stamp steps raising floors in their own files (#1731) |
+| `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache` and `restore_from_releases` to nanobind | conan's per-host artifact (phase 13) |
 | `livery-extensions-nanobind`'s floor `livery-extensions-python>=0.0.0`, and the `livery-extensions-python>=0.0.0` line in the `test` extras of basedpyright, changelog, claude, coverage, mkdocstrings and pytest | the release wave raising it with python's first release (step 8's R2) |
 | `livery-extensions-conan`'s and `livery-extensions-nanobind`'s floor `livery-extensions-cpp>=0.0.0` | the release wave raising it with cpp's first release (step 8's R2) |
 | `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache`, `restore_from_releases` and `raise_floors` to nanobind | conan's per-host artifact (phase 13) |
@@ -3906,6 +3920,32 @@ neither needs nor rules out).
   uv project that installs `fm` and the listed extensions, listed
   python or not; their temporary row goes.
 
+- 2026-10-17, step 8, complete: the release of 2026-10-17 (release
+  PR #1832) publishes the 27 members with commits since their last
+  release. The eight moved extensions and lfs ship 0.0.0, the workshop
+  0.11.0, footman 0.61.0. Every moved extension's floor is now the
+  workshop that exports what it reads, and every co-member floor is a
+  released version, so the R1 and R2 rows go. The coverage floors stay
+  until the ratchet (#1787) raises them. The wave needed five fixes
+  and one re-dispatch before it published:
+  - The local act's rollback left the files a first release creates,
+    which HEAD lacks; it now removes them, and the local act refuses
+    to start on a dirty candidate file (#1781).
+  - The first wave (release PR #1814) refused at the publish
+    pre-flight: conan's, docs' and python's entry modules had no
+    `__version__` (#1821). Both release acts now run the publish job's
+    own checks over the stamped set before any leg (`verify_set`), so
+    that refusal arrives before a wave, not in it.
+  - A dispatch test wrote a CI-only series without setting the CI
+    environment, so it failed where the release's prepare ran it,
+    outside CI (#1825); and the Windows legs passed the path limit
+    in the real-conan tests' homes (#1826).
+  - The gate job's fold read the coverage top-up's second test run as
+    a duplicate shard (#1827, fixed in #1830).
+  - The second wave published 26 of 27; lfs met a PyPI 500, and
+    `fm workflow.release.dispatch --again` published it.
+  The placeholders' yanks and the pending publishers' removal stay
+  Willem's (the debt under First publishes).
 - 2026-10-17, #1731, built: the base names no conan outside comments
   and the rows #1534 and phase 13 keep (the `conan-cache` key, the
   `conan` registry kind). An extension declares its environment

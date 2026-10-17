@@ -215,7 +215,7 @@ def _record(
         root,
         shard=shard,
         digest=files_digest(names),
-        files=files,
+        items=files,
         rows=rows,
         before=before,
         suites=partitioned,

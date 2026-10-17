@@ -240,7 +240,7 @@ def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
     row, why = _metrics.leg_row(trace, job=JOB)
     assert why == "" and row is not None
     # Three phases each: 3750 ms, 60 ms and 300 ms, to a tenth of a second.
-    assert row["files"] == {
+    assert row["items"] == {
         "packages/forge/tests/test_a.py": 3.8,
         "packages/workshop/tests/test_b.py": 0.1,
         "tests/test_root.py": 0.3,
@@ -435,7 +435,7 @@ def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
         work,
         shard=_shard.Shard(2, 4),
         digest="ab" * 32,
-        files=["b.py", "a.py"],
+        items=["b.py", "a.py"],
         rows=["r1.json"],
         before=before,
         suites=["packages/b"],
@@ -449,7 +449,7 @@ def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
     assert row.data["shard"] == {
         "shard": "2of4",
         "digest": "ab" * 32,
-        "files": ["b.py", "a.py"],
+        "items": ["b.py", "a.py"],
         "rows": ["r1.json"],
         "before": before.isoformat(),
         "suites": ["packages/b"],
@@ -849,7 +849,7 @@ def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
     assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=full)[1] == ""
     lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
     series = _shard.DURATIONS.series("check-a")
-    assert f"  {series.ref}: 2 file(s) recorded for run {RUN.run_id}" in lines
+    assert f"  {series.ref}: 2 item(s) recorded for run {RUN.run_id}" in lines
     assert not any(
         line.startswith(f"  {_shard.DURATIONS.series('gate').ref}") for line in lines
     )
@@ -857,7 +857,7 @@ def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
     assert not found.failed and len(found.rows) == 1
     assert found.rows[0].name == _metrics.run_file(RUN.run_id)
     assert found.rows[0].data["run"] == RUN.run_id
-    assert found.rows[0].data["files"] == {
+    assert found.rows[0].data["items"] == {
         "packages/forge/tests/test_a.py": 3.0,
         "packages/forge/tests/test_b.py": 1.5,
     }
@@ -880,7 +880,7 @@ def test_collect_leaves_the_durations_to_the_fold_for_one_shards_row(
         work,
         shard=_shard.Shard(1, 2),
         digest="ab" * 32,
-        files=["packages/forge/tests/test_a.py"],
+        items=["packages/forge/tests/test_a.py"],
         rows=[],
         before=datetime(2026, 10, 17, tzinfo=UTC),
     )
@@ -1394,7 +1394,7 @@ def test_render_folds_a_platforms_shards_into_its_section_with_a_line_per_shard(
             "leg": f"check-ubuntu-latest-3.14-{index}of3",
             "job": f"check (ubuntu-latest, 3.14, {index}of3)",
             "when": "",
-            "files": 2,
+            "items": 2,
             "total_ms": 250000.0,
             "packages": {},
         }

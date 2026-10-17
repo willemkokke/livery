@@ -109,15 +109,15 @@ def on_this_shard(root: Path, units: tuple[Package, ...]) -> tuple[Package, ...]
     """*units* less those that did not run on this shard; all on one shard of one.
 
     A sharded check leg's test step runs each suite's share of its test
-    files and records the files it ran and the suites it partitioned
-    ([livery.workshop.read_shard][]). A suite the record names ran here
-    where a file of it is in the share; one with no file in the share
-    ran on another shard, whose parts the gate job folds in before the
-    union reads. A suite the record does not name, a native suite with
-    no python test file, ran whole on the first shard with every step
-    that does not read the shard, so the first shard expects its parts
-    and every other shard does not. Without a record, or on one shard
-    of one, every unit ran whole here.
+    files and records them as the items it ran, with the suites it
+    partitioned ([livery.workshop.read_shard][]). A suite the record
+    names ran here where a file of it is among the items; one with no
+    file among them ran on another shard, whose parts the gate job
+    folds in before the union reads. A suite the record does not name,
+    a native suite with no python test file, ran whole on the first
+    shard with every step that does not read the shard, so the first
+    shard expects its parts and every other shard does not. Without a
+    record, or on one shard of one, every unit ran whole here.
 
     Raises:
         Failed: When the record does not read, naming why: a sharded
@@ -138,7 +138,7 @@ def on_this_shard(root: Path, units: tuple[Package, ...]) -> tuple[Package, ...]
         unit
         for unit in units
         if (
-            any(_of_unit(unit, name) for name in record.files)
+            any(_of_unit(unit, name) for name in record.items)
             if unit.path in partitioned
             else record.shard.first
         )

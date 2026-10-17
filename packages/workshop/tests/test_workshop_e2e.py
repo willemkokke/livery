@@ -2379,18 +2379,18 @@ _SHARD_JOBS = ("check (ubuntu-latest, 3.14, 1of2)", "check (ubuntu-latest, 3.14,
 
 
 def _fold(
-    files: tuple[int, ...] = (2, 1),
+    items: tuple[int, ...] = (2, 1),
     *,
     count: int = 2,
     rows: tuple[str, ...] = ("20261017T090000Z-76.json",),
     digest: str = "ab" * 32,
 ) -> _e2e_rows.FoldFacts:
-    """The fold's record of *count* shards that ran *files* each."""
+    """The fold's record of *count* shards that ran *items* each."""
     shards = tuple(
         _e2e_rows.ShardFacts(
             f"{index}of{count}", f"{_LEG}-{index}of{count}", _SHARD_JOBS[index - 1], n
         )
-        for index, n in enumerate(files, 1)
+        for index, n in enumerate(items, 1)
     )
     return _e2e_rows.FoldFacts(count, digest, rows, shards)
 
@@ -2424,19 +2424,19 @@ def test_the_shards_proof_refuses_a_leg_that_is_not_the_fold_of_the_shards() -> 
     assert f"the forge's rows of {_SHARD_JOBS[1]} are not beside the folded row" in str(
         caught.value
     )
-    # The leg ran, and the shards partitioned nothing or ran no file.
-    with pytest.raises(_FAILURES, match="ran no test file"):
+    # The leg ran, and the shards partitioned nothing or ran no item.
+    with pytest.raises(_FAILURES, match="ran no item"):
         _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=True)
     with pytest.raises(_FAILURES, match="recorded no partition"):
         _e2e._require_shards(run, _facts(_fold(digest="")), count=2, ran=True)
-    # Every shard skipped, and the fold records files ran or rows read.
+    # Every shard skipped, and the fold records items ran or rows read.
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_shards(run, _facts(_fold()), count=2, ran=False)
     assert (
-        "every shard skipped, and the fold records 3 test file(s) ran and 1"
+        "every shard skipped, and the fold records 3 item(s) ran and 1"
         " durations row(s) read" in str(caught.value)
     )
-    with pytest.raises(_FAILURES, match=r"0 test file\(s\) ran and 1 durations"):
+    with pytest.raises(_FAILURES, match=r"0 item\(s\) ran and 1 durations"):
         _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=False)
     # Then the shapes the loop proves: a leg that ran on a row, the
     # first pass with no row yet (the first shard ran every file), and
@@ -2460,7 +2460,7 @@ def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
     # Nothing on the store: the leg ran, so its row is missing.
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_durations(work, run, f"{_LEG}-1of2", written=True)
-    assert f"no row {name} naming a test file on {series.ref}" in str(caught.value)
+    assert f"no row {name} naming an item on {series.ref}" in str(caught.value)
     _e2e._require_durations(work, run, f"{_LEG}-1of2", written=False)
     _e2e._prove_shards(work, run, _facts(_fold((0, 0), rows=())), ran=False)
     assert (
@@ -2468,11 +2468,11 @@ def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
         " no durations row written" in capsys.readouterr().out
     )
     # The row on the store: every shard skipped, so a row is wrong.
-    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5}}}
+    rows = {name: {"run": "77", "items": {"tests/test_a.py": 1.5}}}
     assert series.put(state_store(work), rows, message="durations: run 77") == ""
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_durations(work, run, _LEG, written=False)
-    assert f"{series.ref} holds {name} with 1 file(s), and every shard skipped" in (
+    assert f"{series.ref} holds {name} with 1 item(s), and every shard skipped" in (
         str(caught.value)
     )
     _e2e._require_durations(work, run, f"{_LEG}-2of2", written=True)

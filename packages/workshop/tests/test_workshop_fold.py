@@ -66,7 +66,7 @@ def _in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _marker(
     shard: str,
-    files: Sequence[str],
+    items: Sequence[str],
     *,
     digest: str = SET,
     rows: Sequence[str] = ("r1.json",),
@@ -77,7 +77,7 @@ def _marker(
     return {
         "shard": shard,
         "digest": digest,
-        "files": list(files),
+        "items": list(items),
         "rows": list(rows),
         "before": before,
         "suites": list(suites),
@@ -92,7 +92,7 @@ def _row(
     packages: Sequence[str] = (),
     marker: Mapping[str, Any] | None = None,
     sums: Mapping[str, tuple[float, int]] | None = None,
-    files: Mapping[str, float] | None = None,
+    items: Mapping[str, float] | None = None,
     slowest: Sequence[tuple[str, float]] = (),
     total: float = 100.0,
 ) -> dict[str, Any]:
@@ -106,7 +106,7 @@ def _row(
             name: {"tests_ms": ms, "tests": tests}
             for name, (ms, tests) in (sums or {}).items()
         },
-        "files": dict(files or {}),
+        "items": dict(items or {}),
         "slowest": [{"test": name, "s": s} for name, s in slowest],
         "scope": {
             "scope": scope,
@@ -161,7 +161,7 @@ FOLDERS: dict[str, Folder] = {"coverage.json": _concat}
 def _two_shards(
     work: Path, *, second: Mapping[str, Any] | None = None
 ) -> tuple[str, str]:
-    """Windows as two shards of two, every file in one, with coverage files."""
+    """Windows as two shards of two, every item in one, with coverage files."""
     first = _put(
         work,
         WIN1,
@@ -169,7 +169,7 @@ def _two_shards(
             WIN1,
             marker=_marker("1of2", FILES[:1]),
             sums={"a": (1000.0, 3)},
-            files={FILES[0]: 1.0},
+            items={FILES[0]: 1.0},
             slowest=[("t1", 0.9)],
         ),
         **{"coverage.json": _coverage(WIN1, {"packages/a": ["a1"]})},
@@ -183,7 +183,7 @@ def _two_shards(
             WIN2,
             marker=_marker("2of2", FILES[1:]),
             sums={"a": (500.0, 2), "b": (200.0, 1)},
-            files={FILES[1]: 0.3, FILES[2]: 0.2},
+            items={FILES[1]: 0.3, FILES[2]: 0.2},
             slowest=[("t2", 1.5)],
             total=70.0,
         ),
@@ -308,7 +308,7 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
     )
     with pytest.raises(
         _FAILURES,
-        match=rf"{WINDOWS}: the shards partitioned different test-file sets"
+        match=rf"{WINDOWS}: the shards partitioned different item sets"
         rf" \({WIN1} {SET[:12]}, {WIN2} {other[:12]}\)",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
@@ -351,8 +351,8 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
 
 def _attempted(work: Path, first: dict[str, Any], second: dict[str, Any]) -> None:
     """Windows as two shards whose records are *first* and *second*."""
-    _put(work, WIN1, _row(WIN1, marker=first, files={FILES[0]: 1.0}))
-    _put(work, WIN2, _row(WIN2, marker=second, files={FILES[1]: 0.3, FILES[2]: 0.2}))
+    _put(work, WIN1, _row(WIN1, marker=first, items={FILES[0]: 1.0}))
+    _put(work, WIN2, _row(WIN2, marker=second, items={FILES[1]: 0.3, FILES[2]: 0.2}))
 
 
 ATTEMPTS = (
@@ -408,7 +408,7 @@ def test_shards_of_one_attempt_refuse_as_before_and_of_two_attempts_fold_alike(
         _marker("2of2", FILES[1:], digest=other, attempt="2"),
     )
     with pytest.raises(
-        _FAILURES, match=rf"{WINDOWS}: the shards partitioned different test-file sets"
+        _FAILURES, match=rf"{WINDOWS}: the shards partitioned different item sets"
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
     _attempted(
@@ -416,7 +416,7 @@ def test_shards_of_one_attempt_refuse_as_before_and_of_two_attempts_fold_alike(
         _marker("1of2", FILES[:1], attempt="2"),
         _marker("2of2", FILES, attempt="2"),
     )
-    with pytest.raises(_FAILURES, match=rf"{WINDOWS}: 1 file\(s\) ran in two shards"):
+    with pytest.raises(_FAILURES, match=rf"{WINDOWS}: 1 item\(s\) ran in two shards"):
         _fold.fold_run(work, RUN, folders=FOLDERS)
     # Two attempts with one partition fold: the proof does not care
     # about the attempt by itself.
@@ -428,25 +428,25 @@ def test_shards_of_one_attempt_refuse_as_before_and_of_two_attempts_fold_alike(
     capsys.readouterr()
     _fold.fold_run(work, RUN, folders={})
     assert capsys.readouterr().out == (
-        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 file(s) ran\n"
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 item(s) ran\n"
     )
     assert _refs(work) == {_metrics.run_ref(RUN, WINDOWS)}
 
 
-def test_a_file_in_two_shards_or_in_none_refuses(work: Path) -> None:
+def test_an_item_in_two_shards_or_in_none_refuses(work: Path) -> None:
     _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES)))
     with pytest.raises(
         _FAILURES,
-        match=rf"{WINDOWS}: 1 file\(s\) ran in two shards: {FILES[0]} \({WIN1} and"
-        rf" {WIN2}\); every file lands in exactly one shard",
+        match=rf"{WINDOWS}: 1 item\(s\) ran in two shards: {FILES[0]} \({WIN1} and"
+        rf" {WIN2}\); every item lands in exactly one shard",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
     _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES[1:2])))
     together = _shard.files_digest(FILES[:2])
     with pytest.raises(
         _FAILURES,
-        match=rf"{WINDOWS}: the files the shards ran together have digest"
-        rf" {together[:12]}, and the set they partitioned has {SET[:12]}: a file",
+        match=rf"{WINDOWS}: the items the shards ran together have digest"
+        rf" {together[:12]}, and the set they partitioned has {SET[:12]}: an item",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
 
@@ -493,14 +493,14 @@ def test_a_shard_that_fell_open_beside_one_that_sliced_refuses(work: Path) -> No
         " ran a slice",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
-    # Both fell open, and one says it ran the whole set while its files
+    # Both fell open, and one says it ran the whole set while its items
     # are not the set.
     _put(work, WIN1, _row(WIN1, marker=_marker("1of1", FILES[:2])))
     _put(work, WIN2, _row(WIN2, marker=_marker("1of1", FILES)))
     own = _shard.files_digest(FILES[:2])
     with pytest.raises(
         _FAILURES,
-        match=rf"{WINDOWS}: {WIN1} says it ran the whole set, and its files' digest"
+        match=rf"{WINDOWS}: {WIN1} says it ran the whole set, and its items' digest"
         rf" {own[:12]} is not the set's {SET[:12]}",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
@@ -540,13 +540,13 @@ def test_the_fold_sums_the_shards_rows_folds_their_files_and_drops_their_refs(
     ubuntu = _put(work, UBUNTU, _row(UBUNTU, sums={"a": (10.0, 1)}))
     _fold.fold_run(work, RUN, folders=FOLDERS)
     out = capsys.readouterr().out
-    assert out == f"  fold: {WINDOWS}: 2 shard(s) folded, 3 file(s) ran\n"
+    assert out == f"  fold: {WINDOWS}: 2 shard(s) folded, 3 item(s) ran\n"
     folded = _metrics.RUNS.series(RUN.run_id, WINDOWS)
     assert _refs(work) == {ubuntu, folded.ref}
     row, why = folded.row(state_store(work), _metrics.ROW_FILE)
     assert why == "" and row is not None
     # The platform's own display name and label; the first shard's
-    # tasks and wall; every shard's sums added and files merged; the
+    # tasks and wall; every shard's sums added and items merged; the
     # slowest tests of every shard, slowest first.
     assert row.data["job"] == DISPLAY[WINDOWS]
     assert row.data["scope"] == {
@@ -560,7 +560,7 @@ def test_the_fold_sums_the_shards_rows_folds_their_files_and_drops_their_refs(
         "a": {"tests_ms": 1500.0, "tests": 5},
         "b": {"tests_ms": 200.0, "tests": 1},
     }
-    assert row.data["files"] == {FILES[0]: 1.0, FILES[1]: 0.3, FILES[2]: 0.2}
+    assert row.data["items"] == {FILES[0]: 1.0, FILES[1]: 0.3, FILES[2]: 0.2}
     assert row.data["slowest"] == [{"test": "t2", "s": 1.5}, {"test": "t1", "s": 0.9}]
     shard = row.data["shard"]
     assert shard["count"] == 2 and shard["digest"] == SET
@@ -569,7 +569,7 @@ def test_the_fold_sums_the_shards_rows_folds_their_files_and_drops_their_refs(
     listed = shard["shards"]
     assert [item["leg"] for item in listed] == [WIN1, WIN2]
     assert [item["job"] for item in listed] == [DISPLAY[WIN1], DISPLAY[WIN2]]
-    assert [item["files"] for item in listed] == [1, 2]
+    assert [item["items"] for item in listed] == [1, 2]
     assert [item["total_ms"] for item in listed] == [100.0, 70.0]
     for item in listed:
         held = stamps[item["leg"]]
@@ -631,7 +631,7 @@ def test_shards_that_each_fell_open_to_the_whole_set_fold_as_the_first(
             WIN1,
             marker=_marker("1of1", FILES, rows=()),
             sums={"a": (9.0, 3)},
-            files=whole,
+            items=whole,
         ),
         **{"coverage.json": _coverage(WIN1, {"packages/a": ["a1"]})},
     )
@@ -642,13 +642,13 @@ def test_shards_that_each_fell_open_to_the_whole_set_fold_as_the_first(
             WIN2,
             marker=_marker("1of1", FILES, rows=()),
             sums={"a": (8.0, 3)},
-            files=whole,
+            items=whole,
         ),
         **{"coverage.json": _coverage(WIN2, {"packages/a": ["a2"]})},
     )
     _fold.fold_run(work, RUN, folders=FOLDERS)
     assert capsys.readouterr().out == (
-        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 file(s) ran\n"
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 item(s) ran\n"
         f"  fold: {WINDOWS}: each shard ran the whole set as one shard of one;"
         f" {WIN1} stands for the platform\n"
     )
@@ -722,7 +722,7 @@ def test_the_collect_joins_the_folded_row_with_the_first_shard_and_writes_the_du
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _two_shards(work)
-    _put(work, UBUNTU, _row(UBUNTU, sums={"a": (10.0, 1)}, files={FILES[0]: 2.0}))
+    _put(work, UBUNTU, _row(UBUNTU, sums={"a": (10.0, 1)}, items={FILES[0]: 2.0}))
     _fold.fold_run(work, RUN, folders=FOLDERS)
     capsys.readouterr()
     repo = _forge(
@@ -741,8 +741,8 @@ def test_the_collect_joins_the_folded_row_with_the_first_shard_and_writes_the_du
     assert f"  {_metrics.SERIES.ref}: run 1013 recorded, 5 job(s)" in lines
     windows = _shard.DURATIONS.series(WINDOWS)
     ubuntu = _shard.DURATIONS.series(UBUNTU)
-    assert f"  {windows.ref}: 3 file(s) recorded for run 1013" in lines
-    assert f"  {ubuntu.ref}: 1 file(s) recorded for run 1013" in lines
+    assert f"  {windows.ref}: 3 item(s) recorded for run 1013" in lines
+    assert f"  {ubuntu.ref}: 1 item(s) recorded for run 1013" in lines
     rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
@@ -760,13 +760,13 @@ def test_the_collect_joins_the_folded_row_with_the_first_shard_and_writes_the_du
         assert entry["jobs"][DISPLAY[label]]["complete"] is True
     assert _speed.forge_shard_row(DISPLAY[WIN1], entry["jobs"][DISPLAY[WIN1]])
     assert not _speed.forge_shard_row(DISPLAY[WINDOWS], folded)
-    # One durations row per platform leg, the folded files on the
+    # One durations row per platform leg, the folded items on the
     # sharded one.
     found = windows.rows(state_store(work))
     assert [row.data["run"] for row in found.rows] == ["1013"]
-    assert found.rows[0].data["files"] == {FILES[0]: 1.0, FILES[1]: 0.3, FILES[2]: 0.2}
+    assert found.rows[0].data["items"] == {FILES[0]: 1.0, FILES[1]: 0.3, FILES[2]: 0.2}
     found = ubuntu.rows(state_store(work))
-    assert found.rows[0].data["files"] == {FILES[0]: 2.0}
+    assert found.rows[0].data["items"] == {FILES[0]: 2.0}
     # A red shard keeps the refs for the forge's re-run; green drops them.
     assert _refs(work) == {
         _metrics.run_ref(RUN, WINDOWS),
@@ -840,8 +840,8 @@ def test_shards_none_of_which_partitioned_fold_on_their_scopes_and_files_alone(
     )
     _fold.fold_run(work, RUN, folders=FOLDERS)
     assert capsys.readouterr().out == (
-        f"  fold: {WINDOWS}: 2 shard(s) folded, 0 file(s) ran\n"
-        f"  fold: {WINDOWS}: no shard partitioned test files (verified); folded"
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 0 item(s) ran\n"
+        f"  fold: {WINDOWS}: no shard partitioned items (verified); folded"
         " without a partition\n"
     )
     folded = _metrics.RUNS.series(RUN.run_id, WINDOWS)
@@ -852,7 +852,7 @@ def test_shards_none_of_which_partitioned_fold_on_their_scopes_and_files_alone(
     assert (
         row.data["scope"]["leg"] == WINDOWS and row.data["scope"]["scope"] == "verified"
     )
-    assert row.data["files"] == {} and row.data["total_ms"] == 100.0
+    assert row.data["items"] == {} and row.data["total_ms"] == 100.0
     shard = row.data["shard"]
     assert shard["count"] == 2 and shard["digest"] == "" and shard["suites"] == []
     assert shard["rows"] == [] and shard["before"] == ""
