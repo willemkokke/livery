@@ -392,6 +392,20 @@ def record_bases(branch: str) -> tuple[str, ...]:
     return (branch, MAIN) if branch and branch != MAIN else (MAIN,)
 
 
+def record_prefixes(branch: str) -> tuple[str, ...]:
+    """The refs of the records a run reads, as prefixes: *branch*'s if any, then main's.
+
+    A check leg and the gate job hand them to
+    [livery.git.remote_snapshot][] as the refs to bring when the block
+    opens: one prefix per base `record_bases` names, spelled in full
+    as that base's refs are (``refs/workshop/coverage/<branch>/``), so
+    a run fetches the two records it reads and no other branch's. A
+    record outside them, the one of the branch a verified row names,
+    is brought on its first read, every leg of it, in one more fetch.
+    """
+    return tuple(f"{RECORD.prefix}{git.slug(base)}/" for base in record_bases(branch))
+
+
 def series(root: Path) -> tuple[git.Series | git.Keyed, ...]:
     """Answer ``store.series``: the coverage record and the coverage marks.
 

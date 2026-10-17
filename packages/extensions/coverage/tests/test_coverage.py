@@ -28,6 +28,7 @@ from livery import git
 from livery.extensions.coverage import _floors as coverage_floors
 from livery.extensions.coverage import _leg as coverage_leg
 from livery.extensions.coverage import _record as coverage_record
+from livery.extensions.coverage import _tasks as coverage_tasks
 from livery.extensions.coverage import _union as coverage_union
 from livery.extensions.coverage._format import Merged
 from livery.extensions.python import _backend as _python
@@ -2578,3 +2579,49 @@ def test_a_shard_leaves_parts_for_the_suites_its_share_touched_alone(
     assert put[0]["leg"] == "check-a-2of2" and put[0]["scope"] == "full"
     assert "packages/x ran without a measurement" not in out
     assert "coverage store: packages/y stored for closure" in out
+
+
+# --- the gate job: what it brings from the store -------------------------------
+
+
+def test_the_gate_job_brings_the_run_s_refs_and_the_two_records_it_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import contextlib
+    from collections.abc import Iterable
+
+    from livery.workshop import RunContext
+
+    monkeypatch.setattr(coverage_tasks, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(coverage_tasks, "discover_packages", lambda root: ())
+    monkeypatch.setattr(coverage_union, "combine_union", lambda root, packages: ())
+    brought: list[tuple[str, ...]] = []
+
+    def _snapshot(
+        store: git.StateStore, *, fetch: Iterable[str] = (), publish: bool = False
+    ) -> contextlib.AbstractContextManager[None]:
+        brought.append(tuple(fetch))
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr("livery.git.remote_snapshot", _snapshot)
+    runs: list[RunContext | None] = [None]
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: runs[0]
+    )
+    # Outside CI nothing is brought: the union refuses on its own.
+    coverage_tasks.coverage_union()
+    assert brought == []
+    # Main's run names no head branch: its legs' refs and main's record.
+    runs[0] = RunContext("gitea", "8", "push", "refs/heads/main")
+    coverage_tasks.coverage_union()
+    assert brought == [("run/8/", git.NAMESPACE + "coverage/main/")]
+    # A pull request's run: its legs' refs, its branch's record and main's.
+    runs[0] = RunContext(
+        "gitea", "9", "pull_request", "refs/pull/3/merge", head_ref="feat/x"
+    )
+    coverage_tasks.coverage_union()
+    assert brought[-1] == (
+        "run/9/",
+        git.NAMESPACE + "coverage/feat-x/",
+        git.NAMESPACE + "coverage/main/",
+    )

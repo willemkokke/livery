@@ -255,10 +255,11 @@ def _stored(root: Path) -> tuple[dict[str, dict[str, Unit]], list[str]]:
     docs job builds without the legs' data by design, and a machine's
     build draws the local data a gate run left, or states the absence.
     """
+    from livery.extensions.coverage._record import MAIN, record_prefixes
     from livery.git import remote_snapshot
     from livery.workshop import check_legs, state_store
 
-    with remote_snapshot(state_store(root), fetch=("coverage/main/",)):
+    with remote_snapshot(state_store(root), fetch=record_prefixes(MAIN)):
         return stored_rows(root, check_legs(root))
 
 

@@ -953,18 +953,24 @@ def test_the_runner_names_the_shard_in_the_label_the_display_and_the_check_entry
         ],
     ]
     # One shard of one is the unsplit leg: no shard in the label or the
-    # display name, and the walk is called without the flag.
-    seen.clear()
-    legs.clear()
-    _points.run_point(
-        root,
-        "gate",
-        "check",
-        os_label="windows-latest",
-        python="3.14",
-        shard="1of1",
-        spawn=green,
-    )
+    # display name, and the walk is called without the flag. The
+    # rendered matrix spells it as an absent key, which reaches the
+    # runner as an empty ``--shard=``; ``1of1`` by hand reads the same.
+    for spelled in ("", "1of1"):
+        seen.clear()
+        legs.clear()
+        _points.run_point(
+            root,
+            "gate",
+            "check",
+            os_label="windows-latest",
+            python="3.14",
+            shard=spelled,
+            spawn=green,
+        )
+        assert legs == ["check-windows-latest-3.14"] * len(seen)
+        assert seen[0] == ["hse", "--profile=fm-profile-check.json", "check"]
+        assert seen[-1][-1] == "--job=check (windows-latest, 3.14)"
     assert legs == ["check-windows-latest-3.14"] * len(seen)
     assert seen[0] == ["hse", "--profile=fm-profile-check.json", "check"]
     assert seen[-1][-1] == "--job=check (windows-latest, 3.14)"
