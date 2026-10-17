@@ -36,7 +36,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -52,6 +52,7 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
+from livery.workshop._shard import Shard
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -1601,6 +1602,138 @@ def check_legs(root: Path) -> list[str]:
     runners = list((contract.get("ci") or {}).get("runners") or ["ubuntu-latest"])
     pythons = gate_pythons(root)
     return [f"check-{runner}-{python}" for runner in runners for python in pythons]
+
+
+#: The most shards a runner may take while ``[ci] shards-max`` is absent.
+SHARDS_MAX = 4
+
+
+def shards_max(ci: dict[str, Any]) -> int:
+    """The most shards a runner may take: ``[ci] shards-max``, `SHARDS_MAX` when absent.
+
+    A value that is not a whole number, or is below 1, fails naming it.
+    """
+    declared: Any = ci.get("shards-max")
+    if declared is None:
+        return SHARDS_MAX
+    if isinstance(declared, bool) or not isinstance(declared, int):
+        fail(
+            f"[ci] shards-max is {declared!r}, which is not a whole number; it is"
+            " the most shards a runner may take"
+        )
+    if declared < 1:
+        fail(f"[ci] shards-max is {declared}; the cap is at least 1")
+    return declared
+
+
+def shard_counts(
+    ci: dict[str, Any], *, key: str, runners: Sequence[str], listed: str
+) -> dict[str, int]:
+    """The shards per runner ``[ci] <key>`` gives, one for a runner it does not name.
+
+    *runners* are the labels the legs fan out to and *listed* names the
+    key they came from, for the refusal. The task fails, naming the key
+    and the runner, when the table names a runner *runners* does not
+    hold, gives a count below 1 or above `shards_max`, or gives one
+    that is not a whole number.
+    """
+    cap = shards_max(ci)
+    counts = dict.fromkeys(runners, 1)
+    declared: Any = ci.get(key)
+    if declared is None:
+        return counts
+    if not isinstance(declared, dict):
+        fail(f"[ci] {key} is {declared!r}; it is a table of runner label to count")
+    table: dict[str, Any] = declared
+    strangers = [runner for runner in table if runner not in runners]
+    if strangers:
+        fail(
+            f"[ci] {key} names {', '.join(strangers)}, which {listed} does not list"
+            f" ({', '.join(runners)}); a count belongs to a runner the legs run on"
+        )
+    for runner, count in table.items():
+        if isinstance(count, bool) or not isinstance(count, int):
+            fail(
+                f"[ci] {key} gives {runner} {count!r}, which is not a whole number;"
+                f" a count is from 1 to {cap}"
+            )
+        if count < 1:
+            fail(f"[ci] {key} gives {runner} {count}; a count is at least 1")
+        if count > cap:
+            fail(
+                f"[ci] {key} gives {runner} {count}, above the cap of {cap}"
+                " ([ci] shards-max); lower the count or raise the cap"
+            )
+        counts[runner] = count
+    return counts
+
+
+def _shard_legs(
+    runners: Sequence[str], pythons: Sequence[str], counts: Mapping[str, int]
+) -> list[str]:
+    """One leg per runner and Python, split into shards where the count is above 1."""
+    legs: list[str] = []
+    for runner in runners:
+        count = counts.get(runner, 1)
+        for python in pythons:
+            leg = f"check-{runner}-{python}"
+            if count == 1:
+                legs.append(leg)
+            else:
+                legs.extend(
+                    f"{leg}-{Shard(index, count)}" for index in range(1, count + 1)
+                )
+    return legs
+
+
+def check_shards(root: Path) -> list[str]:
+    """Name the shard legs the gate produces, split as ``[ci] shards`` says.
+
+    One leg per runner and Python [livery.workshop.check_legs][] names,
+    spelled as that leg, ``check-<os>-<python>``, for a count of one,
+    the count of every runner the table does not name; and
+    ``check-<os>-<python>-<i>of<n>`` for each of the ``n`` shards
+    otherwise, in order. ``[ci] shards-max`` caps a count, 4 when
+    absent. The task fails, naming the key and the runner, when the
+    table names a runner ``[ci] runners`` does not list, gives a count
+    below 1 or above the cap, or gives one that is not a whole number.
+    """
+    from livery.workshop._pythons import gate_pythons
+
+    contract = load_contract(root / "workshop.toml")
+    ci = contract.get("ci") or {}
+    runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+    counts = shard_counts(ci, key="shards", runners=runners, listed="[ci] runners")
+    return _shard_legs(runners, gate_pythons(root), counts)
+
+
+def pull_request_shards(root: Path) -> list[str]:
+    """Name the shard legs a pull request's run produces, split as the contract says.
+
+    One leg per runner and Python [livery.workshop.pull_request_legs][]
+    names, split as [livery.workshop.check_shards][] splits the gate's:
+    by ``[ci] pull-request-shards``, judged against the pull request's
+    runners, or by ``[ci] shards`` when that key is absent. The task
+    fails as `check_shards` fails, and as `pull_request_legs` fails.
+    """
+    from livery.workshop._pythons import gate_pythons
+
+    contract = load_contract(root / "workshop.toml")
+    ci = contract.get("ci") or {}
+    runners = pull_request_runners(ci)
+    if ci.get("pull-request-shards") is None:
+        every = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
+        counts = shard_counts(ci, key="shards", runners=every, listed="[ci] runners")
+    else:
+        listed = (
+            "[ci] pull-request-runners"
+            if ci.get("pull-request-runners") is not None
+            else "[ci] runners"
+        )
+        counts = shard_counts(
+            ci, key="pull-request-shards", runners=runners, listed=listed
+        )
+    return _shard_legs(runners, gate_pythons(root), counts)
 
 
 def effective_point(point: str) -> str:

@@ -96,6 +96,7 @@ def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> No
     (work / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     listed = _store_tasks.ls_flow(work)
     assert "  metrics: remote, window 300; 0 row(s)" in listed
+    assert "  durations/<leg>: remote, window 30; 0 key(s)" in listed
     assert "  verified: remote, window 200; 1 row(s)" in listed
     assert "  coverage/<base>/<leg>: remote, no window; 0 key(s)" in listed
     assert "  coverage/marks: remote, window 400; 0 row(s)" in listed
