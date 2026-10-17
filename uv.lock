@@ -1530,7 +1530,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
-version = "0.10.0"
+version = "0.11.0"
 source = { editable = "packages/workshop" }
 dependencies = [
     { name = "livery-footman" },
