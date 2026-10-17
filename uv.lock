@@ -1419,7 +1419,7 @@ provides-extras = ["uv", "test"]
 
 [[package]]
 name = "livery-forge"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "packages/forge" }
 
 [package.optional-dependencies]
