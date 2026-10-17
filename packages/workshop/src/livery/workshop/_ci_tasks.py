@@ -1247,10 +1247,12 @@ def ci_timings(
 
     Reads the metrics series the gate job writes; CI is its only
     writer, a local run reads. Per job, every metric's latest value
-    and its median and ninetieth percentile over the series' window,
-    then the biggest movers: the recent runs' median against the
-    base runs' median. Then the speed marks, each package's mark on
-    each leg beside the newest run's time.
+    and its median and ninetieth percentile over the series' window;
+    a platform that ran as shards is one job, its folded row, with a
+    line per shard under it giving the shard's wall and queue times
+    from the newest run. Then the biggest movers: the recent runs'
+    median against the base runs' median. Then the speed marks, each
+    package's mark on each leg beside the newest run's time.
     """
     root = workspace_root()
     if root is None:

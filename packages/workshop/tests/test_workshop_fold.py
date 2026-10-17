@@ -698,3 +698,82 @@ def test_the_stamp_and_the_speed_judge_read_the_platform_leg_past_the_shards_row
         (WINDOWS, "packages/a", 1.5),
         (WINDOWS, "packages/b", 0.2),
     ]
+
+
+# --- shards that partitioned nothing ----------------------------------------
+
+
+def test_shards_none_of_which_partitioned_fold_on_their_scopes_and_files_alone(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A gate that skipped on every shard left no record, and has no partition to prove.
+
+    The shards' one scope and their files are the whole proof; the
+    folded row records no digest, rows or bound, and the collect writes
+    no durations row for it. One shard with a record beside one
+    without is red by name, and without a matrix the labels' count
+    names a shard that left no ref.
+    """
+    _put(
+        work,
+        WIN1,
+        _row(WIN1, scope="verified"),
+        **{"coverage.json": _coverage(WIN1, {})},
+    )
+    _put(
+        work,
+        WIN2,
+        _row(WIN2, scope="verified", total=70.0),
+        **{"coverage.json": _coverage(WIN2, {})},
+    )
+    _fold.fold_run(work, RUN, folders=FOLDERS)
+    assert capsys.readouterr().out == (
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 0 file(s) ran\n"
+        f"  fold: {WINDOWS}: no shard partitioned test files (verified); folded"
+        " without a partition\n"
+    )
+    folded = _metrics.RUNS.series(RUN.run_id, WINDOWS)
+    assert _refs(work) == {folded.ref}
+    row, why = folded.row(state_store(work), _metrics.ROW_FILE)
+    assert why == "" and row is not None
+    assert row.data["job"] == DISPLAY[WINDOWS]
+    assert (
+        row.data["scope"]["leg"] == WINDOWS and row.data["scope"]["scope"] == "verified"
+    )
+    assert row.data["files"] == {} and row.data["total_ms"] == 100.0
+    shard = row.data["shard"]
+    assert shard["count"] == 2 and shard["digest"] == ""
+    assert shard["rows"] == [] and shard["before"] == ""
+    assert [item["leg"] for item in shard["shards"]] == [WIN1, WIN2]
+    coverage, why = folded.row(state_store(work), "coverage.json")
+    assert why == "" and coverage is not None
+    assert coverage.data["leg"] == WINDOWS and coverage.data["units"] == {}
+    repo = _forge(
+        [
+            (DISPLAY[WIN1], "success", "2026-10-17T10:00:10Z"),
+            (DISPLAY[WIN2], "success", "2026-10-17T10:00:20Z"),
+        ]
+    )
+    lines = _metrics.collect(work, repo, RUN, sha="d" * 40)
+    assert (
+        f"  {DISPLAY[WINDOWS]}: the forge times of {DISPLAY[WIN1]}, the first of 2"
+        " shard(s)" in lines
+    )
+    assert not [line for line in lines if "durations" in line]
+    # One shard with a record beside one without.
+    _clear(work)
+    _put(work, WIN1, _row(WIN1, scope="verified"))
+    _put(work, WIN2, _row(WIN2, marker=_marker("2of2", FILES[1:])))
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: {WIN1} left no shard record \(.workshop/fm-shard.json"
+        rf" rides the leg's row\) and {WIN2} did;",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    # Without a matrix, the labels' count names the shard that left no ref.
+    _clear(work)
+    _put(work, WIN1, _row(WIN1, scope="verified"))
+    with pytest.raises(
+        _FAILURES, match=rf"{WINDOWS}: {WIN2} left no ref \(1 of 2 shards did: {WIN1}\)"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)

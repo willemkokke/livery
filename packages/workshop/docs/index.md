@@ -1463,10 +1463,16 @@ absence.
   re-run as its own recovery. Below the fold the coverage records, the
   verified stamp, the speed marks and the janitor's key set see one
   leg per platform; the forge's rows of the shards stay in the run's
-  `metrics` file, times alone, for `fm ci.timings`. A run with no
-  sharded platform says so and folds nothing. On GitLab a job run as
-  `parallel: matrix` is listed as `check: [<i>of<n>]`, and the job's
-  display name spells the shard that way.
+  `metrics` file, times alone, and `fm ci.timings` prints each
+  shard's wall and queue times under the platform's section. A
+  platform none of whose shards left a record partitioned nothing:
+  the gate skipped on every shard, the tree already proved or
+  nothing affected, or no step that reads the shard ran. Its shards
+  fold on their scopes and files alone and the fold says so; one
+  shard with a record beside one without is red by name. A run with
+  no sharded platform says so and folds nothing. On GitLab a job run
+  as `parallel: matrix` is listed as `check: [<i>of<n>]`, and the
+  job's display name spells the shard that way.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
@@ -1798,7 +1804,11 @@ leg runs as one shard of one; an absent series reads as no rows.
 the verdicts use, `--key=<leg>,<package>` for one series of a family
 and `--json` for the rows as they are. `fm ci.timings` renders the
 `metrics` series: per job and metric the latest, p50, and p90 over
-the window, then the movers. `fm janitor` bounds every series in the
+the window, then the movers. A platform that ran as shards is one
+section, its folded row, with a line per shard under it giving the
+shard's wall and queue times from the newest run; the shards' own
+rows are no sections, and the movers and the speed and coverage
+sections read the platform legs alone. `fm janitor` bounds every series in the
 scope it runs in, windows, ages, and orphans, the remote ones from
 the merge point's gate job after every green run. The site's deploy
 phase draws its coverage pages from main's coverage record, the union
