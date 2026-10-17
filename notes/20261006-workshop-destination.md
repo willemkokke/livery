@@ -1041,7 +1041,8 @@ names first, the same way.
 | --- | --- |
 | `livery-extensions-changelog`, `livery-extensions-claude` | 10e and 10f: shipped 2026-10-09, release PR #1340 |
 | `livery-extensions-cmake` | step 8's release wave; the package exists since step 8's P1b (#1667) |
-| `livery-extensions-python`, `-unreal` | step 8's release wave, as each leaves the workshop wheel (`-unreal`: 11b) |
+| `livery-extensions-python` | step 8's release wave; the package exists since step 8's P8b (#1734) |
+| `livery-extensions-unreal` | 11b |
 | `livery-extensions-cpp` | step 8's release wave; the package exists since step 8's P7 (#1733) |
 | `livery-extensions-conan` | step 8's release wave; the package exists since step 8's P6b (#1727) |
 | `livery-extensions-nanobind` | step 8's release wave; the package exists since step 8's P5b (#1723) |
@@ -1447,13 +1448,16 @@ remained after N1.
    requires it (until #1729); the tool extensions whose suites mount
    conan reach it through a test edge. P7 (built, #1733) moves cpp to
    `packages/extensions/cpp`, distribution `livery-extensions-cpp`
-   0.0.0; conan's and nanobind's wheels require it, and the workshop
-   wheel ships the base and the python extension alone. P8a (built,
+   0.0.0; conan's and nanobind's wheels require it. P8a (built,
    #1734) makes public what python reads (`neighbours`,
    `SourceReferences`, `graph_changed`, `venv_python`, `is_example`,
    `speed_marks` and the rest of its table), moves `root_marks` and
    `publish_wheels` into python, and has the dev act publish through
-   each member's publish phase.
+   each member's publish phase. P8b (built, #1734) moves python to
+   `packages/extensions/python`, distribution
+   `livery-extensions-python` 0.0.0, and nanobind's wheel requires it:
+   the workshop wheel ships the base alone, `livery/workshop/` and no
+   extension entry point.
 
 **11c, the docs phase** (issue #1594). Ruled 2026-10-10: the docs
 site's generators are steps of a docs phase the docs extension
@@ -1500,8 +1504,8 @@ alone.
   removes `docs/_generated/` at the root and in each package, so a
   step no longer listed leaves nothing behind there.
 - PD (built, #1606): the `docs` dependency group follows what a
-  workspace lists: the base declares the `python.docs-group` query
-  while python ships in the workshop wheel, docs answers zensical and
+  workspace lists: the base declares the `python.docs-group` query,
+  since every workspace's root is the runtime's uv project, docs answers zensical and
   mkdocstrings answers mkdocstrings-python. `griffelib` leaves the
   workshop's runtime dependencies for its `test` extra, which the
   isolated release legs install.
@@ -1813,7 +1817,6 @@ neither needs nor rules out).
 
 | Temporary | Replaced by |
 | --- | --- |
-| the base's declarations of the `python.dev-group` and `python.docs-group` queries | the python extension's own declarations, once it leaves the workshop wheel (step 8) |
 | `fm footman.pages`' curated API page | the mkdocstrings extension's generator (phase 12d) |
 | `_taskref`'s spawned `fm --tasks-file` | `livery.footman.docs.site(provider=...)` (phase 12d) |
 | the reach allowance's forge row | the admin protocol (phase 15) |
@@ -1823,7 +1826,7 @@ neither needs nor rules out).
 | the wave's decision that a member's wheels were built before the wave, read from nanobind's answer of what its wheels job builds | conan's per-host artifact (phase 13) |
 | nanobind's `requires` on conan, and `livery-extensions-nanobind`'s dependency on `livery-extensions-conan` | nanobind cooperating with conan (phase 13, #1729) |
 | cpp's `host-tools` answer, the literal `cc` and `c++` | the toolchain declaration (phase 14) |
-| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage, 34 for nanobind, 21 for conan, 2 for cpp; conan's own suite skips 23 that need cmake or nanobind, and cpp's 3 that need cmake, conan or nanobind, where they are not installed) | fixture extensions in the workshop's suite |
+| the workshop's tests that mount a moved extension as data skip where it is not installed (`workshop_installed.skip_unless_installed`; 48 for cmake, 6 for mkdocstrings, 67 for docs, 6 for coverage, 34 for nanobind, 21 for conan, 2 for cpp, 101 for python; conan's own suite skips 23 that need cmake or nanobind, and cpp's 4 that need cmake, conan, nanobind or python, where they are not installed) | fixture extensions in the workshop's suite |
 | `livery-extensions-mkdocstrings`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `extension_set`, `step_extensions`, `step_enabled`, and on `livery-extensions-docs`, which ships the docs entry module | the release wave raising the floor within its set (step 8's R1) |
 | mkdocstrings' coverage floor at its measured 97.5 | the ratchet back to 100 |
 | `livery-extensions-docs`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `run_phase`, `order_topologically`, `release_tag` and `nearest_extensions` | the release wave raising the floor within its set (step 8's R1) |
@@ -1838,6 +1841,9 @@ neither needs nor rules out).
 | `livery-extensions-conan`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports `Package.root`, `RequirementWriter` and `RegistryTarget.from_table` | the release wave raising the floor within its set (step 8's R1) |
 | `livery-extensions-nanobind`'s floor `livery-extensions-conan>=0.0.0`, which ships conan's entry module | the release wave raising it with conan's first release (step 8's R2) |
 | `livery-extensions-cpp`'s floor `livery-workshop>=0.10.0`, which admits a workshop whose wheel still ships cpp's files and its `cpp` entry point | the release wave raising the floor within its set (step 8's R1) |
+| `livery-extensions-python`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports what python reads | the release wave raising the floor within its set (step 8's R1) |
+| python's coverage floor at its measured 95.5 | the ratchet back to 100 |
+| `livery-extensions-nanobind`'s floor `livery-extensions-python>=0.0.0`, and the `livery-extensions-python>=0.0.0` line in the `test` extras of basedpyright, changelog, claude, coverage, mkdocstrings and pytest | the release wave raising it with python's first release (step 8's R2) |
 | `livery-extensions-conan`'s and `livery-extensions-nanobind`'s floor `livery-extensions-cpp>=0.0.0` | the release wave raising it with cpp's first release (step 8's R2) |
 | each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | conan's declared `[env.CONAN_HOME]`, `{place}/conan` with `always`, placed per job (#1731) |
 | the conan home of a development environment, a loop pass and the scale fixture, in the base's `_devenv`, `_e2e` and `_scale` | the same declaration, placed per environment, loop pass and fixture (#1731) |
@@ -3889,6 +3895,23 @@ neither needs nor rules out).
   the CI entry-script generator; and the stamp phase's extension steps
   raise floors in their own files, as they already stamp versions.
   Built after step 8.
+
+- 2026-10-16, step 8's P8b (#1734), built: python leaves the workshop
+  wheel for `livery-extensions-python`, and the workshop wheel ships
+  the base alone. Of the tool extensions, only those whose suites need
+  python take a test edge on it (ruling 7): basedpyright, changelog,
+  claude, coverage, mkdocstrings and pytest; coverage's python tests
+  stay in coverage, since moving them would close a test-edge cycle.
+  Two faults the move found are fixed in it: coverage's answer to a
+  python query sits under `[for.python]`, so coverage mounts without
+  python; and `fm sync` installs a listed extension before it judges
+  the contracts, so a root that carries the extension's keys (livery's
+  `[[python.private-reaches]]`) syncs instead of refusing the key of
+  the extension it is about to install. Decided without Willem, cheap
+  to reverse: the base keeps declaring `python.dev-group` and
+  `python.docs-group`, since every workspace's root is the runtime's
+  uv project that installs `fm` and the listed extensions, listed
+  python or not; their temporary row goes.
 
 ## Open
 
