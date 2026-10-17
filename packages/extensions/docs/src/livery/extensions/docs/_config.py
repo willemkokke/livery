@@ -76,11 +76,6 @@ ALL_MEMBERS = "all"
 MEMBERS_POLICIES = (PUBLIC_MEMBERS, ALL_MEMBERS)
 
 
-def members_policy(root: Path) -> str:
-    """The members policy the listed extensions answer, ``public`` or ``all``."""
-    return answer(root, MEMBERS)
-
-
 def writers(
     answers: Mapping[str, Any], lookup: object
 ) -> tuple[tuple[str, Writer], ...]:

@@ -1368,11 +1368,13 @@ def _publish_container(root: Path) -> None:
     repo = forge_repository(root)
     image = f"{target.url}/{repo}-docs:latest".lower()
     dockerfile = "FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"
-    with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile", delete=False) as handle:
-        handle.write(dockerfile)
-        spec = handle.name
     docker = tools.docker.opts(cwd=root, nofail=True, recorded=False)
-    built = docker("build", "-f", spec, "-t", image, ".")
+    # The Dockerfile lives only while the build reads it: the directory
+    # goes when the build returns, refused or not.
+    with tempfile.TemporaryDirectory() as scratch:
+        spec = Path(scratch) / "site.Dockerfile"
+        spec.write_text(dockerfile, encoding="utf-8")
+        built = docker("build", "-f", str(spec), "-t", image, ".")
     if built.code != 0:
         fail(f"docker build exited {built.code}:\n{built.stdout}{built.stderr}")
     pushed = docker("push", image)

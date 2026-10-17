@@ -1,9 +1,8 @@
 """What the docs extension reads from the contracts and its queries' answers.
 
-The fallbacks and the refusals first: a project without a name, a
-workspace without packages, a value of the wrong shape that reaches a
-reader without the contract's judge, answers whose requires close a
-cycle. Then the members policy the listed extensions answer.
+The fallbacks and the refusals: a project without a name, a workspace
+without packages, a value of the wrong shape that reaches a reader
+without the contract's judge, answers whose requires close a cycle.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ import pytest
 
 from extensions_docs_workspace import fake_extensions
 from livery.extensions.docs import _contract
-from livery.extensions.docs._config import ALL_MEMBERS, PUBLIC_MEMBERS, members_policy
 from livery.extensions.docs._contract import (
     docs_requirements,
     package_generators,
@@ -37,10 +35,6 @@ def _workspace(tmp_path: Path, listed: str = '["docs"]') -> Path:
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (member / "workshop.toml").write_text('extensions = []\nname = "acme-core"\n')
     return root
-
-
-def _relist(root: Path, listed: str) -> None:
-    (root / "workshop.toml").write_text(f"[workspace]\nextensions = {listed}\n")
 
 
 # The fallbacks first.
@@ -108,20 +102,3 @@ def test_answers_whose_requires_close_a_cycle_leave_the_default_theme(
     )
     root = _workspace(tmp_path, '["docs", "acme.bold", "acme.calm"]')
     assert theme_values(root)["language"] == THEME_DEFAULT["language"]
-
-
-# Then the members policy.
-
-
-def test_the_members_policy_is_public_until_a_listed_extension_answers_all(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake_extensions(
-        tmp_path,
-        monkeypatch,
-        wide='[extension]\n[queries."docs.members"]\nvalue = "all"\n',
-    )
-    root = _workspace(tmp_path)
-    assert members_policy(root) == PUBLIC_MEMBERS
-    _relist(root, '["docs", "acme.wide"]')
-    assert members_policy(root) == ALL_MEMBERS

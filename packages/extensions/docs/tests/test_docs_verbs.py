@@ -207,35 +207,43 @@ def test_a_container_publish_refuses_a_failed_build_and_teaches_a_denied_push(
     monkeypatch.setattr("livery.workshop.forge_repository", lambda at: "Acme/Home")
     answers = {"build": 1}
     seen: list[tuple[str, ...]] = []
-    monkeypatch.setattr(tools, "docker", SimpleNamespace(opts=_tool(answers, seen)))
-    image = "registry.acme.example/team/acme/home-docs:latest"
-    try:
-        with pytest.raises(
-            _FAILURES, match=r"docker build exited 1:\nthe build output"
-        ):
-            _site._publish_container(root)
-        # Nothing is pushed after a failed build.
-        assert [args[0] for args in seen] == ["build"]
-        answers.update(build=0, push=1)
-        with pytest.raises(
-            _FAILURES, match=r"wants `docker login registry\.acme\.example` first"
-        ):
-            _site._publish_container(root)
-        assert seen[-1] == ("push", image)
-        answers.update(push=0)
-        _site._publish_container(root)
-        build, push = seen[-2:]
-        assert build[:2] == ("build", "-f") and build[3:] == ("-t", image, ".")
-        assert Path(build[2]).read_text() == (
-            "FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"
-        )
-        assert push == ("push", image)
-    finally:
-        # The image's Dockerfile is written to the system's temporary
-        # directory for each publish.
-        for args in seen:
+    read: list[str] = []
+    recorded = _tool(answers, seen)
+
+    def opts(**options: object) -> Callable[..., SimpleNamespace]:
+        run = recorded(**options)
+
+        def docker(*args: str) -> SimpleNamespace:
             if args[0] == "build":
-                Path(args[2]).unlink(missing_ok=True)
+                # The Dockerfile the build reads, while the build runs.
+                read.append(Path(args[2]).read_text())
+            return run(*args)
+
+        return docker
+
+    monkeypatch.setattr(tools, "docker", SimpleNamespace(opts=opts))
+    image = "registry.acme.example/team/acme/home-docs:latest"
+    # The refusal first: a failed build pushes nothing, and its Dockerfile
+    # is gone with it.
+    with pytest.raises(_FAILURES, match=r"docker build exited 1:\nthe build output"):
+        _site._publish_container(root)
+    assert [args[0] for args in seen] == ["build"]
+    assert not Path(seen[0][2]).exists()
+    answers.update(build=0, push=1)
+    with pytest.raises(
+        _FAILURES, match=r"wants `docker login registry\.acme\.example` first"
+    ):
+        _site._publish_container(root)
+    assert seen[-1] == ("push", image)
+    assert not Path(seen[-2][2]).exists()
+    answers.update(push=0)
+    _site._publish_container(root)
+    build, push = seen[-2:]
+    assert build[:2] == ("build", "-f") and build[3:] == ("-t", image, ".")
+    assert push == ("push", image)
+    assert read == ["FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"] * 3
+    # Each publish takes its Dockerfile with it, refused or pushed.
+    assert not any(Path(args[2]).exists() for args in seen if args[0] == "build")
 
 
 def test_an_ssh_publish_refuses_a_failed_step_and_ships_once_the_host_is_ready(
