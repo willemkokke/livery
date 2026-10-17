@@ -158,9 +158,17 @@ def test_a_contributed_point_joins_the_workspace_with_its_defaults(
     assert job.token == "job" and not job.writes and not job.environment
     assert _points.dispatchable(root) == ("gate", "nightly", "host-audit")
     assert _points.jobs_of(root, "host-audit") == ("host-audit",)
-    (entry,) = _points.entries_for(root, "host-audit", "host-audit")
+    entry, record = _points.entries_for(root, "host-audit", "host-audit")
     assert entry == _points.Entry(
         "host-audit", "host-audit", "extensions", (), source="packages/audit"
+    )
+    # A point with no gate job records its own row, last.
+    assert record == _points.Entry(
+        "host-audit",
+        "host-audit",
+        "ci.metrics.record",
+        ("--point=host-audit", "--job={display}"),
+        last=True,
     )
     # A root [[ci.schedule]] may attach to the contributed point too.
     (root / "workshop.toml").write_text(
@@ -170,6 +178,7 @@ def test_a_contributed_point_joins_the_workspace_with_its_defaults(
     assert [e.task for e in _points.entries_for(root, "host-audit", "host-audit")] == [
         "extensions",
         "doctor",
+        "ci.metrics.record",
     ]
 
 
@@ -197,10 +206,19 @@ def test_the_runner_runs_a_contributed_points_task_on_its_day(
         python="3.12",
         spawn=green,
     )
+    record = [
+        "hse",
+        "--profile=fm-profile-ci-metrics-record.json",
+        "ci.metrics.record",
+        "--point=host-audit",
+        "--job=host-audit (windows-latest, 3.12)",
+    ]
+    # Off its day the task is skipped and the job still records its run.
     assert (
-        seen == []
+        seen == [record]
         and "runs every 2w; next on 2026-09-28, skipped" in capsys.readouterr().out
     )
+    seen.clear()
     monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
     _points.run_point(
         root,
@@ -210,7 +228,10 @@ def test_the_runner_runs_a_contributed_points_task_on_its_day(
         python="3.12",
         spawn=green,
     )
-    assert seen == [["hse", "--profile=fm-profile-extensions.json", "extensions"]]
+    assert seen == [
+        ["hse", "--profile=fm-profile-extensions.json", "extensions"],
+        record,
+    ]
     assert (
         "host-audit/host-audit: extensions (packages/audit)" in capsys.readouterr().out
     )

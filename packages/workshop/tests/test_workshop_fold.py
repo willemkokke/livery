@@ -702,6 +702,10 @@ def test_the_stamp_and_the_speed_judge_read_the_platform_leg_past_the_shards_row
         ]
     )
     lines = _metrics.collect(work, repo, RUN, sha="d" * 40)
+    # The folded platform row, its two shards' forge rows and ubuntu's.
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 4 job(s)" in lines
+    # The drop, the gate job's last entry, takes the folded ref too.
+    lines = _metrics.drop_halves(work, repo, RUN, sha="d" * 40, job="gate", writers=())
     assert f"  {_metrics.run_ref(RUN, WINDOWS)}: dropped" in lines
     # The stamp names the platform legs: the shards' forge rows carry
     # no scope and block nothing.

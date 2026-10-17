@@ -514,11 +514,12 @@ def test_collect_names_a_job_the_forge_does_not_know(
     entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
     assert entry["jobs"][JOB]["tasks"] == {"check": 100.0}
     assert "wall_ms" not in entry["jobs"][JOB]
-    # Collected halves are dropped; the series file is the record now.
-    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+    # The half stays for the drop, the job's last entry: a collect
+    # never takes what a re-run or a sibling's collect still reads.
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) != {}
 
 
-def test_collect_keeps_the_halves_while_a_completed_job_is_red(
+def test_the_drop_keeps_the_halves_while_a_completed_job_is_red(
     work: Path, tmp_path: Path
 ) -> None:
     # A sibling job's failure turns the gate's verdict red, and the
@@ -581,14 +582,104 @@ def test_collect_keeps_the_halves_while_a_completed_job_is_red(
         == ""
     )
     ref = _metrics.run_ref(run, "check-a")
-    lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
+    repo = cast(Repository, cast(Any, _Repo()))
+    lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run 78 recorded, 5 job(s)" in lines
-    assert "  the per-run refs stay for a re-run of the gate: docs: failure" in lines
-    assert f"  {ref}: dropped" not in lines
+    assert git.read(state_store(work), ref).files is not None
+    lines = _metrics.drop_halves(
+        work, repo, run, sha=sha, job="gate", writers=("check",)
+    )
+    assert lines == ["  the per-run refs stay: docs: failure"]
     assert git.read(state_store(work), ref).files is not None
 
 
-def test_collect_joins_the_forge_times_and_drops_the_halves(
+def test_the_drop_waits_for_a_sibling_writer_and_takes_the_halves_when_last(
+    work: Path, tmp_path: Path
+) -> None:
+    # A point with no gate job: every job collects, so the first to
+    # finish leaves its half for the second's collect, and the second,
+    # the run's last writer, drops both. A queued job that writes no
+    # half (the pages deploy waiting on the gate) never holds the drop.
+    from typing import Any, cast
+
+    from livery.forge import Repository
+    from livery.forge._types import Conclusion, Job, Run, RunStatus
+
+    sha = "f" * 40
+    run = _ci_context.RunContext("gitea", "79", "schedule", "refs/heads/main")
+    forge_run = Run(
+        id=79,
+        workflow="nightly.yml",
+        head_sha=sha,
+        event="schedule",
+        status="running",
+        conclusion="",
+        created_at="2026-09-10T10:00:00Z",
+        started_at="2026-09-10T10:00:05Z",
+    )
+    state = {"done": False}
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+            return (forge_run,)
+
+        def jobs(self, run_id: int) -> tuple[Job, ...]:
+            status: RunStatus = "completed" if state["done"] else "running"
+            conclusion: Conclusion = "success" if state["done"] else ""
+            return (
+                Job(1, "nightly (3.13)", "completed", "success", "", "", ()),
+                Job(2, "nightly (3.14)", status, conclusion, "", "", ()),
+                Job(3, "pages", "queued", "", "", "", ()),
+            )
+
+    class _Repo:
+        checks = _Checks()
+
+    repo = cast(Repository, cast(Any, _Repo()))
+    for label in ("nightly-3.13", "nightly-3.14"):
+        trace = _trace(tmp_path / f"{label}.json", tasks={"check": 100.0})
+        job = f"nightly ({label.split('-')[1]})"
+        assert _metrics.put_leg(work, run, job=job, label=label, trace=trace)[1] == ""
+    # The first job to finish: its sibling still runs, so nothing goes.
+    lines = _metrics.drop_halves(
+        work, repo, run, sha=sha, job="nightly (3.13)", writers=("nightly",)
+    )
+    assert lines == ["  the per-run refs stay: nightly (3.14): running"]
+    refs = git.list_refs(state_store(work), git.RUN_PREFIX)
+    assert refs is not None and len(refs) == 2
+    # The last: its sibling is green and the queued deploy writes no
+    # half, so both refs go.
+    state["done"] = True
+    lines = _metrics.drop_halves(
+        work, repo, run, sha=sha, job="nightly (3.14)", writers=("nightly",)
+    )
+    assert [line.split(": ")[-1] for line in lines] == ["dropped", "dropped"]
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+
+
+def test_a_gate_re_run_after_a_red_first_attempt_still_finds_the_legs_parts(
+    work: Path, tmp_path: Path
+) -> None:
+    # The first gate attempt collects, then fails before its drop; the
+    # forge's re-run runs the gate again without its legs, and both the
+    # row's half and the leg's parts are still on the per-run ref.
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    _metrics.leave_leg_file(work, "coverage.json", {"scope": "full", "units": {}})
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace)[1] == ""
+    ref = _metrics.run_ref(RUN, "check-a")
+    first = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in first
+    kept = git.read(state_store(work), ref).files
+    assert kept is not None and set(kept) == {_metrics.ROW_FILE, "coverage.json"}
+    second = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in second
+    assert git.read(state_store(work), ref).files == kept
+
+
+def test_collect_joins_the_forge_times_and_keeps_the_halves_for_the_drop(
     work: Path, tmp_path: Path
 ) -> None:
     fake = FakeForge()
@@ -619,7 +710,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
-    assert f"  {_metrics.run_ref(run, 'gate')}: dropped" in lines
+    assert git.read(state_store(work), _metrics.run_ref(run, "gate")).files is not None
     rows = git.read(state_store(work), _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(run.run_id)])
@@ -635,6 +726,9 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     # among them.
     assert job["task_steps"] == {"check/test.pytest": 2000.0}
     assert entry["created_at"] == "2026-09-09T00:49:13Z"
+    # The drop, with nothing waiting and nothing red, takes the half.
+    lines = _metrics.drop_halves(work, repo, run, sha=sha, job="gate", writers=())
+    assert f"  {_metrics.run_ref(run, 'gate')}: dropped" in lines
     assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
 
@@ -1017,6 +1111,194 @@ def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> 
     bare = {_metrics.run_file("9"): json.dumps({"schema": _metrics.SCHEMA, "jobs": {}})}
     assert git.put(state_store(work), _metrics.SERIES.ref, bare, message="bare") == ""
     assert "  coverage" in _metrics.render(work)  # older rows still carry it
+
+
+def _nightly_repo(state: dict[str, bool]) -> object:
+    """A forge with one nightly run of two legs; *state* says if the second is done."""
+    from livery.forge._types import Conclusion, Job, Run, RunStatus
+
+    forge_run = Run(
+        id=int(RUN.run_id),
+        workflow="nightly.yml",
+        head_sha="d" * 40,
+        event="schedule",
+        status="running",
+        conclusion="",
+        created_at="2026-09-10T10:00:00Z",
+        started_at="2026-09-10T10:00:05Z",
+    )
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+            return (forge_run,)
+
+        def jobs(self, run_id: int) -> tuple[Job, ...]:
+            status: RunStatus = "completed" if state["done"] else "running"
+            conclusion: Conclusion = "success" if state["done"] else ""
+            return (
+                Job(1, "nightly (3.13)", "completed", "success", "", "", ()),
+                Job(2, "nightly (3.14)", status, conclusion, "", "", ()),
+            )
+
+    class _Repo:
+        checks = _Checks()
+
+    return _Repo()
+
+
+def test_the_record_stays_green_without_a_run_or_a_box(
+    work: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Fallbacks first: off CI the record does nothing and says so; on
+    # CI without a profile box the half stays unwritten, named, and the
+    # collect and the drop still run.
+    from typing import Any, cast
+
+    from livery.forge import Repository
+    from livery.workshop import _ci_tasks
+
+    repo = cast(Repository, cast(Any, _nightly_repo({"done": True})))
+    monkeypatch.setattr(
+        "livery.workshop._points.half_writers", lambda root, point: ("nightly",)
+    )
+    # A footman profile test earlier in this worker may have armed the
+    # plugin; the record here reads an unarmed process's environment.
+    from livery.footman import profile
+
+    monkeypatch.setattr(profile, "_mode", profile._OFF)
+    monkeypatch.setattr(profile, "_parent_box", None)
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITHUB_RUN_ID"):
+        monkeypatch.delenv(name)
+    _ci_tasks.record_flow(work, repo, point="nightly", job="nightly (3.14)")
+    assert "not a CI run" in capsys.readouterr().out
+    assert git.list_refs(state_store(work), _metrics.SERIES.ref) == {}
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", RUN.run_id)
+    monkeypatch.setenv("WORKSHOP_LEG", "nightly-3.14")
+    monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
+    _ci_tasks.record_flow(work, repo, point="nightly", job="nightly (3.14)")
+    out = capsys.readouterr().out
+    assert "no profile box in this job's environment" in out
+    assert f"run {RUN.run_id}: no leg left a row; nothing collected" in out
+    assert f"run {RUN.run_id}: no per-run ref to drop" in out
+
+
+def test_the_record_puts_the_jobs_half_from_its_box_collects_and_drops_when_last(
+    work: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The half is the union of the traces the job's entries left in its
+    # box: the doctor's and the check's tasks ride one row. The first
+    # leg's record left its half; this, the last leg's, collects both
+    # and drops the refs.
+    from typing import Any, cast
+
+    from livery.forge import Repository
+    from livery.workshop import _ci_tasks
+
+    state = {"done": False}
+    repo = cast(Repository, cast(Any, _nightly_repo(state)))
+    monkeypatch.setattr(
+        "livery.workshop._points.half_writers", lambda root, point: ("nightly",)
+    )
+    # A footman profile test earlier in this worker may have armed the
+    # plugin; the record here reads an unarmed process's environment.
+    from livery.footman import profile
+
+    monkeypatch.setattr(profile, "_mode", profile._OFF)
+    monkeypatch.setattr(profile, "_parent_box", None)
+    first = _trace(tmp_path / "first.json", tasks={"check": 50.0})
+    assert (
+        _metrics.put_leg(
+            work, RUN, job="nightly (3.13)", label="nightly-3.13", trace=first
+        )[1]
+        == ""
+    )
+    box = tmp_path / "box"
+    box.mkdir()
+    for name, ms in (("doctor", 1.0), ("check", 4.0)):
+        (box / f"{name}.json").write_text(
+            json.dumps(
+                {
+                    "traceEvents": [
+                        {
+                            "ph": "X",
+                            "cat": "task",
+                            "name": name,
+                            "pid": 1,
+                            "tid": 1,
+                            "ts": 1_000_000.0,
+                            "dur": ms * 1000,
+                        }
+                    ]
+                }
+            )
+        )
+    monkeypatch.setenv("WORKSHOP_LEG", "nightly-3.14")
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    _ci_tasks.record_flow(work, repo, point="nightly", job="nightly (3.14)")
+    out = capsys.readouterr().out
+    assert f"  nightly-3.14: {_metrics.ROW_FILE} on run {RUN.run_id}'s ref" in out
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 2 job(s)" in out
+    # The forge still lists this job as running when its last entry
+    # runs; it is left out of the question, and the sibling is green.
+    assert [line for line in out.splitlines() if "dropped" in line]
+    assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
+    assert entry["jobs"]["nightly (3.14)"]["tasks"] == {"check": 4.0, "doctor": 1.0}
+    assert entry["jobs"]["nightly (3.13)"]["tasks"] == {"check": 50.0}
+
+
+def test_the_collect_and_the_drop_fail_open_when_the_forge_refuses_the_question(
+    work: Path, tmp_path: Path
+) -> None:
+    # A job with no forge credential, one that only builds, pushes its
+    # half and cannot read the run's jobs back: the row carries the
+    # halves alone and names the refusal, and the drop keeps the refs.
+    from typing import Any, cast
+
+    from livery.forge import ForgeError, Repository
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Any, ...]:
+            raise ForgeError(
+                "HTTP 401 on GET /runs: invalid username, password or token"
+            )
+
+        def jobs(self, run_id: int) -> tuple[Any, ...]:
+            raise AssertionError("never asked without a run")
+
+    class _Repo:
+        checks = _Checks()
+
+    repo = cast(Repository, cast(Any, _Repo()))
+    trace = _trace(tmp_path / "t.json", tasks={"nanobind.wheels": 16000.0})
+    assert (
+        _metrics.put_leg(work, RUN, job="wheels", label="wheels", trace=trace)[1] == ""
+    )
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert any(
+        "the forge could not be asked for its jobs (HTTP 401" in line for line in lines
+    )
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in lines
+    rows = git.read(state_store(work), _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
+    assert entry["jobs"]["wheels"]["tasks"] == {"nanobind.wheels": 16000.0}
+    lines = _metrics.drop_halves(
+        work, repo, RUN, sha="b" * 40, job="wheels", writers=()
+    )
+    assert (
+        lines[-1] == f"  run {RUN.run_id}: the forge's jobs are unknown; the refs stay"
+    )
+    assert (
+        git.read(state_store(work), _metrics.run_ref(RUN, "wheels")).files is not None
+    )
 
 
 # --- a platform's shards in the rendering ------------------------------------

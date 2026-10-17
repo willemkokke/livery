@@ -106,12 +106,16 @@ def pytest_configure(config: pytest.Config) -> None:
 
     for name in (*IDENTITY_VARIABLES, LEG_VARIABLE):
         os.environ.pop(name, None)
+    # One scratch directory for the session: the home, and the git
+    # config beside it, so the session's end removes both and a
+    # process that ends without this hook leaves one directory for
+    # footman's collector, not two.
+    home = str(scratch_dir("workshop-isolation"))
     if "GIT_CONFIG_GLOBAL" not in os.environ:
-        gitconfig = scratch_dir("tests") / "gitconfig"
+        gitconfig = Path(home) / "gitconfig"
         gitconfig.write_text(GIT_CONFIG, "utf-8")
         os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
 
-    home = str(scratch_dir("workshop-isolation"))
     set_here: list[str] = []
     for name in variables():
         if os.environ.get(name):

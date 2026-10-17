@@ -394,6 +394,36 @@ def _groups(events: list[dict[str, Any]]) -> dict[int, str]:
     }
 
 
+def test_the_parent_box_is_the_handed_one_once_armed_and_the_environments_before(
+    tmp_path, monkeypatch
+):
+    """A profiled run claims the variable for its children; a task that wants
+    the box it was handed, where its siblings' fragments are, asks here."""
+    from livery.footman import profile
+
+    monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
+    monkeypatch.setattr(profile, "_mode", profile._OFF)
+    monkeypatch.setattr(profile, "_parent_box", None)
+    # Nothing handed, nothing in the environment: no box.
+    assert profile.parent_box() is None
+    handed = tmp_path / "handed"
+    handed.mkdir()
+    # Unarmed, the environment's box is the one.
+    monkeypatch.setenv("FM_PROFILE_DIR", str(handed))
+    assert profile.parent_box() == handed
+    # Armed as a profiled run: the environment now names this run's own
+    # box, and the handed one is what the plugin kept.
+    own = tmp_path / "own"
+    own.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(own))
+    monkeypatch.setattr(profile, "_mode", profile._ROOT)
+    monkeypatch.setattr(profile, "_parent_box", str(handed))
+    assert profile.parent_box() == handed
+    # A handed box whose owner has gone is no box.
+    handed.rmdir()
+    assert profile.parent_box() is None
+
+
 def test_a_child_whose_box_has_gone_writes_nothing(tmp_path, monkeypatch):
     """A box named by a run that has already ended is not written into.
 
