@@ -243,28 +243,25 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
 def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     """Restore exactly the files prepare writes; never raises.
 
-    The error being unwound is the one worth seeing, so this cleans
-    quietly: each member's changelog, pyproject, contract, and
-    version files return to HEAD, and so do the set's manifest and the
-    workspace lock the stamp refreshed. Each restore reads HEAD, never
+    The error being unwound is the one worth seeing, so this raises
+    nothing of its own: each member's changelog, pyproject, contract,
+    and version files return to HEAD, and so do the set's manifest and
+    the workspace lock the stamp refreshed. One of these files on disk
+    that HEAD lacks is one prepare created, as a first release's
+    changelog and manifest are, and it is removed, so the switch back
+    to the base does not carry it along. Each restore reads HEAD, never
     the index: a commit that failed (a signing agent that refused) has
     already staged every change, and a restore from the index would
-    keep them.
+    keep them. Each path the rollback could not put back is printed
+    with the reason, and the other paths are put back all the same.
     """
     from livery.workshop._publish import MANIFEST
 
     paths: list[str] = []
     for package in members:
         base = package.directory.relative_to(root)
-        # Only files the member actually has: one pathspec absent
-        # from HEAD refuses the whole checkout, taking every other
-        # restore down with it (the same trap the lock note below
-        # names). prepare edits existing files, so presence on disk
-        # is the right filter.
         paths.extend(
-            str(base / name)
-            for name in ("CHANGELOG.md", *FLOOR_HOMES)
-            if (package.directory / name).is_file()
+            (base / name).as_posix() for name in ("CHANGELOG.md", *FLOOR_HOMES)
         )
         # Every file the set's stamp writes a version into. A set that
         # cannot name them restores the rest regardless.
@@ -272,20 +269,39 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
             paths.extend(
                 home.relative_to(root).as_posix()
                 for home in _lifecycle.version_files(package)
-                if home.is_file()
             )
-    git.restore(root, *paths)
-    # The lock the stamp refreshed and the manifest, each restored
-    # alone: a file HEAD lacks in the same pathspec would refuse the
-    # whole checkout, taking every other restore down with it.
-    for alone in ("uv.lock", MANIFEST):
-        git.restore(root, alone)
-    # A first release's manifest has no HEAD to return to: it goes, so
-    # the switch back to the base does not carry it along.
-    if not git.tracks(root, f"HEAD:{MANIFEST}"):
-        with contextlib.suppress(git.GitError):
-            git.unstage(root, MANIFEST)
-        (root / MANIFEST).unlink(missing_ok=True)
+    paths.extend(("uv.lock", MANIFEST))
+    for path, reason in _put_back(root, tuple(dict.fromkeys(paths))):
+        print(f"  the rollback could not restore {path}: {reason}")
+
+
+def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Return each of *paths* to HEAD; each path that failed, with the reason.
+
+    A path HEAD has is checked out from HEAD. A path HEAD lacks that
+    is on disk is taken out of the index and deleted. A path in
+    neither is left alone. The paths HEAD has are checked out in one
+    call, and only when git refuses that call is each checked out
+    alone: git refuses the whole call for one bad path, so the one
+    path git refuses never stops the rest.
+    """
+    tracked: list[str] = []
+    failed: list[tuple[str, str]] = []
+    for path in paths:
+        try:
+            if git.tracks(root, f"HEAD:{path}"):
+                tracked.append(path)
+            elif (root / path).is_file():
+                git.unstage(root, path)
+                (root / path).unlink()
+        except (git.GitError, OSError) as error:
+            failed.append((path, str(error)))
+    if tracked and git.restore(root, *tracked):
+        for path in tracked:
+            refused = git.restore(root, path)
+            if refused:
+                failed.append((path, refused))
+    return failed
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:

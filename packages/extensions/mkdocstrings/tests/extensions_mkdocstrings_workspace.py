@@ -90,6 +90,27 @@ def fake_steps(tmp_path: Path, name: str, source: str) -> None:
     importlib.invalidate_caches()
 
 
+def skip_unless_installed(*extensions: str) -> None:
+    """Skip the running test while an extension of *extensions* is not installed.
+
+    A test that reads this repository's own workspace reads contracts
+    whose tables belong to the extensions the workspace mounts. A run
+    of this wheel alone, as a release leg makes, installs docs, which
+    it requires, and no other extension. The reason names each missing
+    extension and the distribution that ships it.
+    """
+    missing = [
+        name
+        for name in dict.fromkeys(extensions)
+        if _extensions.installed_declaration(name) is None
+    ]
+    if missing:
+        named = ", ".join(
+            f"{name} ({_extensions.distribution_of(name)})" for name in missing
+        )
+        pytest.skip(f"not installed here: {named}")
+
+
 def composed_groups(root: Path) -> dict[str, list[str]]:
     """The dependency groups of the project file the engine composes for *root*.
 

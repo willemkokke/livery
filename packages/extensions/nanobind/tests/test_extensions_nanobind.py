@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -25,7 +26,10 @@ from typing import cast
 import pytest
 
 # The wheels job is nanobind's, added as the mount adds it.
-from extensions_nanobind_workspace import nanobind_jobs  # noqa: F401
+from extensions_nanobind_workspace import (
+    nanobind_jobs,  # noqa: F401
+    skip_unless_installed,
+)
 from livery.extensions.nanobind import _ci, _tasks
 from livery.footman import Context, Group
 from livery.workshop._packages import Package, discover_packages
@@ -285,6 +289,17 @@ def test_a_workspace_that_lists_no_nanobind_has_no_verb_for_its_template(
 # --- the declaration ----------------------------------------------------------
 
 
+def _floor_cut(requirement: str) -> str:
+    """*requirement* with its floor's version written ``<floor>``.
+
+    A release raises a floor on a member released beside it to that
+    member's new version, so the value is the release's to move. The
+    name, the floor's presence and the marker stay as the wheel wrote
+    them.
+    """
+    return re.sub(r">=\s*\d[^\s,;]*", ">=<floor>", requirement)
+
+
 def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> None:
     from livery.workshop._extensions import declaration, shipping_distribution
 
@@ -312,17 +327,17 @@ def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> No
     assert shipped is not None and shipped.name == "livery-extensions-nanobind"
     # The extensions it requires, python, cpp and conan, each ship in a
     # distribution of its own, and this wheel requires all three beside
-    # the base.
+    # the base, each at a floor.
     required = importlib.metadata.requires("livery-extensions-nanobind") or []
     assert [
-        line
+        _floor_cut(line)
         for line in required
         if line.startswith(("livery-workshop", "livery-extensions-"))
     ] == [
-        "livery-extensions-conan>=0.0.0",
-        "livery-extensions-cpp>=0.0.0",
-        "livery-extensions-python>=0.0.0",
-        "livery-workshop>=0.10.0",
+        "livery-extensions-conan>=<floor>",
+        "livery-extensions-cpp>=<floor>",
+        "livery-extensions-python>=<floor>",
+        "livery-workshop>=<floor>",
     ]
     declared = declaration("nanobind")
     assert declared is not None
@@ -645,8 +660,13 @@ def test_the_loop_s_dev_wheels_hold_this_distribution() -> None:
     # publishes before the birth hold this distribution: the newborn
     # installs it, and its wheels job runs nanobind.wheels from it.
     from livery.workshop._e2e import LOOP_MEMBERS, dev_members, loop_stack
+    from livery.workshop._extensions import installed_set
 
     root = Path(__file__).resolve().parents[4]
+    # The dev wheels are read from this checkout's packages, whose
+    # contracts read right only beside every extension the workspace
+    # mounts.
+    skip_unless_installed(*installed_set(root))
     templates = {member.name: member.template for member in LOOP_MEMBERS}
     assert templates["loop-native"] == "nanobind-module"
     assert "nanobind" in loop_stack()

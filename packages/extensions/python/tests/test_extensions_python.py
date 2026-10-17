@@ -62,6 +62,17 @@ def _in_this_checkout() -> None:
 # --- its own distribution -----------------------------------------------------
 
 
+def _floor_cut(requirement: str) -> str:
+    """*requirement* with its floor's version written ``<floor>``.
+
+    A release raises a floor on a member released beside it to that
+    member's new version, so the value is the release's to move. The
+    name, the floor's presence and the marker stay as the wheel wrote
+    them.
+    """
+    return re.sub(r">=\s*\d[^\s,;]*", ">=<floor>", requirement)
+
+
 def test_its_own_distribution_ships_python_and_the_workshop_wheel_none() -> None:
     from livery.workshop._extensions import declaration, shipping_distribution
 
@@ -77,13 +88,13 @@ def test_its_own_distribution_ships_python_and_the_workshop_wheel_none() -> None
     shipped = shipping_distribution("livery.extensions.python")
     assert shipped is not None and shipped.name == "livery-extensions-python"
     # At runtime it requires the base, footman, the forge's index probe
-    # and the toolroom's tools, and nothing else.
+    # and the toolroom's tools, and nothing else, each at a floor.
     required = importlib.metadata.requires("livery-extensions-python") or []
-    assert sorted(required) == [
-        "livery-footman>=0.60.0",
-        "livery-forge>=0.7.0",
-        "livery-toolroom>=0.11.0",
-        "livery-workshop>=0.10.0",
+    assert sorted(_floor_cut(line) for line in required) == [
+        "livery-footman>=<floor>",
+        "livery-forge>=<floor>",
+        "livery-toolroom>=<floor>",
+        "livery-workshop>=<floor>",
     ]
     declared = declaration("python")
     assert declared is not None

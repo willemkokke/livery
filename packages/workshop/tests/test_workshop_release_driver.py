@@ -140,6 +140,119 @@ def test_floors_rise_within_the_set_in_both_homes(
     ]
 
 
+def _files(root: Path) -> dict[str, bytes]:
+    """Every file under *root* outside ``.git``, by its path, to its bytes."""
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and ".git" not in path.relative_to(root).parts
+    }
+
+
+def test_a_first_release_failing_its_legs_leaves_the_tree_as_it_was(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    skip_unless_installed("python")
+    # The fallback first: tool has never released, so prepare creates
+    # its changelog, which HEAD lacks. The legs fail, and the rollback
+    # removes that changelog and restores every file prepare edited.
+    _fake, root = workspace
+    _git(root, "tag", "-d", "packages/tool/v0.2.0")
+    _git(root, "rm", "-q", "packages/tool/CHANGELOG.md")
+    _git(root, "commit", "-m", "chore: tool has no changelog yet")
+    _grow(root, "core", "feat: core grows (#1)")
+    _grow(root, "tool", "feat: tool grows (#2)")
+    before = _files(root)
+    changelog = root / "packages" / "tool" / "CHANGELOG.md"
+    created: list[bool] = []
+
+    def _red(_root: Path, plan: MemberPlan, dirs: tuple[Path, ...]) -> None:
+        created.append(changelog.is_file())
+        raise SystemExit(f"{plan.package.name} isolated tests (head) failed")
+
+    monkeypatch.setattr("livery.workshop._release_driver.validate_member", _red)
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
+    )
+    with pytest.raises(_FAILURES, match="livery-core isolated tests"):
+        local_release(root, resolve_set(root, ("core", "tool")))
+    assert created == [True]
+    assert not changelog.exists()
+    assert _files(root) == before
+    assert git.is_clean(root)
+    assert "could not restore" not in capsys.readouterr().out
+
+
+def test_a_rollback_that_cannot_restore_one_path_restores_the_rest_and_names_it(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _fake, root = workspace
+    members = resolve_set(root, ("core", "tool"))
+    core = root / "packages" / "core"
+    tool = root / "packages" / "tool"
+    before = {
+        path: path.read_text()
+        for path in (core / "pyproject.toml", tool / "pyproject.toml")
+    }
+    # What a prepare leaves: an entry in core's changelog, and both
+    # members' versions stamped.
+    stamped_changelog = (core / "CHANGELOG.md").read_text() + "\n## 9.9.9\n"
+    (core / "CHANGELOG.md").write_text(stamped_changelog)
+    for path, text in before.items():
+        path.write_text(text.replace('"0.2.0"', '"9.9.9"'))
+    refused = "packages/core/CHANGELOG.md"
+    restore = git.restore
+
+    def _refusing(at: Path, *paths: str) -> str:
+        # git refuses a whole call for one path it cannot write.
+        if refused in paths:
+            return f"error: unable to unlink old '{refused}': Permission denied"
+        return restore(at, *paths)
+
+    monkeypatch.setattr(git, "restore", _refusing)
+    rollback_prepare(root, members)
+    assert {path: path.read_text() for path in before} == before
+    assert (core / "CHANGELOG.md").read_text() == stamped_changelog
+    out = capsys.readouterr().out
+    named = [line for line in out.splitlines() if "packages/" in line]
+    assert len(named) == 1 and refused in named[0]
+
+
+def test_a_file_prepare_created_that_cannot_go_is_named_and_the_rest_go_back(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._publish import MANIFEST
+
+    _fake, root = workspace
+    pyproject = root / "packages" / "core" / "pyproject.toml"
+    before = pyproject.read_text()
+    pyproject.write_text(before.replace('"0.2.0"', '"9.9.9"'))
+    # A first release's manifest, which HEAD lacks, while another git
+    # holds the index: git cannot take the manifest out of it.
+    (root / MANIFEST).write_text("{}\n")
+    unstage = git.unstage
+
+    def _locked(at: Path, path: str) -> None:
+        if path == MANIFEST:
+            raise git.GitError(
+                "fatal: Unable to create '.git/index.lock': File exists."
+            )
+        unstage(at, path)
+
+    monkeypatch.setattr(git, "unstage", _locked)
+    rollback_prepare(root, resolve_set(root, ("core",)))
+    assert pyproject.read_text() == before
+    assert (root / MANIFEST).is_file()
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1 and MANIFEST in lines[0]
+
+
 def test_rollback_restores_exactly_what_prepare_writes(
     workspace: tuple[FakeForge, Path],
 ) -> None:
