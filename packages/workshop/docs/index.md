@@ -1410,7 +1410,23 @@ absence.
   `durations` rows: longest first, each file into the shard with the
   least summed seconds, ties by name, a file no row names at the
   row's median, so every shard of a run computes the same partition
-  and every file lands in exactly one shard.
+  and every file lands in exactly one shard. The rendered check job
+  carries the shards as literals. On GitHub and Gitea, while every
+  count is one, its matrix is the `os` and `python` lists; when any
+  count is above one it is `include` entries, one per runner, Python
+  and shard in that order, each `{os, python, shard}` with the shard
+  spelled `<i>of<n>`, and a runner with one shard has its entry with
+  `1of1`, so every entry carries the key and the one call passes
+  `--shard="${{ matrix.shard }}"`. The forge names each job by the
+  entry's values in order, `check (windows-latest, 3.14, 2of4)`. When
+  a pull request's runners or counts differ from every other event's,
+  a `legs` job holds both matrices as literals, the event picks one,
+  and the check job reads it with `fromJSON`; both literals take the
+  `include` shape when any count on either event is above one. On
+  GitLab the one check job runs on the first runner, as that runner's
+  count through `parallel: matrix`, `SHARD` taking `1of2` and `2of2`,
+  and its call passes `--shard="$SHARD"`; GitLab reads the first
+  runner's count alone, since its one document serves every event.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
