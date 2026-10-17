@@ -48,3 +48,10 @@ floor = "0.0.0"
 path = "packages/extensions/conan"
 kind = "test"
 floor = "0.0.0"
+
+# The suite creates a member from python's template.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+

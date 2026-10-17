@@ -19,6 +19,12 @@ path = "packages/footman"
 kind = "runtime"
 floor = "0.58.0"
 
+# The suite lists python, whose block the next sync delivers.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.

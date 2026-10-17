@@ -11,6 +11,7 @@ import pytest
 from livery.forge.testing import FakeForge
 from livery.workshop import _new_project as _newborn_module
 from livery.workshop._new_project import new_project
+from workshop_installed import skip_unless_installed
 
 #: The hand-off to the newborn's own runner, bound at import, before the
 #: module's fixture stubs it for every birth below: the tests of the
@@ -359,6 +360,7 @@ def test_a_bad_name_refuses() -> None:
 def test_the_extension_arm_scaffolds_a_self_hosting_home(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     _birth(local=True, owner="", extension="brand")
     root = tmp_path / "acme-tools"
     member = root / "packages" / "brand"

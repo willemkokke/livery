@@ -24,6 +24,12 @@ path = "packages/footman"
 kind = "runtime"
 floor = "0.60.0"
 
+# The suite reads the module roots python answers for a package.
+[[depends]]
+path = "packages/extensions/python"
+kind = "test"
+floor = "0.0.0"
+
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately. The measured value of the

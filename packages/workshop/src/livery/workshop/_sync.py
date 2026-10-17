@@ -364,8 +364,13 @@ def require_mounted(
     and its dev group names the extension's distribution, then ``uv
     sync`` locks and installs through the file's ``[tool.uv.sources]``
     and indexes. An extension the workspace sources from a path or
-    from git installs from there. The fresh process then renders every
-    file with the extension mounted.
+    from git installs from there. That write reads the contracts
+    without judging their keys: a key of an extension no installed
+    distribution declares yet, such as the root's ``[python]`` table
+    before python is installed, has no declaration to be judged by
+    until the install. The fresh process then judges every contract
+    over the installed declarations and renders every file with the
+    extension mounted.
 
     One no distribution declares even then refuses, naming it and the
     list that brings it, and so does a handoff that cannot start. Each
@@ -443,6 +448,7 @@ def _install_listed(root: Path, flags: tuple[str, ...]) -> dict[str, bytes | Non
         What each of the three files held before, None for one that was
         not there, for a refusal that puts them back.
     """
+    from livery.workshop._contract import unjudged
     from livery.workshop._fragment_engine import RENDERED_MANIFEST
     from livery.workshop._shipped_files import PROJECT_FILE, deliver_project_file
     from livery.workshop._uv import run_uv
@@ -452,8 +458,9 @@ def _install_listed(root: Path, flags: tuple[str, ...]) -> dict[str, bytes | Non
         for name in (PROJECT_FILE, RENDERED_MANIFEST, "uv.lock")
     }
     try:
-        for line in deliver_project_file(root):
-            print(line)
+        with unjudged():
+            for line in deliver_project_file(root):
+                print(line)
         run_uv("sync", *flags, root=root)
     except BaseException:
         _put_back(root, held)

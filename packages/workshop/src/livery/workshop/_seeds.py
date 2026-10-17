@@ -414,21 +414,28 @@ def resolved_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
     declares, and for a chain that does not resolve; the extensions the
     chain needs are `birth_chain`'s to judge.
 
+    A template that extends one no installed extension declares, while
+    the part of its chain that resolves needs an extension the
+    workspace's lists do not hold, refuses naming that extension: listed
+    and synced, its distribution may declare the template extended, as
+    python's declares the ``python-library`` the base's
+    ``workshop-extension`` extends.
+
     Raises:
         Failed: for a template, or a template it extends, that no
             installed extension declares, naming ``fm sync`` while the
             installed set holds an extension no installed distribution
-            declares yet and the installed templates otherwise, and for an
-            ``extends`` cycle.
+            declares yet, each extension the resolved part of the chain
+            needs that the lists do not hold, and the installed templates
+            otherwise, and for an ``extends`` cycle.
     """
     from livery.workshop._extensions import installed_extensions, installed_set
 
     available = available_templates()
     unknown = _first_unknown(name, available)
+    held = installed_set(root)
     present = set(installed_extensions())
-    waiting = [
-        extension for extension in installed_set(root) if extension not in present
-    ]
+    waiting = [extension for extension in held if extension not in present]
     if unknown and waiting:
         what = (
             f"no installed extension declares the template {name}"
@@ -440,6 +447,21 @@ def resolved_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
             f"{what}, and the workspace's lists hold {_with_distributions(waiting)},"
             f" which no installed distribution declares yet: {_sync(waiting)}"
         )
+    if unknown and unknown != name:
+        outside = [
+            extension
+            for extension in chain_needs(_resolved_part(name, available))
+            if extension not in held
+        ]
+        if outside:
+            them = "it" if len(outside) == 1 else "them"
+            fail(
+                f"the template {name} extends {unknown}, which no installed"
+                f" extension declares, and needs {_with_distributions(outside)},"
+                f" which the workspace's lists do not hold: list {them} in"
+                f" [workspace] extensions and run `{prog()} sync`, then create"
+                " the package again"
+            )
     return template_chain(name, available, offered=installed_templates(root))
 
 
@@ -457,6 +479,9 @@ def birth_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
             extends, that no installed extension declares while the
             installed set holds an extension no installed distribution
             declares yet, naming each and ``fm sync``; for a template
+            that extends one no installed extension declares while the
+            resolved part of its chain needs an extension the lists do
+            not hold, naming each with its distribution; for a template
             no installed extension declares, naming the installed
             templates; for a chain that does not resolve; for an
             extension the chain needs that the installed set does not
@@ -495,6 +520,25 @@ def birth_chain(root: Path, name: str) -> tuple[DeclaredTemplate, ...]:
             f" installed distribution declares yet: {_sync(missing)}"
         )
     return chain
+
+
+def _resolved_part(
+    name: str, known: Mapping[str, DeclaredTemplate]
+) -> tuple[DeclaredTemplate, ...]:
+    """The templates of *name*'s chain that *known* holds, up to the first it lacks.
+
+    From *name* down the ``extends`` it names, in that order; a template
+    met twice ends the walk.
+    """
+    found: list[DeclaredTemplate] = []
+    current = name
+    while current and current not in {template.name for template in found}:
+        template = known.get(current)
+        if template is None:
+            break
+        found.append(template)
+        current = template.extends
+    return tuple(found)
 
 
 def _first_unknown(name: str, known: Mapping[str, DeclaredTemplate]) -> str:

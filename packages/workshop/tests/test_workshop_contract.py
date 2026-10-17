@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from pathlib import Path
 
@@ -40,6 +41,69 @@ def test_an_unknown_key_refuses_naming_the_known_ones(tmp_path: Path) -> None:
     member = _workspace(tmp_path, "", 'extensions = ["python"]\nname = "m"\n[verbs]\n')
     assert "the top level has no key 'verbs': it takes categories" in _refusal(
         lambda: _contract.load_contract(member)
+    )
+
+
+def _root(directory: Path, table: str) -> Path:
+    """A root contract in *directory* that lists python, with *table* after it."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "workshop.toml"
+    path.write_text('[workspace]\nextensions = ["python"]\n\n' + table)
+    return path
+
+
+def test_a_key_no_listed_extension_owns_refuses_while_every_one_is_installed(
+    tmp_path: Path,
+) -> None:
+    skip_unless_installed("python")
+    typo = _root(tmp_path / "typo", "[pyhton]\nprivate-reaches = []\n")
+    message = _refusal(lambda: _contract.load_contract(typo))
+    assert "the top level has no key 'pyhton'" in message
+    assert "; did you mean 'python'?" in message
+    # The listed extension's own table is judged by its declaration.
+    owned = _root(tmp_path / "owned", "[python]\nprivate-reaches = []\n")
+    assert _contract.load_contract(owned)["python"] == {"private-reaches": []}
+    wrong = _root(tmp_path / "wrong", '[python]\nprivate-reaches = "none"\n')
+    assert "python.private-reaches is" in _refusal(
+        lambda: _contract.load_contract(wrong)
+    )
+
+
+def test_while_a_listed_extension_is_not_installed_its_key_and_a_typo_both_refuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import withheld
+
+    # Until the extension is installed no declaration says which keys
+    # are its, so a judged read cannot tell its key from a typo, and
+    # refuses both. The sync's install alone reads unjudged, and the
+    # process it hands over to judges both once the extension is there.
+    withheld(monkeypatch, "python")
+    for key in ("python", "pyhton"):
+        path = _root(tmp_path / key, f"[{key}]\nprivate-reaches = []\n")
+        assert f"the top level has no key '{key}'" in _refusal(
+            functools.partial(_contract.load_contract, path)
+        )
+
+
+def test_an_unjudged_load_parses_alone_and_keeps_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from workshop_extension_fakes import withheld
+
+    withheld(monkeypatch, "python")
+    path = _root(tmp_path / "listed", "[python]\nprivate-reaches = []\n")
+    spelled = _root(tmp_path / "spelled", "[python]\nprivate_reaches = []\n")
+    with _contract.unjudged():
+        assert _contract.load_contract(path)["python"] == {"private-reaches": []}
+        # The parse's own refusals stand: a key spelled with an underscore.
+        assert "contract keys are kebab-case" in _refusal(
+            lambda: _contract.load_contract(spelled)
+        )
+    # The block kept nothing: the next load judges, and refuses the key
+    # no installed declaration owns.
+    assert "the top level has no key 'python'" in _refusal(
+        lambda: _contract.load_contract(path)
     )
 
 

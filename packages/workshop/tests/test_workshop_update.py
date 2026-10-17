@@ -15,6 +15,7 @@ from livery.workshop._submit import arming_reason, ci_automerge
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
 from workshop_composed import IDENTITY
+from workshop_installed import skip_unless_installed
 from workshop_members import template_verb, wired_here
 from workshop_seeds import Seeds, _seed_home, seed_copier, wire_pushes  # noqa: F401
 
@@ -579,6 +580,7 @@ def test_the_arming_ladder_names_its_level(
 def test_new_package_renders_and_wires(
     seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root = seeds("update", _build) / "ws"
     monkeypatch.chdir(root)
 

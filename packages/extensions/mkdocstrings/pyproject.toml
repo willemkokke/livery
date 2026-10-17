@@ -33,8 +33,9 @@ dependencies = [
 # extension's line in the docs dependency group, so the wheel's runtime
 # needs none. This package's suite runs the check, so the release's
 # isolated legs install the wheel with this extra. The floor is the
-# lock's.
-test = ["griffelib>=2.2.0"]
+# lock's. The suite also reads the module roots python answers, at the
+# floor of its test edge.
+test = ["griffelib>=2.2.0", "livery-extensions-python>=0.0.0"]
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

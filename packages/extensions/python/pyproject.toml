@@ -1,0 +1,48 @@
+# The package's own: edit it directly, nothing rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-extensions-python"
+version = "0.0.0"
+description = "Python distributions, as an extension of the livery workshop: each package's version stamped, its wheel and sdist built, published and verified, its suite run against the installed wheel, and the layering rules over the python sources."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+dependencies = [
+    "livery-footman>=0.60.0",
+    # The python index's simple API: the release train's probe of a
+    # version the index already serves.
+    "livery-forge>=0.7.0",
+    # The store's uv and pytest, through their toolroom handles, so the
+    # versions are the ones the checkout's lock pins.
+    "livery-toolroom>=0.11.0",
+    # The base.
+    "livery-workshop>=0.10.0",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+# The name a package lists in its extensions, and the package whose
+# extension.toml the workshop mounts it from. Nothing else: the
+# extension adds no verb of its own, and nothing activates by being
+# installed.
+[project.entry-points."workshop.extensions"]
+python = "livery.extensions.python"
+
+[tool.uv.build-backend]
+# The importable package is livery.extensions.python, its entry module
+# the root's __init__.py, which serves the names an extension that
+# requires python reads; livery and livery.extensions are PEP 420
+# namespaces with no __init__.py.
+module-name = "livery.extensions.python"

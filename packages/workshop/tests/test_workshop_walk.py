@@ -23,6 +23,7 @@ from livery.workshop._steps import (
     run_step,
     with_files,
 )
+from workshop_installed import skip_unless_installed
 from workshop_python_steps import python_steps_fixture  # noqa: F401
 
 
@@ -98,6 +99,7 @@ def test_a_step_whose_claims_reach_nothing_in_scope_is_said_and_not_started(
 ) -> None:
     from dataclasses import replace
 
+    skip_unless_installed("python")
     root = _repository(tmp_path)
     packages = discover_packages(root)
     ctx = PhaseContext(root=root, packages=packages)
@@ -146,6 +148,7 @@ def test_a_package_step_skips_a_package_with_none_of_its_files(
 ) -> None:
     from dataclasses import replace
 
+    skip_unless_installed("python")
     root = _repository(tmp_path)
     packages = discover_packages(root)
     ctx = PhaseContext(root=root, packages=packages)
@@ -209,6 +212,7 @@ def test_named_files_reach_only_the_steps_whose_claims_reach_them(
 ) -> None:
     from livery.workshop import _quality
 
+    skip_unless_installed("python")
     root = _repository(tmp_path)
     (root / "packages" / "one" / "tests").mkdir()
     test_file = root / "packages" / "one" / "tests" / "test_a.py"

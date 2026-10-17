@@ -19,6 +19,7 @@ from livery.workshop._release import (
     verify_release,
 )
 from livery.workshop._update import bump_floors, latest_released
+from workshop_installed import skip_unless_installed
 from workshop_seeds import (  # noqa: F401
     FakeNotes,
     Seeds,
@@ -73,12 +74,14 @@ def _workspace(seeds: Seeds) -> Path:
 
 
 def test_verify_passes_a_release_shaped_tree(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     plan = verify_release(root, "packages/tool/v0.2.0")
     assert plan.package.name == "livery-tool" and plan.version == "0.2.0"
 
 
 def test_verify_lists_every_disagreement(seeds: Seeds, notes: FakeNotes) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     changelog = root / "packages" / "tool" / "CHANGELOG.md"
     changelog.write_text("# Changelog\n\n## 0.1.9\n\n- old\n")
@@ -88,6 +91,7 @@ def test_verify_lists_every_disagreement(seeds: Seeds, notes: FakeNotes) -> None
 
 
 def test_verify_reads_the_version_where_the_stamper_writes_it(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     # The refusal first: a root module that does not declare the version.
     root = _workspace(seeds)
     package = root / "packages" / "tool" / "src" / "livery" / "tool"
@@ -108,6 +112,7 @@ def test_verify_reads_the_version_where_the_stamper_writes_it(seeds: Seeds) -> N
 
 
 def test_verify_refuses_an_unreleased_floor(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     contract = root / "packages" / "tool" / "workshop.toml"
     contract.write_text(contract.read_text().replace("0.1.0", "0.9.9"))
@@ -117,6 +122,7 @@ def test_verify_refuses_an_unreleased_floor(seeds: Seeds) -> None:
 
 
 def test_prepare_stamps_idempotently(seeds: Seeds, notes: FakeNotes) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     changed = prepare_release(root, "packages/tool", "0.3.0")
     assert "pyproject.toml" in changed
@@ -136,6 +142,7 @@ def test_prepare_refuses_a_package_with_nothing_unreleased(seeds: Seeds) -> None
 
 
 def test_prepare_derives_the_bump_and_the_entry(seeds: Seeds, notes: FakeNotes) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     _git(root, "tag", "packages/tool/v0.2.0")
     new_file = root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py"
@@ -190,6 +197,7 @@ def test_a_scoped_floor_bump_moves_only_the_named_sibling(seeds: Seeds) -> None:
 def test_a_stamped_but_unreleased_version_still_releases(
     seeds: Seeds, monkeypatch: pytest.MonkeyPatch, notes: FakeNotes
 ) -> None:
+    skip_unless_installed("python")
     # The tag is the receipt: a pyproject stamped ahead of its release
     # must not read as released, or that release strands forever. The
     # fixture's packages carry version 0.2.0 with no tag at all, the
@@ -208,6 +216,7 @@ def test_a_stamped_but_unreleased_version_still_releases(
 def test_an_explicit_version_hands_the_provider_its_entry(
     seeds: Seeds, notes: FakeNotes
 ) -> None:
+    skip_unless_installed("python")
     # The driver hands prepare the derived version explicitly; the
     # provider must still be handed the entry on that path, so it can
     # regenerate a stranded heading, or the member's release commit is
@@ -234,6 +243,7 @@ def _lockable(root: Path) -> None:
 
 
 def test_prepare_refreshes_the_lock_with_the_stamp(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     # Finding 10: a stamp without a lock refresh leaves uv.lock
     # claiming the old version, and the first sync after the release
     # dirties the tree, which the train's own re-run then refuses.
@@ -247,6 +257,7 @@ def test_prepare_refreshes_the_lock_with_the_stamp(seeds: Seeds) -> None:
 
 
 def test_prepare_leaves_a_lockless_workspace_alone(seeds: Seeds) -> None:
+    skip_unless_installed("python")
     root = _workspace(seeds)
     changed = prepare_release(root, "packages/core", "0.3.0")
     assert not (root / "uv.lock").exists()
@@ -261,6 +272,7 @@ def test_a_release_without_the_changelog_extension_writes_no_notes(
     # entry was written.
     from livery.workshop import _release_notes
 
+    skip_unless_installed("python")
     root = _workspace(seeds)
     assert _release_notes.release_notes(root) is None
     changelog = root / "packages" / "core" / "CHANGELOG.md"

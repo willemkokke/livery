@@ -20,6 +20,7 @@ from livery.workshop._dev_release import (
     semver_to_pep440,
 )
 from livery.workshop._packages import Package, discover_packages
+from workshop_installed import skip_unless_installed
 from workshop_seeds import FakeNotes, fake_notes, member  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
@@ -125,6 +126,7 @@ def test_no_index_degrades_to_local_with_the_teaching(
 def test_headless_without_yes_refuses_teaching_the_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
@@ -192,6 +194,7 @@ def test_a_refused_upload_names_the_member_and_keeps_the_uploader_s_words(
 
     import livery.toolroom.tools as tools
 
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     _publishing(monkeypatch, [])
@@ -219,6 +222,7 @@ def test_a_refused_upload_names_the_member_and_keeps_the_uploader_s_words(
 def test_a_member_whose_set_holds_no_python_builds_and_is_not_published(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _git(root, "checkout", "-b", "feat/9-widget")
     native = root / "packages" / "native"
@@ -253,6 +257,7 @@ def test_a_member_whose_set_holds_no_python_builds_and_is_not_published(
 def test_a_python_member_publishes_through_its_publish_phase_to_the_dev_index(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     asked: list[str] = []
@@ -320,6 +325,7 @@ def test_sanitise_and_pep440_pass_throughs() -> None:
 def test_a_terminal_no_skips_the_member_and_continues(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
@@ -339,6 +345,7 @@ def test_a_terminal_no_skips_the_member_and_continues(
 def test_no_input_at_a_terminal_refuses_instead_of_skipping(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     # `--no-input` makes confirm take its default no without asking
     # anyone, while the terminal is still real. Judged by the terminal
     # alone that read as a person declining, and the publish was
@@ -428,6 +435,7 @@ def _files_under(directory: Path) -> dict[Path, tuple[bytes, int]]:
 def test_a_build_failing_mid_set_restores_every_file_the_set_touched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root = _set_of_two(tmp_path)
     before = _files_under(root / "packages")
     app = root / "packages" / "app"
@@ -457,6 +465,7 @@ def test_a_build_failing_mid_set_restores_every_file_the_set_touched(
 def test_a_member_built_alone_moves_no_floor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    skip_unless_installed("python")
     root = _set_of_two(tmp_path)
     app = root / "packages" / "app"
     seen: list[str] = []
@@ -496,6 +505,7 @@ def test_a_set_s_requirer_wheel_admits_its_co_member_s_dev_wheel(
 ) -> None:
     import livery.toolroom.tools as tools
 
+    skip_unless_installed("python")
     # core was never released: its dev version, 0.0.0.devN, sorts below
     # the 0.0.0 app's floor names, so only a raised floor admits it.
     root = tmp_path / "ws"
@@ -563,6 +573,7 @@ def test_a_set_s_requirer_wheel_admits_its_co_member_s_dev_wheel(
 def test_a_roots_init_is_stamped_and_restored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     # A root keeps its version in its __init__.py.
@@ -630,6 +641,7 @@ def test_the_release_task_owns_the_terminal() -> None:
 def test_the_real_build_splices_the_readme_and_restores_the_tree(
     tmp_path: Path, notes: FakeNotes
 ) -> None:
+    skip_unless_installed("python")
     # The excerpt is the release notes' unreleased entry, which the
     # stand-in provider answers as a listed extension would.
     notes.line = "- Widget"

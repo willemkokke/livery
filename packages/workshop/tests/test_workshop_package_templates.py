@@ -146,6 +146,7 @@ _ROCKS = (
 def test_a_template_listed_and_not_synced_refuses_naming_fm_sync(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("python")
     # The root lists acme.lua, which no installed distribution declares
     # yet, so the template it may declare is unknown until a sync.
     root = _workspace(tmp_path / "acme", "acme.lua", "python")
@@ -184,9 +185,48 @@ def test_a_template_extending_one_a_listed_and_unsynced_extension_may_declare_re
     assert not (root / "packages").exists()
 
 
+def test_the_base_s_extension_template_refuses_naming_python_until_it_is_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The base declares workshop-extension, which lists python and extends
+    # python's python-library. In a workspace that does not list python,
+    # whose environment holds none of python's distribution, its verb
+    # exists, and the birth refuses before it writes anything, naming
+    # python, its distribution and the list to write it in.
+    from livery.workshop._seeds import installed_templates
+
+    withheld(monkeypatch, "python")
+    root = _workspace(tmp_path / "acme")
+    assert list(installed_templates(root)) == ["workshop-extension"]
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "plugin", "workshop-extension")
+    assert str(caught.value) == (
+        "the template workshop-extension extends python-library, which no"
+        " installed extension declares, and needs python"
+        " (livery-extensions-python), which the workspace's lists do not hold:"
+        " list it in [workspace] extensions and run `fm sync`, then create the"
+        " package again"
+    )
+    assert _files(root) == before
+    # Listed and not installed yet, the refusal names the sync.
+    _workspace_lists(root, "python")
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        render_member(root, "plugin", "workshop-extension")
+    assert str(caught.value) == (
+        "the template workshop-extension extends python-library, which no"
+        " installed extension declares, and the workspace's lists hold python"
+        " (livery-extensions-python), which no installed distribution declares"
+        " yet: run `fm sync`, which installs it, then create the package again"
+    )
+    assert _files(root) == before
+
+
 def test_a_template_no_available_extension_declares_refuses_listing_the_installed(
     tmp_path: Path,
 ) -> None:
+    skip_unless_installed("python")
     root = _workspace(tmp_path / "acme", "python")
     with pytest.raises(_FAILURES) as caught:
         render_member(root, "thing", "package-python")
@@ -1090,11 +1130,11 @@ def test_the_generator_remakes_a_changed_verb_and_keeps_a_task_it_did_not_make(
     assert sorted(package.tasks) == ["lua-module", "lua-rock"]
 
 
-# The templates the workshop's wheel declares.
+# The templates the livery distributions declare.
 
-#: Each template the workshop's wheel declares: the extension declaring
-#: it, the list a package born from it writes, and the template it
-#: extends.
+#: Each template the base and the livery extensions declare: the
+#: extension declaring it, the list a package born from it writes, and
+#: the template it extends.
 AVAILABLE = {
     "cpp-package": ("conan", ("cmake", "conan"), ""),
     "nanobind-module": ("nanobind", ("nanobind",), "python-library"),
@@ -1168,6 +1208,7 @@ def test_every_template_directory_the_workshop_ships_is_a_declared_template() ->
     # declare templates of their own beside the workshop's.
     from livery.workshop._seeds import TEMPLATES, available_templates, template_files
 
+    skip_unless_installed("python")
     installed = available_templates()
     declared = {template_files(template) for template in installed.values()}
     assert all(directory.is_dir() for directory in declared)
@@ -1260,6 +1301,7 @@ def test_a_python_package_without_scripts_has_no_executable(tmp_path: Path) -> N
     from livery.workshop._queries import EXECUTABLES, answer
     from livery.workshop._run import start
 
+    skip_unless_installed("python")
     root = _workspace(tmp_path / "acme", "python")
     render_member(root, "echo", "python-library")
     assert answer(_member(root, "echo"), EXECUTABLES) == ()
@@ -1274,6 +1316,7 @@ def test_python_s_run_step_refuses_a_script_the_environment_lacks(
     from livery.workshop._pythons import scripts_dir
     from livery.workshop._run import start
 
+    skip_unless_installed("python")
     root = _workspace(tmp_path / "acme", "python")
     render_member(root, "tool", "python-library", {"command": "tool"})
     with pytest.raises(_FAILURES) as caught:
@@ -1291,6 +1334,7 @@ def test_python_library_with_a_command_births_a_script_fm_run_starts(
     from livery.workshop._queries import EXECUTABLES, answer
     from livery.workshop._run import start
 
+    skip_unless_installed("python")
     root = _workspace(tmp_path / "acme", "python")
     render_member(root, "tool", "python-library", {"command": "tool"})
     tool = _member(root, "tool")

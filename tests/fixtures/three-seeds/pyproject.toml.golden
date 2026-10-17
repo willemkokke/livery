@@ -63,6 +63,7 @@ dev = [
     "livery-extensions-conan",
     "livery-extensions-mypy",
     "livery-extensions-pytest",
+    "livery-extensions-python",
     "livery-extensions-nanobind",
     "livery-extensions-ruff",
     # What the listed extensions need in the venv: each line is an

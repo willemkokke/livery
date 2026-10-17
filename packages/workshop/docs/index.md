@@ -65,13 +65,38 @@ key; every key the base and the listed extensions declare carries one. The
 schema says what shape a contract has; a rule a schema cannot say
 stays with the code that reads the key.
 
-The workshop's wheel, `livery-workshop`, ships the base and one
-extension, python. Every other extension of the livery distributions
-ships in a distribution of its own, named `livery-extensions-<name>`:
-cpp, the C and C++ languages, ships in `livery-extensions-cpp`. The
-conan and nanobind distributions require it, so a workspace whose
-lists hold either holds cpp too, and `fm sync` installs
-`livery-extensions-cpp` with them.
+The workshop's wheel, `livery-workshop`, ships the base alone. Every
+extension of the livery distributions ships in a distribution of its
+own, named `livery-extensions-<name>` after the name a contract lists:
+
+| Extension | Distribution |
+| --- | --- |
+| `basedpyright` | `livery-extensions-basedpyright` |
+| `changelog` | `livery-extensions-changelog` |
+| `clang-format` | `livery-extensions-clang-format` |
+| `clang-tidy` | `livery-extensions-clang-tidy` |
+| `claude` | `livery-extensions-claude` |
+| `cmake` | `livery-extensions-cmake` |
+| `conan` | `livery-extensions-conan` |
+| `coverage` | `livery-extensions-coverage` |
+| `cpp` | `livery-extensions-cpp` |
+| `docs` | `livery-extensions-docs` |
+| `lfs` | `livery-extensions-lfs` |
+| `mkdocstrings` | `livery-extensions-mkdocstrings` |
+| `mypy` | `livery-extensions-mypy` |
+| `nanobind` | `livery-extensions-nanobind` |
+| `pyrefly` | `livery-extensions-pyrefly` |
+| `pytest` | `livery-extensions-pytest` |
+| `python` | `livery-extensions-python` |
+| `ruff` | `livery-extensions-ruff` |
+| `ty` | `livery-extensions-ty` |
+
+A workspace gets an extension by listing it: `fm sync` installs the
+distribution of each extension its lists hold, and of each extension
+those require. An extension's distribution requires the distribution
+of each extension it requires: conan's requires cpp's, nanobind's
+requires python's, cpp's and conan's, and mkdocstrings' requires
+docs'.
 
 An extension is declared by an entry point in the `workshop.extensions`
 group, mapping the name a contract lists to the package that ships it.
@@ -327,13 +352,18 @@ such as `cmake+cpp`.
 resolves it, before it renders anything else:
 
 1. It writes the project file alone. Its dev group now names the
-   extension's distribution.
+   extension's distribution. This write reads the contracts without
+   judging their keys: until the extension is installed, no
+   declaration says which keys are its, so the root's `[python]`
+   table would refuse the sync that installs python.
 2. It runs `uv sync`, which locks and installs through the project
    file's `[tool.uv.sources]` and indexes. An extension the workspace
    sources from a path or from git installs from there, even when an
    index also offers it.
-3. It continues in a fresh process, which mounts the extension and
-   renders every file with it.
+3. It continues in a fresh process, which mounts the extension, judges
+   every contract over the installed declarations, and renders every
+   file with it. A key no installed extension declares, such as a
+   misspelt table, refuses there.
 
 When no installed distribution declares the extension after the
 install, the sync refuses, naming it and the list that brings it.
@@ -561,10 +591,10 @@ canonical form. Every written file is the workspace's own from then on,
 and nothing records the template: an extension that needs to know what
 a package is reads it from the package's own manifests, as python reads
 its scripts. The templates the livery distributions declare, each
-available while the extension that declares it is installed. The
-nanobind extension ships in `livery-extensions-nanobind`, the conan
-extension in `livery-extensions-conan`, and the workshop's wheel ships
-the others:
+available while the extension that declares it is installed. The base
+declares `workshop-extension`, which extends python's
+`python-library`, so its verb refuses, naming python, until the
+workspace lists python:
 
 | Template | Declared by | Lists | Extends | Options |
 |---|---|---|---|---|
@@ -643,25 +673,34 @@ unknown task. Every creation, a template's verb and `fm ci.scale`
 alike, writes the member through one function, and that birth refuses
 before it writes anything, in this order:
 
-1. A template no installed extension declares, while the workspace's
-   lists hold an extension no installed distribution declares yet,
-   refuses naming each such extension and `fm sync`, which installs it.
-2. A template no installed extension declares refuses, naming the
+1. A template, or a template it extends, that no installed extension
+   declares, while the workspace's lists hold an extension no installed
+   distribution declares yet, refuses naming each such extension and
+   `fm sync`, which installs it.
+2. A template that extends one no installed extension declares, while
+   the part of its chain that resolves needs an extension the
+   workspace's lists do not hold, refuses naming each with its
+   distribution: list it in `[workspace] extensions` and run `fm sync`,
+   then create the package.
+3. A template no installed extension declares refuses, naming the
    installed templates.
-3. A template whose `extends` leads back to it, or names a template
+4. A template whose `extends` leads back to it, or names a template
    nobody declares, refuses naming the cycle or the installed
    templates.
-4. A template that needs an extension the workspace's lists do not
+5. A template that needs an extension the workspace's lists do not
    hold refuses, naming each with its distribution: list it in
    `[workspace] extensions` and run `fm sync`, then create the package.
-5. A template that needs an extension the lists hold and no installed
+6. A template that needs an extension the lists hold and no installed
    distribution declares yet refuses, naming each and `fm sync`.
 
 So a workspace whose root lists the stock list creates a
 `python-library` at once, and lists `cmake` and `conan` before it
 creates a `cpp-package`: until a list holds conan, which declares the
 template, `fm new.package.cpp-package` does not exist, and with conan
-listed and cmake not, it refuses naming cmake.
+listed and cmake not, it refuses naming cmake. A workspace whose lists
+hold no python has no `fm new.package.python-library`, and its
+`fm new.package.workshop-extension`, whose template lists python and
+extends `python-library`, refuses naming python.
 Two extensions declaring one template refuse every birth, naming both.
 A package's contract that writes `template` refuses: the template is
 read at the birth alone.
@@ -1018,32 +1057,14 @@ inside its package, and one extension answers for each file. The
 python extension answers for python sources from one parse per gate,
 memoised by the file's path, size and modification time, and its own
 three steps read the same parse, over the files a narrowed run reaches
-or every source:
-
-- `private-reaches`: no package's source reaches another
-  distribution's private name, apart from the reaches the root
-  contract's `[[python.private-reaches]]` allows, each with its reason.
-- `runner-terminal`: a module that imports the runner asks
-  `livery.footman.attended()` whether a person is there, never the
-  terminal (`sys.stdin.isatty()` and its relatives), since the
-  terminal knows nothing of `--no-input` or `--dry-run`. The runner's
-  own sources, and a module that never imports the runner, are exempt.
-  The step judges the root's `tasks.py` with the packages' sources,
-  while the python extension is mounted.
-- `declared-imports`: at import time, a module under a package's `src`
-  imports the standard library, the workspace's own members, and the
-  distributions its `pyproject.toml` declares in
-  `[project.dependencies]`. Inside a function it may also import a
-  distribution an optional extra declares. An import under
-  `TYPE_CHECKING`, or in a `try` that handles `ImportError`, is not
-  judged. A module a program loads as a plugin, named under the
-  `footman.tasks` or `footman.builtin` entry points for the runner or
-  `pytest11` for pytest, may also import what that program brings: its
-  distribution and the distributions it requires. Which distribution
-  provides a module is read from the metadata of what the workspace's
-  environment installed, so a module that no installed distribution
-  provides refuses, naming it. A refusal names the source, the module,
-  the distribution and the `pyproject.toml` to declare it in.
+or every source: `private-reaches`, which allows a reach into another
+distribution's private name only where the root contract's
+`[[python.private-reaches]]` lists it; `runner-terminal`, which holds a
+module that imports the runner to `livery.footman.attended()`; and
+`declared-imports`, which holds each import a package's `src` makes to
+the distributions its `pyproject.toml` declares. The python extension
+is a distribution of its own, `livery-extensions-python`, and its page
+describes each step.
 
 A step's fix runs inside the gate's rewrite, before the judges.
 

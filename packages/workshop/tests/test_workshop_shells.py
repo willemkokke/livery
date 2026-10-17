@@ -139,6 +139,7 @@ def test_check_affected_scopes_or_says_nothing(
     python_steps: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    skip_unless_installed("python")
     _, root = rig
     ran: list[str] = []
     monkeypatch.setattr(fake_steps, "run_format", lambda **kwargs: ran.append("format"))
@@ -195,6 +196,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     python_steps: object,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    skip_unless_installed("python")
     # A person dispatched the gate for this tree: the run proves it
     # now, whatever an earlier run stamped, so the record is never
     # read and every verb runs.
@@ -227,6 +229,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
 def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch, python_steps: object
 ) -> None:
+    skip_unless_installed("python")
     _, root = rig
     calls: list[tuple[str, object]] = []
 
