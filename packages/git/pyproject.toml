@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-git"
-version = "0.2.0"
+version = "0.3.0"
 description = "Git access for the livery ecosystem: every call a function of the repository's root, through the tool store's pinned git."
 readme = "README.md"
 license = "MIT"
