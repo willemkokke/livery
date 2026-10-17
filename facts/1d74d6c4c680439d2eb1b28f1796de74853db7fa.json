@@ -1,0 +1,1 @@
+{"regions":[["class","ForgeError",6,"31-36"],["function","ForgeError.__init__",22,"31-36"],["class","RateLimited",39,"61-65"],["function","RateLimited.__init__",51,"61-65"],["class","Unsupported",68,""]],"spans":[[7,20],[22,30],[40,49],[51,60],[62,64],[69,77]],"statements":"3,6,22,32-36,39,51,62,65,68"}
