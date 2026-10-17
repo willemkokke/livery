@@ -1427,11 +1427,12 @@ absence.
   job by, and the `check` entry runs `fm check --shard=<i>of<n>`. A
   leg that runs as one shard of one carries no shard in its label or
   its display name, and its `check` entry runs `fm check` bare.
-  Each shard partitions the run's test files by the platform leg's
-  `durations` rows: longest first, each file into the shard with the
-  least summed seconds, ties by name, a file no row names at the
-  row's median, so every shard of a run computes the same partition
-  and every file lands in exactly one shard. The rendered check job
+  Each shard partitions the run's items, the test files of its test
+  step, by the platform leg's `durations` rows: longest first, each
+  item into the shard with the least summed seconds, ties by name, an
+  item no row names at the row's median, so every shard of a run
+  computes the same partition and every item lands in exactly one
+  shard. The rendered check job
   carries the shards as literals. On GitHub and Gitea, while every
   count is one, its matrix is the `os` and `python` lists; when any
   count is above one it is `include` entries, one per runner, Python
@@ -1457,12 +1458,12 @@ absence.
   entry, before any judge reads the run's refs, folds each platform's
   shards into one leg: it refuses, naming the platform, the shards and
   what differs, unless every shard the matrix produces left a ref with
-  a row and its record, the shards name one scope, one test-file set,
-  one list of durations rows read under one bound, no test file ran in
-  two shards, and the files they ran are together the set they
+  a row and its record, the shards name one scope, one item set, one
+  list of durations rows read under one bound, no item ran in two
+  shards, and the items they ran are together the set they
   partitioned. The folded ref is keyed by the platform leg: the timing
   row with the first shard's tasks, every shard's package sums added
-  and seconds per test file merged, named by the platform's own display
+  and seconds per item merged, named by the platform's own display
   name, and every other file the shards' entries left folded by the
   extension that leaves it, through the `ci.fold` query (the coverage
   extension concatenates its parts per suite). The shards' refs are
@@ -1832,7 +1833,7 @@ present, and the refs dropped by the last job to finish.
 | --- | --- | --- | --- |
 | `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job; each job of a point without one |
 | `run/<id>/<leg>` | a job's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the run's last green job drops it | none | the leg |
-| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job's collect, after the fold |
+| `durations/<leg>` | one run on one platform leg: the seconds each item (a test file) took, every phase of every test in it summed over the leg's shards | 30 | the gate job's collect, after the fold |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
@@ -1842,13 +1843,13 @@ present, and the refs dropped by the last job to finish.
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
 
 The `durations` family is one series per platform leg,
-`check-<os>-<python>`, one row per run, `{"run": "<id>", "files":
-{"<path>": <seconds>}}`, the newest thirty kept, written by the gate
+`check-<os>-<python>`, one row per run, `{"run": "<id>", "items":
+{"<item>": <seconds>}}`, the newest thirty kept, written by the gate
 job's collect from each check leg's folded row once the run's `metrics`
 file has landed; a series of a leg the matrix no longer produces is the
 janitor's to drop. A shard of that
 leg reads the newest five rows stamped before the committer time of
-the commit it checked out and takes the median per file; a row the
+the commit it checked out and takes the median per item; a row the
 store stamped at or after that time reaches no shard, so every shard
 of a run reads the same rows whatever lands while the run is in
 flight. A series that cannot be read is printed as the reason and the

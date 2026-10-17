@@ -19,7 +19,7 @@ ref ([livery.workshop._fold][]), then runs `collect`: it reads the
 per-run refs, asks the forge for the run's jobs, joins the two
 halves, folds in the sections the job's judges left (`RUN_ROW`),
 puts the run's file on the series under its window, and writes each
-check leg's seconds per test file onto its platform leg's series of
+check leg's seconds per item onto its platform leg's series of
 the [livery.workshop.DURATIONS][] family; it fails open loudly, a
 printed reason and never a red job. The run's last green job runs
 `drop_halves`: the per-run refs go once every job that writes a half
@@ -272,9 +272,9 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     async pair (a begin and an end under one id) where it overlaps a
     sibling on the task's track, which is how footman draws the steps
     of one ``parallel()`` block; both read as the step's whole wall.
-    The row's ``files`` is the seconds each test file took, every
-    phase of every test in it summed, to a tenth. A missing or
-    unreadable trace is a reason, never a row.
+    The row's ``items`` is the seconds each item took, the test file
+    of each test's node id, every phase of every test in it summed, to
+    a tenth. A missing or unreadable trace is a reason, never a row.
     """
     if not trace.is_file():
         return None, f"no trace at {trace}: the gate did not run under --profile"
@@ -292,9 +292,9 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     packages: dict[str, dict[str, float]] = defaultdict(
         lambda: {"tests_ms": 0.0, "tests": 0}
     )
-    # Every phase of every test, summed per test file: what a shard
-    # partitions the next run's files by.
-    files: dict[str, float] = defaultdict(float)
+    # Every phase of every test, summed per item, the test file of its
+    # node id: what a shard partitions the next run's items by.
+    items: dict[str, float] = defaultdict(float)
     calls: list[tuple[float, str]] = []
     begins: list[float] = []
     ends: list[float] = []
@@ -334,7 +334,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         elif cat == "lane":
             waits[name.removeprefix("lane: ")] += _ms(event)
         elif cat.startswith("test."):
-            files[name.split("::", 1)[0]] += _ms(event)
+            items[name.split("::", 1)[0]] += _ms(event)
             package = _package_of(name)
             if package:
                 packages[package]["tests_ms"] = round(
@@ -357,7 +357,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         "task_steps": dict(sorted(steps.items())),
         "waits_ms": {name: round(ms, 1) for name, ms in sorted(waits.items())},
         "packages": dict(sorted(packages.items())),
-        "files": {path: round(ms / 1000.0, 1) for path, ms in sorted(files.items())},
+        "items": {item: round(ms / 1000.0, 1) for item, ms in sorted(items.items())},
         "slowest": [
             {"test": name, "s": round(ms / 1000.0, 2)} for ms, name in calls[:SLOWEST]
         ],
@@ -551,7 +551,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     concludes as the shards' jobs did, and the forge's rows of the
     shards stand beside it with their times alone, for
     ``fm ci.timings``. After the run's file lands, each check leg's
-    seconds per test file go onto its platform leg's series of the
+    seconds per item go onto its platform leg's series of the
     [livery.workshop.DURATIONS][] family, one row per run, which the
     next run's shards partition by; a leg without them writes none,
     and a refused write is a line.
@@ -758,21 +758,21 @@ def _folded_job(
 def _put_durations(
     root: Path, run: RunContext, halves: Mapping[str, Mapping[str, Any]]
 ) -> list[str]:
-    """Write each leg's seconds per test file onto its platform leg's series; the lines.
+    """Write each leg's seconds per item onto its platform leg's series; the lines.
 
-    One row per leg whose half carries ``files``, named as the run's
+    One row per leg whose half carries ``items``, named as the run's
     file ([livery.workshop._metrics.run_file][]), on the series of
     [livery.workshop.DURATIONS][] keyed by the platform leg the leg's
     label names ([livery.workshop.platform_leg][]). A half without
-    ``files`` writes nothing. The row of one shard of several writes
+    ``items`` writes nothing. The row of one shard of several writes
     nothing either, since the fold's row carries the platform's
-    files; a shard's row reaches the collect only when the fold did
+    items; a shard's row reaches the collect only when the fold did
     not run. A refused write is a line, never a red job.
     """
     lines: list[str] = []
     for name, half in sorted(halves.items()):
-        files = half.get("files")
-        if not isinstance(files, dict) or not files:
+        items = half.get("items")
+        if not isinstance(items, dict) or not items:
             continue
         shard = half.get("shard")
         if isinstance(shard, dict) and "shards" not in shard:
@@ -785,14 +785,14 @@ def _put_durations(
         series = DURATIONS.series(leg)
         why = series.put(
             state_store(root),
-            {run_file(run.run_id): {"run": run.run_id, "files": files}},
+            {run_file(run.run_id): {"run": run.run_id, "items": items}},
             message=f"durations: {leg} from run {run.run_id}",
         )
         if why:
             lines.append(f"  {series.ref}: not written ({why})")
         else:
             lines.append(
-                f"  {series.ref}: {len(files)} file(s) recorded for run {run.run_id}"
+                f"  {series.ref}: {len(items)} item(s) recorded for run {run.run_id}"
             )
     return lines
 

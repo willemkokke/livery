@@ -510,7 +510,7 @@ def test_a_shard_that_finds_nothing_affected_leaves_the_record_of_an_empty_set(
     assert leg_scope(root).scope == "nothing" and leg_scope(root).leg == "check-a-2of2"
     marker, why = _shard.read_shard(root)
     assert why == "" and marker is not None
-    assert marker.shard == _shard.Shard(2, 2) and marker.files == ()
+    assert marker.shard == _shard.Shard(2, 2) and marker.items == ()
     assert marker.rows == () and marker.digest == _shard.files_digest(())
     assert marker.before == _shard.checkout_time(root)
     # One shard of one leaves none.
