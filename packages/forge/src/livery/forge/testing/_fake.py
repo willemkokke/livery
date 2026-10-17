@@ -23,7 +23,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from livery.forge._errors import ForgeError, RateLimited, Unsupported
+from livery.forge._errors import (
+    ForgeError,
+    RateLimited,
+    Unsupported,
+    refuse_unknown_labels,
+)
 from livery.forge._protocol import (
     Checks,
     Issues,
@@ -158,6 +163,7 @@ class _PullRequestState:
     reviews: list[Review] = field(default_factory=list)
     events: list[ScheduleEvent] = field(default_factory=list)
     merged_sha: str = ""
+    labels: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -825,6 +831,7 @@ class _FakePullRequests:
             url=f"fake://{self._owner}/{self._name}/pulls/{pr.number}",
             author=pr.author,
             merged_sha=pr.merged_sha,
+            labels=tuple(pr.labels),
         )
 
     def open(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
@@ -996,6 +1003,15 @@ class _FakePullRequests:
     def comment(self, number: int, body: str) -> None:
         """Post *body* on pull request *number*."""
         self._fake._require_pr(self._state(), number).comments.append(body)
+
+    def add_labels(self, number: int, names: tuple[str, ...]) -> None:
+        """Put *names* on pull request *number*; each must exist on the repository."""
+        state = self._state()
+        refuse_unknown_labels(names, state.labels, f"{self._owner}/{self._name}")
+        pr = self._fake._require_pr(state, number)
+        for name in names:
+            if name not in pr.labels:
+                pr.labels.append(name)
 
 
 class _FakeChecks:

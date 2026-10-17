@@ -80,6 +80,10 @@ class RunContext:
             payload names it (GitLab: the merge request's source), the
             base of the branch's own coverage record; empty on a push
             or when the runner did not say.
+        labels: The pull request's label names, as the event payload
+            names them (GitLab: ``CI_MERGE_REQUEST_LABELS``); empty on
+            a push, on a payload that does not name them, or when the
+            runner did not say.
     """
 
     forge: str
@@ -90,6 +94,7 @@ class RunContext:
     base_ref: str = ""
     leg: str = ""
     head_ref: str = ""
+    labels: tuple[str, ...] = ()
 
 
 def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
@@ -186,6 +191,27 @@ def _event_head_ref(env: Mapping[str, str]) -> str:
     return env.get("GITHUB_HEAD_REF", "")
 
 
+def _event_labels(env: Mapping[str, str]) -> tuple[str, ...]:
+    """The pull request's label names: the payload's, else GitLab's variable.
+
+    GitHub and Gitea write each label as an object under
+    ``pull_request.labels``; GitLab carries the names comma-joined in
+    ``CI_MERGE_REQUEST_LABELS``. A payload that is missing, does not
+    parse, or names no labels reads as none, so a caller treats the
+    run as unlabelled rather than fails.
+    """
+    payload = event_payload(env) or {}
+    raw = (payload.get("pull_request") or {}).get("labels")
+    if isinstance(raw, list):
+        return tuple(
+            str(label["name"])
+            for label in raw
+            if isinstance(label, dict) and label.get("name")
+        )
+    joined = env.get("CI_MERGE_REQUEST_LABELS", "")
+    return tuple(name.strip() for name in joined.split(",") if name.strip())
+
+
 #: GitLab's pipeline sources in the one event vocabulary the verbs
 #: read: a merge request pipeline is a pull request run, and an API-,
 #: trigger- or web-created pipeline is a dispatch, as the forge
@@ -220,6 +246,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             _event_base_ref(env),
             env.get(LEG_VARIABLE, ""),
             _event_head_ref(env),
+            _event_labels(env),
         )
     if env.get("GITLAB_CI") == "true":
         source = env.get("CI_PIPELINE_SOURCE", "")
@@ -232,6 +259,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),
             env.get(LEG_VARIABLE, ""),
             env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", ""),
+            _event_labels(env),
         )
     return None
 

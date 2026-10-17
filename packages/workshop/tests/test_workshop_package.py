@@ -84,6 +84,7 @@ def test_the_surface_is_declared() -> None:
         "COMPILE_COMMANDS",
         "CURRENT_VERSION",
         "DISTRIBUTIONS",
+        "EVERY_RUNNER_LABEL",
         "EXECUTABLES",
         "HUMAN",
         "JOB_BUILT_MEMBERS",

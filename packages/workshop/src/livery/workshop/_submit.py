@@ -39,6 +39,7 @@ from livery.workshop import _stack
 from livery.workshop._contract import load_contract
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._extensions import workspace_root
+from livery.workshop._points import EVERY_RUNNER_LABEL
 from livery.workshop._traces import drop_run
 from livery.workshop._verdict import (
     EXIT_BEHIND,
@@ -771,6 +772,31 @@ def _heal_context_rename(
     )
 
 
+def label_every_runner(repo: Repository, number: int) -> None:
+    """Put [livery.workshop.EVERY_RUNNER_LABEL][] on pull request *number*.
+
+    The gate then runs every runner for it, where
+    ``[ci] pull-request-runners`` names fewer. Idempotent: a label the
+    pull request already carries stays. A forge that refuses, one
+    whose repository does not carry the label among them, fails with
+    the forge's words; the pull request exists by then, so a re-run
+    labels the same one.
+    """
+    try:
+        repo.pr.add_labels(number, (EVERY_RUNNER_LABEL,))
+    except ForgeError as error:
+        fail(
+            f"PR #{number} exists, but {EVERY_RUNNER_LABEL} could not be set on"
+            f" it: {error}\n  `{footman.prog()} workflow.configure` creates the"
+            " label on the repository; then re-run"
+            f" `{footman.prog()} submit --every-runner`"
+        )
+    print(
+        f"  every runner: labelled {EVERY_RUNNER_LABEL}; the gate runs every"
+        " runner for this pull request"
+    )
+
+
 def push_and_pr(
     repo: Repository,
     root: Path,
@@ -779,8 +805,9 @@ def push_and_pr(
     closes: int | None,
     armed: bool,
     force: bool = False,
+    every_runner: bool = False,
 ) -> int:
-    """Disarm, push, find-or-open the pull request, arm per *armed*."""
+    """Disarm, push, find-or-open the pull request, label and arm as asked."""
     body = with_closes(plan.body, closes) if closes is not None else plan.body
     merged = disarm_before_push(repo, root, plan.branch)
     if merged is not None:
@@ -807,6 +834,8 @@ def push_and_pr(
         if plan.body_given and pr.body != body:
             repo.pr.update_body(pr.number, body)
             print("  body updated")
+    if every_runner:
+        label_every_runner(repo, pr.number)
     if armed:
         merged = _arm_verified(
             repo,
@@ -892,6 +921,7 @@ def submit_flow(
     gate: bool = True,
     fix: bool = False,
     force: bool = False,
+    every_runner: bool = False,
     follow_to_verdict: bool = True,
     interval: float = 15,
     timeout: float = 1800,
@@ -965,7 +995,15 @@ def submit_flow(
         )
     elif armed_reason:
         print(f"  arming: {'on' if armed else 'off'} - decided by {armed_reason}")
-    number = push_and_pr(repo, root, plan, closes=linked, armed=armed, force=force)
+    number = push_and_pr(
+        repo,
+        root,
+        plan,
+        closes=linked,
+        armed=armed,
+        force=force,
+        every_runner=every_runner,
+    )
     if not follow_to_verdict:
         return number
     heals = 0
@@ -1021,7 +1059,13 @@ def submit_flow(
                 if gate:
                     _gate(root=root, base=plan.base)
                 number = push_and_pr(
-                    repo, root, plan, closes=linked, armed=armed, force=force
+                    repo,
+                    root,
+                    plan,
+                    closes=linked,
+                    armed=armed,
+                    force=force,
+                    every_runner=every_runner,
                 )
                 continue
             trace_the_run()
@@ -1101,6 +1145,14 @@ def submit_default(
     force: Annotated[
         bool, doc("force-push with a lease after a deliberate history rewrite")
     ] = False,
+    every_runner: Annotated[
+        bool,
+        doc(
+            f"label the PR {EVERY_RUNNER_LABEL} so the gate runs every runner: for"
+            " a change only another platform reaches while [ci]"
+            " pull-request-runners names fewer"
+        ),
+    ] = False,
     follow: Annotated[bool, doc("watch until it lands or says what stopped it")] = True,
     interval: Annotated[int, doc("watch poll seconds")] = 15,
     timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
@@ -1115,6 +1167,10 @@ def submit_default(
     HEAD while unpushed, a follow-up commit otherwise. ``--no-close``
     submits without the close footer, for a branch that carries
     preparatory work on an issue the merge must leave open.
+    ``--every-runner`` labels the pull request ``ci:every-runner``, so
+    the gate runs every runner for it where ``[ci]
+    pull-request-runners`` names fewer: for a change to a line only
+    another platform reaches, which a narrowed run judges red by name.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
@@ -1136,6 +1192,7 @@ def submit_default(
             gate=gate,
             force=force,
             fix=fix,
+            every_runner=every_runner,
             follow_to_verdict=follow,
             interval=interval,
             timeout=timeout,

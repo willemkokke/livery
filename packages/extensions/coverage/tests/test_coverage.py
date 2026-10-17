@@ -1498,6 +1498,36 @@ def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branch
     )
 
 
+def test_the_due_legs_follow_the_event_and_the_every_runner_label(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import RunContext
+
+    # Without a root contract both lists are empty, as a test workspace.
+    run = RunContext("github", "7", "pull_request", "refs/pull/1/merge")
+    assert coverage_union.expected_legs(tmp_path, run) == ([], [])
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.14"\n'
+    )
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\n\n[ci]\nrunners = ["a", "b"]\npull-request-runners = ["b"]\n'
+    )
+    every = ["check-a-3.14", "check-b-3.14"]
+    # A pull request is due the narrowed legs; one carrying the label
+    # is due every leg, as a push is.
+    assert coverage_union.expected_legs(tmp_path, run) == (every, ["check-b-3.14"])
+    labelled = RunContext(
+        "github",
+        "7",
+        "pull_request",
+        "refs/pull/1/merge",
+        labels=("kind/feat", "ci:every-runner"),
+    )
+    assert coverage_union.expected_legs(tmp_path, labelled) == (every, every)
+    push = RunContext("github", "8", "push", "refs/heads/main")
+    assert coverage_union.expected_legs(tmp_path, push) == (every, every)
+
+
 def test_a_leg_a_pull_request_does_not_run_is_carried_whole_from_the_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

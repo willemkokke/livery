@@ -46,9 +46,10 @@ cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
   state whether or not a cancel event was emitted.
 - `issue.search` matches text client-side over the complete listing:
   the protocol promises a body match and Gitea's `q` filter does not.
-- Labels resolve names to ids at the boundary; issue creation with a
-  label the repository does not carry is refused with the instruction
-  to configure it first.
+- Labels resolve names to ids at the boundary; issue creation and
+  `pr.add_labels` (the issue labels endpoint, by id) with a label the
+  repository does not carry are refused with the instruction to
+  configure it first.
 - Releases and tags with `/` in the name travel URL-encoded whole.
 - `members` and `teams` speak the org endpoints; on a personal
   namespace they 404, and the fallback answers the login itself and

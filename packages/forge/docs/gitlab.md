@@ -118,6 +118,7 @@ and on a licensed instance `configure` turns enforcement on through
 | `is_armed` | `GET /projects/:path/merge_requests/:iid` | the `merge_when_pipeline_succeeds` field: readable state, no timeline walk |
 | `schedule_events` | `GET /projects/:path/merge_requests/:iid/notes` plus `GET .../resource_state_events` | reconstructed: system notes beginning "enabled an automatic merge" / "canceled the automatic merge" / "aborted the automatic merge" / "added N commit" map to scheduled, unscheduled, and pushed; state events carry merged, closed, reopened; merged oldest first by timestamp |
 | `comment` | `POST /projects/:path/merge_requests/:iid/notes` | `body` |
+| `add_labels` | `GET /projects/:path/labels`, then `PUT /projects/:path/merge_requests/:iid` | `add_labels` as a comma-joined string; the project's labels are read first and a name the project lacks is refused by name, because the update creates a label it does not know |
 
 ## Checks
 

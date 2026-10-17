@@ -33,7 +33,7 @@ from itertools import islice
 from typing import Any
 from urllib.parse import quote
 
-from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._errors import ForgeError, Unsupported, refuse_unknown_labels
 from livery.forge._http import JsonClient, Opener
 from livery.forge._protocol import (
     Checks,
@@ -607,16 +607,7 @@ class _GithubRepository:
 
     def _ensure_labels(self, labels: tuple[Label, ...]) -> None:
         """Create or update each label by name; none are ever deleted."""
-        existing = {
-            str(label["name"])
-            for label in self._client.paginate(
-                lambda page: (
-                    self._client.request(f"{self._base}/labels?page={page}&per_page=50")
-                    or []
-                ),
-                subject=f"{self._base}/labels",
-            )
-        }
+        existing = _label_names(self._client, self._base)
         for label in labels:
             body = {
                 "name": label.name,
@@ -721,6 +712,17 @@ class _GithubRepository:
         )
 
 
+def _label_names(client: JsonClient, base: str) -> set[str]:
+    """The repository's label names, complete or raising."""
+    return {
+        str(label["name"])
+        for label in client.paginate(
+            lambda page: client.request(f"{base}/labels?page={page}&per_page=50") or [],
+            subject=f"{base}/labels",
+        )
+    }
+
+
 def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
     """GitHub's pull request JSON, normalised."""
     state: ItemState = "open" if data.get("state") == "open" else "closed"
@@ -739,6 +741,9 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         url=str(data.get("html_url", "")),
         author=str((data.get("user") or {}).get("login") or ""),
         merged_sha=str(data.get("merge_commit_sha") or ""),
+        labels=tuple(
+            str(label.get("name", "")) for label in (data.get("labels") or [])
+        ),
     )
 
 
@@ -986,6 +991,20 @@ class _GithubPullRequests:
             f"{self._base}/issues/{number}/comments",
             method="POST",
             data={"body": body},
+        )
+
+    def add_labels(self, number: int, names: tuple[str, ...]) -> None:
+        """Put *names* on pull request *number* (the issue labels API).
+
+        GitHub creates a label it does not know when one is added to
+        an issue, so the repository's labels are read first and a
+        stranger is refused by name before the write.
+        """
+        refuse_unknown_labels(names, _label_names(self._client, self._base), self._base)
+        self._client.request(
+            f"{self._base}/issues/{number}/labels",
+            method="POST",
+            data={"labels": list(names)},
         )
 
 
