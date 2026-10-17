@@ -173,7 +173,7 @@ is carried whole from the records; a pull request labelled
 owe every leg `[ci] runners` names.
 A platform leg that runs as several shards
 leaves, on each shard, the parts of the suites with a test file in that
-shard's share, as the shard's record names them; a suite whose share is
+shard's share, the items its record names; a suite whose share is
 empty on a shard is another shard's to leave. A suite the record does not
 name among the suites it partitioned, a native suite with no python test
 file, ran whole on the first shard with every step that does not read the

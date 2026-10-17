@@ -89,10 +89,12 @@ def verify_release(
         # The modules the set's stamp writes the version into: a
         # package's __init__.py. A package with none, a namespace with
         # no public names, carries its version in its manifest alone.
+        # The name, not the suffix: a recipe the stamp raises floors in
+        # is python source and declares no __version__.
         modules = [
             home
             for home in _lifecycle.version_files(package)
-            if home.suffix == ".py" and home.is_file()
+            if home.name == "__init__.py" and home.is_file()
         ]
         stamp = f'__version__ = "{version}"'
         if modules and not any(

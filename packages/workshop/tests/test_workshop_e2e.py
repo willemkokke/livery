@@ -1742,14 +1742,16 @@ def test_a_fresh_pass_stops_at_a_home_it_may_not_empty_and_changes_nothing(
     # them, so it built on a half-removed home.
     ports = iter((47615, 57713))
     monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
-    first = _e2e.enter_environment("e2e")
-    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "src" / "support"
+    first = _e2e.enter_environment("e2e", ())
+    held = (
+        first.directory / "conan" / "p" / "fmt80a1ffe0392cb" / "s" / "src" / "support"
+    )
     held.mkdir(parents=True)
     (held / "build.gradle").write_text("written by root\n")
     held.chmod(0o555)
     try:
         with pytest.raises(Failed) as refused:
-            _e2e.enter_environment("e2e", fresh=True)
+            _e2e.enter_environment("e2e", (), fresh=True)
         said = str(refused.value)
         assert f"e2e: {held} belongs to {getpass.getuser()}" in said
         assert "nothing was stopped or removed" in said
@@ -1760,7 +1762,7 @@ def test_a_fresh_pass_stops_at_a_home_it_may_not_empty_and_changes_nothing(
     finally:
         held.chmod(0o755)
     # Handed back, the fresh pass takes the whole environment and a new forge.
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", (), fresh=True)
     assert second.url == "http://localhost:57713"
     assert not held.exists()
 
@@ -1775,8 +1777,8 @@ def test_a_fresh_pass_finishes_a_removal_an_earlier_one_could_not(
     # the removal ran: the pass stops, and what stayed holds no environment.
     ports = iter((47615, 57713))
     monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
-    first = _e2e.enter_environment("e2e")
-    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
+    first = _e2e.enter_environment("e2e", ())
+    held = first.directory / "conan" / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
     held.parent.mkdir(parents=True)
     held.write_text("held\n")
 
@@ -1787,14 +1789,14 @@ def test_a_fresh_pass_finishes_a_removal_an_earlier_one_could_not(
 
     monkeypatch.setattr(_devenv, "UNLINK", refusing)
     with pytest.raises(Failed, match=r"is not removed whole"):
-        _e2e.enter_environment("e2e", fresh=True)
+        _e2e.enter_environment("e2e", (), fresh=True)
     assert held.is_file() and not first.env_file.exists()
     # A pass that is not fresh refuses to bring an environment up there.
     with pytest.raises(Failed, match=r"holds what a refused removal left"):
-        _e2e.enter_environment("e2e")
+        _e2e.enter_environment("e2e", ())
     # A fresh pass removes what stayed, though no environment is named there.
     monkeypatch.setattr(_devenv, "UNLINK", os.unlink)
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", (), fresh=True)
     assert second.url == "http://localhost:57713"
     assert not held.exists()
 
@@ -1806,7 +1808,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("python")
+    skip_unless_installed("python", "conan")
     # Two passes in one hosted job, the second fresh: the first's forge
     # listened on 47615 and its release pointed conan's remote there; the
     # second's forge listens on 57713, and its members' build asked
@@ -1817,7 +1819,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     # pass of the job inherits it.
     job_home = tmp_path / "job-conan"
     monkeypatch.setenv("CONAN_HOME", str(job_home))
-    first = _e2e.enter_environment("e2e")
+    first = _e2e.enter_environment("e2e", ("conan",))
     assert first.url == "http://localhost:47615"
     # The release points the remote at the pass's forge from the host, in
     # the home the pass runs conan with. A runner's job points it in its
@@ -1827,7 +1829,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     assert "CONAN_HOME" not in (first.runner_dir(1) / "config.yaml").read_text()
     first_home = Path(os.environ["CONAN_HOME"])
     assert _remotes(first_home, tmp_path)["workshop"] == _registry(47615)
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", ("conan",), fresh=True)
     assert second.url == "http://localhost:57713"
     # Before the second pass's release runs, the home the pass builds
     # with names no earlier forge.
@@ -1835,17 +1837,17 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     assert not [url for url in _remotes(pass_home, tmp_path).values() if "47615" in url]
     _point_the_remote(_registry(57713), tmp_path)
     assert _remotes(pass_home, tmp_path)["workshop"] == _registry(57713)
-    # Both homes are the environment's own, and the job's home never held
-    # the loop's remote.
-    assert first_home == pass_home == second.conan_home
-    assert pass_environment["CONAN_HOME"] == str(second.conan_home)
+    # Both homes are the environment's own, placed there by conan's
+    # declaration, and the job's home never held the loop's remote.
+    assert first_home == pass_home == second.directory / "conan"
+    assert Path(pass_environment["CONAN_HOME"]) == second.directory / "conan"
     assert "CONAN_HOME" not in (second.runner_dir(1) / "config.yaml").read_text()
     assert "workshop" not in _remotes(job_home, tmp_path)
     # A pass that is not fresh keeps the environment, its forge, and the
     # remote that names it.
-    third = _e2e.enter_environment("e2e")
+    third = _e2e.enter_environment("e2e", ("conan",))
     assert third.url == "http://localhost:57713"
-    assert _remotes(third.conan_home, tmp_path)["workshop"] == _registry(57713)
+    assert _remotes(third.directory / "conan", tmp_path)["workshop"] == _registry(57713)
 
 
 def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks_it(
@@ -1896,17 +1898,20 @@ def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks
 def test_a_docker_pass_runs_conan_with_the_docker_environment_s_own_home(
     rig: Path, pass_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("conan")
     # The compose rig is long-lived and keeps its address, so nothing is
     # brought up or removed, fresh or not; conan's home is still the
     # environment's, never the person's own.
     monkeypatch.setenv("CONAN_HOME", str(rig / "person-conan"))
     docker = _devenv.environment("dev")
     docker.update({"MODE": "docker", "GITEA_URL": "http://localhost:3000"})
-    entered = _e2e.enter_environment("dev", fresh=True)
+    entered = _e2e.enter_environment("dev", ("conan",), fresh=True)
     assert entered.directory == docker.directory and docker.env_file.is_file()
     assert (_e2e.CURRENT.name, _e2e.CURRENT.mode) == ("dev", "docker")
-    assert os.environ["CONAN_HOME"] == str(docker.conan_home)
-    assert pass_environment["CONAN_HOME"] == str(docker.conan_home)
+    # The declared value joins its placeholder with a slash, which Windows
+    # takes as a separator too, so the homes compare as paths.
+    assert Path(os.environ["CONAN_HOME"]) == docker.directory / "conan"
+    assert Path(pass_environment["CONAN_HOME"]) == docker.directory / "conan"
 
 
 def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
@@ -2374,18 +2379,18 @@ _SHARD_JOBS = ("check (ubuntu-latest, 3.14, 1of2)", "check (ubuntu-latest, 3.14,
 
 
 def _fold(
-    files: tuple[int, ...] = (2, 1),
+    items: tuple[int, ...] = (2, 1),
     *,
     count: int = 2,
     rows: tuple[str, ...] = ("20261017T090000Z-76.json",),
     digest: str = "ab" * 32,
 ) -> _e2e_rows.FoldFacts:
-    """The fold's record of *count* shards that ran *files* each."""
+    """The fold's record of *count* shards that ran *items* each."""
     shards = tuple(
         _e2e_rows.ShardFacts(
             f"{index}of{count}", f"{_LEG}-{index}of{count}", _SHARD_JOBS[index - 1], n
         )
-        for index, n in enumerate(files, 1)
+        for index, n in enumerate(items, 1)
     )
     return _e2e_rows.FoldFacts(count, digest, rows, shards)
 
@@ -2419,19 +2424,19 @@ def test_the_shards_proof_refuses_a_leg_that_is_not_the_fold_of_the_shards() -> 
     assert f"the forge's rows of {_SHARD_JOBS[1]} are not beside the folded row" in str(
         caught.value
     )
-    # The leg ran, and the shards partitioned nothing or ran no file.
-    with pytest.raises(_FAILURES, match="ran no test file"):
+    # The leg ran, and the shards partitioned nothing or ran no item.
+    with pytest.raises(_FAILURES, match="ran no item"):
         _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=True)
     with pytest.raises(_FAILURES, match="recorded no partition"):
         _e2e._require_shards(run, _facts(_fold(digest="")), count=2, ran=True)
-    # Every shard skipped, and the fold records files ran or rows read.
+    # Every shard skipped, and the fold records items ran or rows read.
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_shards(run, _facts(_fold()), count=2, ran=False)
     assert (
-        "every shard skipped, and the fold records 3 test file(s) ran and 1"
+        "every shard skipped, and the fold records 3 item(s) ran and 1"
         " durations row(s) read" in str(caught.value)
     )
-    with pytest.raises(_FAILURES, match=r"0 test file\(s\) ran and 1 durations"):
+    with pytest.raises(_FAILURES, match=r"0 item\(s\) ran and 1 durations"):
         _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=False)
     # Then the shapes the loop proves: a leg that ran on a row, the
     # first pass with no row yet (the first shard ran every file), and
@@ -2455,7 +2460,7 @@ def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
     # Nothing on the store: the leg ran, so its row is missing.
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_durations(work, run, f"{_LEG}-1of2", written=True)
-    assert f"no row {name} naming a test file on {series.ref}" in str(caught.value)
+    assert f"no row {name} naming an item on {series.ref}" in str(caught.value)
     _e2e._require_durations(work, run, f"{_LEG}-1of2", written=False)
     _e2e._prove_shards(work, run, _facts(_fold((0, 0), rows=())), ran=False)
     assert (
@@ -2463,11 +2468,11 @@ def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
         " no durations row written" in capsys.readouterr().out
     )
     # The row on the store: every shard skipped, so a row is wrong.
-    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5}}}
+    rows = {name: {"run": "77", "items": {"tests/test_a.py": 1.5}}}
     assert series.put(state_store(work), rows, message="durations: run 77") == ""
     with pytest.raises(_FAILURES) as caught:
         _e2e._require_durations(work, run, _LEG, written=False)
-    assert f"{series.ref} holds {name} with 1 file(s), and every shard skipped" in (
+    assert f"{series.ref} holds {name} with 1 item(s), and every shard skipped" in (
         str(caught.value)
     )
     _e2e._require_durations(work, run, f"{_LEG}-2of2", written=True)

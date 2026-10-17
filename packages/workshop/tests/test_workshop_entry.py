@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from workshop_extension_fakes import fake_extensions
 from workshop_installed import skip_unless_installed
 
 LOCK = """\
@@ -41,12 +42,14 @@ version = "1.0.0"
 """
 
 
-def _contract_root(tmp_path: Path, kind: str, *, lock: str = LOCK) -> Path:
+def _contract_root(
+    tmp_path: Path, kind: str, *, lock: str = LOCK, listed: str = ""
+) -> Path:
     root = tmp_path / f"contract-{kind}"
     root.mkdir(exist_ok=True)
     (root / "workshop.toml").write_text(
         "[workspace]\n"
-        "extensions = []\n"
+        f"extensions = [{listed}]\n"
         "\n[forge]\n"
         f'kind = "{kind}"\n'
         'owner = "owner"\n'
@@ -157,11 +160,32 @@ def test_the_matrix_leg_selects_its_interpreter_through_the_entry(
 BASH = shutil.which("bash")
 
 
-def _script_home(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
-    """A rendered setup.sh beside a lock, with a stubbed PATH and HOME."""
+#: An extension declaring a variable in a directory of its own, as a
+#: tool whose cache takes one writer at a time does.
+DECLARING = """\
+[env.ACME_HOME]
+value = "{place}/acme"
+always = true
+doc = "acme's cache takes one writer at a time"
+"""
+
+
+@pytest.fixture
+def declaring(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """The installed extension ``acme.cache``, declaring ``ACME_HOME``; its name."""
+    fake_extensions(tmp_path / "fakes", monkeypatch, cache=DECLARING)
+    return '"acme.cache"'
+
+
+def _script_home(tmp_path: Path, listed: str = "") -> tuple[Path, Path, dict[str, str]]:
+    """A rendered setup.sh beside a lock, with a stubbed PATH and HOME.
+
+    The root lists *listed*, the extensions whose declared variables the
+    script sets.
+    """
     from livery.workshop._ci_generate import generate
 
-    root = _contract_root(tmp_path, "github")
+    root = _contract_root(tmp_path, "github", listed=listed)
     (root / "setup.sh").write_text(generate(root)["setup.sh"])
     bin_dir = tmp_path / "stub-bin"
     bin_dir.mkdir(exist_ok=True)
@@ -175,8 +199,8 @@ def _script_home(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     # forced. Windows needs the rest of the environment for process
     # creation, so only PATH and HOME are overridden. The job's own
     # directories are the test's, a GitHub job's temp and a GitLab job's
-    # checkout, and no conan home is inherited: a runner running this
-    # suite sets them for its own job.
+    # checkout, and the declared variable is not inherited: a runner
+    # running this suite sets them for its own job.
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir(exist_ok=True)
     env = {
@@ -186,16 +210,16 @@ def _script_home(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "RUNNER_TEMP": str(runner_temp),
         "CI_PROJECT_DIR": str(root),
     }
-    env.pop("CONAN_HOME", None)
+    env.pop("ACME_HOME", None)
     return root, bin_dir, env
 
 
 #: Each kind of CI job: how it runs the entry, the variable that names
-#: the job's own directory, and conan's home under that directory. A
+#: the job's own directory, and the declared home under that directory. A
 #: GitLab job sources the script in the shell that runs its later lines.
 _CI_JOBS = {
-    "github": (("setup.sh", "github"), "RUNNER_TEMP", "conan"),
-    "gitlab": (("-c", "source setup.sh gitlab"), "CI_PROJECT_DIR", ".workshop/conan"),
+    "github": (("setup.sh", "github"), "RUNNER_TEMP", "acme"),
+    "gitlab": (("-c", "source setup.sh gitlab"), "CI_PROJECT_DIR", ".workshop/acme"),
 }
 
 
@@ -297,12 +321,13 @@ def test_a_failed_sync_is_named_after_one_retry(tmp_path: Path) -> None:
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 @pytest.mark.parametrize("kind", sorted(_CI_JOBS))
 def test_a_ci_entry_whose_runner_names_no_job_directory_refuses_naming_it(
-    tmp_path: Path, kind: str
+    tmp_path: Path, kind: str, declaring: str
 ) -> None:
-    # A job keeps conan's home in a directory of its own; without one the
-    # entry stops before any sync could build through a shared home.
+    # A job keeps a declared home in a directory of its own; without one
+    # the entry stops before any sync could build through a shared home,
+    # naming the variable and the extension that declares it.
     entry, variable, _home = _CI_JOBS[kind]
-    root, bin_dir, env = _script_home(tmp_path)
+    root, bin_dir, env = _script_home(tmp_path, declaring)
     calls = tmp_path / "uv-calls"
     _uv_stub(bin_dir / "uv", f'#!/bin/sh\necho "$@" >> "{calls}"\nexit 0\n')
     unset = {key: value for key, value in env.items() if key != variable}
@@ -310,7 +335,10 @@ def test_a_ci_entry_whose_runner_names_no_job_directory_refuses_naming_it(
         [str(BASH), *entry], cwd=root, env=unset, capture_output=True, text=True
     )
     assert done.returncode == 1
-    assert f"setup: this job's runner sets no {variable};" in done.stderr
+    assert (
+        f"setup: this job's runner sets no {variable}; acme.cache declares"
+        " ACME_HOME in a directory of the job's own"
+    ) in done.stderr
     missing = tmp_path / "gone" / "job"
     done = subprocess.run(
         [str(BASH), *entry],
@@ -320,33 +348,60 @@ def test_a_ci_entry_whose_runner_names_no_job_directory_refuses_naming_it(
         text=True,
     )
     assert done.returncode == 1
-    assert f"setup: {variable} names {missing}, which is not a directory;" in (
-        done.stderr
-    )
+    assert (
+        f"setup: {variable} names {missing}, which is not a directory;"
+        " acme.cache declares ACME_HOME in it"
+    ) in done.stderr
     assert not calls.exists()
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 @pytest.mark.parametrize("kind", sorted(_CI_JOBS))
-def test_two_jobs_at_once_on_one_runner_sync_with_two_conan_homes(
+def test_a_ci_entry_with_no_variable_in_a_directory_of_its_own_needs_none(
     tmp_path: Path, kind: str
 ) -> None:
-    # One runner, two jobs started together, one CONAN_HOME the runner
-    # sets for both: each job's sync, which builds the native members
-    # through conan, runs with the home in the job's own directory.
+    # No extension of the set declares a variable that names {place}: the
+    # entry asks the runner for no directory of the job's own.
+    entry, variable, _home = _CI_JOBS[kind]
+    root, bin_dir, env = _script_home(tmp_path)
+    calls = tmp_path / "uv-calls"
+    _uv_stub(
+        bin_dir / "uv",
+        f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
+    )
+    missing = tmp_path / "gone" / "job"
+    done = subprocess.run(
+        [str(BASH), *entry],
+        cwd=root,
+        env={**env, variable: str(missing)},
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    assert "_job_place " not in (root / "setup.sh").read_text().split("_declared()")[1]
+
+
+@pytest.mark.skipif(BASH is None, reason="no bash on this machine")
+@pytest.mark.parametrize("kind", sorted(_CI_JOBS))
+def test_two_jobs_at_once_on_one_runner_sync_with_two_declared_homes(
+    tmp_path: Path, kind: str, declaring: str
+) -> None:
+    # One runner, two jobs started together, one ACME_HOME the runner
+    # sets for both: the declaration says always, so each job's sync
+    # runs with the home in the job's own directory.
     entry, variable, under = _CI_JOBS[kind]
     jobs: list[tuple[str, Path, subprocess.Popen[str]]] = []
     for name in ("check", "docs"):
         job = tmp_path / name
         job.mkdir()
-        root, bin_dir, env = _script_home(job)
+        root, bin_dir, env = _script_home(job, declaring)
         calls = job / "uv-calls"
         _uv_stub(
             bin_dir / "uv",
-            f'#!/bin/sh\necho "$@ CONAN_HOME=$CONAN_HOME" >> "{calls}"\n'
+            f'#!/bin/sh\necho "$@ ACME_HOME=$ACME_HOME" >> "{calls}"\n'
             f'mkdir -p "{root}/.venv"\nexit 0\n',
         )
-        env["CONAN_HOME"] = str(tmp_path / "runner" / "conan")
+        env["ACME_HOME"] = str(tmp_path / "runner" / "acme")
         started = subprocess.Popen(
             [str(BASH), *entry],
             cwd=root,
@@ -360,25 +415,31 @@ def test_two_jobs_at_once_on_one_runner_sync_with_two_conan_homes(
     for wanted, calls, started in jobs:
         _, stderr = started.communicate(timeout=60)
         assert started.returncode == 0, stderr
-        # The runner's home is named as not used.
-        assert f"the runner's CONAN_HOME, {tmp_path / 'runner' / 'conan'}," in stderr
+        # The runner's home is named as not used, with the declaration's doc.
+        assert (
+            f"setup: ACME_HOME is {wanted}, as acme.cache declares it; the"
+            f" environment's ACME_HOME, {tmp_path / 'runner' / 'acme'}, is not"
+            " used: acme's cache takes one writer at a time"
+        ) in stderr
         synced = [
             line for line in calls.read_text().splitlines() if "sync --locked" in line
         ]
         assert synced, calls.read_text()
-        home = synced[-1].rpartition("CONAN_HOME=")[2]
+        home = synced[-1].rpartition("ACME_HOME=")[2]
         assert home == wanted
         homes.append(home)
     assert len(set(homes)) == 2
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
-def test_the_happy_path_syncs_locked_records_and_emits(tmp_path: Path) -> None:
-    root, bin_dir, env = _script_home(tmp_path)
+def test_the_happy_path_syncs_locked_records_and_emits(
+    tmp_path: Path, declaring: str
+) -> None:
+    root, bin_dir, env = _script_home(tmp_path, declaring)
     calls = tmp_path / "uv-calls"
     _uv_stub(
         bin_dir / "uv",
-        f'#!/bin/sh\necho "$@ CONAN_HOME=$CONAN_HOME" >> "{calls}"\n'
+        f'#!/bin/sh\necho "$@ ACME_HOME=$ACME_HOME" >> "{calls}"\n'
         f'mkdir -p "{root}/.venv"\nexit 0\n',
     )
     done = subprocess.run(
@@ -396,44 +457,45 @@ def test_the_happy_path_syncs_locked_records_and_emits(tmp_path: Path) -> None:
     )
     receipt = root / ".venv" / ".workshop-sync-receipt"
     assert receipt.read_bytes() == (root / "uv.lock").read_bytes()
-    # One job alone: the workshop's sync builds with the conan home under
-    # the job's temp, and with no home set by the runner nothing is said.
+    # One job alone: the workshop's sync builds with the declared home
+    # under the job's temp, and with no home set by the runner nothing is
+    # said.
     synced = [line for line in lines if "sync --locked" in line]
-    assert synced[-1].endswith(f"CONAN_HOME={tmp_path / 'runner-temp'}/conan")
-    assert "CONAN_HOME" not in done.stderr
+    assert synced[-1].endswith(f"ACME_HOME={tmp_path / 'runner-temp'}/acme")
+    assert "ACME_HOME" not in done.stderr
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
-def test_a_gitlab_job_alone_syncs_and_keeps_its_conan_home_in_its_shell(
-    tmp_path: Path,
+def test_a_gitlab_job_alone_syncs_and_keeps_its_declared_home_in_its_shell(
+    tmp_path: Path, declaring: str
 ) -> None:
     # A GitLab job sources the entry, and the same shell runs the job's
     # later lines: the workshop's sync builds with the home in the
     # job's checkout, the shell keeps it after, and the emission is the
     # sourced one, with nothing persisted.
-    root, bin_dir, env = _script_home(tmp_path)
+    root, bin_dir, env = _script_home(tmp_path, declaring)
     calls = tmp_path / "uv-calls"
     _uv_stub(
         bin_dir / "uv",
-        f'#!/bin/sh\necho "$@ CONAN_HOME=$CONAN_HOME" >> "{calls}"\n'
+        f'#!/bin/sh\necho "$@ ACME_HOME=$ACME_HOME" >> "{calls}"\n'
         f'mkdir -p "{root}/.venv"\nexit 0\n',
     )
     done = subprocess.run(
-        [str(BASH), "-c", 'source setup.sh gitlab && echo "after: $CONAN_HOME"'],
+        [str(BASH), "-c", 'source setup.sh gitlab && echo "after: $ACME_HOME"'],
         cwd=root,
         env=env,
         capture_output=True,
         text=True,
     )
     assert done.returncode == 0, done.stderr
-    home = f"{root}/.workshop/conan"
+    home = f"{root}/.workshop/acme"
     assert done.stdout.splitlines()[-1] == f"after: {home}"
     lines = calls.read_text().splitlines()
     synced = [line for line in lines if "sync --locked" in line]
-    assert synced[-1].endswith(f"CONAN_HOME={home}")
+    assert synced[-1].endswith(f"ACME_HOME={home}")
     assert any("env.emit posix" in line for line in lines)
     assert not any("--github" in line for line in lines)
-    assert "CONAN_HOME" not in done.stderr
+    assert "ACME_HOME" not in done.stderr
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
@@ -487,10 +549,12 @@ def test_a_native_member_is_left_to_the_workshop_sync(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
-def test_sourcing_the_entry_enters_without_persisting(tmp_path: Path) -> None:
+def test_sourcing_the_entry_enters_without_persisting(
+    tmp_path: Path, declaring: str
+) -> None:
     from livery.workshop._entry import entry_script
 
-    root, bin_dir, env = _script_home(tmp_path)
+    root, bin_dir, env = _script_home(tmp_path, declaring)
     (root / "setup.sh").write_text(entry_script(root))
     calls = tmp_path / "uv-calls"
     _uv_stub(
@@ -504,10 +568,10 @@ def test_sourcing_the_entry_enters_without_persisting(tmp_path: Path) -> None:
     lines = calls.read_text().splitlines()
     assert any(line.endswith("env.emit posix") for line in lines)
     assert not any("--github" in line for line in lines)
-    # A person's shell gets no conan home placed, whatever job variables
-    # it happens to hold.
+    # A person's shell gets no declared home placed, whatever job
+    # variables it happens to hold.
     done = subprocess.run(
-        [str(BASH), "-c", 'source setup.sh && echo "after: ${CONAN_HOME-unset}"'],
+        [str(BASH), "-c", 'source setup.sh && echo "after: ${ACME_HOME-unset}"'],
         cwd=root,
         env=env,
         capture_output=True,
@@ -740,6 +804,65 @@ def test_the_emission_names_the_platform_bin_dir(
     assert venv_bin(tmp_path).name == "bin"
 
 
+def test_the_entry_holds_each_declared_variable_rendered_from_its_declaration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: a plain value is set in every mode, and the
+    # environment's value wins without always.
+    from livery.workshop._entry import entry_script
+
+    fake_extensions(
+        tmp_path / "fakes",
+        monkeypatch,
+        cache=DECLARING,
+        plain='[env.ACME_MODE]\nvalue = "quiet $HOME"\ndoc = "how acme reports"\n',
+    )
+    root = _contract_root(tmp_path, "github", listed='"acme.cache", "acme.plain"')
+    script = entry_script(root)
+    github = script.index(
+        '    _job_place RUNNER_TEMP "${RUNNER_TEMP:-}" ACME_HOME acme.cache \\\n'
+    )
+    gitlab = script.index(
+        '    _job_place CI_PROJECT_DIR "${CI_PROJECT_DIR:-}" ACME_HOME acme.cache \\\n'
+    )
+    assert '    _place="$RUNNER_TEMP"\n' in script
+    assert '    _place="$CI_PROJECT_DIR/.workshop"\n' in script
+    declared = script.index(
+        '[ -z "$_place" ] || _declared ACME_HOME "$_place"/acme always acme.cache'
+        """ 'acme'"'"'s cache takes one writer at a time'\n"""
+    )
+    plain = script.index(
+        "_declared ACME_MODE 'quiet $HOME' '' acme.plain 'how acme reports'\n"
+    )
+    sync = script.index("uv sync --project")
+    assert github < gitlab < declared < sync and plain < sync
+    if BASH is None:
+        return
+    # Run as a person's shell sources it: the plain value is set where the
+    # environment has none, and the environment's value wins otherwise;
+    # the value naming a directory of its own is not set off a CI job.
+    shown = 'echo "$ACME_MODE|${ACME_HOME-unset}"'
+    prelude = script.split("# uv at the lock's pin")[0]
+    (tmp_path / "prelude.sh").write_text(prelude + shown + "\n")
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith("ACME_")
+    }
+    done = subprocess.run(
+        [str(BASH), str(tmp_path / "prelude.sh")],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert done.stdout.strip() == "quiet $HOME|unset", done.stderr
+    done = subprocess.run(
+        [str(BASH), str(tmp_path / "prelude.sh")],
+        env={**env, "ACME_MODE": "loud"},
+        capture_output=True,
+        text=True,
+    )
+    assert done.stdout.strip() == "loud|unset", done.stderr
+
+
 def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
     tmp_path: Path,
 ) -> None:
@@ -755,15 +878,8 @@ def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
     assert 'if [ "${1:-}" = github ]; then' in script
     # A placement the job already carries stands; the temp is the fallback.
     assert f'{data_var}="${{{data_var}:-$RUNNER_TEMP/footman}}"' in script
-    # Conan's home is always the job's own on either kind of CI job,
-    # placed before the workshop's sync builds the native members
-    # through conan.
-    github = script.index('_job_conan_home RUNNER_TEMP "${RUNNER_TEMP:-}"')
-    gitlab = script.index('_job_conan_home CI_PROJECT_DIR "${CI_PROJECT_DIR:-}"')
     assert 'elif [ "${1:-}" = gitlab ]; then' in script
-    assert '"${CI_PROJECT_DIR:-}/.workshop/conan"' in script
     assert placed < script.index("uv sync --project")
     assert script.index(f'{data_var}="') < script.index("sync --locked >&2")
-    assert max(github, gitlab) < script.index("uv sync --project")
     assert script.count(f"export UV_CACHE_DIR {data_var}\n") == 1
     assert "__DATA_DIR_VAR__" not in script

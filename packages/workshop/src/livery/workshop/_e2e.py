@@ -381,7 +381,9 @@ def _enter_host(values: Mapping[str, str], env: str) -> None:
     os.environ["FORGE_TOKEN"] = os.environ["FORGE_ADMIN_TOKEN"] = CURRENT.token
 
 
-def enter_environment(name: str, *, fresh: bool = False) -> Environment:
+def enter_environment(
+    name: str, extensions: Sequence[str], *, fresh: bool = False
+) -> Environment:
     """Run the pass on environment *name*, brought up first; the environment.
 
     A host-mode environment is brought up; with *fresh* it is removed
@@ -392,14 +394,15 @@ def enter_environment(name: str, *, fresh: bool = False) -> Environment:
     go into the pass's environment (`_enter_host`). A docker-mode
     environment is the compose rig, used as it is, fresh or not.
 
-    In both modes the pass and every process it starts then run conan
-    with the environment's own home. A release writes the ``workshop``
-    remote into the home conan runs with, naming the environment's
-    forge. A home shared with an earlier pass keeps that remote after
-    the forge is gone, and a later ``conan install`` that asks the
-    remotes for a binary tries it and fails. The environment's home
-    goes with the environment, so a fresh pass starts with no remote
-    an earlier one wrote.
+    In both modes the pass and every process it starts then run with
+    the variables the set of *extensions*, the list the loop's
+    workspace is born with, declares, each one naming ``{place}``
+    placed in the environment's directory. A tool's home placed there
+    goes with the environment: a release writes a remote into it that
+    names the environment's forge, and a home shared with an earlier
+    pass would keep that remote after the forge is gone, so a later
+    install that asks the remotes tries it and fails. A fresh pass
+    starts with nothing an earlier one wrote there.
     """
     from livery.workshop import _devenv
 
@@ -414,8 +417,14 @@ def enter_environment(name: str, *, fresh: bool = False) -> Environment:
         _devenv.up_host(place, ("host",))
         place = _devenv.environment(name)
         _enter_host(place.values(), name)
-    edit_environments({"CONAN_HOME": str(place.conan_home)})
-    print(f"  conan home: {place.conan_home}")
+    from livery.workshop._composition import closure
+    from livery.workshop._extensions import installed_declaration
+
+    held = closure(extensions, installed_declaration)
+    variables = place.variables(held, os.environ)
+    edit_environments(variables)
+    for variable, value in variables.items():
+        print(f"  {variable}: {value}")
     return place
 
 
@@ -2399,9 +2408,9 @@ def _require_shards(run: Run, facts: RunFacts, *, count: int, ran: bool) -> None
 
     The fold's row lists each shard with its job, and the forge's row of
     that job stands beside it. *ran* says whether the leg ran its gate:
-    then the shards partitioned a test-file set and ran its files;
-    otherwise every shard skipped, so the fold names no file ran and
-    no durations row read.
+    then the shards partitioned a set and ran its items; otherwise
+    every shard skipped, so the fold names no item ran and no
+    durations row read.
     """
     leg = facts.job("check")
     fold = leg.fold
@@ -2424,16 +2433,16 @@ def _require_shards(run: Run, facts: RunFacts, *, count: int, ran: bool) -> None
             " the folded row; the collect keeps each shard's job with its times;"
             f" {run.url}"
         )
-    files = sum(shard.files for shard in fold.shards)
-    if ran and (not fold.digest or not files):
+    items = sum(shard.items for shard in fold.shards)
+    if ran and (not fold.digest or not items):
         fail(
-            f"run {run.id}: the check leg ran and its shards ({labels}) ran no test"
-            f" file; the fold recorded no partition; {run.url}"
+            f"run {run.id}: the check leg ran and its shards ({labels}) ran no"
+            f" item; the fold recorded no partition; {run.url}"
         )
-    if not ran and (files or fold.rows):
+    if not ran and (items or fold.rows):
         fail(
-            f"run {run.id}: every shard skipped, and the fold records {files} test"
-            f" file(s) ran and {len(fold.rows)} durations row(s) read ({labels});"
+            f"run {run.id}: every shard skipped, and the fold records {items}"
+            f" item(s) ran and {len(fold.rows)} durations row(s) read ({labels});"
             f" {run.url}"
         )
 
@@ -2442,21 +2451,21 @@ def _require_durations(root: Path, run: Run, leg: str, *, written: bool) -> None
     """Fail unless *run*'s durations row on *leg*'s platform is there, or is not.
 
     *written* says the gate job's collect wrote the row, naming at
-    least one test file; otherwise the leg ran no test file and the
-    series holds no row of the run.
+    least one item; otherwise the leg ran no item and the series holds
+    no row of the run.
     """
     row = durations_row(root, run.id, leg)
-    if written and not row.files:
+    if written and not row.items:
         fail(
-            f"run {run.id}: no row {row.name} naming a test file on {row.ref}; the"
-            " gate job's collect wrote no seconds per test file for the leg;"
+            f"run {run.id}: no row {row.name} naming an item on {row.ref}; the"
+            " gate job's collect wrote no seconds per item for the leg;"
             f" {run.url}"
         )
-    if not written and row.files is not None:
+    if not written and row.items is not None:
         fail(
-            f"run {run.id}: {row.ref} holds {row.name} with {len(row.files)}"
-            " file(s), and every shard skipped; a leg that ran no test file leaves"
-            f" no durations; {run.url}"
+            f"run {run.id}: {row.ref} holds {row.name} with {len(row.items)}"
+            " item(s), and every shard skipped; a leg that ran no item leaves no"
+            f" durations; {run.url}"
         )
 
 
@@ -2469,7 +2478,7 @@ def _prove_shards(root: Path, run: Run, facts: RunFacts, *, ran: bool) -> None:
     the leg ran its gate (*ran*), the shards partitioned the test files
     and the gate job's collect wrote the run's durations row on the
     platform leg's series; where every shard skipped, the fold names no
-    file and no row is written.
+    item and no row is written.
     """
     _require_shards(run, facts, count=SHARDS, ran=ran)
     leg = facts.job("check").leg
@@ -3714,8 +3723,9 @@ if _WORKSHOP_TESTS.is_dir():
         again, so a fresh pass is a new forge, and ``--purge-cache``
         removes the rig's shared caches first. The docker-mode
         environment ``dev`` is the compose rig, addressed as before.
-        The pass runs conan with a home inside the environment, so the
-        remote a release writes there goes with the environment's forge.
+        Each variable an extension of the loop's set declares with a
+        directory of its own is placed inside the environment, so what a
+        release writes there goes with the environment's forge.
         ``--scenario`` names what the pass proves: scenario names, set
         names, or both, comma-separated. The sets are ``develop``
         (birth, the verified skip, the members, the scoped leg), the
@@ -3769,7 +3779,7 @@ if _WORKSHOP_TESTS.is_dir():
             if purge_cache:
                 for line in _devenv.purge_cache():
                     print(line)
-            enter_environment(env, fresh=fresh)
+            enter_environment(env, stack, fresh=fresh)
             # Every commit the pass makes, the driver's, the birth's and
             # the loop's own fm's, is unsigned and carries the tools'
             # identity: the task's marks and the git plugin put both in

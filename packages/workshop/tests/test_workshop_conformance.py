@@ -434,6 +434,7 @@ def test_an_item_without_its_doc_line_breaks_the_clause_naming_each(
         '[contract.package.acme.depth]\ntypes = ["str"]\n\n'
         "[templates.acme-app]\nextensions = []\n\n"
         '[templates.acme-app.options.flavour]\nchoices = ["sweet", "sour"]\n\n'
+        '[env.ACME_HOME]\nvalue = "{place}/acme"\n\n'
         '[phases.lint.acme]\nmain = "acme_kit_docs._steps:judged"\n\n'
         '[phases.lint.acme.options.strict]\ntype = "bool"\ndefault = false\n\n'
         '[for.docs.phases.lint.acme-pages]\nmain = "acme_kit_docs._steps:judged"\n\n'
@@ -461,6 +462,10 @@ def test_an_item_without_its_doc_line_breaks_the_clause_naming_each(
         " flavour of the template acme-app with no doc; fm new.package.acme-app's"
         " help and completion, the agent's guidance and the site show an option"
         " by its doc",
+        "declaration-documented: extension acme_kit_docs: declares the environment"
+        " variable ACME_HOME with no doc; the agent's guidance and the site show a"
+        " variable by its doc, and the entry script says it when the value"
+        " replaces the environment's",
         "declaration-documented: extension acme_kit_docs: declares the option"
         " strict of [phases.lint.acme] with no doc; the agent's guidance and the"
         " site show an option by its doc",

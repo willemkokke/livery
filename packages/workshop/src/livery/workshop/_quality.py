@@ -885,13 +885,13 @@ def _current_point() -> str:
 
 
 def _leave_empty_share(root: Path, shard: Shard, *, attempt: str = "") -> None:
-    """Leave the shard's record of an empty test-file set, before the gate decides.
+    """Leave the shard's record of an empty set, before the gate decides.
 
     The gate job's fold proves a platform's shards from the record each
     one leaves of what it partitioned, and the test step leaves that
     record only when it runs. A shard whose gate skips on the verified
     record, finds nothing affected, or reaches no suite leaves this one
-    instead: no file, no durations row, the checkout's time as the
+    instead: no item, no durations row, the checkout's time as the
     bound, the same on every shard of the platform, so the fold folds
     the platform's skipped shards into one skipped leg. The test step's
     own record replaces it when the step runs. One shard of one leaves
@@ -904,7 +904,7 @@ def _leave_empty_share(root: Path, shard: Shard, *, attempt: str = "") -> None:
         root,
         shard=shard,
         digest=files_digest(()),
-        files=(),
+        items=(),
         rows=(),
         before=checkout_time(root),
         attempt=attempt,

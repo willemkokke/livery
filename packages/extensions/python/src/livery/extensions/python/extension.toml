@@ -50,10 +50,12 @@ combine = "nearest"
 # The steps this extension adds to a package's lifecycle phases, one
 # per phase, each named for the extension, and the test phase's
 # isolated side, which the release train runs once per resolution it
-# proves.
+# proves. The stamp writes the version into pyproject.toml and every
+# __version__, and raises there each requirement's floor on a member
+# released with the package.
 [phases.stamp.python]
 main = "livery.extensions.python._steps:stamp"
-reads = ["version"]
+reads = ["version", "floors"]
 provides = { changed = "strs" }
 
 # The release's wheel and sdist, built on the build phase's isolated

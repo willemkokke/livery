@@ -185,97 +185,77 @@ def member_pairs_at(root: Path, ref: str) -> list[tuple[str, str]] | None:
     return pairs
 
 
-#: The files in a member's directory that can declare a floor on a
-#: sibling: the pyproject requirement, the ``[[depends]]`` floor, and a
-#: conan reference's version range.
-FLOOR_HOMES = ("pyproject.toml", "workshop.toml", "conanfile.py")
-
-
 def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
-    """Raise floors between co-released members; the files changed.
+    """Raise floors between co-released members through the stamp phase; the files.
 
     Within the set only (contract: a solo release never moves a
-    floor): a member depending on a co-member gets the co-released
-    version, in every home it is declared (``FLOOR_HOMES``), the
-    pyproject requirement, the ``[[depends]]`` floor, and a conan
-    reference's version range.
+    floor): each member's stamp phase runs at the version it declares
+    now, with every other member's version as its floors, so the
+    version stays for `prepare_release` to stamp. Each step raises the
+    floors in its own manifests, and the base those of the member's
+    ``[[depends]]`` edges, as `livery.workshop._lifecycle.stamp` says.
+    The files are the ones the phase reported, relative to *root*.
     """
-    import re
-
-    versions = {plan.package.name: plan.version for plan in plans}
-    members = {plan.package.name: plan.package.member for plan in plans}
+    if len(plans) < 2:
+        return []
     changed: list[str] = []
     for plan in plans:
-        for home in FLOOR_HOMES:
-            path = plan.package.directory / home
-            if not path.is_file():
-                continue
-            text = original = path.read_text("utf-8")
-            for name, version in versions.items():
-                if name == plan.package.name:
-                    continue
-                text = re.sub(
-                    rf'("{re.escape(name)}\s*>=\s*)[0-9][^"]*(")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                )
-                # The conan range form the lint teaches:
-                # "name/[>=version]".
-                text = re.sub(
-                    rf'("{re.escape(name)}/\[>=)[^\]"]+(\]")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                )
-                member = re.escape(members[name])
-                text = re.sub(
-                    rf'(path = "packages/{member}"'
-                    rf'[^[]*?floor = ")[^"]+(")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                    flags=re.S,
-                )
-            if text != original:
-                path.write_text(text, encoding="utf-8")
-                changed.append(path.relative_to(root).as_posix())
+        package = plan.package
+        floors = {
+            other.package.path: other.version
+            for other in plans
+            if other.package.path != package.path
+        }
+        current = _lifecycle.current_version(package)
+        stamped = _lifecycle.stamp(package, root, current, floors=floors)
+        changed += [
+            (package.directory / name).relative_to(root).as_posix() for name in stamped
+        ]
     return changed
 
 
-def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
+def rollback_prepare(
+    root: Path, members: tuple[Package, ...], reported: Sequence[str] = ()
+) -> None:
     """Restore exactly the files prepare writes; never raises.
 
     The error being unwound is the one worth seeing, so this raises
-    nothing of its own: each member's changelog, pyproject, contract,
-    and version files return to HEAD, and so do the set's manifest and
-    the workspace lock the stamp refreshed. One of these files on disk
-    that HEAD lacks is one prepare created, as a first release's
-    changelog and manifest are, and it is removed, so the switch back
-    to the base does not carry it along. Each restore reads HEAD, never
-    the index: a commit that failed (a signing agent that refused) has
-    already staged every change, and a restore from the index would
-    keep them. Each path the rollback could not put back is printed
-    with the reason, and the other paths are put back all the same.
+    nothing of its own: each member's changelog, contract and version
+    files return to HEAD, and so do the files the stamp phase
+    *reported* raising floors in (relative to *root*), the set's
+    manifest and the workspace lock the stamp refreshed. One of these
+    files on disk that HEAD lacks is one prepare created, as a first
+    release's changelog and manifest are, and it is removed, so the
+    switch back to the base does not carry it along. Each restore reads
+    HEAD, never the index: a commit that failed (a signing agent that
+    refused) has already staged every change, and a restore from the
+    index would keep them. Each path the rollback could not put back is
+    printed with the reason, and the other paths are put back all the
+    same.
     """
-    for path, reason in _put_back(root, _prepare_paths(root, members)):
+    for path, reason in _put_back(root, _prepare_paths(root, members, reported)):
         print(f"  the rollback could not restore {path}: {reason}")
 
 
-def _prepare_paths(root: Path, members: tuple[Package, ...]) -> tuple[str, ...]:
+def _prepare_paths(
+    root: Path, members: tuple[Package, ...], reported: Sequence[str] = ()
+) -> tuple[str, ...]:
     """The paths prepare may write for *members*, each once, from *root*.
 
-    Each member's changelog, its floor homes and the files its set's
-    stamp writes a version into, then the workspace lock and the set's
+    The files the stamp phase *reported* raising floors in, then each
+    member's changelog, its contract and the files its set's stamp
+    writes a version into, then the workspace lock and the set's
     manifest, with forward slashes. The rollback puts back exactly
     these, and the local act refuses while one of them has changes of
     its own, so the two read the same list.
     """
+    from livery.workshop._contract import CONTRACT
     from livery.workshop._publish import MANIFEST
 
-    paths: list[str] = []
+    paths = [Path(name).as_posix() for name in reported]
     for package in members:
         base = package.directory.relative_to(root)
-        paths.extend(
-            (base / name).as_posix() for name in ("CHANGELOG.md", *FLOOR_HOMES)
-        )
+        paths.extend((base / name).as_posix() for name in ("CHANGELOG.md", CONTRACT))
         # Every file the set's stamp writes a version into. A set that
         # cannot name them restores the rest regardless.
         with contextlib.suppress(Exception):
@@ -766,6 +746,7 @@ class ReleaseDriver:
         kept = self.legs_kept(plans, mined_at)
         git.create_branch(root, self.branch)
         prepared = False
+        floor_changes: list[str] = []
         try:
             floor_changes = bump_set_floors(self._root, plans)
             if floor_changes:
@@ -809,7 +790,7 @@ class ReleaseDriver:
             prepared = True
         finally:
             if not prepared:
-                rollback_prepare(self._root, self._members)
+                rollback_prepare(self._root, self._members, floor_changes)
                 git.switch(root, self.base)
                 git.delete_branch(root, self.branch)
         title = release_title([(plan.package.name, plan.version) for plan in plans])
@@ -1003,8 +984,9 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     fresh_receipts(root)
     plans = derive_plans(root, members)
     print("  act: local; nothing leaves this machine")
+    floor_changes: list[str] = []
     try:
-        bump_set_floors(root, plans)
+        floor_changes = bump_set_floors(root, plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
             _lifecycle.build_release(plan.package, root)
@@ -1016,7 +998,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         print(f"  would release: {listed}")
         print("  wheels in each member's dist/; the tree is restored")
     finally:
-        rollback_prepare(root, members)
+        rollback_prepare(root, members, floor_changes)
 
 
 #: The release workflow, as the forges address one for a dispatch and

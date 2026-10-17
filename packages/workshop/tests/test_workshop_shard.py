@@ -55,10 +55,10 @@ def _moment(stamp: str) -> datetime:
 
 
 def _rows(work: Path, leg: str, rows: dict[str, tuple[str, dict[str, float]]]) -> None:
-    """Write *rows* onto *leg*'s durations series: ``name -> (when, files)``."""
+    """Write *rows* onto *leg*'s durations series: ``name -> (when, items)``."""
     files = {
         name: json.dumps(
-            {"schema": _shard.SCHEMA, "when": when, "run": name, "files": per_file}
+            {"schema": _shard.SCHEMA, "when": when, "run": name, "items": per_file}
         )
         for name, (when, per_file) in rows.items()
     }
@@ -147,28 +147,45 @@ def test_a_row_stamped_at_or_after_the_bound_is_left_out(work: Path) -> None:
     assert _shard.read_durations(work, LEG, before=_moment(_stamp(4))) == ({}, (), "")
 
 
-def test_a_row_without_a_stamp_or_without_files_is_passed_over(work: Path) -> None:
+def test_a_row_without_a_stamp_or_without_items_is_passed_over(work: Path) -> None:
     store = state_store(work)
     ref = _shard.DURATIONS.series(LEG).ref
     files = {
-        "unstamped.json": json.dumps({"schema": _shard.SCHEMA, "files": {"a.py": 8.0}}),
-        "nofiles.json": json.dumps({"schema": _shard.SCHEMA, "when": _stamp(2)}),
+        "unstamped.json": json.dumps({"schema": _shard.SCHEMA, "items": {"a.py": 8.0}}),
+        "noitems.json": json.dumps({"schema": _shard.SCHEMA, "when": _stamp(2)}),
         "junk.json": json.dumps(
-            {"schema": _shard.SCHEMA, "when": _stamp(1), "files": {"a.py": "slow"}}
+            {"schema": _shard.SCHEMA, "when": _stamp(1), "items": {"a.py": "slow"}}
         ),
         "good.json": json.dumps(
-            {"schema": _shard.SCHEMA, "when": _stamp(1.5), "files": {"a.py": 2.0}}
+            {"schema": _shard.SCHEMA, "when": _stamp(1.5), "items": {"a.py": 2.0}}
         ),
     }
     assert git.put(store, ref, files, message="rows") == ""
-    per_file, rows, why = _shard.read_durations(
+    per_item, rows, why = _shard.read_durations(
         work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
     )
     assert why == ""
     # The stamped rows are read, newest first; the unstamped one cannot
     # be placed before the bound, so it is not.
-    assert rows == ("junk.json", "good.json", "nofiles.json")
-    assert per_file == {"a.py": 2.0}
+    assert rows == ("junk.json", "good.json", "noitems.json")
+    assert per_item == {"a.py": 2.0}
+
+
+def test_a_durations_row_keyed_files_names_no_item(work: Path) -> None:
+    # The reader takes the seconds under ``items`` alone: a row that
+    # keeps them under ``files`` is read and names no item.
+    store = state_store(work)
+    ref = _shard.DURATIONS.series(LEG).ref
+    files = {
+        "keyed.json": json.dumps(
+            {"schema": _shard.SCHEMA, "when": _stamp(1), "files": {"a.py": 8.0}}
+        ),
+    }
+    assert git.put(store, ref, files, message="rows") == ""
+    per_item, rows, why = _shard.read_durations(
+        work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert (per_item, rows, why) == ({}, ("keyed.json",), "")
 
 
 def test_a_missing_shard_file_is_none_and_a_corrupt_one_a_reason(
@@ -383,7 +400,7 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
             {
                 "shard": "1of2",
                 "digest": "d",
-                "files": ["a.py"],
+                "items": ["a.py"],
                 "rows": [],
                 "before": "2026-10-17T09:30:00+00:00",
             }
@@ -403,7 +420,7 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
         tmp_path,
         shard=_shard.Shard(1, 2),
         digest="d",
-        files=["a.py"],
+        items=["a.py"],
         rows=[],
         before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
     )
@@ -415,7 +432,7 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
         tmp_path,
         shard=_shard.Shard(1, 2),
         digest="d",
-        files=["a.py"],
+        items=["a.py"],
         rows=[],
         before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
         attempt="2",
@@ -423,6 +440,30 @@ def test_a_record_written_without_the_suites_key_names_no_suite(
     left, why = _shard.read_shard(tmp_path)
     assert why == "" and left is not None and left.attempt == "2"
     assert _shard.marker_fields(left)["attempt"] == "2"
+
+
+def test_a_shard_record_keyed_files_names_no_item(tmp_path: Path) -> None:
+    # The reader takes the shard's items under ``items`` alone: a
+    # record that keeps them under ``files`` reads and names no item.
+    path = tmp_path / _shard.SHARD_FILE
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "shard": "1of2",
+                "digest": "d",
+                "files": ["a.py"],
+                "rows": [],
+                "before": "2026-10-17T09:30:00+00:00",
+                "suites": ["tests"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    left, why = _shard.read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.items == () and left.suites == ("tests",)
+    assert _shard.marker_fields(left)["items"] == []
 
 
 def test_the_shard_file_round_trips_under_the_workshop_directory(
@@ -434,7 +475,7 @@ def test_the_shard_file_round_trips_under_the_workshop_directory(
         tmp_path,
         shard=_shard.Shard(2, 4),
         digest="ab" * 32,
-        files=["b.py", "a.py"],
+        items=["b.py", "a.py"],
         rows=["r2.json", "r1.json"],
         before=before,
         suites=["tests", "packages/b"],
@@ -444,7 +485,7 @@ def test_the_shard_file_round_trips_under_the_workshop_directory(
     assert why == "" and left is not None
     assert left.shard == _shard.Shard(2, 4)
     assert left.digest == "ab" * 32
-    assert left.files == ("b.py", "a.py")
+    assert left.items == ("b.py", "a.py")
     assert left.rows == ("r2.json", "r1.json")
     assert left.before == before
     assert left.suites == ("tests", "packages/b")

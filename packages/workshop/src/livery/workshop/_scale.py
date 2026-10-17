@@ -261,11 +261,20 @@ def edit_member(root: Path, name: str) -> Path:
 def _environment(root: Path) -> dict[str, str]:
     """The children's environment: this one, minus the venv it names.
 
-    The conan home is the fixture's own, beside the workspace, so the
-    packages its native members build never reach the machine's cache.
+    The variables the extensions of the fixture's set declare join it,
+    each one naming ``{place}`` placed in the fixture's directory,
+    beside the workspace: a tool's home there is the fixture's own, so
+    what its native members build never reaches the machine's. The
+    fixture forms its children's environment, so an ``always`` one
+    beats the value this one carries, and each child keeps it.
+
+    Raises:
+        Failed: when two of the extensions declare one variable.
     """
+    from livery.workshop._variables import placed, workspace_variables
+
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
-    env["CONAN_HOME"] = str(root.parent / "conan-home")
+    env.update(placed(workspace_variables(root), str(root.parent), env, forming=True))
     return env
 
 

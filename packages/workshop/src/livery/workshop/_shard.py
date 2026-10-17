@@ -1,18 +1,19 @@
-"""A check leg's shard: its spelling, its share of the test files, and the durations.
+"""A check leg's shard: its spelling, its share of the items, and the durations.
 
 A platform's check leg may run as several shards, each on a runner of
-its own, each running a share of the test files. A shard is spelled
-``<i>of<n>`` at the end of the leg's label, ``check-<os>-<python>-2of4``;
+its own, each running a share of the items a test step partitions;
+pytest's items are test files. A shard is spelled ``<i>of<n>`` at the
+end of the leg's label, ``check-<os>-<python>-2of4``;
 the label without it is the platform leg, the key every record below
 the gate job's fold is kept by. [livery.workshop.Shard][] parses and
 spells one, [livery.workshop.platform_leg][] and
 [livery.workshop.shard_of][] split a label.
 
 The share is a function of its inputs: [livery.workshop.partition][]
-packs the test files longest first into the shard with the least
-summed seconds, so every shard of a run computes the same partition
-from the same file set and the same durations, and every file lands in
-exactly one shard. The durations are the medians
+packs the items longest first into the shard with the least summed
+seconds, so every shard of a run computes the same partition from the
+same set and the same durations, and every item lands in exactly one
+shard. The durations are the medians
 [livery.workshop.read_durations][] takes over the newest rows of the
 platform leg's series in the [livery.workshop.DURATIONS][] family,
 bounded by the checkout's committer time
@@ -54,7 +55,7 @@ NEWEST = 5
 
 #: The file a shard leaves under the checkout's ``.workshop/``
 #: directory, which git ignores, naming the shard it ran, the digest of
-#: the file set it partitioned, its own files, the rows it read and the
+#: the set it partitioned, its own items, the rows it read and the
 #: bound it read them under.
 SHARD_FILE = ".workshop/fm-shard.json"
 
@@ -145,20 +146,20 @@ def shard_of(label: str) -> Shard:
 
 
 def partition(
-    files: Iterable[str], durations: Mapping[str, float], count: int
+    items: Iterable[str], durations: Mapping[str, float], count: int
 ) -> tuple[tuple[str, ...], ...]:
-    """Pack *files* into *count* shards by their *durations*, every file in exactly one.
+    """Pack *items* into *count* shards by their *durations*, every item in exactly one.
 
-    The files go longest first, ties by name, each into the shard with
-    the least summed seconds so far, ties to the lowest shard. A file
+    The items go longest first, ties by name, each into the shard with
+    the least summed seconds so far, ties to the lowest shard. An item
     *durations* does not name weighs the median of the named
     durations, or one second when none are named. The result is a
     function of the set and the durations alone: the same whatever
-    order *files* comes in, and a file given twice is one file. With
-    more shards than files the surplus shards are empty.
+    order *items* comes in, and an item given twice is one item. With
+    more shards than items the surplus shards are empty.
 
     Returns:
-        One tuple of files per shard, in the order the files were
+        One tuple of items per shard, in the order the items were
         packed.
 
     Raises:
@@ -173,7 +174,7 @@ def partition(
         seconds = durations.get(name)
         return float(seconds) if seconds is not None else fill
 
-    ordered = sorted(set(files), key=lambda name: (-weight(name), name))
+    ordered = sorted(set(items), key=lambda name: (-weight(name), name))
     shards: list[list[str]] = [[] for _ in range(count)]
     sums = [0.0] * count
     for name in ordered:
@@ -209,7 +210,7 @@ def _current_legs(root: Path) -> set[tuple[str, ...]] | None:
 
 
 #: The family: one series per platform leg, ``durations/<leg>``, one row
-#: per run, ``{"run": "<id>", "files": {"<path>": <seconds>}}``, written
+#: per run, ``{"run": "<id>", "items": {"<item>": <seconds>}}``, written
 #: by the run's gate job from its shards' rows. A series of a leg the
 #: matrix no longer produces is the janitor's to drop.
 DURATIONS: git.Keyed = git.Keyed(
@@ -231,17 +232,17 @@ def _moment(stamp: str) -> datetime | None:
 def read_durations(
     root: Path, leg: str, *, before: datetime
 ) -> tuple[dict[str, float], tuple[str, ...], str]:
-    """The median seconds per test file on *leg*'s platform, from rows before *before*.
+    """The median seconds per item on *leg*'s platform, from rows before *before*.
 
     The rows are the newest `NEWEST` of the series ``durations/<platform
     leg>`` whose store stamp is before *before*; a row stamped at or
     after it, or not stamped, is not read, so every shard of a run
     reads the same rows whatever lands while the run is in flight. The
-    median of a file is over the rows that name it with a number. A
-    naive *before* is read as UTC.
+    median of an item is over the rows that name it with a number
+    under ``items``. A naive *before* is read as UTC.
 
     Returns:
-        The seconds per file, the names of the rows read, newest first,
+        The seconds per item, the names of the rows read, newest first,
         and why the series could not be read. A series that cannot be
         read is ``({}, (), reason)``, never a raise: the caller runs as
         one shard of one and says so. An absent series is ``({}, (),
@@ -262,15 +263,15 @@ def read_durations(
             break
     seen: dict[str, list[float]] = defaultdict(list)
     for row in chosen:
-        files: Any = row.data.get("files")
-        if not isinstance(files, dict):
+        held: Any = row.data.get("items")
+        if not isinstance(held, dict):
             continue
-        for path, seconds in files.items():
+        for name, seconds in held.items():
             if isinstance(seconds, int | float) and not isinstance(seconds, bool):
-                seen[str(path)].append(float(seconds))
+                seen[str(name)].append(float(seconds))
     medians = {
-        path: round(statistics.median(values), 1)
-        for path, values in sorted(seen.items())
+        name: round(statistics.median(values), 1)
+        for name, values in sorted(seen.items())
     }
     return medians, tuple(row.name for row in chosen), ""
 
@@ -294,14 +295,15 @@ class ShardMarker:
 
     Attributes:
         shard: The shard the leg ran as.
-        digest: The digest of the test-file set it partitioned,
-            [livery.workshop.files_digest][] of every file of every
+        digest: The digest of the set it partitioned,
+            [livery.workshop.files_digest][] of every item of every
             shard.
-        files: The files this shard ran, in packing order.
+        items: The items this shard ran, in packing order; pytest's
+            are test files.
         rows: The durations rows it read, newest first.
         before: The bound it read them under, the checkout's committer
             time.
-        suites: The units whose test files were in the set, by path. A
+        suites: The units whose items were in the set, by path. A
             unit the record does not name ran whole on the first shard,
             with every step that does not read the shard, so the first
             shard leaves its parts. A record written without the key
@@ -316,7 +318,7 @@ class ShardMarker:
 
     shard: Shard
     digest: str
-    files: tuple[str, ...]
+    items: tuple[str, ...]
     rows: tuple[str, ...]
     before: datetime
     suites: tuple[str, ...] = ()
@@ -328,7 +330,7 @@ def marker_fields(marker: ShardMarker) -> dict[str, Any]:
     return {
         "shard": str(marker.shard),
         "digest": marker.digest,
-        "files": list(marker.files),
+        "items": list(marker.items),
         "rows": list(marker.rows),
         "before": marker.before.isoformat(),
         "suites": list(marker.suites),
@@ -358,7 +360,7 @@ def parse_marker(loaded: Any, *, source: str) -> tuple[ShardMarker | None, str]:
     return ShardMarker(
         shard=shard,
         digest=str(loaded.get("digest", "") or ""),
-        files=tuple(str(name) for name in loaded.get("files", []) or []),
+        items=tuple(str(name) for name in loaded.get("items", []) or []),
         rows=tuple(str(name) for name in loaded.get("rows", []) or []),
         before=before,
         suites=tuple(str(name) for name in loaded.get("suites", []) or []),
@@ -371,7 +373,7 @@ def leave_shard(
     *,
     shard: Shard,
     digest: str,
-    files: Iterable[str],
+    items: Iterable[str],
     rows: Iterable[str],
     before: datetime,
     suites: Iterable[str] = (),
@@ -379,7 +381,7 @@ def leave_shard(
 ) -> Path:
     """Leave the shard's record in `SHARD_FILE` at *root*, for the gate job's proof.
 
-    *suites* names the units whose test files are in the set; a unit
+    *suites* names the units whose items are in the set; a unit
     left out ran whole on the first shard. *attempt* is the run's
     attempt the shard ran in, the run context's; empty when unknown.
     The leg's one write copies the record into its timing row under
@@ -391,7 +393,7 @@ def leave_shard(
     path = root / SHARD_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     marker = ShardMarker(
-        shard, digest, tuple(files), tuple(rows), before, tuple(suites), attempt
+        shard, digest, tuple(items), tuple(rows), before, tuple(suites), attempt
     )
     path.write_text(json.dumps(marker_fields(marker), sort_keys=True), encoding="utf-8")
     return path

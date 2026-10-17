@@ -5,7 +5,7 @@ metrics row (each check leg's scope and the coverage section the gate
 job left), the verified series (the tree a run proved and what it
 rests on), a base's coverage record (which run measured each unit),
 the coverage marks, and a platform leg's durations series (the seconds
-per test file a run's gate job recorded). A platform that ran as
+per item a run's gate job recorded). A platform that ran as
 shards has one check row, the fold's, keyed by the platform leg with
 its shards listed under ``shard``; the forge's rows of the shards
 stand beside it with their times alone, and no proof reads them as
@@ -47,13 +47,13 @@ class ShardFacts:
         shard: The shard, ``1of2``.
         leg: The shard's leg label (``check-ubuntu-latest-3.14-1of2``).
         job: The shard's job name, as the forge lists it.
-        files: How many test files the shard ran.
+        items: How many items the shard ran.
     """
 
     shard: str
     leg: str
     job: str
-    files: int
+    items: int
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ class FoldFacts:
 
     Attributes:
         count: How many shards the platform ran as.
-        digest: The digest of the test-file set the shards partitioned.
+        digest: The digest of the set the shards partitioned.
         rows: The durations rows the shards partitioned by, newest
             first; empty when no row was there to read.
         shards: Each shard, in order.
@@ -220,7 +220,7 @@ def _shard_facts(leg: str, shard: Any) -> tuple[str, FoldFacts | None]:
                 str(item.get("shard") or ""),
                 str(item.get("leg") or ""),
                 str(item.get("job") or ""),
-                int(item.get("files") or 0),
+                int(item.get("items") or 0),
             )
             for item in (listed if isinstance(listed, list) else [])
             if isinstance(item, dict)
@@ -248,13 +248,13 @@ class DurationsRow:
         ref: The series' ref, ``durations/<platform leg>`` under the
             store's namespace.
         name: The row's file name, the run's.
-        files: The seconds per test file the row holds; ``None`` when
-            the series holds no row of the run.
+        items: The seconds per item the row holds; ``None`` when the
+            series holds no row of the run.
     """
 
     ref: str
     name: str
-    files: dict[str, float] | None
+    items: dict[str, float] | None
 
 
 def durations_row(root: Path, run_id: int | str, leg: str) -> DurationsRow:
@@ -263,7 +263,7 @@ def durations_row(root: Path, run_id: int | str, leg: str) -> DurationsRow:
     The series is the platform leg's ([livery.workshop.platform_leg][]),
     so a shard's label reads its platform's. Fails naming the series
     when it cannot be read; a series without the run's row answers
-    ``files`` as ``None``.
+    ``items`` as ``None``.
     """
     series = _shard.DURATIONS.series(_shard.platform_leg(leg))
     name = _metrics.run_file(str(run_id))
@@ -275,12 +275,12 @@ def durations_row(root: Path, run_id: int | str, leg: str) -> DurationsRow:
     row = next((item for item in found.rows if item.name == name), None)
     if row is None:
         return DurationsRow(series.ref, name, None)
-    files = {
-        str(path): float(seconds)
-        for path, seconds in dict(row.data.get("files") or {}).items()
+    items = {
+        str(each): float(seconds)
+        for each, seconds in dict(row.data.get("items") or {}).items()
         if isinstance(seconds, int | float) and not isinstance(seconds, bool)
     }
-    return DurationsRow(series.ref, name, files)
+    return DurationsRow(series.ref, name, items)
 
 
 def verified_by(root: Path, run_id: int | str) -> _verified.Verified:

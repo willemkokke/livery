@@ -113,9 +113,10 @@ ACTIONS: dict[str, dict[str, str]] = {
 #: can: the venv it would need is what the entry step makes.
 STORE_HOME = "${{ runner.temp }}/footman/toolroom"
 #: Where a GitHub job keeps conan's home: the working drive, the job's
-#: own, the same path the entry and
-#: `livery.workshop._env_tasks.runner_placements` export, so the cache
-#: step and every conan the job runs agree on one directory.
+#: own, the path conan's declared CONAN_HOME, ``{place}/conan``, takes
+#: on a GitHub job, where the entry and `fm env.emit --github` place it
+#: under the runner's temp, so the cache step and every conan the job
+#: runs agree on one directory.
 CONAN_HOME = "${{ runner.temp }}/conan"
 
 

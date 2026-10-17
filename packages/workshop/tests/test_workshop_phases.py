@@ -753,7 +753,7 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
     # extension the root lists adds to it as one a package lists does.
     assert found["sync"] == PhaseSpec("sync", {}, WORKSPACE_LEVEL, False, (), False)
     assert found["stamp"] == PhaseSpec(
-        "stamp", {"version": "str"}, PACKAGE_LEVEL, False, (), False
+        "stamp", {"version": "str", "floors": "table"}, PACKAGE_LEVEL, False, (), False
     )
     # The gated phases are the ones with a verb; the lifecycle phases are
     # the package-level ones, in the file's order.
@@ -791,7 +791,7 @@ def test_the_bases_phases_are_read_from_its_contract_file() -> None:
     assert {name: dict(spec.keys) for name, spec in found.items() if spec.keys} == {
         "build": {"isolated": "bool", "configuration": "str", "epoch": "int"},
         "test": {"isolated": "bool", "resolution": "str", "release-dirs": "paths"},
-        "stamp": {"version": "str"},
+        "stamp": {"version": "str", "floors": "table"},
         "publish": {"version": "str", "registry-target": "table", "prebuilt": "bool"},
         "verify": {
             "version": "str",

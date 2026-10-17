@@ -2,7 +2,7 @@
 
 The conan extension builds a member whose recipe, ``conanfile.py``,
 names a reference into the conan cache, and releases it. An extension
-whose builds link such a member reads five of its names. The
+whose builds link such a member reads six of its names. The
 workspace's conan members resolve one another from their sources
 through the conan workspace file at the root,
 [livery.extensions.conan.WORKSPACE_FILE][], whose text
@@ -12,7 +12,10 @@ block, so a build in it resolves each member from the conan cache.
 A release's build saves the package it created out of the cache with
 [livery.extensions.conan.save_cache][], one file per host, and
 [livery.extensions.conan.restore_from_releases][] restores a released
-version from the member's release on the forge.
+version from the member's release on the forge. A release's stamp
+raises the floors a recipe declares on the members released with it
+through [livery.extensions.conan.raise_floors][], a consumer's recipe
+among them.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from livery.extensions.conan._package import WORKSPACE_FILE as WORKSPACE_FILE
+    from livery.extensions.conan._package import raise_floors as raise_floors
     from livery.extensions.conan._package import (
         restore_from_releases as restore_from_releases,
     )
@@ -36,6 +40,7 @@ __version__ = "0.0.0"
 __all__ = [
     "WORKSPACE_FILE",
     "__version__",
+    "raise_floors",
     "restore_from_releases",
     "save_cache",
     "workspace_aside",
@@ -45,6 +50,7 @@ __all__ = [
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
     "WORKSPACE_FILE": "livery.extensions.conan._package",
+    "raise_floors": "livery.extensions.conan._package",
     "restore_from_releases": "livery.extensions.conan._package",
     "save_cache": "livery.extensions.conan._package",
     "workspace_aside": "livery.extensions.conan._package",
