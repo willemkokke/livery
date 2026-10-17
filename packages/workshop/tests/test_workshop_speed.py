@@ -189,6 +189,12 @@ def test_a_rows_own_label_names_the_leg_before_the_display_name() -> None:
 def test_leg_label_reads_a_matrix_display_name_and_keeps_a_plain_one() -> None:
     assert _speed.leg_label(UBUNTU) == LEG
     assert _speed.leg_label("check (macos-latest, 3.11)") == "check-macos-latest-3.11"
+    # A shard leg's display name has a third part, its shard.
+    assert (
+        _speed.leg_label("check (windows-latest, 3.14, 2of4)")
+        == "check-windows-latest-3.14-2of4"
+    )
+    assert _speed.leg_label("nightly (3.14)") == "nightly (3.14)"
     assert _speed.leg_label("docs") == "docs"
     assert _speed.is_reference(LEG) and not _speed.is_reference(
         "check-macos-latest-3.14"
