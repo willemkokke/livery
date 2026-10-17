@@ -21,7 +21,7 @@ from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._ci_context import state_store
 from livery.workshop._diagnostics import gather_bundle, record
-from livery.workshop._verdict import EXIT_DISARMED, Verdict, follow
+from livery.workshop._verdict import EXIT_DISARMED, Verdict, follow_pull_request
 from livery.workshop._workflow_decision import (
     WorkflowAction,
     workflow_decision,
@@ -448,7 +448,7 @@ def test_a_one_poll_blocker_blip_does_not_end_the_watch(
         "livery.workshop._verdict.classify",
         lambda *a, **k: next(verdicts),
     )
-    result = follow(repo, "feat/1-x", root, interval=0, timeout=5)
+    result = follow_pull_request(repo, "feat/1-x", root, interval=0, timeout=5)
     assert result.state == "merged"
 
 
@@ -464,7 +464,7 @@ def test_closed_is_definitive_on_a_single_read(
         lambda *a, **k: Verdict("closed", 12, "closed unmerged", 1),
     )
     with pytest.raises(SystemExit) as caught:
-        follow(repo, "feat/1-x", root, interval=0, timeout=5)
+        follow_pull_request(repo, "feat/1-x", root, interval=0, timeout=5)
     assert caught.value.code == 12
     # And the non-merged ending wrote its bundle to the local series.
     (bundle,) = SERIES.rows(state_store(root)).rows

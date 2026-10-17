@@ -211,7 +211,7 @@ def test_the_clean_heal_reships_and_lands(
 
     from livery.workshop import _verdict
 
-    real_follow = _verdict.follow
+    real_follow = _verdict.follow_pull_request
 
     def follow_behind_once(*args: Any, **kwargs: Any) -> Any:
         calls["follows"] += 1
@@ -225,7 +225,9 @@ def test_the_clean_heal_reships_and_lands(
     def cannot_start(root: Path, cause: str) -> None:
         """The handoff to a fresh submit cannot start: the heal carries on here."""
 
-    monkeypatch.setattr("livery.workshop._submit.follow", follow_behind_once)
+    monkeypatch.setattr(
+        "livery.workshop._submit.follow_pull_request", follow_behind_once
+    )
     monkeypatch.setattr(_reconcile, "_reexec", cannot_start)
     number = submit_flow(
         repo,

@@ -19,7 +19,7 @@ from typing import Protocol
 import livery.footman as footman
 from livery import git
 from livery.footman import fail
-from livery.forge import ForgeError, Repository
+from livery.forge import Repository
 from livery.workshop._workflow_decision import (
     WorkflowAction,
     workflow_decision,
@@ -226,10 +226,10 @@ def run_workflow(
             # the branch it returned to, since the pull request holds
             # the reserved branch on the remote. A blocker exits with
             # its code, the way the submit does.
-            from livery.workshop._verdict import follow
+            from livery.workshop._verdict import follow_pull_request
 
             print(f"  following PR of {driver.branch} to its merge")
-            follow(repo, driver.branch, root, timeout=driver.watch)
+            follow_pull_request(repo, driver.branch, root, timeout=driver.watch)
         if _merged(repo, root, driver.branch):
             driver.on_merged()
         return
@@ -272,14 +272,27 @@ def tidy_leftover(
 
 
 def _merged(repo: Repository, root: Path, branch: str) -> bool:
-    """Whether *branch*'s PR has merged, asked of the forge."""
+    """Whether *branch*'s pull request has merged, asked of the forge.
+
+    A forge that does not answer is asked again within the transient
+    budget, and then the engine stops with the forge's words: a
+    failure reason is printed, never read as "not merged".
+    """
+    from livery.workshop._forge_lane import pull_request_for
+    from livery.workshop._verdict import ForgeUnreachable, follow
+
     try:
-        pr = repo.pr.find_by_head(branch, state="all")
-        if pr is None:
-            pr = repo.pr.find_by_head_sha(git.any_head(root, branch))
-        return pr is not None and pr.merged
-    except ForgeError:
-        return False
+        pr = follow(
+            repo,
+            lambda: pull_request_for(repo, root, branch),
+            subject=f"the pull request of {branch}",
+            interval=5,
+            timeout=None,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    return pr is not None and pr.merged
 
 
 def _forge_user(repo: Repository) -> str:

@@ -21,8 +21,10 @@ from livery.forge import (
     GiteaForge,
     GithubForge,
     GitlabForge,
+    PullRequest,
     Repository,
 )
+from livery.workshop import _stack
 from livery.workshop._contract import load_contract
 from livery.workshop._tokens import admin_token, forge_token, host_qualifier
 
@@ -154,3 +156,42 @@ def this_repository(root: Path) -> Repository:
     if not owner:
         fail("workshop.toml [forge] must carry kind and owner")
     return this_forge(root).repository(owner, forge_repository(root))
+
+
+def forge_kind(root: Path) -> str:
+    """The forge the workspace's contract names, ``github``, ``gitea`` or ``gitlab``.
+
+    Empty when the contract names none, which the fake forge speaks for,
+    and when there is no contract to read.
+    """
+    path = root / "workshop.toml"
+    if not path.is_file():
+        return ""
+    contract = load_contract(path)
+    return str((contract.get("forge") or {}).get("kind", ""))
+
+
+def pull_request_for(repo: Repository, root: Path, branch: str) -> PullRequest | None:
+    """The pull request *branch* is or was the head of, or None.
+
+    By head branch first, then by the branch's head commit: a forge
+    that deletes the head branch on merge may clear the merged pull
+    request's head ref, and the commit persists after the branch is
+    gone. A pull request found by the commit is the branch's own only
+    when its head branch is *branch* or empty, and never while
+    *branch* is a stacked branch still at the commit it started from:
+    that commit is the parent's head, so the pull request found is the
+    parent's. A forge that cannot be asked raises; the caller decides
+    what an unanswered question means, never this function.
+    """
+    pr = repo.pr.find_by_head(branch, state="all")
+    if pr is not None:
+        return pr
+    sha = git.any_head(root, branch)
+    if not sha:
+        return None
+    pr = repo.pr.find_by_head_sha(sha)
+    if pr is None or (pr.head_branch and pr.head_branch != branch):
+        return None
+    _parent, start = _stack.stack(root, branch)
+    return None if start == sha else pr

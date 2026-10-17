@@ -29,7 +29,13 @@ from livery.workshop import _lifecycle
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages, receipt_member
 from livery.workshop._release import prepare_release
-from livery.workshop._verdict import Transient
+from livery.workshop._verdict import (
+    FollowTimedOut,
+    ForgeUnreachable,
+    Pending,
+    Transient,
+    follow,
+)
 from livery.workshop._versions import derive_version
 from livery.workshop._workflow_engine import Submission, run_workflow
 from livery.workshop._workflow_state import WorkflowKind
@@ -456,22 +462,26 @@ def require_verified_base(
         return
     if _base_tree_verified(root, base):
         return
-    deadline = time.monotonic() + timeout
     announced = False
     silent_since: float | None = None
     nudged = False
     ever_reported = False
-    while True:
+
+    def read() -> bool | Pending:
+        nonlocal announced, silent_since, nudged, ever_reported
         try:
             git.fetch(root)
             sha = git.remote_head(root, base)
             status = repo.checks.status(sha) if sha else None
-        except (ForgeError, Exception):
-            return
-        if status is None:
-            return
-        if status.state == "success":
-            return
+        except ForgeError:
+            raise
+        except Exception as error:
+            # The base gate fails open: a tree nobody can vouch for
+            # releases, and the reason is said rather than swallowed.
+            print(f"  {base}'s CI could not be read ({error}); releasing unverified")
+            return True
+        if status is None or status.state == "success":
+            return True
         if status.state == "failure":
             fail(
                 f"{base}'s own CI is red, and a release publishes that tree."
@@ -499,31 +509,44 @@ def require_verified_base(
                 f" {SILENT_NUDGE_AFTER // 60} min; a fresh push event may be"
                 " needed (an empty commit mints one)."
             )
-        if now >= deadline:
-            # Not started and hanging are different problems with
-            # different remedies, so the timeout names the one that
-            # actually happened.
-            if ever_reported:
-                fail(
-                    f"{base} reported a run but never went green within"
-                    f" {timeout / 60:.0f} minutes. Check the runners"
-                    f" (`{footman.prog()} status --watch` on a branch follows"
-                    " a run), or"
-                    " --force-unverified-base."
-                )
-            fail(
-                f"{base}'s tip never got a CI run in {timeout / 60:.0f}"
-                " minutes: run creation itself failed, and waiting cannot"
-                " fix that. A fresh push event mints a run (an empty"
-                " commit, or its PR merged), or --force-unverified-base."
-            )
         if not announced:
             announced = True
             print(
                 f"  waiting for {base}'s own CI before releasing (up to"
                 f" {BASE_TIMEOUT // 60} min)"
             )
-        time.sleep(poll)
+        return Pending()
+
+    try:
+        follow(
+            repo,
+            read,
+            subject=f"{base}'s own CI",
+            interval=poll,
+            timeout=timeout,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        print(exc.line)
+        print(f"  releasing unverified: {base}'s CI could not be read")
+    except FollowTimedOut:
+        # Not started and hanging are different problems with
+        # different remedies, so the timeout names the one that
+        # actually happened.
+        if ever_reported:
+            fail(
+                f"{base} reported a run but never went green within"
+                f" {timeout / 60:.0f} minutes. Check the runners"
+                f" (`{footman.prog()} status --watch` on a branch follows"
+                " a run), or"
+                " --force-unverified-base."
+            )
+        fail(
+            f"{base}'s tip never got a CI run in {timeout / 60:.0f}"
+            " minutes: run creation itself failed, and waiting cannot"
+            " fix that. A fresh push event mints a run (an empty"
+            " commit, or its PR merged), or --force-unverified-base."
+        )
 
 
 class ReleaseDriver:
@@ -935,21 +958,29 @@ def _wave_runs_answered(
     with the forge's words and the command that follows the wave, which
     runs on in CI whatever happens here.
     """
-    while True:
-        try:
-            runs = _wave_runs(repo)
-        except ForgeError as error:
-            if transient.note(error):
-                fail(
-                    transient.giving_up(
-                        "the wave runs on in CI; follow it with"
-                        f" `{footman.prog()} ci.status --point=release --wait`"
-                    ).strip()
-                )
-            time.sleep(interval)
-            continue
-        transient.reset()
-        return runs
+    try:
+        return follow(
+            repo,
+            lambda: _wave_runs(repo),
+            subject=_WAVE_SUBJECT,
+            interval=interval,
+            timeout=None,
+            quiet=None,
+            transient=transient,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+
+
+def _wave_subject() -> str:
+    """What a spent budget names: the wave runs on, and the verb that follows it."""
+    return (
+        "the wave runs on in CI; follow it with"
+        f" `{footman.prog()} ci.status --point=release --wait`"
+    )
+
+
+_WAVE_SUBJECT = _wave_subject
 
 
 def await_wave(
@@ -967,20 +998,25 @@ def await_wave(
     demanded a live run would miss a fast forge. An unreadable poll is
     retried within *transient*'s budget.
     """
-    if transient is None:
-        transient = Transient(interval=interval)
-    deadline = time.monotonic() + timeout
-    while True:
-        new = [
-            run
-            for run in _wave_runs_answered(repo, transient, interval=interval)
-            if run.id not in before
-        ]
-        if new:
-            return new[0].id
-        if time.monotonic() >= deadline:
-            return None
-        time.sleep(interval)
+
+    def new_run() -> int | Pending:
+        new = [run for run in _wave_runs(repo) if run.id not in before]
+        return new[0].id if new else Pending()
+
+    try:
+        return follow(
+            repo,
+            new_run,
+            subject=_WAVE_SUBJECT,
+            interval=interval,
+            timeout=timeout,
+            quiet=None,
+            transient=transient,
+        )
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    except FollowTimedOut:
+        return None
 
 
 def dispatch_flow(
