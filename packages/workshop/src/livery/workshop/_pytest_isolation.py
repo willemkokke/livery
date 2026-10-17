@@ -37,6 +37,14 @@ Without the guard, a step one test mounted would judge the changes of
 every later test in the worker. Registries the test loaded itself go
 back as a process starts with them, and a session that loads none of
 them imports nothing for the guard.
+
+A patch a test made with `monkeypatch.setattr` is undone everywhere,
+not only on the object it was set on. A module first imported while
+the patch was active copied the patched value (`from owner import
+name`); without the guard it keeps that value after monkeypatch puts
+the owner back, and every later test in the worker calls the test's
+stand-in, so the outcome depends on which test imported the module
+first.
 """
 
 from __future__ import annotations
@@ -51,6 +59,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+# The value monkeypatch records for an attribute the owner did not have.
+from _pytest.compat import NOTSET
 
 from livery.workshop._ci_context import LEG_VARIABLE
 
@@ -267,3 +278,59 @@ def _mount_state_stays() -> Iterator[None]:
     _steps.restore(steps)
     _points.restore(jobs)
     _extensions.restore(record)
+
+
+#: Values the interpreter may share between unrelated names, so that a
+#: module's own constant can be the very object a test patched in.
+#: Only a patched value of another type is told apart by its identity.
+SHARED = (type(None), bool, int, float, complex, str, bytes, tuple, frozenset)
+
+
+@pytest.fixture(autouse=True)
+def _patches_stay_undone(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Give the modules the test imported the originals its patches replaced.
+
+    The fixture depends on `monkeypatch`, so its teardown runs while
+    the patches are still in place: a global of a newly imported module
+    that is a patched value gets the first original back, under
+    whatever name the module bound it. monkeypatch then restores the
+    owners themselves. An attribute the patch added, which had no
+    original, is left as it is, and so is a patched value of a type in
+    `SHARED`, whose identity a module's own constant can share.
+    """
+    before = set(sys.modules)
+    yield
+    # monkeypatch keeps its record as (owner, name, value before) and
+    # exposes no public view of it.
+    patches: list[tuple[object, str, object]] = list(
+        getattr(monkeypatch, "_setattr", ())
+    )
+    if not patches:
+        return
+    loaded = [
+        module for name, module in list(sys.modules.items()) if name not in before
+    ]
+    if not loaded:
+        return
+    originals: dict[tuple[int, str], object] = {}
+    replaced: dict[int, object] = {}
+    for owner, name, value in patches:
+        key = (id(owner), name)
+        if key in originals:
+            # A later patch of the same attribute: the value it replaced
+            # was an earlier patch's.
+            replaced[id(value)] = originals[key]
+        else:
+            originals[key] = value
+    for owner, name, _value in patches:
+        with contextlib.suppress(AttributeError):
+            replaced[id(getattr(owner, name))] = originals[(id(owner), name)]
+    replaced = {key: value for key, value in replaced.items() if value is not NOTSET}
+    for module in loaded:
+        names = getattr(module, "__dict__", {})
+        for name, value in list(names.items()):
+            if isinstance(value, SHARED):
+                continue
+            original = replaced.get(id(value), value)
+            if original is not value:
+                names[name] = original
