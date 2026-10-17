@@ -787,15 +787,17 @@ def test_a_shard_count_renders_the_check_matrix_as_include_entries_in_order(
     # A pull request's shards are the full set's, so no legs job: the
     # matrix is literal on the check job, as include entries alone, one
     # per os, python and shard in that order. A runner with one shard
-    # has its entry too, so every entry carries the key the call passes.
+    # has its entry without the key: the forge names its job as the
+    # unsplit leg, `check (ubuntu-latest, 3.13)`, which is how the
+    # runner names it and keys its rows, and the call's shard is empty.
     assert "legs" not in jobs
     assert jobs["check"].get("needs", []) == []
     assert jobs["check"]["strategy"] == {
         "fail-fast": False,
         "matrix": {
             "include": [
-                {"os": "ubuntu-latest", "python": "3.13", "shard": "1of1"},
-                {"os": "ubuntu-latest", "python": "3.14", "shard": "1of1"},
+                {"os": "ubuntu-latest", "python": "3.13"},
+                {"os": "ubuntu-latest", "python": "3.14"},
                 {"os": "macos-latest", "python": "3.13", "shard": "1of2"},
                 {"os": "macos-latest", "python": "3.13", "shard": "2of2"},
                 {"os": "macos-latest", "python": "3.14", "shard": "1of2"},
@@ -811,6 +813,7 @@ def test_a_shard_count_renders_the_check_matrix_as_include_entries_in_order(
     # The entry's python is quoted as the plain list's is, since YAML
     # reads a bare 3.10 as a number; the shard is a word.
     assert '          - {os: macos-latest, python: "3.14", shard: 2of2}\n' in text
+    assert '          - {os: ubuntu-latest, python: "3.14"}\n' in text
     # Nothing else moved: the verdict waits on the check legs as before.
     assert "check" in jobs["gate"]["needs"]
 
@@ -827,7 +830,8 @@ def test_pull_request_shards_that_differ_render_the_legs_job_with_include_litera
     jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
     # The runners are the same on every event; the counts differ, so
     # the legs job holds both matrices, each as include entries, and
-    # the event picks one.
+    # the event picks one. A runner with one shard has no shard key in
+    # either literal.
     assert list(jobs)[:2] == ["legs", "check"]
     (step,) = jobs["legs"]["steps"]
     pull = (
@@ -836,13 +840,13 @@ def test_pull_request_shards_that_differ_render_the_legs_job_with_include_litera
         '{"os":"ubuntu-latest","python":"3.13","shard":"2of2"},'
         '{"os":"ubuntu-latest","python":"3.14","shard":"1of2"},'
         '{"os":"ubuntu-latest","python":"3.14","shard":"2of2"},'
-        '{"os":"macos-latest","python":"3.13","shard":"1of1"},'
-        '{"os":"macos-latest","python":"3.14","shard":"1of1"}]}'
+        '{"os":"macos-latest","python":"3.13"},'
+        '{"os":"macos-latest","python":"3.14"}]}'
     )
     full = (
         '{"include":['
-        '{"os":"ubuntu-latest","python":"3.13","shard":"1of1"},'
-        '{"os":"ubuntu-latest","python":"3.14","shard":"1of1"},'
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"},'
         '{"os":"macos-latest","python":"3.13","shard":"1of2"},'
         '{"os":"macos-latest","python":"3.13","shard":"2of2"},'
         '{"os":"macos-latest","python":"3.14","shard":"1of2"},'
@@ -875,19 +879,20 @@ def test_narrowed_pull_request_runners_with_a_shard_render_include_literals_for_
     )
     jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]
     # A count above one on any event puts both literals in the include
-    # shape, so the one call passes the shard on every event; the pull
-    # request's literal holds its runners alone, each with the count
-    # [ci] shards gives it while pull-request-shards is absent.
+    # shape, so the one call passes the shard on every event, empty
+    # for a runner with one shard; the pull request's literal holds its
+    # runners alone, each with the count [ci] shards gives it while
+    # pull-request-shards is absent.
     (step,) = jobs["legs"]["steps"]
     pull = (
         '{"include":['
-        '{"os":"ubuntu-latest","python":"3.13","shard":"1of1"},'
-        '{"os":"ubuntu-latest","python":"3.14","shard":"1of1"}]}'
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"}]}'
     )
     full = (
         '{"include":['
-        '{"os":"ubuntu-latest","python":"3.13","shard":"1of1"},'
-        '{"os":"ubuntu-latest","python":"3.14","shard":"1of1"},'
+        '{"os":"ubuntu-latest","python":"3.13"},'
+        '{"os":"ubuntu-latest","python":"3.14"},'
         '{"os":"macos-latest","python":"3.13","shard":"1of2"},'
         '{"os":"macos-latest","python":"3.13","shard":"2of2"},'
         '{"os":"macos-latest","python":"3.14","shard":"1of2"},'
