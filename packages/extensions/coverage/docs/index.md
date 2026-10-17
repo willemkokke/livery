@@ -173,8 +173,12 @@ owe every leg `[ci] runners` names.
 A platform leg that runs as several shards
 leaves, on each shard, the parts of the suites with a test file in that
 shard's share, as the shard's record names them; a suite whose share is
-empty on a shard is another shard's to leave, and the gate job folds the
-shards of a platform into one leg before the union reads.
+empty on a shard is another shard's to leave. A suite the record does not
+name among the suites it partitioned, a native suite with no python test
+file, ran whole on the first shard with every step that does not read the
+shard, so the first shard leaves its parts and the other shards expect
+none of it. The gate job folds the shards of a platform into one leg
+before the union reads.
 
 A branch's record outlives the branch by a day, because main's run for
 the squash that merged it carries the suites its legs skipped from that

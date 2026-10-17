@@ -327,6 +327,7 @@ def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
         files=["b.py", "a.py"],
         rows=["r1.json"],
         before=before,
+        suites=["packages/b"],
     )
     label = "check-a-2of4"
     assert _metrics.put_leg(work, RUN, job=JOB, label=label, trace=trace)[1] == ""
@@ -340,6 +341,7 @@ def test_the_shard_record_rides_the_row_and_one_shard_of_one_carries_none(
         "files": ["b.py", "a.py"],
         "rows": ["r1.json"],
         "before": before.isoformat(),
+        "suites": ["packages/b"],
     }
 
 

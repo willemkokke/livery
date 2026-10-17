@@ -79,9 +79,13 @@ name, a file no row names at the rows' median. The shard hands python's
 runner its slice as the selection the runner already takes, a suite with
 no file in the slice left out of the call; a suite that is not
 worker-safe is sliced the same way and still runs under `-n 0`. The
-shard records its slice, the digest of the whole set and the rows it
-read in `.workshop/fm-shard.json`, for the gate job's proof that the
-shards of a platform partitioned one set from one row. With no row
+shard records its slice, the suites with a file in the set, the digest
+of the whole set and the rows it read in `.workshop/fm-shard.json`, for
+the gate job's proof that the shards of a platform partitioned one set
+from one row. A suite with no python test file, a native suite the
+cmake extension measures, is not partitioned: it runs whole on the
+first shard, with every step that does not read the shard, and the
+coverage leg expects its parts there alone. With no row
 before the checkout's committer time, or a store that cannot be read,
 the line says why, the first shard runs every file and the others run
 none. `fm check --shard=2of2` on a machine runs the share by name alone,
