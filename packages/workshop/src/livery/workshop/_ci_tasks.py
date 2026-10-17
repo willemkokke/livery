@@ -16,9 +16,12 @@ runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
-that store (livery.workshop._metrics), and ``ci.balance`` reads the
+that store (livery.workshop._metrics), ``ci.balance`` reads the
 same rows to predict each platform's wall at one to several shards
-and propose the counts (livery.workshop._balance); the hidden
+and propose the counts (livery.workshop._balance), and
+``ci.footprint`` sums the same rows into runner-minutes per runner
+label, priced where GitHub would bill them
+(livery.workshop._footprint); the hidden
 ``ci.metrics.collect`` is the gate job's writer ``ci.run`` schedules,
 the hidden ``ci.fold`` folds each platform's shards into one leg
 before the judges read, and the hidden ``ci.leg`` is each check leg's
@@ -1309,3 +1312,93 @@ def ci_balance(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     balance_flow(root, cap=max_)
+
+
+def _github_public(root: Path, repo: Repository) -> tuple[bool, str]:
+    """Whether *repo* is a public repository on GitHub, and why that is unknown.
+
+    False with no reason on another forge, or when GitHub says the
+    repository is private. False with the reason when GitHub did not
+    answer, or knows no such repository: the caller prints it, so a
+    missing price is never silent on the one forge that prices.
+    """
+    from livery.workshop._forge_lane import forge_kind, this_forge
+
+    if forge_kind(root) != "github":
+        return False, ""
+    try:
+        info = this_forge(root).get_repo(repo.owner, repo.name)
+    except ForgeError as error:
+        return False, (
+            f"GitHub did not say whether {repo.owner}/{repo.name} is public: {error}"
+        )
+    if info is None:
+        return False, f"GitHub knows no repository {repo.owner}/{repo.name}"
+    return not info.private, ""
+
+
+def footprint_flow(root: Path, repo: Repository, *, since: int) -> None:
+    """Print the window's runner-minutes by runner label; price them where GitHub would.
+
+    Fails when the window holds no row, naming what writes one.
+    """
+    from livery.git import remote_snapshot
+    from livery.workshop._footprint import default_runner, footprint, price, render
+    from livery.workshop._metrics import SERIES
+
+    if since < 0:
+        fail(f"--since={since} names no count of runs: 0 reads the whole window")
+    with remote_snapshot(state_store(root), fetch=("metrics",)):
+        found = SERIES.rows(state_store(root))
+    if found.failed:
+        fail(found.reason)
+    for skipped in found.skipped:
+        print(f"  {skipped}")
+    entries = [row.data for row in found.rows[: since or None]]
+    if not entries:
+        fail(
+            "the metrics window is empty: the gate job of a run on the forge"
+            " writes one row per run; nothing to sum"
+        )
+    runner = default_runner(root)
+    summed = footprint(entries, default_runner=runner)
+    for line in render(summed, default_runner=runner):
+        print(line)
+    public, why = _github_public(root, repo)
+    if why:
+        print(f"  not priced: {why}")
+    elif public:
+        for line in price(summed):
+            print(line)
+
+
+@ci.task(name="footprint")
+def ci_footprint(
+    since: Annotated[int, doc("the newest runs read; 0 reads the whole window")] = 0,
+) -> None:
+    """Sum the window's runner-minutes by runner label; price them where GitHub would.
+
+    Reads the metrics series the gate job writes; CI is its only
+    writer, a local run reads. Every job of every run in the window,
+    or of the newest ``--since`` runs, is counted on one runner label:
+    a check leg on the runner its job name lists, every other job (the
+    gate job, the docs build, the release jobs) on the first runner
+    ``[ci] runners`` names, where the workflow places them. Per label
+    and kind the jobs and the minutes, then the total and the minutes
+    per 30 days from the window's span. A job without a wall time,
+    still running when the gate job collected or never started, is
+    counted apart and priced as nothing.
+
+    On GitHub, when the repository is public, the same minutes are
+    priced at GitHub's rates for the standard runners of a private
+    repository, by the class the label names (linux, windows, macos),
+    with the total, the USD per 30 days and the source page: a public
+    repository is not billed for them, and the price says what the
+    matrix would cost one that is. On another forge, or on a private
+    GitHub repository, nothing is priced.
+
+    Fails when the window holds no row: the gate job of a run on the
+    forge writes one.
+    """
+    repo, root = _resolved()
+    footprint_flow(root, repo, since=since)
