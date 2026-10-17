@@ -873,6 +873,38 @@ def test_the_runner_hands_its_children_one_listing_of_the_store(
     assert SNAPSHOT_VARIABLE not in os.environ
 
 
+def test_the_record_entry_lists_the_store_for_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The job's listing is taken once, before its entries run, and
+    # never learns a ref pushed after it: a sibling job's half, or the
+    # record's own put. The record is the one entry handed no listing.
+    import subprocess
+
+    from livery.workshop._ci_context import SNAPSHOT_VARIABLE
+
+    monkeypatch.delenv(SNAPSHOT_VARIABLE, raising=False)
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)],
+        check=True,
+        capture_output=True,
+    )
+    work = tmp_path / "work"
+    subprocess.run(
+        ["git", "clone", "-q", str(origin), str(work)], check=True, capture_output=True
+    )
+    handed: list[tuple[str, bool]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        task = next(word for word in argv[1:] if not word.startswith("--"))
+        handed.append((task, SNAPSHOT_VARIABLE in env))
+        return 0
+
+    _points.run_point(_root(work), "nightly", "nightly", python="3.14", spawn=green)
+    assert handed == [("doctor", True), ("check", True), ("ci.metrics.record", False)]
+
+
 def test_a_push_promotes_the_gate_to_the_merge_point(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

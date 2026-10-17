@@ -1847,7 +1847,13 @@ def run_point(
                 argv.append(entry.task)
                 argv.extend(arg.format(**facts) for arg in entry.args)
                 print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
-                code = spawn(argv, env)
+                # The record lists the store for itself: a sibling job's
+                # half may have landed after this job's listing was
+                # taken, and the job's listing never learns a new ref.
+                handed = env
+                if entry.task == RECORD_TASK:
+                    handed = {k: v for k, v in env.items() if k != SNAPSHOT_VARIABLE}
+                code = spawn(argv, handed)
                 if code != 0:
                     reason = f"{resolved}/{job}: {entry.task} exited {code}"
                     if entry.source == "builtin" or entry.judges:

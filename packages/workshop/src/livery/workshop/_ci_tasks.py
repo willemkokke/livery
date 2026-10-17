@@ -1169,9 +1169,12 @@ def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
 
     Every line is printed and none is a verdict: the row is a record
     of what the job did, and a job with no gate job to judge it stays
-    green whatever its record could not do.
+    green whatever its record could not do. The three steps share one
+    listing of the store, taken here: the put records its ref in it,
+    so the collect and the drop after it see the half it just put.
     """
     from livery.footman.profile import as_trace, parent_box, swept
+    from livery.git import remote_snapshot
     from livery.workshop._ci_context import run_context
     from livery.workshop._metrics import put_leg
     from livery.workshop._points import trace_file
@@ -1180,27 +1183,30 @@ def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
     if run is None:
         print("  not a CI run: a job's row is put by CI only")
         return
-    # The job's box, where the entries before this one left their
-    # fragments: this process was handed it, and runs profiled itself,
-    # so the environment names its own, empty, box instead.
-    box = parent_box()
-    if box is None:
-        print(
-            "  no profile box in this job's environment; the job's half stays unwritten"
-        )
-    else:
-        events, origin = swept(box)
-        trace = root / trace_file("job row")
-        trace.write_text(as_trace(events, origin=origin), encoding="utf-8")
-        lines, why = put_leg(root, run, job=job, label=run.leg, trace=trace)
-        for line in lines:
-            print(line)
-        if why:
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "metrics")):
+        # The job's box, where the entries before this one left their
+        # fragments: this process was handed it, and runs profiled
+        # itself, so the environment names its own, empty, box instead.
+        box = parent_box()
+        if box is None:
             print(
-                f"  {job}: the half could not be put ({why}); the row goes without it"
+                "  no profile box in this job's environment; the job's half stays"
+                " unwritten"
             )
-    metrics_collect_flow(root, repo)
-    drop_flow(root, repo, point=point, job=job)
+        else:
+            events, origin = swept(box)
+            trace = root / trace_file("job row")
+            trace.write_text(as_trace(events, origin=origin), encoding="utf-8")
+            lines, why = put_leg(root, run, job=job, label=run.leg, trace=trace)
+            for line in lines:
+                print(line)
+            if why:
+                print(
+                    f"  {job}: the half could not be put ({why}); the row goes"
+                    " without it"
+                )
+        metrics_collect_flow(root, repo)
+        drop_flow(root, repo, point=point, job=job)
 
 
 @metrics.task(name="record")
