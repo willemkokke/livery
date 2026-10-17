@@ -257,3 +257,54 @@ def test_registries_a_test_loaded_itself_go_back_as_a_process_starts(
         "-p", "no:cacheprovider", f"--basetemp={base}"
     )
     result.assert_outcomes(passed=2)
+
+
+def test_a_module_first_imported_under_a_patch_keeps_the_original_after_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # A module that copies a function from another (`from owner import
+    # name`) and is first imported while a test has the function
+    # patched takes the patch; monkeypatch puts the owner back, and the
+    # copy kept the patched function for every later test in the
+    # worker. The next test finds the original in both places, under
+    # whatever name the copy took, and a patch made twice goes back to
+    # the first original. The cases left alone come first: a constant
+    # of the module's own that is the very object a patch set, and an
+    # attribute the patch added, which has no original to go back to.
+    pytester.syspathinsert()
+    pytester.makepyfile(
+        acme_owner="FLAG = False\n\ndef root():\n    return 'real'\n",
+        acme_copier=(
+            "from acme_owner import extra, root\n"
+            "from acme_owner import root as renamed\n"
+            "\n"
+            "FLAG = True\n"
+        ),
+    )
+    pytester.makepyfile(
+        """
+        import acme_owner
+
+        def test_patches(monkeypatch):
+            monkeypatch.setattr(acme_owner, "FLAG", True)
+            monkeypatch.setattr(acme_owner, "extra", [], raising=False)
+            monkeypatch.setattr(acme_owner, "root", lambda: "first")
+            monkeypatch.setattr("acme_owner.root", lambda: "patched")
+            import acme_copier
+
+            assert acme_copier.root() == "patched"
+            assert acme_copier.renamed() == "patched"
+
+        def test_after():
+            import acme_copier
+
+            assert acme_copier.FLAG is True
+            assert acme_copier.extra == []
+            assert not hasattr(acme_owner, "extra")
+            assert acme_owner.root() == "real"
+            assert acme_copier.root() == "real"
+            assert acme_copier.renamed() == "real"
+        """
+    )
+    result = _run(pytester)
+    result.assert_outcomes(passed=2)
