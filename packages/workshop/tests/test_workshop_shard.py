@@ -373,6 +373,41 @@ def test_the_checkout_time_is_heads_committer_time(work: Path) -> None:
     assert when == datetime.fromisoformat(spelled)
 
 
+def test_a_record_written_without_the_suites_key_names_no_suite(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / _shard.SHARD_FILE
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "shard": "1of2",
+                "digest": "d",
+                "files": ["a.py"],
+                "rows": [],
+                "before": "2026-10-17T09:30:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    left, why = _shard.read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.suites == ()
+    # Written again, the record carries the key.
+    assert _shard.marker_fields(left)["suites"] == []
+    # A record left without naming suites names none the same way.
+    _shard.leave_shard(
+        tmp_path,
+        shard=_shard.Shard(1, 2),
+        digest="d",
+        files=["a.py"],
+        rows=[],
+        before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
+    )
+    left, why = _shard.read_shard(tmp_path)
+    assert why == "" and left is not None and left.suites == ()
+
+
 def test_the_shard_file_round_trips_under_the_workshop_directory(
     tmp_path: Path,
 ) -> None:
@@ -385,6 +420,7 @@ def test_the_shard_file_round_trips_under_the_workshop_directory(
         files=["b.py", "a.py"],
         rows=["r2.json", "r1.json"],
         before=before,
+        suites=["tests", "packages/b"],
     )
     assert path == tmp_path / ".workshop" / "fm-shard.json"
     left, why = _shard.read_shard(tmp_path)
@@ -394,3 +430,5 @@ def test_the_shard_file_round_trips_under_the_workshop_directory(
     assert left.files == ("b.py", "a.py")
     assert left.rows == ("r2.json", "r1.json")
     assert left.before == before
+    assert left.suites == ("tests", "packages/b")
+    assert _shard.marker_fields(left)["suites"] == ["tests", "packages/b"]

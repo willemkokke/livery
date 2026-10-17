@@ -949,6 +949,12 @@ def test_a_suite_with_no_file_in_the_share_is_left_out_of_the_call(
     assert "  test.pytest: shard 2of2 runs 2 of 3 test file(s)\n" in (
         capsys.readouterr().out
     )
+    # The record names the suites with a file in the set; the member
+    # without one is left to the first shard whole, as a step that does
+    # not read the shard is.
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.suites == ("packages/one", "packages/two")
     calls.clear()
     _sharded(monkeypatch, durations=weights, rows=rows, leg=f"{LEG}-1of2")
     step.run(PhaseContext(root=tmp_path, packages=packages, shard=Shard(1, 2)))
@@ -1017,6 +1023,7 @@ def test_two_shards_hand_the_runner_complementary_shares_of_every_test_file(
         assert left.files == expected[index]
         assert left.digest == files_digest(every)
         assert left.rows == rows and left.before == BOUND
+        assert left.suites == ("packages/one", "packages/two", "tests")
     assert records[0].digest == records[1].digest
 
 
@@ -1126,6 +1133,7 @@ def test_the_share_takes_the_run_s_selection_when_it_names_files(
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
     assert left.files == () and left.digest == files_digest((a,))
+    assert left.suites == ("packages/one",)
     _sharded(
         monkeypatch, durations={a: 1.0, b: 1.0}, rows=("r1.json",), leg=f"{LEG}-1of2"
     )
@@ -1161,10 +1169,10 @@ def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
             )
         )
 
-    def left() -> tuple[tuple[str, ...], str]:
+    def left() -> tuple[tuple[str, ...], str, tuple[str, ...]]:
         record, why = read_shard(tmp_path)
         assert why == "" and record is not None
-        return record.files, record.digest
+        return record.files, record.digest, record.suites
 
     # A record of another shard, another bound or other rows, or one
     # that does not read, is replaced, never added to.
@@ -1176,22 +1184,25 @@ def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
         json.dumps([1, 2]),
         json.dumps({**key, "shard": "1of2", "set": [a], "files": [a]}),
         json.dumps({**key, "rows": ["r9.json"], "set": [a], "files": [a]}),
-        json.dumps({**key, "set": "a", "files": [a]}),
-        json.dumps({**key, "set": [a], "files": [1]}),
+        json.dumps({**key, "set": "a", "files": [a], "suites": ["packages/one"]}),
+        json.dumps({**key, "set": [a], "files": [1], "suites": ["packages/one"]}),
+        json.dumps({**key, "set": [a], "files": [a], "suites": "packages/one"}),
+        json.dumps({**key, "set": [a], "files": [a]}),
     ):
         sets.write_text(stale)
         run((one,))
-        assert left() == ((b,), files_digest((a, b)))
+        assert left() == ((b,), files_digest((a, b)), ("packages/one",))
     # The gate's run over one, then the top-up's run over two on the
     # same shard: the record holds both slices and the digest of both
     # sets, as one partition of one set.
     run((one,))
-    assert left() == ((b,), files_digest((a, b)))
+    assert left() == ((b,), files_digest((a, b)), ("packages/one",))
+    both = ("packages/one", "packages/two")
     run((two,))
-    assert left() == ((b, d), files_digest((a, b, c, d)))
+    assert left() == ((b, d), files_digest((a, b, c, d)), both)
     # Running it again adds nothing.
     run((two,))
-    assert left() == ((b, d), files_digest((a, b, c, d)))
+    assert left() == ((b, d), files_digest((a, b, c, d)), both)
     # The first shard's record is its own.
     _sharded(monkeypatch, durations=durations, rows=rows, leg=f"{LEG}-1of2")
     step.run(
@@ -1199,7 +1210,7 @@ def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
             root=tmp_path, packages=(one, two), subset=(one,), shard=Shard(1, 2)
         )
     )
-    assert left() == ((a,), files_digest((a, b)))
+    assert left() == ((a,), files_digest((a, b)), ("packages/one",))
 
 
 def test_the_top_up_runs_through_the_step_and_is_sliced_by_the_same_partition(

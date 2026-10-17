@@ -2495,13 +2495,17 @@ def test_a_shard_expects_parts_only_for_the_suites_its_share_touched(
         coverage_leg.suites_that_ran(full, tmp_path, (x, y))
     record.unlink()
 
-    def ran() -> list[str]:
-        return [
-            unit.path for unit in coverage_leg.suites_that_ran(full, tmp_path, (x, y))
-        ]
+    # A native suite: the slice never partitions it, since it has no
+    # python test file.
+    n = _native_suite(tmp_path, "n")
 
+    def ran() -> list[str]:
+        units = coverage_leg.suites_that_ran(full, tmp_path, (x, y, n))
+        return [unit.path for unit in units]
+
+    every = ["packages/x", "packages/y", "packages/n", "tests"]
     # Without a record, or on one shard of one, every unit ran whole.
-    assert ran() == ["packages/x", "packages/y", "tests"]
+    assert ran() == every
     leave_shard(
         tmp_path,
         shard=Shard(1, 1),
@@ -2509,11 +2513,28 @@ def test_a_shard_expects_parts_only_for_the_suites_its_share_touched(
         files=("packages/y/tests/test_b.py",),
         rows=(),
         before=before,
+        suites=("packages/y",),
     )
-    assert ran() == ["packages/x", "packages/y", "tests"]
-    # On a shard of two, the units with a test file in the share: y's
-    # and the workspace's own; a file of another package whose path
-    # starts like x's is not x's.
+    assert ran() == every
+    # A record written before the suites were named names none: every
+    # unit is the first shard's whole, and no other shard's.
+    old = {
+        "shard": "1of2",
+        "digest": "d",
+        "files": ["packages/y/tests/test_b.py"],
+        "rows": [],
+        "before": before.isoformat(),
+    }
+    record.write_text(json.dumps(old), encoding="utf-8")
+    assert ran() == every
+    record.write_text(json.dumps({**old, "shard": "2of2"}), encoding="utf-8")
+    assert ran() == []
+    # On a shard of two, a unit the record names ran here where a file
+    # of it is in the share: y's and the workspace's own, not x's. The
+    # native suite, which the record does not name, ran whole on the
+    # first shard: the second shard expects nothing of it. A file of
+    # another package whose path starts like x's is not x's.
+    suites = ("packages/x", "packages/y", "tests")
     leave_shard(
         tmp_path,
         shard=Shard(2, 2),
@@ -2525,13 +2546,96 @@ def test_a_shard_expects_parts_only_for_the_suites_its_share_touched(
         ),
         rows=("r1.json",),
         before=before,
+        suites=suites,
     )
     assert ran() == ["packages/y", "tests"]
-    # A share with no file of any unit: nothing ran on this shard.
+    # The first shard with no file of any named unit in its share: the
+    # native suite alone ran here.
     leave_shard(
-        tmp_path, shard=Shard(2, 2), digest="d", files=(), rows=(), before=before
+        tmp_path,
+        shard=Shard(1, 2),
+        digest="d",
+        files=(),
+        rows=(),
+        before=before,
+        suites=suites,
+    )
+    assert ran() == ["packages/n"]
+    # A later shard with the same empty share: nothing ran here.
+    leave_shard(
+        tmp_path,
+        shard=Shard(2, 2),
+        digest="d",
+        files=(),
+        rows=(),
+        before=before,
+        suites=suites,
     )
     assert ran() == []
+
+
+def test_a_suite_the_slice_did_not_partition_leaves_its_parts_on_the_first_shard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    python_steps: object,
+) -> None:
+    from datetime import UTC, datetime
+
+    from livery.workshop import Shard, leave_shard
+    from livery.workshop._verified import FULL, write_marker
+
+    _measured_by_pytest(tmp_path, python=False)
+    x = _suite(tmp_path, "x")
+    n = _native_suite(tmp_path, "n")
+    x_source = str(_source(tmp_path, "x"))
+    _contextual_part(
+        tmp_path,
+        "host.1.X",
+        {
+            "": {x_source: [1]},
+            "packages/x/tests/test_mod.py::test_one|run": {x_source: [2, 3]},
+        },
+    )
+    leave_part(tmp_path, "packages/n", {_NATIVE: {1: 1}})
+    before = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+    put = _capture_leaves(monkeypatch)
+    # The second shard: x's file is in its share, and the native suite
+    # is not named, so its parts are the first shard's and the leg
+    # refuses nothing for lacking them.
+    write_marker(tmp_path, FULL, leg="check-a-2of2")
+    leave_shard(
+        tmp_path,
+        shard=Shard(2, 2),
+        digest="d",
+        files=("packages/x/tests/test_mod.py",),
+        rows=("r1.json",),
+        before=before,
+        suites=("packages/x",),
+    )
+    _in_ci(monkeypatch, "check-a-2of2")
+    coverage_leg.gather_leg(tmp_path, (x, n))
+    out = capsys.readouterr().out
+    assert sorted(_units(put[0])) == ["packages/x"]
+    assert "packages/n ran without a measurement" not in out
+    # The first shard: no file of x in its share, and the native suite
+    # ran whole here, so its parts are left and x's are not expected.
+    put.clear()
+    write_marker(tmp_path, FULL, leg="check-a-1of2")
+    leave_shard(
+        tmp_path,
+        shard=Shard(1, 2),
+        digest="d",
+        files=(),
+        rows=("r1.json",),
+        before=before,
+        suites=("packages/x",),
+    )
+    _in_ci(monkeypatch, "check-a-1of2")
+    coverage_leg.gather_leg(tmp_path, (x, n))
+    out = capsys.readouterr().out
+    assert sorted(_units(put[0])) == ["packages/n"]
+    assert "packages/x ran without a measurement" not in out
 
 
 def test_a_shard_leaves_parts_for_the_suites_its_share_touched_alone(
@@ -2561,6 +2665,7 @@ def test_a_shard_leaves_parts_for_the_suites_its_share_touched_alone(
         },
     )
     write_marker(tmp_path, FULL, leg="check-a-2of2")
+    # Both suites were partitioned; only y's file is in this share.
     leave_shard(
         tmp_path,
         shard=Shard(2, 2),
@@ -2568,6 +2673,7 @@ def test_a_shard_leaves_parts_for_the_suites_its_share_touched_alone(
         files=("packages/y/tests/test_mod.py",),
         rows=("r1.json",),
         before=datetime(2026, 10, 17, 9, 30, tzinfo=UTC),
+        suites=("packages/x", "packages/y"),
     )
     put = _capture_leaves(monkeypatch)
     _in_ci(monkeypatch, "check-a-2of2")

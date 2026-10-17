@@ -38,6 +38,7 @@ DISPLAY = {
 BEFORE = "2026-10-17T09:30:00+00:00"
 FILES = ("packages/a/tests/test_a.py", "packages/a/tests/test_b.py", "tests/test_c.py")
 SET = _shard.files_digest(FILES)
+SUITES = ("packages/a", "tests")
 
 _FAILURES = (SystemExit, Failed)
 
@@ -70,6 +71,7 @@ def _marker(
     digest: str = SET,
     rows: Sequence[str] = ("r1.json",),
     before: str = BEFORE,
+    suites: Sequence[str] = SUITES,
 ) -> dict[str, Any]:
     return {
         "shard": shard,
@@ -77,6 +79,7 @@ def _marker(
         "files": list(files),
         "rows": list(rows),
         "before": before,
+        "suites": list(suites),
     }
 
 
@@ -307,6 +310,24 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
         rf" \({WIN1} {SET[:12]}, {WIN2} {other[:12]}\)",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
+    # The suites partitioned are one more field the shards must agree on.
+    _two_shards(
+        work,
+        second=_row(WIN2, marker=_marker("2of2", FILES[1:], suites=("packages/a",))),
+    )
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: the shards partitioned different suites"
+        rf" \({WIN1} packages/a, tests, {WIN2} packages/a\)",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES[1:], suites=())))
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: the shards partitioned different suites"
+        rf" \({WIN1} packages/a, tests, {WIN2} none\)",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
     _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES[1:], rows=())))
     with pytest.raises(
         _FAILURES,
@@ -458,6 +479,7 @@ def test_the_fold_sums_the_shards_rows_folds_their_files_and_drops_their_refs(
     shard = row.data["shard"]
     assert shard["count"] == 2 and shard["digest"] == SET
     assert shard["rows"] == ["r1.json"] and shard["before"] == BEFORE
+    assert shard["suites"] == list(SUITES)
     listed = shard["shards"]
     assert [item["leg"] for item in listed] == [WIN1, WIN2]
     assert [item["job"] for item in listed] == [DISPLAY[WIN1], DISPLAY[WIN2]]
@@ -742,7 +764,7 @@ def test_shards_none_of_which_partitioned_fold_on_their_scopes_and_files_alone(
     )
     assert row.data["files"] == {} and row.data["total_ms"] == 100.0
     shard = row.data["shard"]
-    assert shard["count"] == 2 and shard["digest"] == ""
+    assert shard["count"] == 2 and shard["digest"] == "" and shard["suites"] == []
     assert shard["rows"] == [] and shard["before"] == ""
     assert [item["leg"] for item in shard["shards"]] == [WIN1, WIN2]
     coverage, why = folded.row(state_store(work), "coverage.json")

@@ -396,7 +396,8 @@ def _prove(
     the label's, a shard the matrix produces that left no ref (or,
     without a matrix, an index of the records' count that did, or of
     the labels' count when no shard left a record), the shards' scopes,
-    their file sets, their durations rows, their bounds, and the files:
+    their file sets, their suites, their durations rows, their bounds,
+    and the files:
     a file in two shards, or a union whose digest is not the set's. A
     record of one shard of one says the shard fell open on the record
     and ran the whole set; every shard of the platform must have, and
@@ -498,6 +499,16 @@ def _prove(
             f"{platform}: the shards partitioned different test-file sets ({shown});"
             " a platform's shards partition one set"
         )
+    suites = {label: marker.suites for label, marker in markers.items()}
+    if len(set(suites.values())) > 1:
+        shown = ", ".join(
+            f"{label} {', '.join(named) if named else 'none'}"
+            for label, named in suites.items()
+        )
+        fail(
+            f"{platform}: the shards partitioned different suites ({shown}); a"
+            " platform's shards partition one set"
+        )
     rows = {label: marker.rows for label, marker in markers.items()}
     if len(set(rows.values())) > 1:
         shown = ", ".join(
@@ -570,10 +581,10 @@ def _folded_row(
     are every chosen shard's added, the slowest tests every chosen
     shard's, slowest first; the row is named by the platform's display
     name and keyed by the platform leg under ``scope.leg``; ``shard``
-    records the set's digest, the rows and the bound the shards read,
-    and each shard's label, job, row stamp, file count, wall and
-    package sums. Shards that left no record partitioned nothing: the
-    digest, the rows and the bound are empty.
+    records the set's digest, its suites, the rows and the bound the
+    shards read, and each shard's label, job, row stamp, file count,
+    wall and package sums. Shards that left no record partitioned
+    nothing: the digest, the suites, the rows and the bound are empty.
     """
     first = chosen[0].row or {}
     marker = chosen[0].marker
@@ -620,6 +631,7 @@ def _folded_row(
             "shard": {
                 "count": len(shards),
                 "digest": marker.digest if marker is not None else "",
+                "suites": list(marker.suites) if marker is not None else [],
                 "rows": list(marker.rows) if marker is not None else [],
                 "before": marker.before.isoformat() if marker is not None else "",
                 "shards": [
