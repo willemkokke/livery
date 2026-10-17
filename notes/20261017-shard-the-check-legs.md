@@ -1,9 +1,12 @@
 # Shard the check legs across runners, and carry coverage across a change
 
-Status: phase 1 complete 2026-10-17 (#1744, #1745, #1743 merged; the loop
-pass green on the `shards` environment, 6 scenarios). Phase 2 in review:
-parts 1 to 6 built as #1749, #1763, #1764, #1762, #1772 and #1771, part
-7 (#1777) building. Phase 3's table, `fm ci.balance`, merged ahead (#1747).
+Status: phase 1 complete 2026-10-17. Phase 2 built the same day: parts 1
+to 7 merged (#1760, #1768, #1769, #1770, #1775, #1776, #1782) with the
+fixes the first live sharded runs found (#1792, #1797 merged; #1804 and
+#1808 in review); the loop's two-shard scenario (#1786) built, its pass
+pending #1804; the acceptance on this repository is PR #1789, unarmed,
+on its third run. Phase 3's table, `fm ci.balance`, merged ahead (#1759);
+its `--write`, `--submit` and nightly entry wait on #1757.
 
 ## The prompt (Willem)
 
@@ -488,7 +491,38 @@ Acceptance:
 - 2026-10-17, found live: the coverage store's janitor test reads a
   failed fetch and a dropped ref alike (#1773); a Windows-only red on
   one dispatched run did not repeat. GitHub started no pull request
-  run for one pushed head; a dispatched gate run stood in.
+  run for one pushed head; a dispatched gate run stood in (#1779: the
+  branch's `on:` block was older than main's; an integrate fixed it).
+- 2026-10-17, Willem: `fm ci.balance --submit` stays unarmed; the
+  second run a label starts beside a push's is left as it is; macOS's
+  count may drop to 2 while he looks at where macOS's test time goes
+  (the trace puts 53% of its excess over ubuntu in 14 files;
+  test_cassette.py 35 s against none, test_fetch.py 41 s against 4 s);
+  GitLab reads the first runner's full-set count alone. CI's weight in
+  the core is the design, not a debt: no extraction into extensions.
+- 2026-10-17, the agent: the durations row's map and the shard
+  record's list are named `files`; the generic word is `items`. The
+  rename is cheap while no row exists elsewhere and follows the open
+  changes as its own pull request.
+- 2026-10-17, from the loop and the first live sharded runs, each a
+  fix the same day: a one-shard runner's entry carried `shard: 1of1`,
+  so the forge named its job apart from the leg's own name (#1790); an
+  in-process footman app run left its note policy for the pytest
+  worker, which a shard's slice exposed (#1796); the runner's
+  `WORKSHOP_LEG` reached the test session, so a test driving the gate
+  ran as the shard (#1807); a suite the slice did not partition, the
+  loop's native suite, was expected on no shard, so the record names
+  the suites it partitioned and the rest are the first shard's
+  (#1798); the per-platform proof compared a shard's whole label, a
+  shard that skipped left no record, and the coverage record was keyed
+  by the shard's label (#1786). The fold refused correctly on both
+  live runs where a shard left no ref.
+- 2026-10-17, the agent: main's loop changed under part 7 to prove
+  each scenario from the rows the legs write; the two-shard scenario
+  was redone against it as #1786.
+- 2026-10-17, a hold on merges to main for about an hour, asked by
+  the session landing the release wave (the train refuses a moved
+  base): the open pull requests were disarmed meanwhile.
 
 ## Open
 
