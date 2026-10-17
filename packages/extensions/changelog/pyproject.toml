@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-changelog"
-version = "0.0.0"
+version = "0.1.0"
 description = "Changelogs for the livery workshop: git-cliff writes each package's CHANGELOG.md entry as the release train releases it."
 readme = "README.md"
 license = "MIT"
