@@ -36,6 +36,7 @@ from livery.workshop._points import (
     job_runners,
     job_seams,
     points,
+    pull_request_listed,
     pull_request_runners,
     shard_counts,
 )
@@ -432,19 +433,21 @@ def _shard_facts(
     shards = shard_counts(ci, key="shards", runners=runners, listed="[ci] runners")
     if ci.get("pull-request-shards") is None:
         return shards, {runner: shards[runner] for runner in narrowed}
-    listed = (
-        "[ci] pull-request-runners"
-        if ci.get("pull-request-runners") is not None
-        else "[ci] runners"
+    pull = shard_counts(
+        ci,
+        key="pull-request-shards",
+        runners=narrowed,
+        listed=pull_request_listed(ci),
     )
-    pull = shard_counts(ci, key="pull-request-shards", runners=narrowed, listed=listed)
     return shards, pull
 
 
 def _runners(answers: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Every event's runner labels, and a pull request's."""
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
-    narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
+    narrowed = [
+        str(runner) for runner in answers.get("pull_request_runners", runners[:1])
+    ]
     return runners, narrowed
 
 
