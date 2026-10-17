@@ -241,7 +241,10 @@ class DeclaredVariable:
             taken.
         doc: What the variable is for.
         always: Whether the value beats one the environment already
-            carries. Without it, the environment's value wins.
+            carries where an environment is formed for what runs inside
+            it: a CI job's, by its entry, a loop pass's and the scale
+            fixture's. Everywhere else, and without it, the
+            environment's value wins.
         extension: The extension that declares it.
     """
 

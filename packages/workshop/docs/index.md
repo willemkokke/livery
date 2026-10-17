@@ -1144,11 +1144,18 @@ answers one placeholder, `{place}`: a directory of the variable's
 own. Every other brace form refuses when the declaration is read,
 `{UPPER}` and `{env.HOME}` among them, naming the form, so a
 placeholder added later changes the meaning of no declared value. A
-name a shell cannot export refuses too. Without `always`, a variable
-the environment already carries keeps its value, as the cascade's
-variables do; with it, the declared value is set over it. A
-`[for.<target>]` table declares no variable, and two extensions that
-declare one variable refuse, naming both.
+name a shell cannot export refuses too. A `[for.<target>]` table
+declares no variable, and two extensions that declare one variable
+refuse, naming both.
+
+`always` makes the extension's value beat one the runner sets for
+every job, where the job's environment is formed: in `setup.sh` and in
+`fm env.emit --github`. A loop pass and the scale fixture form the
+environment of what they start the same way. Everywhere else, every
+`fm` run among them, the environment wins: a variable it already
+carries keeps its value, as the cascade's variables do. So a job's
+later runs keep the value its entry placed, and a nested run keeps the
+one its parent set.
 
 The workshop sets the variables the extensions of the workspace's
 installed set declare, and each place names the directory `{place}`
@@ -1156,7 +1163,7 @@ stands for:
 
 | Where | `{place}` |
 | --- | --- |
-| every `fm` run, through the cascade's hook | on a CI job, the job's own directory: `RUNNER_TEMP` on a GitHub or Gitea job, `.workshop` under `CI_PROJECT_DIR` on a GitLab one; on a desk, none |
+| every `fm` run, through the cascade's hook, where the environment carries no value | on a CI job, the job's own directory: `RUNNER_TEMP` on a GitHub or Gitea job, `.workshop` under `CI_PROJECT_DIR` on a GitLab one; on a desk, none |
 | `setup.sh`, for the steps before `fm` | the same directory; the script stops a job whose runner names none |
 | `fm env.emit --github`, which persists them for a job's later steps | `RUNNER_TEMP`; a job without one refuses |
 | a pass of the loop, `fm ci.e2e` | the directory of the development environment the pass runs on |
@@ -1469,9 +1476,11 @@ absence.
 - Every CI job keeps each variable an extension declares with a
   directory of its own, an `[env]` value naming `{place}`, in the
   job's own directory. A declaration with `always` beats a value the
-  runner sets for its jobs, as conan's `CONAN_HOME` does: conan's cache
-  takes one process at a time, and a runner that takes several jobs at
-  once would otherwise have two of them write one cache. On a GitHub or
+  runner sets for its jobs where the entry forms the job's environment,
+  as conan's `CONAN_HOME` does, and the job's later runs keep it:
+  conan's cache takes one process at a time, and a runner that takes
+  several jobs at once would otherwise have two of them write one
+  cache. On a GitHub or
   Gitea runner the directory is `RUNNER_TEMP`, the job's temporary
   directory, placed by `setup.sh github`. On a GitLab runner it is
   `.workshop` under `CI_PROJECT_DIR`, the job's checkout, placed by

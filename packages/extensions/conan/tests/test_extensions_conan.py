@@ -300,10 +300,13 @@ def test_conan_declares_its_home_in_a_directory_of_its_own_that_beats_the_runner
     assert home.doc.startswith("conan's cache takes one writer at a time")
     assert isinstance(home, DeclaredVariable)
     runner = {"CONAN_HOME": "/runner/conan"}
-    assert placed(declared.env, str(tmp_path), runner) == {
+    # Where a job's environment is formed, the declared home beats the
+    # runner's; a run nested in another keeps the home it inherits.
+    assert placed(declared.env, str(tmp_path), runner, forming=True) == {
         "CONAN_HOME": f"{tmp_path}/conan"
     }
-    assert placed(declared.env, None, runner) == {}
+    assert placed(declared.env, str(tmp_path), runner) == runner
+    assert placed(declared.env, None, runner, forming=True) == {}
 
 
 def test_its_build_serves_the_isolated_side_alone() -> None:

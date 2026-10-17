@@ -264,7 +264,9 @@ def _environment(root: Path) -> dict[str, str]:
     The variables the extensions of the fixture's set declare join it,
     each one naming ``{place}`` placed in the fixture's directory,
     beside the workspace: a tool's home there is the fixture's own, so
-    what its native members build never reaches the machine's.
+    what its native members build never reaches the machine's. The
+    fixture forms its children's environment, so an ``always`` one
+    beats the value this one carries, and each child keeps it.
 
     Raises:
         Failed: when two of the extensions declare one variable.
@@ -272,7 +274,7 @@ def _environment(root: Path) -> dict[str, str]:
     from livery.workshop._variables import placed, workspace_variables
 
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
-    env.update(placed(workspace_variables(root), str(root.parent), env))
+    env.update(placed(workspace_variables(root), str(root.parent), env, forming=True))
     return env
 
 

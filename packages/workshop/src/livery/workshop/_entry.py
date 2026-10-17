@@ -81,7 +81,8 @@ _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # .workshop under its checkout, CI_PROJECT_DIR, a path no two jobs
 # running at once share, which git ignores. A job whose runner names no
 # such directory stops here. A value the environment already carries
-# wins, unless the declaration says always.
+# wins, unless the declaration says always: here the job's environment
+# is formed, so such a value beats one the runner sets for every job.
 _place=""
 # Called with the variable naming the job's directory, its value, the
 # declared variable, and the extension that declares it.

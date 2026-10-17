@@ -108,7 +108,9 @@ def apply_declared(root: Path, environ: MutableMapping[str, str]) -> dict[str, s
     directory: ``RUNNER_TEMP`` on a GitHub or Gitea job, ``.workshop``
     under ``CI_PROJECT_DIR`` on a GitLab one. Off a CI job it is not
     set, and a desk keeps its own. A variable *environ* already
-    carries keeps its value unless its declaration says ``always``. The
+    carries keeps its value, its declaration's ``always`` included: the
+    job's entry already placed it where the job's environment was
+    formed, and a nested run keeps the value its parent set. The
     cascade's files count as the environment here, since they are folded
     in first. What the hook contributes is remembered in `_APPLIED`. A
     declaration that cannot be read costs these variables alone, said on
@@ -303,9 +305,11 @@ def runner_placements(
     of a step's shell never reaches by itself.
 
     *variables* are the ones the workspace's extensions declare, which
-    `apply_declared` sets for each run as well. A value naming
-    ``{place}`` takes the runner's temp, which is the job's own, and an
-    ``always`` one beats a value the runner sets for every job.
+    `apply_declared` sets for each run where the environment carries
+    none. A value naming ``{place}`` takes the runner's temp, which is
+    the job's own. The emission forms the environment of the job's later
+    steps, so an ``always`` one beats a value the runner sets for every
+    job.
 
     Raises:
         Failed: when one of *variables* names ``{place}`` on a job
@@ -337,7 +341,7 @@ def runner_placements(
         directory_variable("DATA_DIR"): f"{runner_temp}/footman",
     }
     found = {key: environ.get(key) or value for key, value in shared.items()}
-    found.update(placed(held, runner_temp, environ))
+    found.update(placed(held, runner_temp, environ, forming=True))
     return found
 
 

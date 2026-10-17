@@ -562,7 +562,7 @@ doc = "the variable's value; {place} in it stands for a directory of the variabl
 
 [contract.extension.env."*".always]
 types = ["bool"]
-doc = "whether the value beats one the environment already carries; false when absent, and the environment's value wins"
+doc = "whether the value beats one the runner sets for every job, where the job's environment is formed: in the entry script and fm env.emit --github, and likewise where a loop pass or the scale fixture forms the environment of what it starts; everywhere else, every fm run among them, the environment's value wins; false when absent"
 
 [contract.extension.env."*".doc]
 types = ["str"]

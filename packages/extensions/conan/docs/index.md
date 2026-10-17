@@ -49,7 +49,9 @@ On a CI job the home is `conan` under the job's own directory:
 `RUNNER_TEMP` on a GitHub or Gitea job, `.workshop` under
 `CI_PROJECT_DIR` on a GitLab one. `always` makes it beat a
 `CONAN_HOME` the runner sets for every job, since a runner may run
-several jobs at once. A pass of the loop keeps it in its development
+several jobs at once: the job's entry places it, and every later `fm`
+run of the job keeps that home, as a run nested in another keeps the
+one its parent set. A pass of the loop keeps it in its development
 environment's directory, so a remote a release writes there goes with
 the environment's forge, and the scale fixture keeps it in the
 fixture's directory. On a desk nothing names a directory, and conan's

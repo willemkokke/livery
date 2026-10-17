@@ -192,7 +192,8 @@ class Environment:
     ) -> dict[str, str]:
         """The variables *extensions* declare, placed for a pass on this environment.
 
-        Each by name, to the value it takes against *environ*: one
+        Each by name, to the value it takes against *environ*. The pass
+        forms the environment of the processes it starts, so one
         *environ* carries wins unless the declaration says ``always``,
         and a value naming ``{place}`` takes this environment's
         directory, so what the pass and the processes it starts keep
@@ -206,7 +207,12 @@ class Environment:
         """
         from livery.workshop._variables import declared_variables, placed
 
-        return placed(declared_variables(extensions), str(self.directory), environ)
+        return placed(
+            declared_variables(extensions),
+            str(self.directory),
+            environ,
+            forming=True,
+        )
 
     def values(self) -> dict[str, str]:
         """The env file's pairs; empty when there is none yet."""

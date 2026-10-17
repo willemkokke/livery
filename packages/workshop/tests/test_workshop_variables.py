@@ -183,10 +183,18 @@ def test_without_always_the_environment_s_value_wins() -> None:
     assert placed((shared,), "/job", {"ACME_HOME": ""}) == {"ACME_HOME": "/job/acme"}
 
 
-def test_with_always_the_declared_value_beats_a_runner_wide_one() -> None:
-    assert placed((ACME_HOME,), "/job", {"ACME_HOME": "/runner/acme"}) == {
+def test_always_beats_the_environment_only_where_an_environment_is_formed() -> None:
+    runner = {"ACME_HOME": "/runner/acme"}
+    # Anywhere else, a run nested in another among them, the value the
+    # environment carries wins, always or not.
+    assert placed((ACME_HOME,), "/job", runner) == {"ACME_HOME": "/runner/acme"}
+    # Where a job's environment is formed, the declared value beats one
+    # the runner sets for every job.
+    assert placed((ACME_HOME,), "/job", runner, forming=True) == {
         "ACME_HOME": "/job/acme"
     }
+    shared = replace(ACME_HOME, always=False)
+    assert placed((shared,), "/job", runner, forming=True) == runner
 
 
 def test_a_value_naming_a_place_is_not_set_where_none_is_named() -> None:
@@ -223,7 +231,7 @@ def _declaring_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def test_every_fm_run_in_a_ci_job_sets_the_declared_variables(
+def test_every_fm_run_in_a_ci_job_sets_a_declared_variable_the_job_lacks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from typing import cast
@@ -246,10 +254,17 @@ def test_every_fm_run_in_a_ci_job_sets_the_declared_variables(
     # On a desk the home is not set: the person's own stands.
     _env_tasks.apply_cascade(cast(footman.Invocation, None))
     assert "ACME_HOME" not in os.environ and _env_tasks._APPLIED == {}
-    # In a job, over the runner's own value, since the declaration says
-    # always; the hook remembers what it set, for the emitters.
+    # A run nested in another under the job's markers keeps the home its
+    # parent set, though the declaration says always: the job's own
+    # environment was formed by its entry.
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("ACME_HOME", "/runner/acme")
+    monkeypatch.setenv("ACME_HOME", str(tmp_path / "fixture" / "acme"))
+    _env_tasks.apply_cascade(cast(footman.Invocation, None))
+    assert os.environ["ACME_HOME"] == str(tmp_path / "fixture" / "acme")
+    assert _env_tasks._APPLIED == {}
+    # In a job whose environment carries none, the hook places it and
+    # remembers what it set, for the emitters.
+    monkeypatch.delenv("ACME_HOME")
     _env_tasks.apply_cascade(cast(footman.Invocation, None))
     assert os.environ["ACME_HOME"] == f"{temp}/acme"
     assert {"ACME_HOME": f"{temp}/acme"} == _env_tasks._APPLIED

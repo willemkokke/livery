@@ -15,7 +15,8 @@ extensions of the workspace's installed set, and names the directory
 ``{place}`` stands for:
 
 - every ``fm`` run, through the cascade's hook: on a CI job, the job's
-  own directory (`job_place`); on a desk, none;
+  own directory (`job_place`), where the job's environment carries
+  none yet; on a desk, none;
 - the entry script, ``setup.sh``, for the steps before ``fm``: the same
   directory on a CI job, and none off one;
 - ``fm env.emit --github``, which persists the variables for a job's
@@ -25,10 +26,15 @@ extensions of the workspace's installed set, and names the directory
 - the scale fixture: the fixture's directory.
 
 A value naming ``{place}`` is not set where nothing names a directory.
-Without ``always``, a variable the environment already carries keeps
-its value, as the cascade's variables do. With it, the declared value
-is set whatever the environment carries, since the environment's may
-be one a runner sets for every job it takes.
+A variable the environment already carries keeps its value, as the
+cascade's variables do, with one exception. Where an environment is
+formed for what runs inside it, a declaration's ``always`` makes its
+value beat the one the environment carries: a CI job's, in the entry
+script and ``fm env.emit --github``, where the value to beat is one the
+runner sets for every job it takes; and a loop pass's or the scale
+fixture's, for the processes they start. Everywhere else, every ``fm``
+run among them, the environment wins, so a job's later runs keep the
+value its entry placed and a nested run keeps the one its parent set.
 """
 
 from __future__ import annotations
@@ -121,20 +127,24 @@ def placed(
     variables: Iterable[DeclaredVariable],
     place: str | None,
     environ: Mapping[str, str],
+    *,
+    forming: bool = False,
 ) -> dict[str, str]:
     """The value each of *variables* takes against *environ*, by name.
 
     A value naming ``{place}`` takes *place* there, and is left out
     when *place* is None. A variable *environ* already carries keeps
-    that value unless it is ``always``. An empty value counts as none,
-    as in the cascade.
+    that value. *forming* says the caller forms an environment for what
+    runs inside it, a CI job's, a loop pass's or the scale fixture's:
+    there an ``always`` variable takes the declared value whatever
+    *environ* carries. An empty value counts as none, as in the cascade.
     """
     found: dict[str, str] = {}
     for variable in variables:
         if variable.placed and place is None:
             continue
         held = environ.get(variable.name, "")
-        if held and not variable.always:
+        if held and not (forming and variable.always):
             found[variable.name] = held
         else:
             found[variable.name] = variable.render(place or "")
