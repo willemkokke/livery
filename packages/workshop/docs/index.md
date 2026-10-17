@@ -352,13 +352,18 @@ such as `cmake+cpp`.
 resolves it, before it renders anything else:
 
 1. It writes the project file alone. Its dev group now names the
-   extension's distribution.
+   extension's distribution. This write reads the contracts without
+   judging their keys: until the extension is installed, no
+   declaration says which keys are its, so the root's `[python]`
+   table would refuse the sync that installs python.
 2. It runs `uv sync`, which locks and installs through the project
    file's `[tool.uv.sources]` and indexes. An extension the workspace
    sources from a path or from git installs from there, even when an
    index also offers it.
-3. It continues in a fresh process, which mounts the extension and
-   renders every file with it.
+3. It continues in a fresh process, which mounts the extension, judges
+   every contract over the installed declarations, and renders every
+   file with it. A key no installed extension declares, such as a
+   misspelt table, refuses there.
 
 When no installed distribution declares the extension after the
 install, the sync refuses, naming it and the list that brings it.

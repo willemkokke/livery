@@ -259,6 +259,29 @@ def test_an_extension_from_the_index_installs_from_the_index(
     assert "registry" in _locked(root)["source"]
 
 
+def test_a_listed_extension_s_key_in_the_root_waits_for_its_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._contract import load_contract
+    from livery.workshop._sync import require_mounted
+
+    root = _workspace(tmp_path, monkeypatch, offered=(("1.2.0", DECLARES),))
+    contract = root / "workshop.toml"
+    contract.write_text(contract.read_text("utf-8") + f"\n[{NAME}]\nsetting = 1\n")
+    # The refusal first: the extension's own key has no declaration to
+    # be judged by until the extension is installed, so a judged read
+    # refuses it, as every verb but the install does.
+    with pytest.raises(Failed, match=f"the top level has no key '{NAME}'"):
+        load_contract(contract)
+    # The install writes the project file without judging the keys, and
+    # installs the distribution; the fresh process it hands over to
+    # judges every contract over what is installed then.
+    with pytest.raises(SystemExit):
+        require_mounted(root, ("--offline",))
+    assert _installed(root) is not None
+    assert f'"{DIST}",' in (root / "pyproject.toml").read_text("utf-8")
+
+
 # The project file alone: what the install writes before uv runs.
 
 

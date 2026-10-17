@@ -357,15 +357,38 @@ def test_python_s_templates_wait_until_python_is_listed_and_synced(
     assert refused.returncode != 0, said
     assert "needs python (livery-extensions-python)" in said, said
     assert not (project / "packages").exists()
-    # Listed, the sync installs python's distribution from the source the
-    # newborn's project file names, and both templates create a member.
+    # Listed, with a table of python's in the root and a misspelt one
+    # beside it: the sync installs python's distribution from the source
+    # the newborn's project file names before it judges the contracts,
+    # then judges them over what is installed, and refuses the misspelt
+    # table alone.
     from livery.workshop._extensions import list_in_root
 
     list_in_root(project, PYTHON)
-    _run([fm, "sync"], project, env)
+    contract = project / "workshop.toml"
+    listed = contract.read_text("utf-8")
+    owned = "\n[python]\nprivate-reaches = []\n"
+    contract.write_text(listed + owned + "\n[pyhton]\nprivate-reaches = []\n")
+    refused = subprocess.run(
+        [fm, "sync"], cwd=project, env=env, capture_output=True, text=True
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode != 0, said
+    assert "the top level has no key 'pyhton'" in said, said
+    assert "no key 'python'" not in said, said
     assert _installed(project, "livery-extensions-python")
+    contract.write_text(listed + owned)
+    _run([fm, "sync"], project, env)
+    # Both templates create a member, and the gate judges python's table.
     _run([fm, "new.package.python-library", "thing"], project, env)
     _run([fm, "new.package.workshop-extension", "plugin"], project, env)
     gate = _run([fm, "check"], project, env)
     for step in ("drift.check", "test.pytest"):
         assert f"ok   {step}" in gate, gate
+    contract.write_text(listed + '\n[python]\nprivate-reaches = "none"\n')
+    refused = subprocess.run(
+        [fm, "check"], cwd=project, env=env, capture_output=True, text=True
+    )
+    said = refused.stdout + refused.stderr
+    assert refused.returncode != 0, said
+    assert "python.private-reaches is" in said, said

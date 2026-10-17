@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import tomllib
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +134,30 @@ def forget_contracts() -> None:
     _CONTRACTS.clear()
 
 
+#: How many `unjudged` blocks are open in this process; while one is,
+#: a load parses and judges no key.
+_UNJUDGED: list[int] = [0]
+
+
+@contextmanager
+def unjudged() -> Generator[None]:
+    """Load contracts inside the block without judging their keys.
+
+    The sync opens it while it installs the extensions the lists name
+    and no installed distribution declares yet: a key of such an
+    extension has no declaration to be judged by until the install, and
+    the judgement would refuse the very sync that installs it. A load
+    inside the block still refuses a file that is not TOML and a key
+    spelled with an underscore, and keeps nothing for a later load,
+    which judges as usual.
+    """
+    _UNJUDGED[0] += 1
+    try:
+        yield
+    finally:
+        _UNJUDGED[0] -= 1
+
+
 def load_contract(path: Path) -> dict[str, Any]:
     """Parse the contract at *path* and judge its keys; a refusal names the file.
 
@@ -148,7 +174,8 @@ def load_contract(path: Path) -> dict[str, Any]:
     judged against the workspace's installed set
     ([livery.workshop._extensions.installed_set][]): the root's set and
     every package's. Every problem is listed in one refusal
-    ([livery.workshop._contract_keys.judge][]).
+    ([livery.workshop._contract_keys.judge][]). Inside an `unjudged`
+    block a load parses alone and keeps nothing.
     """
     import copy
 
@@ -161,6 +188,8 @@ def load_contract(path: Path) -> dict[str, Any]:
     )
 
     workspace = _package_workspace(path)
+    if _UNJUDGED[0]:
+        return parse_contract(path.read_text("utf-8"), where=str(path))
     key = _contract_key(path, workspace)
     held = _CONTRACTS.get(key)
     if held is not None:
