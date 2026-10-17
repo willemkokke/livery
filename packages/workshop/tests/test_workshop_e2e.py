@@ -14,9 +14,9 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.forge import Conclusion, Repository
+from livery.forge import Conclusion, Repository, Run
 from livery.forge.testing import FakeForge
-from livery.workshop import _devenv, _e2e
+from livery.workshop import _devenv, _e2e, _e2e_rows
 from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
 from workshop_installed import skip_unless_installed
@@ -2364,3 +2364,142 @@ def test_a_tree_whose_file_goes_under_the_walk_is_still_removed_whole(
     monkeypatch.setattr(Path, "chmod", vanishing)
     _e2e._rmtree(root)
     assert not root.exists()
+
+
+# --- the shards: the proofs, then the seeding --------------------------------
+
+_LEG = "check-ubuntu-latest-3.14"
+_JOB = "check (ubuntu-latest, 3.14)"
+_SHARD_JOBS = ("check (ubuntu-latest, 3.14, 1of2)", "check (ubuntu-latest, 3.14, 2of2)")
+
+
+def _fold(
+    files: tuple[int, ...] = (2, 1),
+    *,
+    count: int = 2,
+    rows: tuple[str, ...] = ("20261017T090000Z-76.json",),
+    digest: str = "ab" * 32,
+) -> _e2e_rows.FoldFacts:
+    """The fold's record of *count* shards that ran *files* each."""
+    shards = tuple(
+        _e2e_rows.ShardFacts(
+            f"{index}of{count}", f"{_LEG}-{index}of{count}", _SHARD_JOBS[index - 1], n
+        )
+        for index, n in enumerate(files, 1)
+    )
+    return _e2e_rows.FoldFacts(count, digest, rows, shards)
+
+
+def _facts(
+    fold: _e2e_rows.FoldFacts | None, *, shard_jobs: tuple[str, ...] = _SHARD_JOBS
+) -> _e2e_rows.RunFacts:
+    leg = _e2e_rows.LegFacts(_JOB, "affected", (), "", _LEG, (), fold=fold)
+    return _e2e_rows.RunFacts("77", {_JOB: leg}, {}, shard_jobs)
+
+
+def _run() -> Run:
+    return Run(
+        77, "ci.yml", "a" * 40, "push", "completed", "success", url="http://r/77"
+    )
+
+
+def test_the_shards_proof_refuses_a_leg_that_is_not_the_fold_of_the_shards() -> None:
+    run = _run()
+    # The leg ran as one shard of one.
+    with pytest.raises(_FAILURES, match="is not a fold"):
+        _e2e._require_shards(run, _facts(None), count=2, ran=True)
+    # Another count than the contract's.
+    with pytest.raises(_FAILURES, match=r"folds 1 shard\(s\) and lists 1 \("):
+        _e2e._require_shards(run, _facts(_fold((3,), count=1)), count=2, ran=True)
+    # A shard whose forge row the collect did not keep beside the fold's.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_shards(
+            run, _facts(_fold(), shard_jobs=_SHARD_JOBS[:1]), count=2, ran=True
+        )
+    assert f"the forge's rows of {_SHARD_JOBS[1]} are not beside the folded row" in str(
+        caught.value
+    )
+    # The leg ran, and the shards partitioned nothing or ran no file.
+    with pytest.raises(_FAILURES, match="ran no test file"):
+        _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=True)
+    with pytest.raises(_FAILURES, match="recorded no partition"):
+        _e2e._require_shards(run, _facts(_fold(digest="")), count=2, ran=True)
+    # Every shard skipped, and the fold records files ran or rows read.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_shards(run, _facts(_fold()), count=2, ran=False)
+    assert (
+        "every shard skipped, and the fold records 3 test file(s) ran and 1"
+        " durations row(s) read" in str(caught.value)
+    )
+    with pytest.raises(_FAILURES, match=r"0 test file\(s\) ran and 1 durations"):
+        _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=False)
+    # Then the shapes the loop proves: a leg that ran on a row, the
+    # first pass with no row yet (the first shard ran every file), and
+    # a leg whose every shard skipped.
+    _e2e._require_shards(run, _facts(_fold()), count=2, ran=True)
+    _e2e._require_shards(run, _facts(_fold((3, 0), rows=())), count=2, ran=True)
+    _e2e._require_shards(run, _facts(_fold((0, 0), rows=())), count=2, ran=False)
+
+
+def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _ci_context, _metrics, _shard
+
+    work = seeds("pushed", pushed) / "work"
+    ctx = _ci_context.RunContext("gitea", "77", "push", "refs/heads/main")
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: ctx)
+    run = _run()
+    series = _shard.DURATIONS.series(_LEG)
+    name = _metrics.run_file("77")
+    # Nothing on the store: the leg ran, so its row is missing.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_durations(work, run, f"{_LEG}-1of2", written=True)
+    assert f"no row {name} naming a test file on {series.ref}" in str(caught.value)
+    _e2e._require_durations(work, run, f"{_LEG}-1of2", written=False)
+    _e2e._prove_shards(work, run, _facts(_fold((0, 0), rows=())), ran=False)
+    assert (
+        f"  shards: run 77's check leg skipped on every shard, folded into {_LEG};"
+        " no durations row written" in capsys.readouterr().out
+    )
+    # The row on the store: every shard skipped, so a row is wrong.
+    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5}}}
+    assert series.put(state_store(work), rows, message="durations: run 77") == ""
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_durations(work, run, _LEG, written=False)
+    assert f"{series.ref} holds {name} with 1 file(s), and every shard skipped" in (
+        str(caught.value)
+    )
+    _e2e._require_durations(work, run, f"{_LEG}-2of2", written=True)
+    _e2e._prove_shards(work, run, _facts(_fold()), ran=True)
+    assert (
+        f"  shards: run 77's check leg ran as 2 shards folded into {_LEG}; its"
+        " durations row is on the store" in capsys.readouterr().out
+    )
+
+
+def test_the_wiring_seeds_two_shards_on_the_pass_s_runner_and_keeps_a_declared_count(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import tomllib
+
+    _wiring_rig(monkeypatch, tmp_path)
+    monkeypatch.setattr(_e2e.CURRENT, "label", "e2e-linux-x64-01")
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    contract = (tmp_path / "workshop.toml").read_text("utf-8")
+    # The count names the environment's runner, the one the runners
+    # list names, inside the [ci] table the matrix reads.
+    assert 'runners = ["e2e-linux-x64-01"]' in contract
+    assert contract.count("shards =") == 1
+    assert tomllib.loads(contract)["ci"]["shards"] == {"e2e-linux-x64-01": _e2e.SHARDS}
+    # Wired again, nothing moves; a count set by hand stands.
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert (tmp_path / "workshop.toml").read_text("utf-8") == contract
+    by_hand = contract.replace(
+        f'shards = {{ "e2e-linux-x64-01" = {_e2e.SHARDS} }}',
+        'shards = { "e2e-linux-x64-01" = 3 }',
+    )
+    assert by_hand != contract
+    (tmp_path / "workshop.toml").write_text(by_hand, "utf-8")
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert (tmp_path / "workshop.toml").read_text("utf-8") == by_hand

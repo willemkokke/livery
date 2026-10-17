@@ -49,6 +49,7 @@ from typing import Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
+from livery.workshop._shard import platform_leg
 from livery.workshop._speed import forge_shard_row, leg_label, leg_of
 
 #: The series: one row per tree id, the newest kept.
@@ -266,15 +267,19 @@ def _entry(tree: str, entry: dict[str, Any]) -> Verified:
 
 
 def proves(row: Verified, leg: str = "") -> bool:
-    """Whether *row* proves its tree for *leg*: a full row that names the leg.
+    """Whether *row* proves its tree for *leg*: a full row naming the leg's platform.
 
     With *leg* empty, any full row does. Each stored name is read
     through [livery.workshop._speed.leg_label][], so a row written
-    with the forge's display names counts for the leg it names.
+    with the forge's display names counts for the leg it names, and
+    the names and *leg* are compared as platform legs
+    ([livery.workshop.platform_leg][]), so a shard of a platform reads
+    the row the fold stamped under the platform leg as its own.
     """
     if row.scope != FULL:
         return False
-    return not leg or leg in {leg_label(name) for name in row.legs}
+    platform = platform_leg(leg)
+    return not leg or platform in {platform_leg(leg_label(name)) for name in row.legs}
 
 
 def proved(root: Path, leg: str = "") -> tuple[dict[str, Verified], str]:

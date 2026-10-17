@@ -483,3 +483,40 @@ def test_a_prose_only_diff_says_so_and_skips(
     _stepping(monkeypatch)
     _quality.check()
     assert "nothing affected: the branch changes no files" in capsys.readouterr().out
+
+
+def test_a_shard_that_finds_nothing_affected_leaves_the_record_of_an_empty_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _shard
+
+    # The gate job's fold proves a platform's shards from one record
+    # each; a shard whose gate runs no test step leaves the record of
+    # an empty set, the same on every shard of the platform.
+    root = _root(tmp_path, "affected-legs = true\n")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "seed"], cwd=root, check=True)
+    monkeypatch.setattr(git, "fetch", lambda root: None)
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context",
+        lambda: _run("pull_request", "main", leg="check-a-2of2"),
+    )
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda root, step: ())
+    _stepping(monkeypatch)
+    _quality.check()
+    assert "nothing affected: the branch changes no files" in capsys.readouterr().out
+    assert leg_scope(root).scope == "nothing" and leg_scope(root).leg == "check-a-2of2"
+    marker, why = _shard.read_shard(root)
+    assert why == "" and marker is not None
+    assert marker.shard == _shard.Shard(2, 2) and marker.files == ()
+    assert marker.rows == () and marker.digest == _shard.files_digest(())
+    assert marker.before == _shard.checkout_time(root)
+    # One shard of one leaves none.
+    (root / _shard.SHARD_FILE).unlink()
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda: _run("pull_request", "main")
+    )
+    _quality.check()
+    assert not (root / _shard.SHARD_FILE).exists()
