@@ -14,6 +14,7 @@ while it is pre-1.0 a minor version may include breaking changes.
 ### Added
 
 - The coverage union carries a reading at a file's earlier content across the change, keeping it at the lines the change left in place and dropping the rest by name, and livery.git reads a blob by its id by @willemkokke
+- Fm sync mirrors the store's row series alone, and a read outside the mirror names the scope by @willemkokke
 
 ### Changed
 
