@@ -1171,9 +1171,7 @@ def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
     of what the job did, and a job with no gate job to judge it stays
     green whatever its record could not do.
     """
-    import os
-
-    from livery.footman.profile import DROP, as_trace, swept
+    from livery.footman.profile import as_trace, parent_box, swept
     from livery.workshop._ci_context import run_context
     from livery.workshop._metrics import put_leg
     from livery.workshop._points import trace_file
@@ -1182,8 +1180,11 @@ def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
     if run is None:
         print("  not a CI run: a job's row is put by CI only")
         return
-    box = os.environ.get(DROP, "")
-    if not box or not Path(box).is_dir():
+    # The job's box, where the entries before this one left their
+    # fragments: this process was handed it, and runs profiled itself,
+    # so the environment names its own, empty, box instead.
+    box = parent_box()
+    if box is None:
         print(
             "  no profile box in this job's environment; the job's half stays unwritten"
         )
