@@ -114,8 +114,8 @@ shards the contract gives each runner they are
 [livery.workshop.pull_request_shards][], each shard spelled by a
 [livery.workshop.Shard][] at the end of its label, which
 [livery.workshop.platform_leg][] and [livery.workshop.shard_of][]
-split. A shard's share of the test files is what
-[livery.workshop.partition][] packs from the medians
+split. A shard's share of the items a test step partitions, pytest's
+test files, is what [livery.workshop.partition][] packs from the medians
 [livery.workshop.read_durations][] takes over the platform leg's rows
 in the [livery.workshop.DURATIONS][] family, bounded by
 [livery.workshop.checkout_time][]; the set it partitioned has the

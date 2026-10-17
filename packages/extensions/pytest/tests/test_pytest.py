@@ -872,7 +872,7 @@ def test_an_unreadable_durations_store_leaves_every_test_file_to_the_first_shard
     assert asked == [(f"{LEG}-2of2", BOUND)]
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
-    assert left.shard == Shard(2, 2) and left.files == () and left.rows == ()
+    assert left.shard == Shard(2, 2) and left.items == () and left.rows == ()
     assert left.digest == files_digest(files) and left.before == BOUND
     # The first shard runs every file in one call, and records them.
     _sharded(monkeypatch, reason=down, leg=f"{LEG}-1of2")
@@ -888,7 +888,7 @@ def test_an_unreadable_durations_store_leaves_every_test_file_to_the_first_shard
     }
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
-    assert left.shard == Shard(1, 2) and left.files == files and left.rows == ()
+    assert left.shard == Shard(1, 2) and left.items == files and left.rows == ()
     assert left.digest == files_digest(files)
 
 
@@ -918,7 +918,7 @@ def test_with_no_durations_row_before_the_bound_the_first_shard_runs_every_file(
     assert [_selection(call) for call in calls] == [{"packages/one": files}]
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
-    assert left.files == files and left.rows == ()
+    assert left.items == files and left.rows == ()
 
 
 def test_a_suite_with_no_file_in_the_share_is_left_out_of_the_call(
@@ -1020,7 +1020,7 @@ def test_two_shards_hand_the_runner_complementary_shares_of_every_test_file(
         # The record: the slice in packing order, the digest of the
         # whole set, the rows read and the bound.
         assert left.shard == Shard(index + 1, 2)
-        assert left.files == expected[index]
+        assert left.items == expected[index]
         assert left.digest == files_digest(every)
         assert left.rows == rows and left.before == BOUND
         assert left.suites == ("packages/one", "packages/two", "tests")
@@ -1102,7 +1102,7 @@ def test_without_a_leg_the_share_is_by_name_alone_and_no_store_is_read(
         assert "  test.pytest: shard 2of2 runs 1 of 3 test file(s)\n" in out
         left, why = read_shard(tmp_path)
         assert why == "" and left is not None
-        assert left.files == (b,) and left.rows == () and left.before == BOUND
+        assert left.items == (b,) and left.rows == () and left.before == BOUND
         assert left.digest == files_digest((a, b, c))
 
 
@@ -1132,7 +1132,7 @@ def test_the_share_takes_the_run_s_selection_when_it_names_files(
     assert calls == []
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
-    assert left.files == () and left.digest == files_digest((a,))
+    assert left.items == () and left.digest == files_digest((a,))
     assert left.suites == ("packages/one",)
     _sharded(
         monkeypatch, durations={a: 1.0, b: 1.0}, rows=("r1.json",), leg=f"{LEG}-1of2"
@@ -1172,7 +1172,7 @@ def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
     def left() -> tuple[tuple[str, ...], str, tuple[str, ...]]:
         record, why = read_shard(tmp_path)
         assert why == "" and record is not None
-        return record.files, record.digest, record.suites
+        return record.items, record.digest, record.suites
 
     # A record of another shard, another bound or other rows, or one
     # that does not read, is replaced, never added to.
@@ -1252,10 +1252,10 @@ def test_every_run_of_the_step_takes_its_files_from_one_partition_of_the_workspa
             )
         record, why = read_shard(tmp_path)
         assert why == "" and record is not None
-        ran.append(set(record.files))
+        ran.append(set(record.items))
         digests.append(record.digest)
         # Each shard runs its own slice of the one partition, and no more.
-        assert set(record.files) <= set(whole[index - 1])
+        assert set(record.items) <= set(whole[index - 1])
     assert not ran[0] & ran[1]
     assert ran[0] | ran[1] == {a, b, c, w1, w2}
     assert digests[0] == digests[1]
@@ -1313,7 +1313,7 @@ def test_the_top_up_runs_through_the_step_and_is_sliced_by_the_same_partition(
     assert measured.packages == ("packages/one", "packages/two")
     left, why = read_shard(tmp_path)
     assert why == "" and left is not None
-    assert left.files == (b, d) and left.digest == files_digest((a, b, c, d))
+    assert left.items == (b, d) and left.digest == files_digest((a, b, c, d))
     # The leg then leaves parts for both suites, each with a file in the share.
     assert [
         unit.path

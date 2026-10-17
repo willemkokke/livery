@@ -95,8 +95,8 @@ def _put_metrics(
     assert why == ""
 
 
-def _folded(files: tuple[int, int] = (2, 1)) -> dict[str, object]:
-    """The fold's row of the platform: two shards, *files* each, one row read."""
+def _folded(items: tuple[int, int] = (2, 1)) -> dict[str, object]:
+    """The fold's row of the platform: two shards, *items* each, one row read."""
     return {
         "scope": {
             "scope": "affected",
@@ -117,12 +117,12 @@ def _folded(files: tuple[int, int] = (2, 1)) -> dict[str, object]:
                     "leg": f"{LEG}-{index}of2",
                     "job": job,
                     "when": "2026-10-17T09:5{index}:00+00:00",
-                    "files": count,
+                    "items": count,
                     "total_ms": 100.0,
                     "packages": {},
                 }
                 for index, (job, count) in enumerate(
-                    zip((SHARD1, SHARD2), files, strict=True), 1
+                    zip((SHARD1, SHARD2), items, strict=True), 1
                 )
             ],
         },
@@ -150,7 +150,7 @@ def test_a_shards_row_with_no_folded_one_fails_naming_the_fold(
         "shard": {
             "shard": "1of2",
             "digest": "ab" * 32,
-            "files": ["tests/test_a.py"],
+            "items": ["tests/test_a.py"],
             "rows": [],
             "before": "2026-10-17T09:30:00+00:00",
         },
@@ -191,7 +191,7 @@ def test_a_folded_row_answers_for_the_platform_past_the_shards_forge_rows(
     assert leg.fold is not None
     assert leg.fold.count == 2 and leg.fold.digest == "ab" * 32
     assert leg.fold.rows == ("20261017T090000Z-76.json",)
-    assert [(s.shard, s.leg, s.job, s.files) for s in leg.fold.shards] == [
+    assert [(s.shard, s.leg, s.job, s.items) for s in leg.fold.shards] == [
         ("1of2", f"{LEG}-1of2", SHARD1, 2),
         ("2of2", f"{LEG}-2of2", SHARD2, 1),
     ]
@@ -209,13 +209,13 @@ def test_a_runs_durations_row_is_read_on_the_platform_leg_or_is_none(
     assert _e2e_rows.durations_row(work, "77", f"{LEG}-2of2") == (
         _e2e_rows.DurationsRow(series.ref, name, None)
     )
-    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5, "tests/b.py": "x"}}}
+    rows = {name: {"run": "77", "items": {"tests/test_a.py": 1.5, "tests/b.py": "x"}}}
     assert series.put(state_store(work), rows, message="durations: run 77") == ""
     # A shard's label reads its platform's series; a number is a reading.
     found = _e2e_rows.durations_row(work, "77", f"{LEG}-2of2")
     assert found == _e2e_rows.DurationsRow(series.ref, name, {"tests/test_a.py": 1.5})
     assert _e2e_rows.durations_row(work, 77, LEG) == found
-    assert _e2e_rows.durations_row(work, "78", LEG).files is None
+    assert _e2e_rows.durations_row(work, "78", LEG).items is None
     # A series that cannot be read fails naming it.
     subprocess.run(
         ["git", "remote", "set-url", "origin", str(tmp_path / "gone.git")],

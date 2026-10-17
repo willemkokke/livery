@@ -2408,9 +2408,9 @@ def _require_shards(run: Run, facts: RunFacts, *, count: int, ran: bool) -> None
 
     The fold's row lists each shard with its job, and the forge's row of
     that job stands beside it. *ran* says whether the leg ran its gate:
-    then the shards partitioned a test-file set and ran its files;
-    otherwise every shard skipped, so the fold names no file ran and
-    no durations row read.
+    then the shards partitioned a set and ran its items; otherwise
+    every shard skipped, so the fold names no item ran and no
+    durations row read.
     """
     leg = facts.job("check")
     fold = leg.fold
@@ -2433,16 +2433,16 @@ def _require_shards(run: Run, facts: RunFacts, *, count: int, ran: bool) -> None
             " the folded row; the collect keeps each shard's job with its times;"
             f" {run.url}"
         )
-    files = sum(shard.files for shard in fold.shards)
-    if ran and (not fold.digest or not files):
+    items = sum(shard.items for shard in fold.shards)
+    if ran and (not fold.digest or not items):
         fail(
-            f"run {run.id}: the check leg ran and its shards ({labels}) ran no test"
-            f" file; the fold recorded no partition; {run.url}"
+            f"run {run.id}: the check leg ran and its shards ({labels}) ran no"
+            f" item; the fold recorded no partition; {run.url}"
         )
-    if not ran and (files or fold.rows):
+    if not ran and (items or fold.rows):
         fail(
-            f"run {run.id}: every shard skipped, and the fold records {files} test"
-            f" file(s) ran and {len(fold.rows)} durations row(s) read ({labels});"
+            f"run {run.id}: every shard skipped, and the fold records {items}"
+            f" item(s) ran and {len(fold.rows)} durations row(s) read ({labels});"
             f" {run.url}"
         )
 
@@ -2451,21 +2451,21 @@ def _require_durations(root: Path, run: Run, leg: str, *, written: bool) -> None
     """Fail unless *run*'s durations row on *leg*'s platform is there, or is not.
 
     *written* says the gate job's collect wrote the row, naming at
-    least one test file; otherwise the leg ran no test file and the
-    series holds no row of the run.
+    least one item; otherwise the leg ran no item and the series holds
+    no row of the run.
     """
     row = durations_row(root, run.id, leg)
-    if written and not row.files:
+    if written and not row.items:
         fail(
-            f"run {run.id}: no row {row.name} naming a test file on {row.ref}; the"
-            " gate job's collect wrote no seconds per test file for the leg;"
+            f"run {run.id}: no row {row.name} naming an item on {row.ref}; the"
+            " gate job's collect wrote no seconds per item for the leg;"
             f" {run.url}"
         )
-    if not written and row.files is not None:
+    if not written and row.items is not None:
         fail(
-            f"run {run.id}: {row.ref} holds {row.name} with {len(row.files)}"
-            " file(s), and every shard skipped; a leg that ran no test file leaves"
-            f" no durations; {run.url}"
+            f"run {run.id}: {row.ref} holds {row.name} with {len(row.items)}"
+            " item(s), and every shard skipped; a leg that ran no item leaves no"
+            f" durations; {run.url}"
         )
 
 
@@ -2478,7 +2478,7 @@ def _prove_shards(root: Path, run: Run, facts: RunFacts, *, ran: bool) -> None:
     the leg ran its gate (*ran*), the shards partitioned the test files
     and the gate job's collect wrote the run's durations row on the
     platform leg's series; where every shard skipped, the fold names no
-    file and no row is written.
+    item and no row is written.
     """
     _require_shards(run, facts, count=SHARDS, ran=ran)
     leg = facts.job("check").leg
