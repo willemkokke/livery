@@ -149,6 +149,75 @@ def _files(root: Path) -> dict[str, bytes]:
     }
 
 
+def _past_the_refusal(_root: Path, _plans: tuple[MemberPlan, ...]) -> list[str]:
+    raise AssertionError("the local act went past its refusal and wrote floors")
+
+
+def test_the_local_act_refuses_an_edit_to_a_file_it_writes_and_writes_nothing(
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusal first: core's pyproject has an edit of its own, which
+    # the restore after the act would discard.
+    _fake, root = workspace
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.bump_set_floors", _past_the_refusal
+    )
+    _grow(root, "core", "feat: core grows (#1)")
+    pyproject = root / "packages" / "core" / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# by hand\n")
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        local_release(root, resolve_set(root, ("core",)))
+    assert "packages/core/pyproject.toml" in str(caught.value)
+    assert _files(root) == before
+    assert git.dirty_paths(root) == ["packages/core/pyproject.toml"]
+
+
+def test_the_local_act_refuses_a_first_releases_hand_made_changelog_and_keeps_it(
+    workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # tool has never released, and its changelog, which HEAD lacks, was
+    # written by hand: the rollback would delete it.
+    _fake, root = workspace
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.bump_set_floors", _past_the_refusal
+    )
+    _git(root, "tag", "-d", "packages/tool/v0.2.0")
+    _git(root, "rm", "-q", "packages/tool/CHANGELOG.md")
+    _git(root, "commit", "-m", "chore: tool has no changelog yet")
+    changelog = root / "packages" / "tool" / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\nWritten by hand.\n")
+    before = _files(root)
+    with pytest.raises(_FAILURES) as caught:
+        local_release(root, resolve_set(root, ("tool",)))
+    assert "packages/tool/CHANGELOG.md" in str(caught.value)
+    assert _files(root) == before
+
+
+def test_an_untracked_file_outside_what_the_local_act_writes_does_not_refuse(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    skip_unless_installed("python")
+    _fake, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    for stray in (root / "conanbuild.sh", root / "packages" / "core" / "notes.txt"):
+        stray.write_text("stray\n")
+    before = _files(root)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
+    )
+    local_release(root, resolve_set(root, ("core",)))
+    assert "would release: livery-core v0.3.0" in capsys.readouterr().out
+    assert _files(root) == before
+    assert sorted(git.dirty_paths(root)) == ["conanbuild.sh", "packages/core/notes.txt"]
+
+
 def test_a_first_release_failing_its_legs_leaves_the_tree_as_it_was(
     workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,

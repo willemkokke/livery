@@ -255,6 +255,19 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     keep them. Each path the rollback could not put back is printed
     with the reason, and the other paths are put back all the same.
     """
+    for path, reason in _put_back(root, _prepare_paths(root, members)):
+        print(f"  the rollback could not restore {path}: {reason}")
+
+
+def _prepare_paths(root: Path, members: tuple[Package, ...]) -> tuple[str, ...]:
+    """The paths prepare may write for *members*, each once, from *root*.
+
+    Each member's changelog, its floor homes and the files its set's
+    stamp writes a version into, then the workspace lock and the set's
+    manifest, with forward slashes. The rollback puts back exactly
+    these, and the local act refuses while one of them has changes of
+    its own, so the two read the same list.
+    """
     from livery.workshop._publish import MANIFEST
 
     paths: list[str] = []
@@ -271,8 +284,49 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
                 for home in _lifecycle.version_files(package)
             )
     paths.extend(("uv.lock", MANIFEST))
-    for path, reason in _put_back(root, tuple(dict.fromkeys(paths))):
-        print(f"  the rollback could not restore {path}: {reason}")
+    return tuple(dict.fromkeys(paths))
+
+
+def _require_unchanged(root: Path, members: tuple[Package, ...]) -> None:
+    """Refuse while a path prepare may write has changes of its own, naming each.
+
+    The rollback returns each of those paths to HEAD and deletes one
+    HEAD lacks, so an uncommitted edit there, or a file a person made
+    there by hand, would be lost. A change anywhere else in the tree
+    does not refuse.
+
+    Raises:
+        Failed: naming each such path, modified, staged, deleted or
+            untracked, and saying to commit or stash it first.
+    """
+    out = git.run(
+        root,
+        "status",
+        "--porcelain",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        *_prepare_paths(root, members),
+    )
+    fields = out.split("\0")
+    changed: list[str] = []
+    index = 0
+    while index < len(fields):
+        record = fields[index]
+        index += 1
+        if len(record) < 4:
+            continue
+        changed.append(record[3:])
+        if record[0] in "RC":
+            # A rename or a copy names the path it came from next.
+            index += 1
+    if changed:
+        listed = "".join(f"\n  {path}" for path in sorted(set(changed)))
+        fail(
+            "the local act writes these files and then restores them from"
+            f" HEAD, so the changes they have now would be lost:{listed}\n"
+            "Commit or stash them first, then run it again."
+        )
 
 
 def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
@@ -918,7 +972,11 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     never asked because nothing leaves the machine. The derivation
     reads origin's receipts, fetched first, so it names the versions
     the armed act would ([livery.workshop._release_driver.fresh_receipts][]).
+    Before any of it, the act refuses while a file it would write has
+    changes of its own, since the restore would discard them; a change
+    anywhere else in the tree is left alone.
     """
+    _require_unchanged(root, members)
     fresh_receipts(root)
     plans = derive_plans(root, members)
     print("  act: local; nothing leaves this machine")
