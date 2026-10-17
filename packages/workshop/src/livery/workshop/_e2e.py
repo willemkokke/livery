@@ -2731,6 +2731,8 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     _main_settled(root, kind)
     stamp = git.head_sha(root)
     probe = root / "tests" / "test_tests_leg.py"
+    # A fresh newborn has no workspace tests yet: this file is the first.
+    probe.parent.mkdir(exist_ok=True)
     probe.write_text(
         '"""A workspace-tests change: the loop proves the tests leg on it."""\n'
         "\n"
