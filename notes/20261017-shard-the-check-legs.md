@@ -1,12 +1,14 @@
 # Shard the check legs across runners, and carry coverage across a change
 
-Status: phase 1 complete 2026-10-17. Phase 2 built the same day: parts 1
-to 7 merged (#1760, #1768, #1769, #1770, #1775, #1776, #1782) with the
-fixes the first live sharded runs found (#1792, #1797 merged; #1804 and
-#1808 in review); the loop's two-shard scenario (#1786) built, its pass
-pending #1804; the acceptance on this repository is PR #1789, unarmed,
-on its third run. Phase 3's table, `fm ci.balance`, merged ahead (#1759);
-its `--write`, `--submit` and nightly entry wait on #1757.
+Status: phases 1 and 2 complete 2026-10-17. Phase 2's parts 1 to 7
+merged (#1760, #1768, #1769, #1770, #1775, #1776, #1782) with the fixes
+the live sharded runs found (#1792, #1797, #1804, #1808); the loop's
+two-shard pass is green and merged (#1811); this repository runs as
+three macOS and four Windows shards (#1789 merged). Phase 3's table
+merged ahead (#1759), its reader of the test wall (#1815), and its
+write side, `--write`, `--submit` and the nightly entry, is in review
+(#1819). Open after the plan: the first shard's lighter slice (#1818),
+the `items` rename (#1820), and the macOS count.
 
 ## The prompt (Willem)
 
@@ -409,6 +411,19 @@ Acceptance:
   `fm ci.timings` after the merge shows the slowest leg under 400 s.
 - The plan's status line names phase 2 complete, in the same change.
 
+Phase 2 landed 2026-10-17. The loop's two-shard pass proved the fold
+from the rows on four runs (pass 20261017T140934Z). PR #1789's third
+run, 39045011081, was green on all eight check jobs and the gate. The
+shards' own walls: macOS 261, 333 and 282 s against 952 s unsharded;
+Windows 294, 352 and 356 s on three shards and 643 s on the first,
+against 1329 s; ubuntu 504 s unsharded. The first shard carries every
+step the others leave to it and gets no lighter slice for it, so the
+acceptance's 400 s holds for every shard but the first on Windows:
+#1818. The run's own wall was 1421 s, of which 500 to 1050 s per
+shard was queueing behind the release wave's legs and other runs,
+which is where the macOS count's cost shows: three macOS shards on two
+concurrent runs exceed GitHub's five.
+
 ### Phase 3: the balancer
 
 Deliverables:
@@ -438,6 +453,8 @@ Acceptance:
 |---|---|
 | counts set by hand in phase 2 | `fm ci.balance --write`, phase 3 |
 | the mode, `pull-request-runners` on linux | runners decided per change, later |
+| the first shard's slice as heavy as the others' | #1818, the head start of the unsharded steps' time |
+| `files` as the name of a shard's items | #1820, the `items` rename |
 
 ## Decision record
 
@@ -523,6 +540,20 @@ Acceptance:
 - 2026-10-17, a hold on merges to main for about an hour, asked by
   the session landing the release wave (the train refuses a moved
   base): the open pull requests were disarmed meanwhile.
+- 2026-10-17, the agent: the trace had the test step's span all
+  along, as an async pair a step straddling a sibling is drawn as;
+  the timing row's reader read slices alone (#1815). The balancer
+  proposes once three full green rows carry the test wall.
+- 2026-10-17, the agent: phase 3's write side (#1819) rewrites the
+  two keys in place keeping the contract's comments, submits the
+  day's branch unarmed as ruled, and runs on every nightly; its
+  submit extracted the commit and start verbs' bodies into functions,
+  since a serial verb cannot be body-called inside a run.
+- 2026-10-17, measured on the first sharded merges: queueing, not
+  the legs' walls, set the run's wall in the busy hour, with eight
+  check jobs per run against GitHub's twenty and five macOS. The
+  macOS count of 2 would keep two concurrent runs within five;
+  Willem is looking at where macOS's test time goes before ruling.
 
 ## Open
 
