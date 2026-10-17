@@ -1111,14 +1111,116 @@ def ci_metrics_collect() -> None:
 
     Runs in the gate job before its verdict. Reads the per-run refs
     the legs wrote, asks the forge for the run's jobs and their
-    steps, puts the run's file on the metrics series under its
-    window, and drops the per-run refs when every completed job is
-    green; a red job keeps them, since the forge's re-run of the
-    failed jobs runs this gate again without its legs. Fails open
-    loudly: every reason is printed and the exit stays 0.
+    steps, and puts the run's file on the metrics series under its
+    window. The per-run refs stay for `ci.metrics.drop`, the job's
+    last entry, so a red verdict leaves them for the forge's re-run
+    of the job, which runs without its legs. Fails open loudly: every
+    reason is printed and the exit stays 0.
     """
     repo, root = _resolved()
     metrics_collect_flow(root, repo)
+
+
+def drop_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
+    """Drop the run's per-run refs once every half is in; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._metrics import drop_halves
+    from livery.workshop._points import half_writers
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: the run's per-run refs are dropped by CI only")
+        return
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/",)):
+        for line in drop_halves(
+            root,
+            repo,
+            run,
+            sha=git.head_sha(root),
+            job=job,
+            writers=half_writers(root, point),
+        ):
+            print(line)
+
+
+@metrics.task(name="drop")
+def ci_metrics_drop(
+    *,
+    point: Annotated[str, doc("the point whose jobs put the run's halves")] = "",
+    job: Annotated[str, doc("this job's name as the forge lists it")] = "",
+) -> None:
+    """Drop the run's per-run refs, once every job that put a half is green.
+
+    The last entry of a job that collected the run's row, after its
+    verdict: this job is green when it runs. The refs stay while
+    another job that puts a half (a check leg, or a sibling job of a
+    point with no gate job) has not completed green, or any completed
+    job is red, so a re-run finds what the legs put and the last of a
+    point's collecting jobs is the one that drops. Fails open loudly:
+    every reason is printed and the exit stays 0.
+    """
+    repo, root = _resolved()
+    drop_flow(root, repo, point=point, job=job)
+
+
+def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
+    """Put this job's half from its box, collect the run's row, drop when last.
+
+    Every line is printed and none is a verdict: the row is a record
+    of what the job did, and a job with no gate job to judge it stays
+    green whatever its record could not do.
+    """
+    import os
+
+    from livery.footman.profile import DROP, as_trace, swept
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._metrics import put_leg
+    from livery.workshop._points import trace_file
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: a job's row is put by CI only")
+        return
+    box = os.environ.get(DROP, "")
+    if not box or not Path(box).is_dir():
+        print(
+            "  no profile box in this job's environment; the job's half stays unwritten"
+        )
+    else:
+        events, origin = swept(box)
+        trace = root / trace_file("job row")
+        trace.write_text(as_trace(events, origin=origin), encoding="utf-8")
+        lines, why = put_leg(root, run, job=job, label=run.leg, trace=trace)
+        for line in lines:
+            print(line)
+        if why:
+            print(
+                f"  {job}: the half could not be put ({why}); the row goes without it"
+            )
+    metrics_collect_flow(root, repo)
+    drop_flow(root, repo, point=point, job=job)
+
+
+@metrics.task(name="record")
+def ci_metrics_record(
+    *,
+    point: Annotated[str, doc("the point this job belongs to")] = "",
+    job: Annotated[str, doc("this job's name as the forge lists it")] = "",
+) -> None:
+    """Record this job's run: its half, the run's row, the refs dropped when last.
+
+    The last entry of every job of a point with no gate job (the
+    nightly, the release, a point a package contributes). The half is
+    the union of the traces the job's entries left in its profile
+    box, put on the job's per-run ref; the collect then writes the
+    run's row from every half present, so each job's write carries
+    the jobs before it; the drop takes the refs once every job of the
+    point has completed green. Fails open loudly: every reason is
+    printed and the exit stays 0.
+    """
+    repo, root = _resolved()
+    record_flow(root, repo, point=point, job=job)
 
 
 profile = ci.group("profile", help="A run as one timeline")

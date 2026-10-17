@@ -1247,6 +1247,16 @@ def due(every: str, on: date) -> tuple[bool, date]:
 #: the run's row is folded in.
 COLLECT = "ci.metrics.collect"
 
+#: The task that drops the run's per-run refs, the last entry of a job
+#: that collected: after its verdict, and only once every job that
+#: puts a half has completed green.
+DROP_TASK = "ci.metrics.drop"
+
+#: The task that ends every job of a point with no verdict job: it
+#: puts the job's half from the traces its entries left, collects the
+#: run's row, and drops the refs when it is the run's last green job.
+RECORD_TASK = "ci.metrics.record"
+
 #: The workshop's own schedule. Every entry runs profiled, so a job's
 #: own timeline is the union of the work it did; the gate's check job
 #: also records the leg's timing row, and its verdict job collects the
@@ -1278,12 +1288,17 @@ BUILTIN: tuple[Entry, ...] = (
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.
     Entry("gate", "gate", "ci.verified.stamp"),
-    # Last, so the forge's merge follows it as closely as it can: a
-    # release pull request whose base moved under its set is refused
-    # before the merge, where the publish would refuse it after. Green
-    # off a release branch. The stamp before it holds either way: it
-    # records the tree, and the tree is green.
+    # After the stamp, so the forge's merge follows it as closely as
+    # it can: a release pull request whose base moved under its set is
+    # refused before the merge, where the publish would refuse it
+    # after. Green off a release branch. The stamp before it holds
+    # either way: it records the tree, and the tree is green.
     Entry("gate", "gate", "workflow.release.check-fresh"),
+    # Last of all, after a green verdict and whatever the extensions
+    # add: the legs' per-run refs go only once this job has nothing
+    # left to read from them, so a red attempt leaves them for its
+    # re-run, which runs this job again without its legs.
+    Entry("gate", "gate", DROP_TASK, ("--point=gate", "--job={display}"), last=True),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     # The wave is dispatched from the gate job itself, right after
     # main's own verdict: the verb reads the manifest at HEAD and the
@@ -1297,10 +1312,13 @@ BUILTIN: tuple[Entry, ...] = (
     # not own.
     Entry("merge", "gate", "janitor", last=True),
     # The clock's point: the doctor first, so the night's record opens
-    # with the runner's and the forge's state, then the whole check with
-    # the tests that declare the nightly point selected in, on every
-    # python of the matrix.
-    Entry("nightly", "nightly", "doctor"),
+    # with the runner's and the forge's state, mending what footman
+    # can (a runner that keeps its caches across jobs holds the scratch
+    # of processes that died there; a finding that stands after the
+    # mend is still red), then the whole check with the tests that
+    # declare the nightly point selected in, on every python of the
+    # matrix.
+    Entry("nightly", "nightly", "doctor", ("--fix",)),
     Entry("nightly", "nightly", "check"),
     # The wave, at the squash the dispatch names: the publish that cuts
     # the receipts. The verb decides for itself what the ref holds, and
@@ -1417,11 +1435,72 @@ def _join_entries(composed: list[Entry], item: JobContribution) -> None:
 
 
 def schedule(root: Path) -> tuple[Entry, ...]:
-    """Every entry: the builtin ones, the packages' contributed ones, the contract's."""
-    return (
+    """Every entry: the builtin ones, the packages' contributed ones, the contract's.
+
+    Then the record each job of a point without a verdict job ends
+    with (`recording`), after every entry the contract gave the job.
+    """
+    scheduled = (
         builtin_schedule()
         + tuple(item.entry for item in contributed(root))
         + declared(root)
+    )
+    return scheduled + recording(root, scheduled)
+
+
+def _has_verdict_job(point: Point) -> bool:
+    """Whether *point*, or the point it inherits, declares a verdict job."""
+    verdicts = {name for name, _job in verdict_jobs()}
+    return point.name in verdicts or point.inherits in verdicts
+
+
+def recording(root: Path, scheduled: tuple[Entry, ...]) -> tuple[Entry, ...]:
+    """The record ending every job of each point of *root* with no verdict job.
+
+    A verdict job collects what its point's legs put; a point without
+    one (the nightly, the release, every point a package contributes)
+    would leave no row of its run, so each of its jobs ends with
+    `RECORD_TASK`, which puts the job's own half, collects the run's
+    row and drops the per-run refs when it is the run's last green
+    job. The jobs are the point's declared ones and any a
+    ``[[ci.schedule]]`` entry in *scheduled* names.
+    """
+    entries: list[Entry] = []
+    for point in points(root):
+        if _has_verdict_job(point):
+            continue
+        jobs = [job.name for job in point.jobs]
+        for entry in scheduled:
+            if entry.point == point.name and entry.job not in jobs:
+                jobs.append(entry.job)
+        entries.extend(
+            Entry(
+                point.name,
+                job,
+                RECORD_TASK,
+                (f"--point={point.name}", "--job={display}"),
+                last=True,
+            )
+            for job in jobs
+        )
+    return tuple(entries)
+
+
+def half_writers(root: Path, point: str) -> tuple[str, ...]:
+    """The jobs of *point* that put a half of the run's row, by their schedule names.
+
+    The check legs of a point with a verdict job (`ci.leg`), and every
+    job of a point without one (`RECORD_TASK`). A forge lists a matrix
+    job's legs under the job's name with the leg in brackets, so a
+    reader matches by prefix.
+    """
+    return tuple(
+        dict.fromkeys(
+            entry.job
+            for entry in schedule(root)
+            if entry.task in ("ci.leg", RECORD_TASK)
+            and entry.point in (INHERITS.get(point), point)
+        )
     )
 
 

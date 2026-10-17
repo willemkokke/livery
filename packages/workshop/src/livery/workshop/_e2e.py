@@ -2232,6 +2232,26 @@ def _log_says(
         )
 
 
+def _require_task(facts: RunFacts, prefix: str, task: str) -> None:
+    """Fail unless a job of *facts* named by *prefix* ran *task*, by its row.
+
+    A matrix job is several forge jobs under one name (``nightly
+    (3.14)``), so any one of them running the task is the proof.
+    """
+    found = [job for name, job in facts.jobs.items() if name.startswith(prefix)]
+    if not found:
+        fail(
+            f"run {facts.run}: the row names no job starting with {prefix!r};"
+            f" its jobs are {', '.join(sorted(facts.jobs)) or 'none'}"
+        )
+    if not any(task in job.tasks for job in found):
+        ran = sorted({t for job in found for t in job.tasks})
+        fail(
+            f"run {facts.run}: no {prefix} job ran {task}; the row names"
+            f" {', '.join(ran) or 'no task'}"
+        )
+
+
 def _require_scope(
     run: Run,
     facts: RunFacts,
@@ -2805,10 +2825,9 @@ def _prove_nightly(root: Path, kind: str) -> None:
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, "nightly", limit=1)[0]
-    jobs = repo.checks.jobs(run.id)
-    # The nightly's job writes no row of its own yet (#1748), so the
-    # verification's own line is the proof it ran.
-    _log_says(repo, run, jobs, "nightly", " passes its own tests from site-packages")
+    # The nightly's jobs record the run's row themselves; the row names
+    # the scheduled verification among the tasks a job ran.
+    _require_task(run_facts(root, run.id), "nightly", VERIFY_TASK)
     print(
         f"  nightly: proven by hand (run {run.id}: dispatched, followed to green,"
         " the scheduled verification ran, and the point read back green)"
@@ -2876,17 +2895,9 @@ def _prove_contributed_point(root: Path, kind: str) -> None:
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, CONTRIBUTED_POINT, root)[0]
-    jobs = repo.checks.jobs(run.id)
-    # The point's job writes no row of its own yet (#1748), so the
-    # task's own line is the proof it ran.
-    _log_says(
-        repo,
-        run,
-        jobs,
-        CONTRIBUTED_POINT,
-        f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: extensions"
-        f" (packages/{CONTRIBUTING_MEMBER})",
-    )
+    # The point's job records the run's row itself; the row names the
+    # member's declared task among the tasks the job ran.
+    _require_task(run_facts(root, run.id), CONTRIBUTED_POINT, "extensions")
     print(
         f"  {CONTRIBUTED_POINT}: proven by hand (run {run.id}: the contributed"
         " point dispatched, its task run, and the point read back green)"

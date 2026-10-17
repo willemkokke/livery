@@ -229,17 +229,27 @@ def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(
     assert why == "" and lines is not None and lines.data["scope"] == "full"
 
 
-def test_collect_drops_the_legs_measured_lines_with_its_half(
+def test_the_drop_takes_the_legs_measured_lines_with_its_half(
     work: Path, tmp_path: Path
 ) -> None:
-    # The gate job's collect drops a leg's per-run ref once the run's
-    # file landed, and the suites the leg measured go with it.
+    # The gate job's collect leaves a leg's per-run ref for its last
+    # entry, the drop, which takes it once every leg is green; the
+    # suites the leg measured go with it.
     from livery.forge.testing import FakeForge
-    from livery.workshop._metrics import ROW_FILE, collect, put_leg, run_ref
+    from livery.workshop._metrics import (
+        ROW_FILE,
+        collect,
+        drop_halves,
+        put_leg,
+        run_ref,
+    )
 
     fake = FakeForge()
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
+    # The drop asks the forge for the run's jobs; a run the forge does
+    # not list keeps the refs, so the fake has one for this sha.
+    fake.push("owner", "repo", "main", sha="b" * 40)
     why = coverage_record.leave_run(
         work, RUN, leg=LEG, scope="verified", packages=(), units={}
     )
@@ -253,7 +263,9 @@ def test_collect_drops_the_legs_measured_lines_with_its_half(
     held = git.read(state_store(work), ref).files
     assert held is not None
     assert set(held) == {ROW_FILE, coverage_record.RUN_FILE}
-    lines = collect(work, repo, RUN, sha="b" * 40)
+    collect(work, repo, RUN, sha="b" * 40)
+    assert git.read(state_store(work), ref).files == held
+    lines = drop_halves(work, repo, RUN, sha="b" * 40, job="gate", writers=())
     assert f"  {ref}: dropped" in lines
     assert git.read(state_store(work), ref).files is None
     assert coverage_record.run_legs(work, RUN) == ([], "")

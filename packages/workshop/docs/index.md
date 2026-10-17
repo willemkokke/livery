@@ -1689,12 +1689,18 @@ per-run ref once, in its last entry, `ci.leg`: its timing row and
 every file the leg's other entries left for it, the coverage
 extension's measured suites among them. The gate job's collect folds
 the sections its judges left into the run's row, a number per
-package each, which `fm ci.timings` renders as a trend.
+package each, which `fm ci.timings` renders as a trend, and the
+job's last entry drops the per-run refs once every leg has completed
+green, so a red attempt leaves them for its re-run. A point with no
+gate job (the nightly, the release, a point a package contributes)
+ends each of its jobs with `ci.metrics.record`: the job's half from
+the traces its entries left, the run's row collected from every half
+present, and the refs dropped by the last job to finish.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
-| `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
-| `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
+| `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job; each job of a point without one |
+| `run/<id>/<leg>` | a job's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the run's last green job drops it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |

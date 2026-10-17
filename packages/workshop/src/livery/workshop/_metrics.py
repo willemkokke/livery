@@ -8,18 +8,23 @@ the forge times them, beside the per-task durations and lane waits
 the leg's own trace recorded, and the test time per package summed
 from the trace's pytest slices.
 
-Two writers, both inside CI. Each check leg ends with `put_leg`: it
+Three writers, all inside CI. Each check leg ends with `put_leg`: it
 reads the trace the profiled gate wrote and puts the task half of
 its row on the leg's per-run ref, in one write with every file the
 leg's other entries left in its spool (`LEG_SPOOL`); a write that
 fails is a red leg. The run's gate job runs `collect`: it reads the
 per-run refs, asks the forge for the run's jobs, joins the two
-halves, folds in the sections the job's judges left (`RUN_ROW`),
-puts the run's file on the series under its window, and drops the
-per-run refs; it fails open loudly, a printed reason and never a
-red job. Local runs read: `render` is what `fm ci.timings` prints,
-the latest value, p50, and p90 per metric over the window, the
-movers against a base window, and each section's trend.
+halves, folds in the sections the job's judges left (`RUN_ROW`) and
+puts the run's file on the series under its window; it fails open
+loudly, a printed reason and never a red job. The run's last green
+job runs `drop_halves`: the per-run refs go once every job that
+writes a half has completed green, so a re-run of a red gate job
+still finds what its legs put, and a point with no gate job, where
+every job puts a half and collects, keeps each job's half until the
+last one has folded it in. Local runs read: `render` is what
+`fm ci.timings` prints, the latest value, p50, and p90 per metric
+over the window, the movers against a base window, and each
+section's trend.
 """
 
 from __future__ import annotations
@@ -36,7 +41,7 @@ from livery import git
 from livery.workshop._ci_context import RunContext, state_store
 
 if TYPE_CHECKING:
-    from livery.forge import Job, Repository
+    from livery.forge import Job, Repository, Run
 
 #: The rows' schema. A reader skips a row of another version and
 #: names it; a new field is the same version, a changed meaning is
@@ -51,11 +56,10 @@ SERIES = git.Series("metrics", window=300, schema=SCHEMA)
 #: The per-run family: one series per run and check leg, keyed
 #: ``(run, leg)``, holding the leg's half of its timing row, and beside
 #: it every file the leg's entries left for its one write, until the
-#: run's gate job collects the halves and drops the refs, those files
-#: included. A half older than six hours outlived a run that was
-#: cancelled or died before its gate job could collect, and the janitor
-#: drops it: no run lasts that long, and the forge has no run-by-id
-#: lookup to ask.
+#: run's last green job drops the refs, those files included. A half
+#: older than six hours outlived a run that was cancelled or died
+#: before its last job could drop, and the janitor drops it: no run
+#: lasts that long, and the forge has no run-by-id lookup to ask.
 RUNS: git.Keyed = git.Keyed(
     "run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6)
 )
@@ -426,51 +430,19 @@ def _forge_row(job: Job, *, created: str, now: str) -> dict[str, Any]:
     }
 
 
-def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[str]:
-    """Join the legs' halves with the forge's times into the run's file; what happened.
+def _forge_jobs(
+    repo: Repository, run: RunContext, *, sha: str
+) -> tuple[Run | None, dict[str, Job], list[str]]:
+    """The forge's run for *run* and its jobs by name; the lines about the lookup.
 
-    Every line names what was done or why not. Nothing is written
-    when no leg left a row, and a per-run ref is dropped only after
-    the run's file landed and while no completed job is red: a failed
-    put or a red sibling job keeps the halves, since the forge's
-    re-run of the failed jobs runs the gate again without its legs,
-    and that union reads what the first attempt left. A job the forge
-    does not know keeps its trace half and
-    is named; a row of another schema is skipped and named. The run
-    is looked up under the head the runner's event names, because a
-    pull request's checkout is a merge commit the forge never files
-    a run under; *sha* is the checkout, the fallback and the row's
-    own record. Every job the forge lists is recorded, the legs with
-    their traces, the others with their forge times alone, and the
-    run's own wall from its start to this collection.
+    The run is looked up under the head the runner's event names,
+    because a pull request's checkout is a merge commit the forge
+    never files a run under; *sha* is the checkout, the fallback. A
+    forge that numbers the run differently from the environment (a
+    pull request's merge sha, say) still yields the newest run for
+    the sha, named as a substitution.
     """
     lines: list[str] = []
-    keys = RUNS.listed(state_store(root), run.run_id)
-    if keys is None:
-        return [
-            f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed;"
-            " nothing collected"
-        ]
-    halves: dict[str, dict[str, Any]] = {}
-    refs: list[str] = []
-    for key in keys:
-        series = RUNS.series(*key)
-        refs.append(series.ref)
-        found, why = series.row(state_store(root), ROW_FILE)
-        if why:
-            lines.append(f"  {series.ref}: {why}; skipped")
-            continue
-        if found is None:
-            lines.append(f"  {series.ref}: empty; skipped")
-            continue
-        halves[str(found.data.get("job", key[-1]))] = found.data
-    if not halves:
-        lines.append(f"  run {run.run_id}: no leg left a row; nothing collected")
-        return lines
-    # The run by its own id among the runs for this sha; a forge that
-    # numbers the run differently from the environment (a pull
-    # request's merge sha, say) still yields the newest run for the
-    # sha, named as a substitution.
     head = run.head_sha or sha
     runs = repo.checks.runs(head_sha=head)
     forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
@@ -483,6 +455,49 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     jobs = (
         {job.name: job for job in repo.checks.jobs(forge_run.id)} if forge_run else {}
     )
+    return forge_run, jobs, lines
+
+
+def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[str]:
+    """Join the legs' halves with the forge's times into the run's file; what happened.
+
+    Every line names what was done or why not. Nothing is written
+    when no leg left a row. The per-run refs stay: `drop_halves`
+    takes them once every half is in, so a re-run of a red gate job
+    still unions what its legs put, and a point whose every job
+    collects folds each earlier job's half into its own write. A job
+    the forge does not know keeps its trace half and is named; a row
+    of another schema is skipped and named. The run is looked up
+    under the head the runner's event names (`_forge_jobs`); *sha*
+    is the checkout, the fallback and the row's own record. Every
+    job the forge lists is recorded, the legs with their traces, the
+    others with their forge times alone, and the run's own wall from
+    its start to this collection.
+    """
+    lines: list[str] = []
+    keys = RUNS.listed(state_store(root), run.run_id)
+    if keys is None:
+        return [
+            f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed;"
+            " nothing collected"
+        ]
+    halves: dict[str, dict[str, Any]] = {}
+    for key in keys:
+        series = RUNS.series(*key)
+        found, why = series.row(state_store(root), ROW_FILE)
+        if why:
+            lines.append(f"  {series.ref}: {why}; skipped")
+            continue
+        if found is None:
+            lines.append(f"  {series.ref}: empty; skipped")
+            continue
+        halves[str(found.data.get("job", key[-1]))] = found.data
+    if not halves:
+        lines.append(f"  run {run.run_id}: no leg left a row; nothing collected")
+        return lines
+    head = run.head_sha or sha
+    forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
+    lines.extend(looked)
     if forge_run is None:
         lines.append(
             f"  run {run.run_id}: the forge lists no such run for {head[:12]};"
@@ -548,17 +563,69 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     lines.append(
         f"  {SERIES.ref}: run {run.run_id} recorded, {len(entry['jobs'])} job(s)"
     )
-    red = sorted(
-        f"{name}: {job.conclusion}"
-        for name, job in jobs.items()
-        if job.status == "completed" and job.conclusion not in ("success", "skipped")
-    )
-    if red:
+    return lines
+
+
+def _green(job: Job) -> bool:
+    """Whether *job* has completed and did not fail."""
+    return job.status == "completed" and job.conclusion in ("success", "skipped")
+
+
+def drop_halves(
+    root: Path,
+    repo: Repository,
+    run: RunContext,
+    *,
+    sha: str,
+    job: str,
+    writers: tuple[str, ...],
+) -> list[str]:
+    """Drop the run's per-run refs once every half is in and nothing is red.
+
+    Runs as the last entry of a job that collected, after its own
+    verdict, so its own job is green when it runs and is left out of
+    the question. *writers* names the jobs that put a half, as the
+    schedule spells them (``check``); a forge job answers to a writer
+    by its display name's prefix (``check (ubuntu-latest, 3.14)``).
+    The refs stay, and the lines say so, while a writer other than
+    *job* has not completed green or any completed job is red: a
+    re-run of a red job finds what the legs put, and the last of a
+    point's collecting jobs is the one that drops. A job the forge
+    does not list, or a run it does not know, keeps the refs too; the
+    janitor's six-hour sweep is the net under every kept ref.
+    """
+    lines: list[str] = []
+    keys = RUNS.listed(state_store(root), run.run_id)
+    if keys is None:
+        return [f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed; kept"]
+    if not keys:
+        return [f"  run {run.run_id}: no per-run ref to drop"]
+    forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
+    lines.extend(looked)
+    if forge_run is None:
         lines.append(
-            "  the per-run refs stay for a re-run of the gate: " + ", ".join(red)
+            f"  run {run.run_id}: the forge lists no such run; the per-run refs stay"
         )
         return lines
-    for ref in sorted(refs):
+    waiting = sorted(
+        f"{name}: {found.conclusion or found.status}"
+        for name, found in jobs.items()
+        if name != job
+        and any(name == writer or name.startswith(f"{writer} (") for writer in writers)
+        and not _green(found)
+    )
+    red = sorted(
+        f"{name}: {found.conclusion}"
+        for name, found in jobs.items()
+        if found.status == "completed" and not _green(found)
+    )
+    if waiting or red:
+        lines.append(
+            "  the per-run refs stay: " + ", ".join(dict.fromkeys([*red, *waiting]))
+        )
+        return lines
+    for key in sorted(keys):
+        ref = RUNS.series(*key).ref
         gone = git.drop(state_store(root), ref)
         lines.append(f"  {ref}: {gone or 'dropped'}")
     return lines

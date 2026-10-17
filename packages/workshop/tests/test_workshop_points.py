@@ -285,11 +285,17 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
         "toolroom.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
         in out
     )
-    assert [argv[-1] for argv in seen] == ["doctor", "check"]
+    assert [argv[2] for argv in seen] == ["doctor", "check", "ci.metrics.record"]
     monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
     seen.clear()
     _points.run_point(root, "nightly", "nightly", spawn=green)
-    assert [argv[-1] for argv in seen] == ["doctor", "check", "--submit"]
+    assert [argv[2] for argv in seen] == [
+        "doctor",
+        "check",
+        "toolroom.refresh",
+        "ci.metrics.record",
+    ]
+    assert seen[2][-1] == "--submit"
 
 
 def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
@@ -330,10 +336,10 @@ def test_an_entry_that_runs_once_runs_on_the_first_leg_alone(
     assert (
         f"ci.e2e (workshop.toml) runs once, on the first leg ({first}); skipped" in out
     )
-    assert [argv[-1] for argv in seen] == ["doctor", "check"]
+    assert [argv[2] for argv in seen] == ["doctor", "check", "ci.metrics.record"]
     seen.clear()
     _points.run_point(root, "nightly", "nightly", python=first, spawn=green)
-    assert [argv[-3:] for argv in seen][-1] == [
+    assert [argv[-3:] for argv in seen][-2] == [
         "ci.e2e",
         "--scenario=release",
         "--from-main",
@@ -606,7 +612,8 @@ def test_a_red_scheduled_entry_leaves_the_ones_after_it_running(
 
     with pytest.raises(_FAILURES, match=r"nightly/nightly: acme\.first exited 3"):
         _points.run_point(root, "nightly", "nightly", spawn=spawn)
-    assert seen[-2:] == ["acme.first", "acme.second"]
+    # The job's own record runs after the scheduled entries, red or not.
+    assert seen[-3:] == ["acme.first", "acme.second", "ci.metrics.record"]
     assert (
         "nightly/nightly: acme.first exited 3; the scheduled entries after it"
         " still run" in capsys.readouterr().out
@@ -622,19 +629,30 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     # The merge point inherits the gate's jobs and adds its own.
     assert _points.jobs_of(root, "merge") == ("check", "docs", "gate", "govern")
-    # The nightly point runs the whole check, its own tests selected in.
+    # The nightly point runs the doctor, mending what footman can, then
+    # the whole check, its own tests selected in, then records its row:
+    # a point with no gate job has no other writer of the run's row.
     assert _points.jobs_of(root, "nightly") == ("nightly",)
     assert _points.entries_for(root, "nightly", "nightly") == (
-        _points.Entry("nightly", "nightly", "doctor"),
+        _points.Entry("nightly", "nightly", "doctor", ("--fix",)),
         _points.Entry("nightly", "nightly", "check"),
+        _points.Entry(
+            "nightly",
+            "nightly",
+            "ci.metrics.record",
+            ("--point=nightly", "--job={display}"),
+            last=True,
+        ),
     )
     # The release's job is declared; a point's own name is a job of it
     # too, green and empty until the contract attaches a task. A
     # workspace whose packages hold no nanobind has no wheels job.
     assert _points.jobs_of(root, "release") == ("publish",)
-    # The wave's verbs are the release's entries, at the dispatched ref.
+    # The wave's verbs are the release's entries, at the dispatched ref,
+    # and the job records its row last.
     assert [e.task for e in _points.entries_for(root, "release", "publish")] == [
-        "workflow.release.publish"
+        "workflow.release.publish",
+        "ci.metrics.record",
     ]
     assert _points.entries_for(root, "release", "publish")[0].args == ("--ref={ref}",)
     assert _points.entries_for(root, "release", "release") == ()
@@ -655,9 +673,16 @@ def test_a_nanobind_roots_release_builds_its_wheels_then_publishes(
     (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')
     assert _points.jobs_of(root, "release") == ("wheels", "publish")
     # The wheels job builds this platform's wheels with nanobind's verb,
-    # at the release squash its checkout is.
+    # at the release squash its checkout is, then records its row.
     assert _points.entries_for(root, "release", "wheels") == (
         _points.Entry("release", "wheels", "nanobind.wheels", source="nanobind"),
+        _points.Entry(
+            "release",
+            "wheels",
+            "ci.metrics.record",
+            ("--point=release", "--job={display}"),
+            last=True,
+        ),
     )
     # The publish job waits for the wheels job and collects its artifact.
     publish = next(
@@ -681,8 +706,13 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     # declared ones.
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     entries = _points.entries_for(root, "nightly", "nightly")
-    assert [e.task for e in entries] == ["doctor", "check", "release.verify"]
-    assert entries[-1] == _points.Entry(
+    assert [e.task for e in entries] == [
+        "doctor",
+        "check",
+        "release.verify",
+        "ci.metrics.record",
+    ]
+    assert entries[-2] == _points.Entry(
         "nightly", "nightly", "release.verify", ("--all",), source="workshop.toml"
     )
     docs = _points.entries_for(root, "gate", "docs")
@@ -773,6 +803,13 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "hse",
             "--profile=fm-profile-workflow-release-check-fresh.json",
             "workflow.release.check-fresh",
+        ],
+        [
+            "hse",
+            "--profile=fm-profile-ci-metrics-drop.json",
+            "ci.metrics.drop",
+            "--point=gate",
+            "--job=gate",
         ],
     ]
 
@@ -889,7 +926,14 @@ def test_a_dispatched_points_inputs_reach_its_entries(
             "--profile=fm-profile-workflow-release-publish.json",
             "workflow.release.publish",
             "--ref=",
-        ]
+        ],
+        [
+            "hse",
+            "--profile=fm-profile-ci-metrics-record.json",
+            "ci.metrics.record",
+            "--point=release",
+            "--job=publish",
+        ],
     ]
     seen.clear()
     # GitHub and Gitea carry the inputs in the event payload.
@@ -903,7 +947,14 @@ def test_a_dispatched_points_inputs_reach_its_entries(
             "--profile=fm-profile-workflow-release-publish.json",
             "workflow.release.publish",
             "--ref=abc123",
-        ]
+        ],
+        [
+            "hse",
+            "--profile=fm-profile-ci-metrics-record.json",
+            "ci.metrics.record",
+            "--point=release",
+            "--job=publish",
+        ],
     ]
     seen.clear()
     # GitLab carries them as pipeline variables, environment by name.
@@ -916,7 +967,14 @@ def test_a_dispatched_points_inputs_reach_its_entries(
             "--profile=fm-profile-workflow-release-publish.json",
             "workflow.release.publish",
             "--ref=def456",
-        ]
+        ],
+        [
+            "hse",
+            "--profile=fm-profile-ci-metrics-record.json",
+            "ci.metrics.record",
+            "--point=release",
+            "--job=publish",
+        ],
     ]
 
 
@@ -940,7 +998,14 @@ def test_the_wheels_job_runs_nanobinds_verb_at_the_checkout_with_no_ref(
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
     _points.run_point(root, "release", "wheels", spawn=green)
     assert seen == [
-        ["hse", "--profile=fm-profile-nanobind-wheels.json", "nanobind.wheels"]
+        ["hse", "--profile=fm-profile-nanobind-wheels.json", "nanobind.wheels"],
+        [
+            "hse",
+            "--profile=fm-profile-ci-metrics-record.json",
+            "ci.metrics.record",
+            "--point=release",
+            "--job=wheels",
+        ],
     ]
 
 
@@ -958,10 +1023,21 @@ def test_the_nightly_point_runs_the_whole_check(
         return 0
 
     _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
-    # The doctor opens the night's record, then the whole check.
+    # The doctor opens the night's record, mending what it can, then
+    # the whole check, then the job's own record of the run.
     assert seen == [
-        (["hse", "--profile=fm-profile-doctor.json", "doctor"], "nightly"),
+        (["hse", "--profile=fm-profile-doctor.json", "doctor", "--fix"], "nightly"),
         (["hse", "--profile=fm-profile-check.json", "check"], "nightly"),
+        (
+            [
+                "hse",
+                "--profile=fm-profile-ci-metrics-record.json",
+                "ci.metrics.record",
+                "--point=nightly",
+                "--job=nightly (3.14)",
+            ],
+            "nightly",
+        ),
     ]
 
 
@@ -984,9 +1060,12 @@ def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(
     ]
     assert order == sorted(order)
     gate = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
-    # The freshness check last, so the merge it allows follows it as
-    # closely as the forge can.
-    assert "janitor" not in gate and gate[-1] == "workflow.release.check-fresh"
+    # The freshness check after the stamp, so the merge it allows
+    # follows it as closely as the forge can; the drop of the legs'
+    # refs last of all, after a green verdict.
+    assert "janitor" not in gate
+    assert gate[-2:] == ["workflow.release.check-fresh", "ci.metrics.drop"]
+    assert gate.index("ci.verified.stamp") < gate.index("workflow.release.check-fresh")
 
 
 def test_the_check_legs_are_one_per_runner_and_gate_python(tmp_path: Path) -> None:
@@ -1075,6 +1154,7 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
         "--needs=check,docs",
         "ci.verified.stamp",
         "workflow.release.check-fresh",
+        "--job=gate",
     ]
     assert min(e["ts"] for e in drawn) == 0.0  # the file starts at its own zero
     assert "pushed" in capsys.readouterr().out
@@ -1182,3 +1262,44 @@ def test_an_entry_on_a_declared_or_inherited_job_adds_no_job(tmp_path: Path) -> 
         '\n[[ci.schedule]]\npoint = "release"\ntask = "status"\n',
     )
     assert _points.emitted_points(root) == _points.points(root)
+
+
+def test_every_job_of_a_point_without_a_verdict_job_ends_with_the_record(
+    tmp_path: Path,
+) -> None:
+    # The gate job collects what its legs put; a point without one
+    # would leave no row of its run. Each of its jobs, declared or
+    # named by the contract's schedule, records last; the gate and the
+    # merge point, which inherits the gate's verdict job, never do.
+    skip_unless_installed("docs")
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\njob = "audit"\ntask = "doctor"\n',
+    )
+    recorded = {
+        (entry.point, entry.job): entry.args
+        for entry in _points.schedule(root)
+        if entry.task == _points.RECORD_TASK
+    }
+    assert recorded == {
+        ("nightly", "nightly"): ("--point=nightly", "--job={display}"),
+        ("nightly", "audit"): ("--point=nightly", "--job={display}"),
+        ("release", "publish"): ("--point=release", "--job={display}"),
+    }
+    assert all(entry.last for entry in _points.recording(root, _points.schedule(root)))
+    for point in ("gate", "merge"):
+        for job in _points.jobs_of(root, point):
+            tasks = [e.task for e in _points.entries_for(root, point, job)]
+            assert _points.RECORD_TASK not in tasks, (point, job)
+
+
+def test_half_writers_are_the_legs_of_a_verdict_point_and_every_recording_job(
+    tmp_path: Path,
+) -> None:
+    skip_unless_installed("docs")
+    root = _root(tmp_path)
+    assert _points.half_writers(root, "gate") == ("check",)
+    # The merge point inherits the gate's legs.
+    assert _points.half_writers(root, "merge") == ("check",)
+    assert _points.half_writers(root, "nightly") == ("nightly",)
+    assert _points.half_writers(root, "release") == ("publish",)
