@@ -415,6 +415,28 @@ def test_a_range_outside_its_file_refuses() -> None:
         assert str(refused.value) == message
 
 
+def test_a_text_without_a_final_newline_holds_its_last_line() -> None:
+    text = "int a;\nint b;"
+    last = Entry(digest="", ranges=(Range(2, 1, 2, 7, 0),))
+    fmt.check_ranges(last, text, source="a.c")
+    with pytest.raises(PartError, match="the file has 2 lines"):
+        fmt.check_ranges(
+            Entry(digest="", ranges=(Range(3, 1, 3, 2, 0),)), text, source="a.c"
+        )
+
+
+def test_unrun_ranges_that_meet_are_one_stretch() -> None:
+    met = Entry(digest="", ranges=(Range(1, 1, 1, 5, 0), Range(1, 5, 1, 9, 0)))
+    assert fmt.unrun_columns(met) == {1: ((1, 9),)}
+
+
+def test_a_range_that_ran_inside_one_that_never_did_leaves_its_line_unmarked() -> None:
+    # Line 2 lies whole inside a range that ran, itself inside one that
+    # never did: the innermost decides, and the line has no stretch.
+    nested = Entry(digest="", ranges=(Range(1, 1, 3, 5, 0), Range(2, 1, 3, 1, 4)))
+    assert fmt.unrun_columns(nested) == {1: ((1, None),), 3: ((1, 5),)}
+
+
 def test_a_measurer_s_branches_match_how_it_names_them() -> None:
     lines = {
         **_raw(**{"a.py": {"digest": "", "counts": [[1, 3]], "statements": "1"}}),
@@ -436,6 +458,18 @@ def test_a_measurer_s_branches_match_how_it_names_them() -> None:
     gcov["files"]["a.cpp"]["counts"] = [[1, 2, 3]]
     with pytest.raises(PartError, match=r"counts\[0\]: is no \[line, runs\] pair"):
         fmt.decode(gcov, source="p")
+
+
+def test_a_count_of_no_runs_reads_as_a_line_that_never_ran() -> None:
+    lines = {
+        **_raw(
+            **{"a.py": {"digest": "", "counts": [[1, 0], [2, 3]], "statements": "1-2"}}
+        ),
+        "measurer": {"name": "lines", "counts": "counts", "branches": "none"},
+    }
+    entry = fmt.decode(lines, source="p").files["a.py"]
+    assert entry.counts == {2: 3}
+    assert entry.executed == {2} and entry.missing == {1}
 
 
 # --- what a part holds ---------------------------------------------------
@@ -646,6 +680,38 @@ def test_a_part_reads_back_from_its_stored_form_its_facts_kept_apart() -> None:
     kept, facts = fmt.stored(unread)
     assert kept["files"] == {"packages/n/gone.cpp": {"digest": ""}} and facts == {}
     assert fmt.from_stored(kept, facts, source="p") == unread
+
+
+def test_a_stored_part_whose_branches_never_ran_keeps_them_in_its_facts_alone() -> None:
+    entry = Entry(
+        digest="a" * 40,
+        statements=frozenset({1, 2, 3}),
+        counts={1: 1},
+        branches=(
+            Branch(1, 2, 0, 0, "line 1 didn't jump to line 2"),
+            Branch(1, 3, 1, 0, "line 1 didn't jump to line 3"),
+        ),
+    )
+    part = Part("packages/x", COVERAGE_PY, {"packages/x/a.py": entry})
+    kept, facts = fmt.stored(part)
+    (name,) = facts
+    assert kept["files"]["packages/x/a.py"] == {
+        "digest": "a" * 40,
+        "facts": name,
+        "hits": "1",
+    }
+    assert facts[name]["branches"] == [
+        [1, 2, 0, "line 1 didn't jump to line 2"],
+        [1, 3, 1, "line 1 didn't jump to line 3"],
+    ]
+    assert fmt.from_stored(kept, facts, source="p") == part
+
+
+def test_the_facts_a_part_names_pass_over_what_is_off_the_stored_form() -> None:
+    assert fmt.facts_names({"files": ["packages/x/a.py"]}) == {}
+    assert fmt.facts_names(
+        {"files": {"packages/x/a.py": "facts", "packages/x/b.py": {"facts": "f"}}}
+    ) == {"f": ""}
 
 
 def test_a_numbering_keeps_each_context_s_index_and_appends_the_new_ones() -> None:
@@ -1148,3 +1214,47 @@ def test_an_unchanged_line_s_reading_carries_across_an_insertion_and_a_deletion(
         "packages/x/a.py: carried the reading of tests by gcov 14.2 at content"
         f" {OLD[:12]} across the change: 2 of 2 measured line(s) kept, 0 dropped",
     )
+
+
+def test_a_numbered_branch_carries_by_its_place_and_one_on_a_removed_line_drops() -> (
+    None
+):
+    counted = _at(
+        "packages/x",
+        NEW,
+        measurer=GCOV,
+        statements=frozenset({1, 2, 3, 4, 6}),
+        counts={3: 2},
+        branches=(Branch(3, None, 0, 2), Branch(3, None, 1, 0)),
+    )
+    # Old line 2 is new line 3, and old line 6 is gone with its branch.
+    before = _at(
+        "tests",
+        OLD,
+        measurer=GCOV,
+        counts={2: 1, 6: 1},
+        branches=(Branch(2, None, 1, 4), Branch(6, None, 0, 1)),
+    )
+    combined = fmt.merge([before, counted], {"packages/x/a.py": NEW}, source=_source)
+    entry = combined.files["packages/x/a.py"].entry
+    assert entry.branches == (Branch(3, None, 0, 2), Branch(3, None, 1, 4))
+    assert dict(entry.counts) == {3: 3}
+    assert combined.left_out == (
+        "packages/x/a.py: carried the reading of tests by gcov 14.2 at content"
+        f" {OLD[:12]} across the change: 1 of 2 measured line(s) kept, 1 dropped",
+    )
+
+
+def test_a_content_without_a_final_newline_carries_its_last_line() -> None:
+    old_text = "a = 1\nb = 2"
+    new_text = "z = 0\na = 1\nb = 2"
+    texts = {fmt.digest(text.encode()): text for text in (old_text, new_text)}
+    old, new = (fmt.digest(text.encode()) for text in (old_text, new_text))
+    kept = _at("packages/x", new, statements=frozenset({1, 2, 3}), counts={1: 1})
+    older = _at("tests", old, counts={2: 1})
+    combined = fmt.merge(
+        [older, kept], {"packages/x/a.py": new}, source=lambda held: texts[held]
+    )
+    assert combined.carried == 1
+    # Old line 2, the last, is new line 3.
+    assert combined.files["packages/x/a.py"].entry.executed == {1, 3}
