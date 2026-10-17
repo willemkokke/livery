@@ -47,9 +47,8 @@ floor = "0.0.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately. The measured value of the
-# suite that moved here with the extension.
-floor = 91
+# suite grows, lower it only deliberately.
+floor = 100
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.
