@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from livery.footman import fail, parallel, step
+from livery.workshop._shard import ONE, Shard
 
 if TYPE_CHECKING:
     from livery.workshop._composition import Lookup
@@ -295,6 +296,13 @@ class PhaseContext:
             removes no code: ``--safe-fix``.
         point: The CI point whose tests the test phase selects; empty
             for the gate's own.
+        shard: The shard of a sharded check leg this run is, as
+            ``fm check --shard`` or the leg's label names it
+            ([livery.workshop.Shard][]); one shard of one for a run
+            that is not split. A step that declares ``shard`` among
+            its flags runs its share of it, and the walk runs every
+            other step on the first shard alone
+            ([livery.workshop._steps.on_this_shard][]).
         catalogue: Every file the run may read, by unit, each with its
             category, listed once per walk by
             [livery.workshop._steps.catalogue][]; None when there is
@@ -334,6 +342,7 @@ class PhaseContext:
     files: tuple[str, ...] = ()
     safe: bool = False
     point: str = ""
+    shard: Shard = ONE
     catalogue: Mapping[str, tuple[tuple[str, str], ...]] | None = None
     package: Package | None = None
     selection: tuple[str, ...] = ()
