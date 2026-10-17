@@ -6,8 +6,10 @@ sync receipt, and emits the environment: sourced by a shell it enters
 that shell, and ``setup.sh github`` persists the emission into
 ``GITHUB_ENV``/``GITHUB_PATH`` so every later CI step calls the
 runner bare. A GitLab job sources ``setup.sh gitlab``, and its shell
-keeps the emission for the job's later lines. On a CI job of either
-kind, conan's home is the job's own. Between entries the per-command reconcile
+keeps the emission for the job's later lines. The script sets the
+variables the workspace's extensions declare before its sync, and on a
+CI job of either kind places each one that names ``{place}`` in the
+job's own directory. Between entries the per-command reconcile
 (``livery.workshop._reconcile``) keeps the venv following the lock.
 
 The script is a generated artifact like the CI workflows: emitted by
@@ -19,10 +21,15 @@ is deferred to the tool-store port.
 
 from __future__ import annotations
 
+import shlex
 import tomllib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import livery.footman as footman
+
+if TYPE_CHECKING:
+    from livery.workshop._declaration import DeclaredVariable
 
 
 def locked_uv_version(root: Path) -> str:
@@ -67,33 +74,41 @@ _SCRIPT = """\
 # then call __PROG__ bare, and a GitLab job sources `setup.sh gitlab`,
 # whose shell runs the job's later lines.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-# On a CI job conan's home is always the job's own: conan's cache takes
-# one process at a time, and a runner may run several jobs at once, so
-# a home the runner sets for every job is not used. A GitHub job keeps
-# it under its temp, RUNNER_TEMP. A GitLab job keeps it in its checkout,
-# CI_PROJECT_DIR, a path no two jobs running at once share, under
-# .workshop/, which git ignores. The native members build through conan
-# in `__PROG__ sync --locked` below, so the home is placed before it, and
-# a job whose runner names no such directory stops here. Called with
-# the variable's name, its value, and the home under it.
-_job_conan_home() {
+# The variables the workspace's extensions declare, set before the sync
+# below, whose builds may read them. A value naming a directory of its
+# own is placed in a CI job's own directory and is not set off a CI job:
+# a GitHub job's is its temp, RUNNER_TEMP, and a GitLab job's is
+# .workshop under its checkout, CI_PROJECT_DIR, a path no two jobs
+# running at once share, which git ignores. A job whose runner names no
+# such directory stops here. A value the environment already carries
+# wins, unless the declaration says always: here the job's environment
+# is formed, so such a value beats one the runner sets for every job.
+_place=""
+# Called with the variable naming the job's directory, its value, the
+# declared variable, and the extension that declares it.
+_job_place() {
     if [ -z "$2" ]; then
-        echo "setup: this job's runner sets no $1; a job keeps conan's home" \\
-            "in a directory of its own, so run it on a runner that sets one" >&2
+        echo "setup: this job's runner sets no $1; $4 declares $3 in a" \\
+            "directory of the job's own, so run it on a runner that sets one" >&2
         return 1
     fi
     if [ ! -d "$2" ]; then
-        echo "setup: $1 names $2, which is not a directory; a job keeps" \\
-            "conan's home in it, so its runner must create it first" >&2
+        echo "setup: $1 names $2, which is not a directory; $4 declares $3" \\
+            "in it, so its runner must create it first" >&2
         return 1
     fi
-    if [ -n "${CONAN_HOME:-}" ] && [ "$CONAN_HOME" != "$3" ]; then
-        echo "setup: conan's home is $3, this job's own; the runner's" \\
-            "CONAN_HOME, $CONAN_HOME, is not used, since conan's cache takes" \\
-            "one process at a time" >&2
+}
+# Called with the variable's name, its value, always or nothing, the
+# extension that declares it, and what the variable is for.
+_declared() {
+    eval "_held=\\"\\${$1:-}\\""
+    if [ -n "$_held" ] && [ "$_held" != "$2" ]; then
+        [ "$3" = always ] || return 0
+        echo "setup: $1 is $2, as $4 declares it; the environment's $1," \\
+            "$_held, is not used: $5" >&2
     fi
-    CONAN_HOME="$3"
-    export CONAN_HOME
+    eval "$1=\\"\\$2\\""
+    export "$1"
 }
 # On a GitHub job uv's cache and the runner's data directory, the tool
 # store under it, live under the runner's temp, the working drive. On
@@ -107,17 +122,12 @@ _job_conan_home() {
 # stands: a runner that keeps its caches across jobs sets them in its
 # own environment, and the temp is only where nothing is set.
 if [ "${1:-}" = github ]; then
-    _job_conan_home RUNNER_TEMP "${RUNNER_TEMP:-}" "${RUNNER_TEMP:-}/conan" \\
-        || { return 1 2>/dev/null || exit 1; }
-    UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
+__GITHUB_PLACE__    UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
     __DATA_DIR_VAR__="${__DATA_DIR_VAR__:-$RUNNER_TEMP/footman}"
     export UV_CACHE_DIR __DATA_DIR_VAR__
 elif [ "${1:-}" = gitlab ]; then
-    _job_conan_home CI_PROJECT_DIR "${CI_PROJECT_DIR:-}" \\
-        "${CI_PROJECT_DIR:-}/.workshop/conan" \\
-        || { return 1 2>/dev/null || exit 1; }
-fi
-# uv at the lock's pin, the version the venv carries: every sync in
+__GITLAB_PLACE__fi
+__DECLARED__# uv at the lock's pin, the version the venv carries: every sync in
 # this job, this script's and __PROG__'s own, runs the same uv and
 # fills one cache. A uv on PATH at the pin serves; any other version
 # is left where it is, and the pinned one is installed once, under
@@ -149,9 +159,10 @@ fi
 _sync_args=()
 [ -f "$_root/uv.lock" ] && _sync_args+=(--locked)
 # A native member builds its extension at install against the tools
-# the store supplies below (the compiler's helpers, the conan
-# provider), so this sync leaves it out; the workshop's sync below
-# enters the environment itself and its own uv sync builds it.
+# the store supplies below (the compiler's helpers, the provider that
+# resolves its native dependencies), so this sync leaves it out; the
+# workshop's sync below enters the environment itself and its own uv
+# sync builds it.
 _native=(__NATIVE_SKIP__)
 _sync() { uv sync --project "$_root" "${_sync_args[@]}" "$@" >&2; }
 _sync "${_native[@]}" \\
@@ -187,18 +198,88 @@ fi
 
 
 def entry_script(root: Path) -> str:
-    """The emitted ``setup.sh`` body for *root*, header not included."""
+    """The emitted ``setup.sh`` body for *root*, header not included.
+
+    The variables the extensions of *root*'s set declare are rendered
+    from their declarations: each one's line, and in each CI branch the
+    check that the job names a directory of its own, once for each
+    variable that names ``{place}``.
+
+    Raises:
+        Failed: when two of the extensions declare one variable, naming
+            both.
+    """
     from livery.footman import directory_variable
+    from livery.workshop._variables import workspace_variables
 
     pin = locked_uv_version(root)
     skipped = " ".join(f"--no-install-package {name}" for name in native_members(root))
+    variables = workspace_variables(root)
     return (
         _SCRIPT.replace("__PROG__", footman.prog())
         .replace("__INSTALLER__", installer_url(pin))
         .replace("__DATA_DIR_VAR__", directory_variable("DATA_DIR"))
         .replace("__UV_PIN__", pin)
         .replace("__NATIVE_SKIP__", skipped)
+        .replace("__GITHUB_PLACE__", _job_place("github", variables))
+        # A shell branch takes no empty body: one that places nothing
+        # does nothing.
+        .replace("__GITLAB_PLACE__", _job_place("gitlab", variables) or "    :\n")
+        .replace("__DECLARED__", _declared_lines(variables))
     )
+
+
+def _job_place(mode: str, variables: tuple[DeclaredVariable, ...]) -> str:
+    """The lines of the script's *mode* branch that name the job's own directory.
+
+    One check for each of *variables* that names ``{place}``, so a job
+    whose runner names no directory stops naming the variable and the
+    extension that declares it, then the directory itself. Empty when
+    none names ``{place}``.
+    """
+    from livery.workshop._variables import JOB_DIRECTORIES
+
+    placed = [variable for variable in variables if variable.placed]
+    if not placed:
+        return ""
+    named, under = JOB_DIRECTORIES[mode]
+    lines = [
+        f'    _job_place {named} "${{{named}:-}}" {variable.name}'
+        f" {shlex.quote(variable.extension)} \\\n"
+        "        || { return 1 2>/dev/null || exit 1; }\n"
+        for variable in placed
+    ]
+    lines.append(f'    _place="${named}{"/" + under if under else ""}"\n')
+    return "".join(lines)
+
+
+def _declared_lines(variables: tuple[DeclaredVariable, ...]) -> str:
+    """One ``_declared`` line for each of *variables*, as the script calls it.
+
+    A value naming ``{place}`` is set only where the script found one.
+    """
+    from livery.workshop._variables import PLACE_WORD
+
+    lines: list[str] = []
+    for variable in variables:
+        value = '"$_place"'.join(
+            shlex.quote(part) if part else ""
+            for part in variable.value.split(PLACE_WORD)
+        )
+        line = " ".join(
+            (
+                "_declared",
+                variable.name,
+                value or "''",
+                "always" if variable.always else "''",
+                shlex.quote(variable.extension),
+                shlex.quote(variable.doc),
+            )
+        )
+        lines.append(
+            f'[ -z "$_place" ] || {line}\n' if variable.placed else f"{line}\n"
+        )
+    return "".join(lines)
 
 
 def native_members(root: Path) -> tuple[str, ...]:
@@ -208,8 +289,8 @@ def native_members(root: Path) -> tuple[str, ...]:
     workspace's ``job-built-members`` answer, carries native code its
     install builds against the store's tools, so the entry installs it
     after the tools are in the environment; every other member installs
-    in the first sync. A job-built member the uv workspace does not hold,
-    a conan package, is no uv install and is left out.
+    in the first sync. A job-built member the uv workspace does not hold
+    is no uv install and is left out.
     """
     from livery.workshop._identity import roster
     from livery.workshop._queries import JOB_BUILT_MEMBERS, answer

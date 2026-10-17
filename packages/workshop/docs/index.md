@@ -405,19 +405,21 @@ An extension whose packages must not run a step another extension of
 their set adds deletes it, with the reason. The nanobind extension, a
 distribution of its own, `livery-extensions-nanobind`, builds a
 package's platform wheels, so in a set that holds nanobind python's
-`uv build` never runs, and neither do the conan steps that would stamp,
-build and publish the recipe the package consumes:
+`uv build` never runs, and neither do the conan steps that would build
+and publish the recipe the package consumes. Its own stamp step writes
+the version and raises the floors in both the pyproject and the
+recipe, since one step of a package provides the files the phase
+changed, so python's and conan's stamp steps go too:
 
 ```toml
-[phases.build.nanobind]
-main = "livery.extensions.nanobind._build:build"
-isolated = true
-reads = ["epoch"]
-provides = { dist = "path" }
+[phases.stamp.nanobind]
+main = "livery.extensions.nanobind._stamp:stamp"
+reads = ["version", "floors"]
+provides = { changed = "strs" }
 
-[phases.build.nanobind.deletes]
-"python:build.python" = "uv build writes a pure wheel"
-"conan:stamp.conan" = "the package's recipe declares no version to stamp"
+[phases.stamp.nanobind.deletes]
+"python:stamp.python" = "this step writes the version and the pyproject's floors through python's stamp"
+"conan:stamp.conan" = "the recipe names no version, and this step raises its floors through conan"
 ```
 
 A package whose set does not hold the deleting extension runs the
@@ -453,7 +455,7 @@ or a value of another type, refuses before any step runs:
 
 | Phase | Keys the engine gives | Key the release train reads back |
 | --- | --- | --- |
-| `stamp` | `version` (`str`), the version to write | `changed` (`strs`), the files written |
+| `stamp` | `version` (`str`), the version to write; `floors` (`table`), each member released with the package, by its path, to the version it releases at, empty for a member released alone. Each step writes the version into its own manifests and raises there each floor they declare on one of those members, and the base raises the floor of each of the package's `[[depends]]` edges on one in its `workshop.toml` | `changed` (`strs`), the files written |
 | `build` | `isolated` (`bool`), the side; `configuration` (`str`), the preset: the train builds isolated in `release`, `fm check` on the tree in `instrumented`, and `fm run` on the tree in `debug`. `epoch` (`int`), the build's source date, from the train; 0 takes the build tool's own | `dist` (`path`), where the artifacts are |
 | `test` | `isolated` (`bool`), true on the train's legs; `resolution` (`str`), `floor`, `latest` or `head`; `release-dirs` (`paths`), the co-released set's `dist/` directories. `fm check` gives none of them, which is the tree side | `resolved` (`table`), each distribution the leg installed, to its version |
 | `publish` | `version` (`str`) and `registry-target` (`table`), the resolved registry's fields, which `RegistryTarget.from_table` reads back; `prebuilt` (`bool`), true when a job of the run built the package and the run collected it into `dist/` | `published` (`bool`), whether anything uploaded |
@@ -519,7 +521,7 @@ or the rule's answer over nothing. The base declares:
 | `public-modules` | package | the modules that declare the public API | the union |
 | `module-roots` | package | the names other packages reference the code by | the union |
 | `references` | package | what each source references: its file, its module name, each name with how the source makes the reference, and the names its language's conventions account for | the union; a file outside the package, or one two extensions answer for, refuses |
-| `version-files` | package | the files `stamp` may write a version into | the union |
+| `version-files` | package | every file `stamp`'s steps write, versions and floors: the release keeps and restores them, and the local act refuses while one has changes of its own | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
 | `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each a `RequirementWriter` called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |
@@ -861,7 +863,7 @@ knows, every suffix starting with a dot; the plugin an
 `extension.toml` names is an installed `footman.tasks` entry point;
 an `extension.toml` carries an `[extension] description`, and every
 verb its plugin defines and every contract key, template, template
-option and step option it declares carries its doc line, each one missing named
+option, step option and environment variable it declares carries its doc line, each one missing named
 (`declaration-documented`); every extension a template lists composes something in a package, unless
 another it lists requires it, and the set of the template's list holds
 every extension the template's chain needs (`template-composes`); a step's
@@ -1123,6 +1125,53 @@ region, `.vscode/settings.json` a `settings` region, `tasks.py` a
 `cliff.toml` in each package an `own` region. `fm explain <file>` names a
 file's regions and their lines. A managed file whose format has no
 comments keeps your lines as a tail after the lines the render owns.
+
+## The variables an extension declares
+
+An extension declares each environment variable it needs in an
+`[env.<NAME>]` table of its `extension.toml`. The conan extension
+declares its home:
+
+```toml
+[env.CONAN_HOME]
+value = "{place}/conan"
+always = true
+doc = "conan's cache takes one writer at a time, so each CI job, loop pass and scale fixture keeps a home of its own"
+```
+
+`value` and `doc` are required, and `always` is false when absent.
+The value takes the placeholder grammar of a step in words and
+answers one placeholder, `{place}`: a directory of the variable's
+own. Every other brace form refuses when the declaration is read,
+`{UPPER}` and `{env.HOME}` among them, naming the form, so a
+placeholder added later changes the meaning of no declared value. A
+name a shell cannot export refuses too. A `[for.<target>]` table
+declares no variable, and two extensions that declare one variable
+refuse, naming both.
+
+`always` makes the extension's value beat one the runner sets for
+every job, where the job's environment is formed: in `setup.sh` and in
+`fm env.emit --github`. A loop pass and the scale fixture form the
+environment of what they start the same way. Everywhere else, every
+`fm` run among them, the environment wins: a variable it already
+carries keeps its value, as the cascade's variables do. So a job's
+later runs keep the value its entry placed, and a nested run keeps the
+one its parent set.
+
+The workshop sets the variables the extensions of the workspace's
+installed set declare, and each place names the directory `{place}`
+stands for:
+
+| Where | `{place}` |
+| --- | --- |
+| every `fm` run, through the cascade's hook, where the environment carries no value | on a CI job, the job's own directory: `RUNNER_TEMP` on a GitHub or Gitea job, `.workshop` under `CI_PROJECT_DIR` on a GitLab one; on a desk, none |
+| `setup.sh`, for the steps before `fm` | the same directory; the script stops a job whose runner names none |
+| `fm env.emit --github`, which persists them for a job's later steps | `RUNNER_TEMP`; a job without one refuses |
+| a pass of the loop, `fm ci.e2e` | the directory of the development environment the pass runs on |
+| the scale fixture, `fm ci.scale` | the fixture's directory |
+
+A value naming `{place}` is not set where nothing names a directory,
+so on a desk conan's own default home stands.
 
 ## The tools a workspace requires
 
@@ -1522,18 +1571,23 @@ absence.
   the pytest extension's `pytest.toml`), so two packages may share a
   test file's name; a helper module in a package's `tests/` carries
   the package's name, and the session refuses to start otherwise.
-- Every CI job keeps conan's home in a directory of its own, whatever
-  `CONAN_HOME` the runner sets for its jobs. Conan's cache takes one
-  process at a time, and a runner that takes several jobs at once
-  would otherwise have two of them write one cache. On a GitHub or
-  Gitea runner the home is `conan` under `RUNNER_TEMP`, the job's
-  temporary directory, placed by `setup.sh github`. On a GitLab runner
-  it is `.workshop/conan` under `CI_PROJECT_DIR`, the job's checkout,
-  placed by `source setup.sh gitlab`: GitLab clones each of the jobs
-  that run at the same time into its own path, and git ignores
-  `.workshop/`. The entry places the home before its sync builds a
-  native member, and refuses a job whose runner does not set that
-  variable or names a directory that does not exist.
+- Every CI job keeps each variable an extension declares with a
+  directory of its own, an `[env]` value naming `{place}`, in the
+  job's own directory. A declaration with `always` beats a value the
+  runner sets for its jobs where the entry forms the job's environment,
+  as conan's `CONAN_HOME` does, and the job's later runs keep it:
+  conan's cache takes one process at a time, and a runner that takes
+  several jobs at once would otherwise have two of them write one
+  cache. On a GitHub or
+  Gitea runner the directory is `RUNNER_TEMP`, the job's temporary
+  directory, placed by `setup.sh github`. On a GitLab runner it is
+  `.workshop` under `CI_PROJECT_DIR`, the job's checkout, placed by
+  `source setup.sh gitlab`: GitLab clones each of the jobs that run at
+  the same time into its own path, and git ignores `.workshop/`. The
+  entry places the variables before its sync builds a native member,
+  and refuses a job whose runner does not set that variable or names a
+  directory that does not exist, naming the declared variable and the
+  extension that declares it.
 - `fm start`: open the work. An issue number assigns and branches
   `<kind>/<number>-<slug>`, a quoted title files the issue first, and
   `<kind>/<slug>` starts a branch that belongs to no issue, whose

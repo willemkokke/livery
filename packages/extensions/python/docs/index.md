@@ -53,7 +53,12 @@ the tests.
 python adds a step to each phase of a python package's release:
 
 - `stamp.python` writes the version into `pyproject.toml` and into
-  each `__init__.py` under `src/` that carries `__version__`.
+  each `__init__.py` under `src/` that carries `__version__`, and
+  raises each requirement on a member released with the package,
+  `"<name>>=<floor>"` wherever the pyproject declares it, to that
+  member's version; a member released alone moves no floor. The entry
+  module serves the same work as [livery.extensions.python.stamp][],
+  which nanobind's stamp step calls.
 - `build.python` builds the wheel and the sdist with `uv build` into
   the package's `dist/`, from an empty `dist/` each time. The wheel
   carries the package's `docs/` as the module's `_docs`, copied for

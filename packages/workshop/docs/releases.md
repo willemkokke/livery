@@ -57,7 +57,15 @@ A list from a contract is named with its file when the legs run. A
 word other than the three, or one listed twice, is refused when the
 contract is read. A sibling released in the same wave counts at its
 new version: its floor in every co-released member rises to that
-version first.
+version first. The stamp phase raises it, given the members released
+together as its `floors`. Each extension's stamp step raises the
+floors in its own manifests: python's in `pyproject.toml`, conan's in
+the recipe's `name/[>=x]` range, nanobind's in both. The base raises
+the `floor` of each `[[depends]]` edge in the member's `workshop.toml`.
+A member released alone moves no floor. A release that fails restores
+every file the phase reported, with each member's version files,
+contract and changelog. The dev act raises its set's floors through
+the same phase, for the build alone.
 
 After a release, `fm release.verify <member>` runs the member's verify
 phase: the newest released version the index serves, installed alone

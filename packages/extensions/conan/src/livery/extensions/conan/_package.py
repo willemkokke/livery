@@ -223,6 +223,39 @@ def is_conan_package(member: Package) -> bool:
     return EXTENSION in extension_set(member) and names_a_reference(member)
 
 
+def raise_floors(package: Package, floors: Mapping[str, str]) -> list[str]:
+    """Raise each requirement on a member released with *package*; the files changed.
+
+    *floors* names each such member by its path, to the version it
+    releases at. A reference to that member in the recipe in the range
+    form a requirement writer writes, ``"<name>/[>=<floor>]"``, takes
+    that version, in a recipe that names a reference and in a
+    consumer's alike. Empty for no floors, for a package with no
+    recipe, and for a recipe that names none of them.
+    """
+    recipe = package.directory / RECIPE_FILE
+    if not floors or not recipe.is_file():
+        return []
+    from livery.workshop import discover_packages
+
+    names = {
+        member.name: floors[member.path]
+        for member in discover_packages(package.root)
+        if member.path in floors and member.path != package.path
+    }
+    text = original = recipe.read_text("utf-8")
+    for name, version in names.items():
+        text = re.sub(
+            rf'("{re.escape(name)}/\[>=)[^\]"]+(\]")',
+            rf"\g<1>{version}\g<2>",
+            text,
+        )
+    if text == original:
+        return []
+    recipe.write_text(text, encoding="utf-8")
+    return [RECIPE_FILE]
+
+
 def stamp_version(package: Package) -> _Stamper:
     """Where a conan package's version lives, ready to stamp."""
     return _Stamper(package)

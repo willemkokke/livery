@@ -11,33 +11,41 @@
 # then call fm bare, and a GitLab job sources `setup.sh gitlab`,
 # whose shell runs the job's later lines.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-# On a CI job conan's home is always the job's own: conan's cache takes
-# one process at a time, and a runner may run several jobs at once, so
-# a home the runner sets for every job is not used. A GitHub job keeps
-# it under its temp, RUNNER_TEMP. A GitLab job keeps it in its checkout,
-# CI_PROJECT_DIR, a path no two jobs running at once share, under
-# .workshop/, which git ignores. The native members build through conan
-# in `fm sync --locked` below, so the home is placed before it, and
-# a job whose runner names no such directory stops here. Called with
-# the variable's name, its value, and the home under it.
-_job_conan_home() {
+# The variables the workspace's extensions declare, set before the sync
+# below, whose builds may read them. A value naming a directory of its
+# own is placed in a CI job's own directory and is not set off a CI job:
+# a GitHub job's is its temp, RUNNER_TEMP, and a GitLab job's is
+# .workshop under its checkout, CI_PROJECT_DIR, a path no two jobs
+# running at once share, which git ignores. A job whose runner names no
+# such directory stops here. A value the environment already carries
+# wins, unless the declaration says always: here the job's environment
+# is formed, so such a value beats one the runner sets for every job.
+_place=""
+# Called with the variable naming the job's directory, its value, the
+# declared variable, and the extension that declares it.
+_job_place() {
     if [ -z "$2" ]; then
-        echo "setup: this job's runner sets no $1; a job keeps conan's home" \
-            "in a directory of its own, so run it on a runner that sets one" >&2
+        echo "setup: this job's runner sets no $1; $4 declares $3 in a" \
+            "directory of the job's own, so run it on a runner that sets one" >&2
         return 1
     fi
     if [ ! -d "$2" ]; then
-        echo "setup: $1 names $2, which is not a directory; a job keeps" \
-            "conan's home in it, so its runner must create it first" >&2
+        echo "setup: $1 names $2, which is not a directory; $4 declares $3" \
+            "in it, so its runner must create it first" >&2
         return 1
     fi
-    if [ -n "${CONAN_HOME:-}" ] && [ "$CONAN_HOME" != "$3" ]; then
-        echo "setup: conan's home is $3, this job's own; the runner's" \
-            "CONAN_HOME, $CONAN_HOME, is not used, since conan's cache takes" \
-            "one process at a time" >&2
+}
+# Called with the variable's name, its value, always or nothing, the
+# extension that declares it, and what the variable is for.
+_declared() {
+    eval "_held=\"\${$1:-}\""
+    if [ -n "$_held" ] && [ "$_held" != "$2" ]; then
+        [ "$3" = always ] || return 0
+        echo "setup: $1 is $2, as $4 declares it; the environment's $1," \
+            "$_held, is not used: $5" >&2
     fi
-    CONAN_HOME="$3"
-    export CONAN_HOME
+    eval "$1=\"\$2\""
+    export "$1"
 }
 # On a GitHub job uv's cache and the runner's data directory, the tool
 # store under it, live under the runner's temp, the working drive. On
@@ -51,16 +59,18 @@ _job_conan_home() {
 # stands: a runner that keeps its caches across jobs sets them in its
 # own environment, and the temp is only where nothing is set.
 if [ "${1:-}" = github ]; then
-    _job_conan_home RUNNER_TEMP "${RUNNER_TEMP:-}" "${RUNNER_TEMP:-}/conan" \
+    _job_place RUNNER_TEMP "${RUNNER_TEMP:-}" CONAN_HOME conan \
         || { return 1 2>/dev/null || exit 1; }
+    _place="$RUNNER_TEMP"
     UV_CACHE_DIR="${UV_CACHE_DIR:-$RUNNER_TEMP/uv-cache}"
     FOOTMAN_DATA_DIR="${FOOTMAN_DATA_DIR:-$RUNNER_TEMP/footman}"
     export UV_CACHE_DIR FOOTMAN_DATA_DIR
 elif [ "${1:-}" = gitlab ]; then
-    _job_conan_home CI_PROJECT_DIR "${CI_PROJECT_DIR:-}" \
-        "${CI_PROJECT_DIR:-}/.workshop/conan" \
+    _job_place CI_PROJECT_DIR "${CI_PROJECT_DIR:-}" CONAN_HOME conan \
         || { return 1 2>/dev/null || exit 1; }
+    _place="$CI_PROJECT_DIR/.workshop"
 fi
+[ -z "$_place" ] || _declared CONAN_HOME "$_place"/conan always conan 'conan'"'"'s cache takes one writer at a time, so each CI job, loop pass and scale fixture keeps a home of its own'
 # uv at the lock's pin, the version the venv carries: every sync in
 # this job, this script's and fm's own, runs the same uv and
 # fills one cache. A uv on PATH at the pin serves; any other version
@@ -93,9 +103,10 @@ fi
 _sync_args=()
 [ -f "$_root/uv.lock" ] && _sync_args+=(--locked)
 # A native member builds its extension at install against the tools
-# the store supplies below (the compiler's helpers, the conan
-# provider), so this sync leaves it out; the workshop's sync below
-# enters the environment itself and its own uv sync builds it.
+# the store supplies below (the compiler's helpers, the provider that
+# resolves its native dependencies), so this sync leaves it out; the
+# workshop's sync below enters the environment itself and its own uv
+# sync builds it.
 _native=(--no-install-package acme-native)
 _sync() { uv sync --project "$_root" "${_sync_args[@]}" "$@" >&2; }
 _sync "${_native[@]}" \

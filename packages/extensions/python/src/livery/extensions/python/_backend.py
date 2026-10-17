@@ -154,6 +154,53 @@ class _Stamper:
         return changed
 
 
+def stamp(package: Package, version: str, floors: Mapping[str, str]) -> list[str]:
+    """Write *version* and raise *package*'s floors in its manifests; the files changed.
+
+    The version goes into ``pyproject.toml`` and every ``__version__``
+    (`stamp_version`), and each requirement on one of *floors*, the
+    members released with *package*, takes that member's version
+    (`raise_floors`). Each file once, relative to the package's
+    directory.
+    """
+    changed = stamp_version(package).stamp(version)
+    changed += raise_floors(package, floors)
+    return list(dict.fromkeys(changed))
+
+
+def raise_floors(package: Package, floors: Mapping[str, str]) -> list[str]:
+    """Raise each requirement on a member released with *package*; the files changed.
+
+    *floors* names each such member by its path, to the version it
+    releases at. A requirement on its distribution in
+    ``pyproject.toml``, ``"<name>>=<floor>"`` wherever the file
+    declares it (its dependencies, its extras, its groups), takes that
+    version. Empty for no floors, and for a pyproject that names none of
+    them.
+    """
+    if not floors:
+        return []
+    from livery.workshop import discover_packages
+
+    names = {
+        member.name: floors[member.path]
+        for member in discover_packages(package.root)
+        if member.path in floors and member.path != package.path
+    }
+    pyproject = package.directory / "pyproject.toml"
+    text = original = pyproject.read_text("utf-8")
+    for name, version in names.items():
+        text = re.sub(
+            rf'("{re.escape(name)}\s*>=\s*)[0-9][^"]*(")',
+            rf"\g<1>{version}\g<2>",
+            text,
+        )
+    if text == original:
+        return []
+    pyproject.write_text(text, encoding="utf-8")
+    return ["pyproject.toml"]
+
+
 def test(
     package: Package,
     root: Path,

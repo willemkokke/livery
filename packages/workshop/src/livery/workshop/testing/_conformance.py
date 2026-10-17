@@ -760,6 +760,13 @@ def _declaration_documented(subject: Subject) -> list[Violation]:
         for option, spec in _table(_table(table).get("options")).items()
         if not _documented(_table(spec).get("doc"))
     ]
+    reasons += [
+        f"declares the environment variable {name} with no doc; the agent's"
+        " guidance and the site show a variable by its doc, and the entry"
+        " script says it when the value replaces the environment's"
+        for name, table in _table(data.get("env")).items()
+        if not _documented(_table(table).get("doc"))
+    ]
     for prefix, held in _step_holders(data):
         for phase, table in _table(held.get("phases")).items():
             for step, body in _step_tables(_table(table)).items():
@@ -1319,7 +1326,8 @@ CLAUSES: tuple[Clause, ...] = (
         DECLARATION_DOCUMENTED,
         "An extension's extension.toml carries an [extension] description, and"
         " every verb its plugin defines, every contract key, template,"
-        " template option and step option it declares carries its doc line.",
+        " template option, step option and environment variable it declares"
+        " carries its doc line.",
         _declaration_documented,
     ),
     Clause(

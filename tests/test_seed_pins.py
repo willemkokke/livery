@@ -811,7 +811,8 @@ NANOBIND = "livery.extensions.nanobind._build"
 #: set answers in composition order, cpp, conan, python, then nanobind.
 #: conan answers no version and no version file for the member's recipe, a
 #: consumer's, and nanobind deletes conan's stamp, build and publish and
-#: python's build, so none of them runs.
+#: python's build, so none of them runs. nanobind answers the recipe among
+#: the version files, the file its stamp raises floors in.
 NANOBIND_BODIES = {
     "current_version": (f"{PYTHON}:current_version",),
     "version_files": (f"{PYTHON}:stamp_version",),
@@ -851,7 +852,11 @@ NANOBIND_BODIES = {
 #: What the entries whose bodies ran answered, read from the member's seeds.
 NANOBIND_ANSWERS = {
     "current_version": "0.0.0",
-    "version_files": ("pyproject.toml", "src/acme/native/__init__.py"),
+    "version_files": (
+        "pyproject.toml",
+        "src/acme/native/__init__.py",
+        "conanfile.py",
+    ),
     # The pyproject declares no requirement; the recipe declares fmt.
     "declared_requirements": {"fmt": "[>=11.0]"},
     "module_roots": ("acme.native",),

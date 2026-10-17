@@ -1,9 +1,12 @@
-"""The python extension's names another extension reads to build and test a wheel.
+"""The python extension's names another extension reads to stamp, build and test wheels.
 
 The python extension builds, versions, publishes and tests a package
 whose set holds python. An extension that builds such a package's
 wheels with a tool of its own, as nanobind builds them with
-cibuildwheel, reads two of its functions.
+cibuildwheel, reads three of its functions.
+[livery.extensions.python.stamp][] writes a release's version into the
+package's ``pyproject.toml`` and every ``__version__``, and raises
+there the floors on the members released with it.
 [livery.extensions.python.module_docs][] copies the package's ``docs/``
 into its source tree as the wheel's embedded ``_docs`` for one build,
 and removes the copy after it. [livery.extensions.python.run_isolated_test][]
@@ -23,15 +26,17 @@ if TYPE_CHECKING:
     from livery.extensions.python._backend import (
         run_isolated_test as run_isolated_test,
     )
+    from livery.extensions.python._backend import stamp as stamp
 
 __version__ = "0.0.0"
 
-__all__ = ["__version__", "module_docs", "run_isolated_test"]
+__all__ = ["__version__", "module_docs", "run_isolated_test", "stamp"]
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
     "module_docs": "livery.extensions.python._backend",
     "run_isolated_test": "livery.extensions.python._backend",
+    "stamp": "livery.extensions.python._backend",
 }
 
 
