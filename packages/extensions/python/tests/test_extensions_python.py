@@ -29,7 +29,7 @@ from livery.extensions.python._backend import (
     module_docs_dir,
 )
 from livery.footman import Failed
-from livery.workshop import discover_packages
+from livery.workshop import discover_packages, venv_python
 from livery.workshop.testing import CLAUSES, Clause
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -432,12 +432,61 @@ def test_the_stamp_refuses_a_manifest_without_a_version_and_rewrites_no_current_
     # A new version rewrites the manifest and each __version__, and a
     # module that carries none is left as it is.
     changed = _lifecycle.stamp(package, tmp_path, "2.0.0")
-    assert [Path(name) for name in changed] == [
-        Path("pyproject.toml"),
-        Path("src/acme/core/__init__.py"),
-    ]
+    assert changed == ["pyproject.toml", "src/acme/core/__init__.py"]
     assert (module / "__init__.py").read_text() == '__version__ = "2.0.0"\n'
     assert (module / "shapes" / "__init__.py").read_text() == "SIDES = 4\n"
+
+
+def test_the_stamp_names_a_module_with_forward_slashes_from_a_windows_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The names are the release commit's paths, written with forward
+    # slashes on every platform. Windows spells a module's path with
+    # backslashes; each module here reads its path back as Windows does.
+    from pathlib import PureWindowsPath
+
+    from livery.extensions.python import _backend
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    module = directory / "src" / "acme" / "core"
+    module.mkdir(parents=True)
+    (module / "__init__.py").write_text('__version__ = "1.0.0"\n')
+    (directory / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\nversion = "1.0.0"\n'
+    )
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+
+    class _WindowsModule:
+        """A module's file whose path from the package reads as Windows spells it."""
+
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def read_text(self, encoding: str) -> str:
+            return self.path.read_text(encoding)
+
+        def write_text(self, text: str, *, encoding: str) -> int:
+            return self.path.write_text(text, encoding=encoding)
+
+        def relative_to(self, other: Path) -> PureWindowsPath:
+            return PureWindowsPath(*self.path.relative_to(other).parts)
+
+    stamper = _backend.stamp_version(package)
+    manifest, *modules = stamper.homes()
+    spelled = [_WindowsModule(path) for path in modules]
+    monkeypatch.setattr(stamper, "homes", lambda: [manifest, *spelled])
+    assert [str(path.relative_to(directory)) for path in spelled] == [
+        "src\\acme\\core\\__init__.py"
+    ]
+    assert stamper.stamp("2.0.0") == ["pyproject.toml", "src/acme/core/__init__.py"]
+    assert (module / "__init__.py").read_text() == '__version__ = "2.0.0"\n'
 
 
 def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
@@ -701,7 +750,7 @@ def test_a_module_outside_site_packages_runs_no_test(
     code = _verify.run_tests(venv, tmp_path / "tree", "core", "acme.core")
     assert code == 1
     assert len(ran) == 1
-    assert ran[0][0] == str(venv / "bin" / "python")
+    assert ran[0][0] == str(venv_python(venv))
     assert "site-packages" in ran[0][2]
     assert "acme.core does not import from site-packages" in capsys.readouterr().out
     # Imported from site-packages, the member's tests run at the tree.
@@ -709,7 +758,7 @@ def test_a_module_outside_site_packages_runs_no_test(
     codes[0] = 0
     assert _verify.run_tests(venv, tmp_path / "tree", "core", "acme.core") == 0
     assert ran[1] == [
-        str(venv / "bin" / "python"),
+        str(venv_python(venv)),
         "-m",
         "pytest",
         "packages/core/tests",
@@ -747,7 +796,7 @@ def test_the_released_version_installs_alone_into_a_plain_environment(
             "pip",
             "install",
             "--python",
-            str(venv / "bin" / "python"),
+            str(venv_python(venv)),
             "--index",
             "idx",
             "acme-core[x]==1.2.0",
@@ -789,11 +838,50 @@ def test_a_red_plain_environment_installs_nothing_and_no_index_names_none(
         "pip",
         "install",
         "--python",
-        str(venv / "bin" / "python"),
+        str(venv_python(venv)),
         "acme-core==1.2.0",
         "pytest",
         "pytest-xdist",
     )
+
+
+def test_the_verify_phase_finds_the_interpreter_where_a_windows_venv_keeps_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A Windows venv keeps its interpreter as Scripts\python.exe, where
+    # the workshop's venv_python names it; the install and both runs
+    # of the tests reach it there.
+    from types import SimpleNamespace
+
+    import livery.footman
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _verify
+    from livery.workshop import _pythons
+
+    monkeypatch.setattr(_pythons, "sys", SimpleNamespace(platform="win32"))
+    commands: list[tuple[str, ...]] = []
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            return SimpleNamespace(code=0)
+
+        return _run
+
+    ran: list[list[str]] = []
+
+    def _run(argv: list[str], **_kwargs: object) -> object:
+        ran.append(argv)
+        return SimpleNamespace(code=0)
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    monkeypatch.setattr(livery.footman, "run", _run)
+    venv = tmp_path / ".verify"
+    interpreter = str(venv / "Scripts" / "python.exe")
+    assert _verify.install(venv, "3.14", "acme-core==1.2.0", "") == 0
+    assert commands[1][:4] == ("pip", "install", "--python", interpreter)
+    assert _verify.run_tests(venv, tmp_path / "tree", "core", "acme.core") == 0
+    assert [argv[0] for argv in ran] == [interpreter, interpreter]
 
 
 def test_each_python_package_here_is_categorised_by_python_s_table() -> None:

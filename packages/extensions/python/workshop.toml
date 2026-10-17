@@ -28,12 +28,8 @@ floor = "0.11.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately. Two lines of `_backend.py`
-# cannot run: in `module_for`, the return after the loop, since the
-# loop breaks only before it has named a module part; and in
-# `publish_wheels`, the return after the refusal, which raises. The
-# CI union reaches every other line.
-floor = 99.5
+# suite grows, lower it only deliberately.
+floor = 100
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.

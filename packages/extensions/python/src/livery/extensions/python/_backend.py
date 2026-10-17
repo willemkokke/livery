@@ -70,7 +70,8 @@ def module_for(package: Package) -> str:
     distribution name guessed wrong the moment a member's own name
     carried a hyphen: ``loop-echo`` under a workspace prefix became
     ``loop.echo``, a module that does not exist. A package without a
-    src tree falls back to the dist-name spelling, underscores for
+    src tree, or whose ``src/`` holds no single directory to start the
+    chain, falls back to the dist-name spelling, underscores for
     hyphens beyond the namespace dot.
     """
     src = package.directory / "src"
@@ -86,8 +87,6 @@ def module_for(package: Package) -> str:
                 break
             node = dirs[0]
             parts.append(node.name)
-        if parts:
-            return ".".join(parts)
     head, _, tail = package.name.partition("-")
     if not tail:
         return head
@@ -150,7 +149,9 @@ class _Stamper:
             )
             if count and stamped != text:
                 init.write_text(stamped, encoding="utf-8")
-                changed.append(str(init.relative_to(self._package.directory)))
+                # The release commit's paths: forward slashes on every
+                # platform, as the manifest's name above.
+                changed.append(init.relative_to(self._package.directory).as_posix())
         return changed
 
 
@@ -1056,7 +1057,6 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
         print(f"  {package.name}: already published; walking past")
         return False
     fail(f"uv publish ({package.name}) exited {result.code}:\n{output}")
-    return False  # unreachable; fail raises
 
 
 #: How each index refuses a file it already serves. Gitea and PyPI
