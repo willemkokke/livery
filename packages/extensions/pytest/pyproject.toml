@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-extensions-pytest"
-version = "0.0.0"
+version = "0.1.0"
 description = "pytest as a check of the livery workshop: each python package's suite and documentation examples, configured by the root pytest.toml and .coveragerc."
 readme = "README.md"
 license = "MIT"
