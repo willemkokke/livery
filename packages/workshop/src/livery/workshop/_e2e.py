@@ -1589,13 +1589,16 @@ def _runs_followed(
     subject: str,
     timeout: float,
     interval: float,
+    timed_out: Callable[[Pending], str],
 ) -> _A:
     """Poll the runs (of *head_sha*, or all) until *read* answers from them.
 
     A loaded local forge answers a runs listing in minutes, and the
     client's timeout is shorter: an unreadable poll is retried as the
     ``ci`` verbs retry theirs, and only a spent budget or the deadline
-    is the verdict, each failing with its words.
+    is the verdict, each failing with its words. *read* answers a
+    pending whose key says what it still waits for; at the deadline
+    *timed_out* turns the last one into the failure's words.
     """
     try:
         return follow(
@@ -1609,7 +1612,7 @@ def _runs_followed(
     except ForgeUnreachable as exc:
         fail(exc.line.strip())
     except FollowTimedOut as exc:
-        fail(exc.last.line or f"{subject} did not complete within {timeout:.0f}s")
+        fail(timed_out(exc.last))
 
 
 def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
@@ -1622,11 +1625,7 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
         latest = max(runs, key=lambda run: run.id, default=None)
         if latest is not None and latest.status == "completed":
             return latest
-        return Pending(
-            f"{workflow} did not complete within {timeout:.0f}s:"
-            f" {repo.web_url()}/actions",
-            key="pending",
-        )
+        return Pending(key="pending")
 
     latest = _runs_followed(
         repo,
@@ -1634,6 +1633,10 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
         subject=f"{workflow}'s runs",
         timeout=timeout,
         interval=5,
+        timed_out=lambda _last: (
+            f"{workflow} did not complete within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions"
+        ),
     )
     if latest.conclusion != "success":
         fail(
@@ -1746,6 +1749,9 @@ def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
         # attempt's halves: the re-run waits until every job has
         # completed, naming the one it waits on.
         _jobs_settled(repo, run)
+        # The re-run keeps the latest attempt's logs alone, so the first
+        # attempt's failure is said here or nowhere.
+        print(red_jobs_text(repo, run))
         repo.checks.rerun(run.id, failed_only=True)
         print(f"  re-running {run.workflow} (run {run.id}) once: it ended failure")
         retried.append(run.workflow)
@@ -1787,11 +1793,13 @@ def _watch(
                 return runs
             retried = True
         missing = ", ".join(sorted(set(require) - present))
-        waited = f"; never appeared: {missing}" if missing else ""
-        return Pending(
+        return Pending(key=missing)
+
+    def never_completed(last: Pending) -> str:
+        waited = f"; never appeared: {last.key}" if last.key else ""
+        return (
             f"the loop's runs did not complete within {timeout:.0f}s"
-            f"{waited}: {repo.web_url()}/actions",
-            key=f"{len(runs)}:{missing}",
+            f"{waited}: {repo.web_url()}/actions"
         )
 
     runs = _runs_followed(
@@ -1801,6 +1809,7 @@ def _watch(
         subject=f"{sha[:10]}'s runs",
         timeout=timeout,
         interval=interval,
+        timed_out=never_completed,
     )
     RUNS.count += len(runs)
     for line in judge_runs(repo, runs, branch=branch):
@@ -2161,11 +2170,7 @@ def _completed_run(
             if retried or not _retry_red_once(repo, (run,)):
                 return run
             retried = True
-        return Pending(
-            f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
-            f" {repo.web_url()}/actions",
-            key="pending",
-        )
+        return Pending(key="pending")
 
     run = _runs_followed(
         repo,
@@ -2174,6 +2179,10 @@ def _completed_run(
         subject=f"{sha[:10]}'s {event} run",
         timeout=timeout,
         interval=interval,
+        timed_out=lambda _last: (
+            f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
+            f" {repo.web_url()}/actions"
+        ),
     )
     RUNS.count += 1
     if run.conclusion != "success":
