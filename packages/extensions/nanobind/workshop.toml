@@ -55,10 +55,11 @@ floor = "0.4.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately. The measured value of the
-# suite that moved here with the extension: the build's armed test runs
-# at the merge and nightly points alone.
-floor = 84
+# suite grows, lower it only deliberately. The build container's
+# Linux branch runs on the Linux leg alone, so a run on any other
+# machine reads below the CI union, which reaches every line; the
+# floor sits a little under the union's 100.
+floor = 99.5
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.

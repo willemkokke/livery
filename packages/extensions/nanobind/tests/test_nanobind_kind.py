@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from _pytest.outcomes import Skipped  # the skip a fixture raises
@@ -200,6 +203,229 @@ def test_the_one_wheel_skip_follows_the_hosts_libc(
     # The loader is the second signal, for a musl-built python elsewhere.
     monkeypatch.setattr(f"{module}._musl_loader_present", lambda: True)
     assert _build.host_is_musl()
+
+
+def test_the_musl_loader_answers_for_an_interpreter_that_names_no_triple(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An interpreter whose build names no triple, as on Windows: the
+    # loader under /lib is the only signal left, here a scratch /lib.
+    lib = tmp_path / "lib"
+    lib.mkdir()
+
+    def _rooted(path: str) -> Path:
+        return tmp_path / path.lstrip("/")
+
+    monkeypatch.setattr(_build, "Path", _rooted)
+    monkeypatch.setattr("sysconfig.get_config_var", lambda name: None)
+    assert not _build.host_is_musl()
+    (lib / "ld-musl-x86_64.so.1").touch()
+    assert _build.host_is_musl()
+
+
+# The wheel build, with uv and the conan environment faked where the
+# build reads them: the refusals first, then what it hands each run.
+
+#: A wheel tagged for a platform, as cibuildwheel names one.
+PLATFORM_WHEEL = "acme_ext-0.0.1-cp314-cp314-macosx_11_0_arm64.whl"
+
+
+class _Uv:
+    """uv as the build runs it, through ``opts``, and the conan environment.
+
+    Each run is recorded with the options it was made with. A
+    cibuildwheel run writes ``wheels`` into its output directory and
+    exits with ``wheel_code``; a ``uv build --sdist`` run writes nothing
+    and exits with ``sdist_code``. When ``watched`` names a path, each
+    run records whether it exists at that moment.
+    """
+
+    def __init__(self) -> None:
+        self.wheels: tuple[str, ...] = (PLATFORM_WHEEL,)
+        self.wheel_code = 0
+        self.sdist_code = 0
+        self.watched: Path | None = None
+        self.runs: list[tuple[dict[str, object], tuple[str, ...]]] = []
+        self.present: list[bool] = []
+        self.conan_roots: list[Path] = []
+
+    def opts(self, **options: object) -> Callable[..., SimpleNamespace]:
+        """The run the build makes with *options*."""
+
+        def _run(*args: str) -> SimpleNamespace:
+            self.runs.append((options, args))
+            if self.watched is not None:
+                self.present.append(self.watched.exists())
+            if args[0] == "build":
+                code = self.sdist_code
+            else:
+                code = self.wheel_code
+                out = Path(args[args.index("--output-dir") + 1])
+                out.mkdir(parents=True, exist_ok=True)
+                for name in self.wheels:
+                    (out / name).write_bytes(b"")
+            said = f"{args[0]} said"
+            return SimpleNamespace(code=code, stdout=said, stderr=f"{args[0]} refused")
+
+        return _run
+
+    def env(self, run: int) -> dict[str, str]:
+        """The environment the *run*-th run was made with."""
+        return cast("dict[str, str]", self.runs[run][0]["env"])
+
+    def conan_environment(self, root: Path) -> dict[str, str]:
+        """The conan environment of *root*: one fixed table."""
+        self.conan_roots.append(root)
+        return {
+            "CONAN_HOME": "/conan/home",
+            "CMAKE_CONAN_PROVIDER": "/conan/conan_provider.cmake",
+        }
+
+
+@pytest.fixture
+def uv(monkeypatch: pytest.MonkeyPatch) -> _Uv:
+    """Uv and the conan environment faked, on a glibc host naming no build set."""
+    for key in (
+        "CIBW_BUILD",
+        "CIBW_SKIP",
+        "CIBW_ARCHS",
+        "SOURCE_DATE_EPOCH",
+        "CONAN_INSTALL_ARGS",
+        "CONAN_HOME",
+        "CMAKE_CONAN_PROVIDER",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    faked = _Uv()
+    monkeypatch.setattr(tools, "uv", faked)
+    monkeypatch.setattr(_container, "conan_environment", faked.conan_environment)
+    monkeypatch.setattr(_build, "host_is_musl", lambda: False)
+    return faked
+
+
+def test_a_failing_cibuildwheel_refuses_with_its_output_and_takes_the_docs_back(
+    tmp_path: Path, uv: _Uv
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    module = package.directory / "src" / "acme" / "ext"
+    module.mkdir(parents=True)
+    (module / "__init__.py").write_text("")
+    (package.directory / "docs").mkdir()
+    (package.directory / "docs" / "index.md").write_text("# acme-ext\n")
+    uv.watched = module / "_docs" / "index.md"
+    uv.wheel_code = 2
+    dist = tmp_path / "out"
+    with pytest.raises(
+        _FAILURES, match=r"cibuildwheel \(acme-ext\) exited 2"
+    ) as caught:
+        _build.build_wheels(package, tmp_path, dist)
+    # The tool's own output is the diagnosis: the refusal carries both streams.
+    assert "tool said" in str(caught.value)
+    assert "tool refused" in str(caught.value)
+    # The wheel embeds the docs: the copy is in the tree for the run and
+    # gone after it, a failed run too.
+    assert uv.present == [True]
+    assert not (module / "_docs").exists()
+
+
+def test_cibuildwheel_writing_a_pure_wheel_refuses_the_build(
+    tmp_path: Path, uv: _Uv
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    uv.wheels = ("acme_ext-0.0.1-py3-none-any.whl",)
+    with pytest.raises(_FAILURES, match="built a pure wheel"):
+        _build.build_wheels(package, tmp_path, tmp_path / "out")
+
+
+def test_a_failing_sdist_refuses_the_build_after_the_wheels(
+    tmp_path: Path, uv: _Uv
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    uv.sdist_code = 1
+    with pytest.raises(
+        _FAILURES, match=r"uv build --sdist \(acme-ext\) exited 1"
+    ) as caught:
+        _build.build_dist(package, tmp_path)
+    assert "build refused" in str(caught.value)
+    assert [args[0] for _options, args in uv.runs] == ["tool", "build"]
+
+
+def test_the_dist_is_rebuilt_clean_and_the_sdist_shares_the_wheels_environment(
+    tmp_path: Path, uv: _Uv
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    dist = package.directory / "dist"
+    dist.mkdir(parents=True)
+    (dist / "acme_ext-0.0.0.tar.gz").write_bytes(b"")
+    assert _build.build_dist(package, tmp_path, epoch=7) == dist
+    # A file an earlier build left is gone; the new wheel is there.
+    assert sorted(path.name for path in dist.iterdir()) == [PLATFORM_WHEEL]
+    (wheel_options, _), (sdist_options, sdist_args) = uv.runs
+    assert sdist_args == ("build", "--sdist", "--out-dir", str(dist))
+    assert sdist_options == wheel_options
+    assert sdist_options["cwd"] == package.directory
+    assert uv.env(1)["SOURCE_DATE_EPOCH"] == "7"
+
+
+def test_a_host_wheel_replaces_the_build_set_the_caller_named(
+    tmp_path: Path, uv: _Uv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    monkeypatch.setenv("CIBW_BUILD", "cp3*-*")
+    monkeypatch.setenv("CIBW_SKIP", "pp*")
+    monkeypatch.setenv("CIBW_ARCHS", "all")
+    monkeypatch.setenv("CONAN_HOME", "/caller/home")
+    dist = tmp_path / "floor"
+    env = _build.build_wheels(
+        package,
+        tmp_path,
+        dist,
+        epoch=1700000000,
+        conan_install_args="--build=missing;-pr:h;/floor.txt",
+        one_host_wheel=True,
+    )
+    version = sys.version_info
+    assert env["CIBW_BUILD"] == f"cp{version.major}{version.minor}-*"
+    assert env["CIBW_SKIP"] == "*-musllinux_*"
+    assert env["CIBW_ARCHS"] == "native"
+    assert env["SOURCE_DATE_EPOCH"] == "1700000000"
+    assert env["CONAN_INSTALL_ARGS"] == "--build=missing;-pr:h;/floor.txt"
+    # The conan environment fills what the caller left unset, and no more.
+    assert uv.conan_roots == [tmp_path]
+    assert env["CONAN_HOME"] == "/caller/home"
+    assert env["CMAKE_CONAN_PROVIDER"] == "/conan/conan_provider.cmake"
+    ((options, args),) = uv.runs
+    assert options == {
+        "cwd": package.directory,
+        "env": env,
+        "nofail": True,
+        "recorded": False,
+    }
+    assert args == (
+        "tool",
+        "run",
+        "--from",
+        _build.CIBUILDWHEEL,
+        "cibuildwheel",
+        "--output-dir",
+        str(dist),
+    )
+
+
+def test_the_default_build_set_keeps_what_the_caller_named_and_skips_the_other_libc(
+    tmp_path: Path, uv: _Uv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    monkeypatch.setenv("CIBW_BUILD", "cp3*-*")
+    monkeypatch.setattr(_build, "host_is_musl", lambda: True)
+    env = _build.build_wheels(package, tmp_path, tmp_path / "out")
+    assert env["CIBW_BUILD"] == "cp3*-*"
+    # A musl host installs the musllinux wheel alone.
+    assert env["CIBW_SKIP"] == "*-manylinux_*"
+    assert env["CIBW_ARCHS"] == "native"
+    # No epoch and no arguments of the caller's: neither is set.
+    assert "SOURCE_DATE_EPOCH" not in env
+    assert "CONAN_INSTALL_ARGS" not in env
+    assert uv.env(0) == env
 
 
 # The chain's seeds: the parent's first, the leaf's over them.
@@ -614,6 +840,13 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
     return root, package
 
 
+def test_a_package_without_a_pyproject_passes_conan_the_default_arguments(
+    tmp_path: Path,
+) -> None:
+    package = _package(tmp_path / "packages" / "ext", "acme-ext")
+    assert _build.conan_install_args(package) == _build.DEFAULT_INSTALL_ARGS
+
+
 def test_the_declared_conan_arguments_are_read_in_both_spellings(
     tmp_path: Path,
 ) -> None:
@@ -627,6 +860,47 @@ def test_the_declared_conan_arguments_are_read_in_both_spellings(
     assert _build.conan_install_args(package) == "--build=missing"
     (package.directory / "pyproject.toml").write_text('[project]\nname = "acme-ext"\n')
     assert _build.conan_install_args(package) == (_build.DEFAULT_INSTALL_ARGS)
+
+
+def test_a_floor_leg_passes_over_an_edge_no_conan_package_floors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # An edge whose member is not in the workspace, an edge naming no
+    # floor, and a floor on a python library that releases no conan
+    # package: none of them is a claim a leg proves.
+    from livery.extensions.conan import _package as _conan
+    from livery.workshop._packages import Edge
+
+    root, extension = _floor_workspace(tmp_path)
+    library = root / "packages" / "lib"
+    library.mkdir()
+    (library / "workshop.toml").write_text(
+        'extensions = ["python"]\nname = "acme-lib"\n'
+    )
+    (library / "pyproject.toml").write_text(
+        '[project]\nname = "acme-lib"\nversion = "0.1.0"\n'
+    )
+    package = Package(
+        directory=extension.directory,
+        path=extension.path,
+        name=extension.name,
+        depends=(
+            Edge(path="packages/gone", kind="build", floor="0.1.0"),
+            Edge(path="packages/geometry", kind="build", floor=""),
+            Edge(path="packages/lib", kind="runtime", floor="0.1.0"),
+        ),
+        extensions=extension.extensions,
+    )
+
+    def _never(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("no edge here holds a floor on a conan package")
+
+    monkeypatch.setattr(_conan, "restore_from_releases", _never)
+    monkeypatch.setattr(_build, "build_wheels", _never)
+    monkeypatch.setattr(_python, "run_isolated_test", _never)
+    _ci.floor_legs(package, root, {})
+    assert capsys.readouterr().out == ""
+    assert not (package.directory / "build").exists()
 
 
 def test_a_floor_the_wave_itself_releases_is_the_build_that_already_ran(
