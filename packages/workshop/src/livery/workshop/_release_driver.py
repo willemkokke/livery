@@ -358,6 +358,28 @@ def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
     return failed
 
 
+def verify_set(root: Path, plans: tuple[MemberPlan, ...]) -> None:
+    """Run the publish job's own checks over the stamped set, before any leg.
+
+    The wave refuses a member whose version homes disagree with its tag,
+    whose release notes are unsound, or whose floor names an unreleased
+    version, and it refuses only after the release has merged. The same
+    checks on the stamped tree refuse before a release pull request
+    exists. The set's own tags count as released, as the wave counts them.
+
+    Raises:
+        Failed: as the publish job's check refuses, naming the member and
+            each problem.
+    """
+    from livery.workshop._release import verify_release
+
+    coreleased = frozenset(f"{plan.package.path}/v{plan.version}" for plan in plans)
+    for plan in plans:
+        verify_release(
+            root, f"{plan.package.path}/v{plan.version}", coreleased=coreleased
+        )
+
+
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
     """The find-links dirs: each member's ``dist/`` that exists, in set order.
 
@@ -771,6 +793,7 @@ class ReleaseDriver:
                 # failed), and the manifest alone is what lets the
                 # squash's discovery still name the whole set.
                 git.commit_all(root, "chore(release): the set manifest")
+            verify_set(self._root, plans)
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
@@ -985,6 +1008,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
             _lifecycle.build_release(plan.package, root)
+        verify_set(root, plans)
         release_dirs = _wheel_dists(plans)
         for plan in plans:
             validate_member(root, plan, release_dirs)

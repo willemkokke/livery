@@ -24,7 +24,9 @@ if TYPE_CHECKING:
         run_isolated_test as run_isolated_test,
     )
 
-__all__ = ["module_docs", "run_isolated_test"]
+__version__ = "0.0.0"
+
+__all__ = ["__version__", "module_docs", "run_isolated_test"]
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {
