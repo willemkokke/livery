@@ -1006,7 +1006,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-claude"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/claude" }
 dependencies = [
     { name = "livery-footman" },
