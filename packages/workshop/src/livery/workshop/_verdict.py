@@ -29,10 +29,20 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 
 import livery.footman as footman
 from livery import git
-from livery.forge import ForgeError, RateBudget, RateLimited, Repository
+from livery.forge import (
+    CombinedStatus,
+    ForgeError,
+    PullRequest,
+    RateBudget,
+    RateLimited,
+    Repository,
+    Run,
+    classify_merge_refusal,
+)
 
 EXIT_CONFLICTS = 10
 EXIT_DISARMED = 11
@@ -152,7 +162,7 @@ class Transient:
         self.count = 0
         self.last = ""
 
-    def note(self, error: ForgeError) -> bool:
+    def note(self, error: Exception) -> bool:
         """Print *error* as one failure of the run; True when the run is spent."""
         self.count += 1
         self.last = str(error)
@@ -171,6 +181,149 @@ class Transient:
             f" polls ({seconds:.0f}s at {self.interval:.0f}s); last error:"
             f" {self.last}; {subject}"
         )
+
+
+@dataclass(frozen=True)
+class Pending:
+    """What one poll answers while the thing followed is not there yet.
+
+    Attributes:
+        line: The line the follow prints when the state changes, and
+            again at its quiet cadence while the state holds; empty
+            prints nothing.
+        key: What tells one pending state from another; the line
+            when empty.
+    """
+
+    line: str = ""
+    key: str = ""
+
+    @property
+    def state(self) -> str:
+        """The key, or the line when no key was given."""
+        return self.key or self.line
+
+
+class FollowTimedOut(Exception):
+    """A follow reached its deadline with the thing followed still pending.
+
+    Attributes:
+        subject: What was followed, in the caller's words.
+        timeout: The seconds the follow waited.
+        last: The last pending answer, for the caller's own line.
+    """
+
+    def __init__(self, subject: str, timeout: float, last: Pending) -> None:
+        super().__init__(f"{subject}: still pending after {timeout:.0f}s")
+        self.subject = subject
+        self.timeout = timeout
+        self.last = last
+
+
+class ForgeUnreachable(Exception):
+    """A follow spent its transient budget on unreadable polls.
+
+    Attributes:
+        line: The giving-up line, how long and the last error, for the
+            caller to print before it exits 15 or fails.
+        error: The last error.
+    """
+
+    def __init__(self, line: str, error: Exception) -> None:
+        super().__init__(line.strip())
+        self.line = line
+        self.error = error
+
+
+_T = TypeVar("_T")
+
+
+def follow(
+    repo: Repository | None,
+    read: Callable[[], _T | Pending],
+    *,
+    subject: str | Callable[[], str],
+    interval: float = 15,
+    timeout: float | None = 1800,
+    quiet: float | None = 60,
+    transient: Transient | None = None,
+    retried: tuple[type[Exception], ...] = (ForgeError,),
+) -> _T:
+    """Poll *read* until it answers: the one wait on the forge.
+
+    *read* returns the answer, or a [livery.workshop._verdict.Pending][]
+    while there is none yet. The follow prints a pending line when its
+    state changes and again every *quiet* seconds while it holds
+    (``None`` prints on change alone), rests *interval* seconds between
+    polls, slower while *repo*'s API budget is low, and waits out a
+    spent budget, moving the deadline by the wait. An error of a
+    *retried* type is a retry within *transient*'s budget; a run of
+    them that spends it raises
+    [livery.workshop._verdict.ForgeUnreachable][] with the giving-up
+    line. The deadline, *timeout* seconds from the start, raises
+    [livery.workshop._verdict.FollowTimedOut][]; ``None`` waits as long
+    as the caller's own timeout allows. Without a *repo* the rests are
+    plain sleeps.
+
+    Args:
+        repo: The repository polled, for its rate budget; None for a
+            wait on something that is not a forge.
+        read: One poll: the answer, or a pending state.
+        subject: What is followed, for the giving-up and timeout
+            lines; a callable is asked only when a line needs it.
+        interval: Seconds between polls.
+        timeout: Seconds until the follow gives up, or None for none.
+        quiet: Seconds after which a held pending line prints again.
+        transient: The budget for unreadable polls; a fresh one at
+            *interval* when None, shared across calls when given.
+        retried: The exception types a poll may raise and be retried.
+
+    Returns:
+        What *read* answered.
+
+    Raises:
+        FollowTimedOut: The deadline passed with *read* still pending.
+        ForgeUnreachable: *read* raised a retried error past the budget.
+    """
+    started = time.monotonic()
+    deadline = None if timeout is None else started + timeout
+    if transient is None:
+        transient = Transient(interval=interval)
+    pace = Pace(interval)
+    last = Pending()
+    printed_at: float | None = None
+    while True:
+        try:
+            answer = read()
+        except RateLimited as exc:
+            waited = pace.wait_out(exc)
+            if deadline is not None:
+                deadline += waited
+            continue
+        except retried as exc:
+            if transient.note(exc):
+                words = subject if isinstance(subject, str) else subject()
+                raise ForgeUnreachable(transient.giving_up(words), exc) from exc
+            time.sleep(interval)
+            continue
+        transient.reset()
+        if not isinstance(answer, Pending):
+            return answer
+        now = time.monotonic()
+        held = (
+            quiet is not None and printed_at is not None and now - printed_at >= quiet
+        )
+        if answer.line and (printed_at is None or answer.state != last.state or held):
+            print(answer.line)
+            printed_at = now
+        last = answer
+        if deadline is not None and now >= deadline:
+            words = subject if isinstance(subject, str) else subject()
+            raise FollowTimedOut(words, timeout or 0.0, answer)
+        if repo is not None:
+            pace.rest(repo)
+        else:
+            time.sleep(interval)
 
 
 #: Green-and-armed polls the watch grants the server to merge before
@@ -207,20 +360,65 @@ class Verdict:
     pr_number: int = 0
 
 
-def _failing_job(repo: Repository, head_sha: str) -> str:
-    """The first failing job's name for *head_sha*, or empty.
+def _deciding_runs(runs: tuple[Run, ...]) -> tuple[Run, ...]:
+    """The runs that decide a commit: the newest run of each workflow at it.
+
+    A workflow that ran again at the same commit superseded its earlier
+    run, so a rehearsal dispatched by hand that failed and then passed,
+    or a red run re-run green, no longer counts against the commit.
+    """
+    newest: dict[str, Run] = {}
+    for run in runs:
+        held = newest.get(run.workflow)
+        if held is None or run.id > held.id:
+            newest[run.workflow] = run
+    return tuple(newest.values())
+
+
+def _failing_job(repo: Repository, head_sha: str) -> tuple[str, tuple[Run, ...]]:
+    """The first failing job among the runs that decide *head_sha*, and those runs.
 
     A job carries its own conclusion while its run continues, so a red
-    leg is named the moment it ends, not when the last leg does.
+    leg is named the moment it ends, not when the last leg does. The
+    name is empty when no deciding run has failed: the red the forge
+    aggregates then belongs to a superseded run.
     """
-    for run in repo.checks.runs(head_sha=head_sha):
+    deciding = _deciding_runs(repo.checks.runs(head_sha=head_sha))
+    for run in deciding:
         for job in repo.checks.jobs(run.id):
             if job.conclusion in ("failure", "cancelled"):
                 tail = "" if run.conclusion else "; the run continues"
-                return f"{run.workflow}: {job.name} ({job.conclusion}){tail}"
+                return f"{run.workflow}: {job.name} ({job.conclusion}){tail}", deciding
         if run.conclusion in ("failure", "cancelled"):
-            return f"{run.workflow} ({run.conclusion})"
-    return ""
+            return f"{run.workflow} ({run.conclusion})", deciding
+    return "", deciding
+
+
+def _published_conflict(
+    repo: Repository, root: Path, pr: PullRequest, status: CombinedStatus
+) -> str:
+    """The forge's own words for a pull request it cannot merge, or empty.
+
+    GitHub and GitLab publish a mergeability state beside the pull
+    request and start no run for one in conflict, so its combined
+    status stays ``none`` for as long as anyone waits. The local probe
+    can miss the conflict (a merge driver the forge ignores resolves it
+    here), so the forge's answer decides. Gitea publishes none.
+    """
+    from livery.workshop import _forge_lane
+
+    kind = _forge_lane.forge_kind(root)
+    if kind not in ("github", "gitlab"):
+        return ""
+    hold = repo.pr.merge_hold(pr.number)
+    if hold in ("", "clean", "mergeable"):
+        return ""
+    classified = classify_merge_refusal(
+        kind, "", combined=status, item_state=pr.state, merged=pr.merged, hold=hold
+    )
+    if classified.state != "conflict":
+        return ""
+    return f"{classified.message} (the forge reports {hold})"
 
 
 _GREEN_CONCLUSIONS = ("", "success", "skipped", "neutral")
@@ -309,12 +507,10 @@ def classify(
     single un-watched read never reports 16: the server may simply not
     have evaluated yet.
     """
-    pr = repo.pr.find_by_head(branch, state="all")
+    from livery.workshop._forge_lane import pull_request_for
+
+    pr = pull_request_for(repo, root, branch)
     if pr is None:
-        sha = git.head_sha(root)
-        merged = repo.pr.find_by_head_sha(sha)
-        if merged is not None and merged.merged:
-            return Verdict("merged", 0, f"PR #{merged.number} merged", merged.number)
         return Verdict("no-pr", 0, f"no pull request for {branch}")
     if pr.merged:
         return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
@@ -344,15 +540,25 @@ def classify(
             pr.number,
         )
     status = repo.checks.status(pr.head_sha)
-    if status.state == "failure":
-        failing = _failing_job(repo, pr.head_sha)
-        detail = failing or "CI is red"
-        return Verdict("ci-failed", EXIT_CI_FAILED, detail, pr.number)
-    if status.state == "none":
+    state = status.state
+    if state == "failure":
+        failing, deciding = _failing_job(repo, pr.head_sha)
+        if failing or not deciding:
+            return Verdict(
+                "ci-failed", EXIT_CI_FAILED, failing or "CI is red", pr.number
+            )
+        # The red the forge aggregates belongs to a superseded run: a
+        # workflow that ran again at this commit. The runs that decide
+        # are green or still moving, so they judge the commit.
+        moving = any(run.status != "completed" for run in deciding)
+        state = "pending" if moving else "success"
+    if state == "none":
         # A pull request whose merge ref the forge cannot build gets no
         # run at all, so its status stays none for as long as anyone
         # waits. The conflict probe decides at once instead: exit 10,
-        # and the self-heal integrates and re-submits.
+        # and the self-heal integrates and re-submits. The forge's
+        # published state decides where the local probe cannot see the
+        # conflict.
         git.fetch(root)
         if git.conflicts_with_base(root, pr.base_branch):
             return Verdict(
@@ -362,10 +568,17 @@ def classify(
                 " runs nothing for it",
                 pr.number,
             )
-    if status.state in ("pending", "none"):
-        return Verdict(
-            "in-flight", 0, f"CI {status.state} for {pr.head_sha[:10]}", pr.number
-        )
+        published = _published_conflict(repo, root, pr, status)
+        if published:
+            return Verdict(
+                "conflicts",
+                EXIT_CONFLICTS,
+                f"PR #{pr.number} cannot merge into {pr.base_branch}, so the"
+                f" forge runs nothing for it: {published}",
+                pr.number,
+            )
+    if state in ("pending", "none"):
+        return Verdict("in-flight", 0, f"CI {state} for {pr.head_sha[:10]}", pr.number)
     # Green. A conflict blocks the merge whatever the arming state, so
     # it is classified first; behind matters only once an armed pull
     # request has been given time, because without strict protection an
@@ -495,7 +708,7 @@ def _eligible_reviewers(root: Path, base: str) -> set[str]:
         return set()
 
 
-def follow(
+def follow_pull_request(
     repo: Repository,
     branch: str,
     root: Path,
@@ -505,56 +718,40 @@ def follow(
 ) -> Verdict:
     """Watch until a terminal verdict, or raise SystemExit with its code.
 
-    Returns the ``merged`` verdict on success. Every job's status
-    change prints as a line of its own as it happens
-    (livery.workshop._verdict.JobWatch), and a job that fails prints
-    its failure lines under its name. Every terminal blocker
-    (10-13, 16, 17) raises SystemExit carrying its code, after
-    printing the detail; the deadline raises 14. A transport error
-    during a poll is a retry: printed once, polled through at the
-    interval, and only a run of them that reaches the budget
-    (livery.workshop._verdict.Transient) raises 15, naming the last
-    error and the pull request. A spent API budget is neither: the
-    watch says when it returns, waits for it, and moves its deadline by
-    the wait; a low one slows the polls
-    ([livery.workshop._verdict.paced][]).
+    Returns the ``merged`` verdict on success, or ``awaiting-approvals``
+    once the arm holds and a review is what happens next. Every job's
+    status change prints as a line of its own as it happens
+    ([livery.workshop._verdict.JobWatch][]), and a job that fails
+    prints its failure lines under its name. Every terminal blocker
+    (10-13, 16, 17) raises SystemExit carrying its code, after printing
+    the detail; the deadline raises 14; a forge unreachable past the
+    transient budget raises 15, naming the last error and the pull
+    request. The polls, the transient budget and the API budget are
+    [livery.workshop._verdict.follow][]'s.
     """
-    deadline = time.monotonic() + timeout
-    transient = Transient(interval=interval)
     green_polls = 0
     confirm_streak = 0
     last_state = ""
-    pace = Pace(interval)
+    last_verdict: Verdict | None = None
     jobs = JobWatch()
-    while True:
-        try:
-            grace_spent = green_polls >= _MERGE_GRACE_POLLS
-            verdict = classify(repo, branch, root, grace_spent=grace_spent)
-            # Every job's move prints as it happens, before the verdict
-            # line it may lead to: a red leg is named while the others
-            # run, with its failure lines, so the fix starts at once.
-            jobs.report(repo, _head_of(repo, branch))
-        except RateLimited as exc:
-            # Not the pull request's verdict and not an outage: the
-            # budget returns at a known time, so the watch waits for it.
-            deadline += pace.wait_out(exc)
-            continue
-        except ForgeError as exc:
-            if transient.note(exc):
-                print(transient.giving_up(_pull_request_words(repo, branch)))
-                raise SystemExit(EXIT_UNREACHABLE) from None
-            time.sleep(interval)
-            continue
-        transient.reset()
-        if verdict.state != last_state:
-            print(f"{jobs.stamp()}{verdict.state}: {verdict.detail}")
-            last_state = verdict.state
+
+    def read() -> Verdict | Pending:
+        nonlocal green_polls, confirm_streak, last_state, last_verdict
+        grace_spent = green_polls >= _MERGE_GRACE_POLLS
+        verdict = classify(repo, branch, root, grace_spent=grace_spent)
+        # Every job's move prints as it happens, before the verdict
+        # line it may lead to: a red leg is named while the others
+        # run, with its failure lines, so the fix starts at once.
+        jobs.report(repo, _head_of(repo, branch))
+        last_verdict = verdict
+        changed = verdict.state != last_state
+        last_state = verdict.state
+        if changed:
             confirm_streak = 0
-        if verdict.state == "merged":
-            return verdict
-        if verdict.state == "awaiting-approvals":
-            # Not an error: the watch's job is done, the arm holds,
-            # and a human review is what happens next.
+        line = f"{jobs.stamp()}{verdict.state}: {verdict.detail}"
+        if verdict.state in ("merged", "awaiting-approvals"):
+            if changed:
+                print(line)
             return verdict
         if verdict.exit_code:
             # A blocker must hold for two consecutive polls before it
@@ -564,21 +761,38 @@ def follow(
             # is the exception, definitive on a single read: a closed
             # pull request does not reopen itself.
             confirm_streak += 1
-            if verdict.state != "closed" and confirm_streak < _CONFIRM_POLLS:
-                time.sleep(interval)
-                continue
-            _record_ending(repo, verdict, branch, root)
-            raise SystemExit(verdict.exit_code)
-        confirm_streak = 0
+            if verdict.state == "closed" or confirm_streak >= _CONFIRM_POLLS:
+                if changed:
+                    print(line)
+                return verdict
+            return Pending(line, key=verdict.state)
         if verdict.state == "in-flight" and verdict.detail.startswith("green"):
             green_polls += 1
         else:
             green_polls = 0
-        if time.monotonic() >= deadline:
-            print(f"  still in flight after {timeout:.0f}s")
-            _record_ending(repo, verdict, branch, root)
-            raise SystemExit(EXIT_TIMEOUT)
-        pace.rest(repo)
+        return Pending(line, key=verdict.state)
+
+    try:
+        verdict = follow(
+            repo,
+            read,
+            subject=lambda: _pull_request_words(repo, branch),
+            interval=interval,
+            timeout=timeout,
+            quiet=None,
+        )
+    except ForgeUnreachable as exc:
+        print(exc.line)
+        raise SystemExit(EXIT_UNREACHABLE) from None
+    except FollowTimedOut:
+        print(f"  still in flight after {timeout:.0f}s")
+        if last_verdict is not None:
+            _record_ending(repo, last_verdict, branch, root)
+        raise SystemExit(EXIT_TIMEOUT) from None
+    if verdict.exit_code:
+        _record_ending(repo, verdict, branch, root)
+        raise SystemExit(verdict.exit_code)
+    return verdict
 
 
 def _pull_request_words(repo: Repository, branch: str) -> str:

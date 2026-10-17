@@ -25,7 +25,6 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-import time
 import tomllib
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -45,7 +44,11 @@ from livery.workshop._verdict import (
     EXIT_BEHIND,
     EXIT_CONFLICTS,
     EXIT_DISARMED,
+    EXIT_UNREACHABLE,
+    ForgeUnreachable,
+    Pending,
     follow,
+    follow_pull_request,
 )
 
 submit = group(
@@ -79,12 +82,10 @@ _HOLD_POLL = 3.0
 
 
 def _contract_forge_kind(root: Path) -> str:
-    """The contract's forge kind; empty when unreadable."""
-    contract_path = root / "workshop.toml"
-    if not contract_path.is_file():
-        return ""
-    contract = load_contract(contract_path)
-    return str((contract.get("forge") or {}).get("kind", ""))
+    """The forge the contract names; [livery.workshop._forge_lane.forge_kind][]."""
+    from livery.workshop._forge_lane import forge_kind
+
+    return forge_kind(root)
 
 
 def _reported_context_names(repo: Repository, sha: str) -> tuple[str, ...]:
@@ -138,27 +139,37 @@ def _wait_for_verdict(repo: Repository, number: int, *, local_head: str = "") ->
     the wait is followed, and the move is said: the old and new
     heads, whether the new one is *local_head* (this clone's own
     push) or arrived from elsewhere, and the newest run for it, so
-    the cancelled run it leaves behind needs no investigation.
+    the cancelled run it leaves behind needs no investigation. A
+    forge unreachable past the transient budget exits 15.
     """
     pr = repo.pr.get(number)
     if pr is None:
         return
     head = pr.head_sha
-    last = ""
-    quiet_since = time.monotonic()
-    while True:
+
+    def read() -> str | Pending:
+        nonlocal head
         current = repo.pr.get(number)
         if current is not None and current.head_sha and current.head_sha != head:
             print(_head_moved_line(repo, number, head, current.head_sha, local_head))
             head = current.head_sha
         state = repo.checks.status(head).state
         if state not in ("pending", "none"):
-            return
-        if state != last or time.monotonic() - quiet_since >= 60:
-            last = state
-            quiet_since = time.monotonic()
-            print(f"  waiting: checks are {state} for PR #{number}")
-        time.sleep(_HOLD_POLL)
+            return state
+        return Pending(f"  waiting: checks are {state} for PR #{number}", key=state)
+
+    try:
+        follow(
+            repo,
+            read,
+            subject=f"PR #{number}",
+            interval=_HOLD_POLL,
+            timeout=None,
+            quiet=60,
+        )
+    except ForgeUnreachable as exc:
+        print(exc.line)
+        raise SystemExit(EXIT_UNREACHABLE) from None
 
 
 def _head_moved_line(
@@ -209,12 +220,13 @@ def _follow_merge_state(
     from livery.forge import classify_merge_refusal
 
     settling_checked = False
-    last_state = ""
     local_head = str(kwargs.pop("local_head", "") or "")
-    while True:
+
+    def read() -> bool | Pending:
+        nonlocal settling_checked
         try:
             act(*args, **kwargs)
-            return
+            return True
         except ForgeError as exc:
             if exc.status not in (405, 422):
                 raise
@@ -229,23 +241,30 @@ def _follow_merge_state(
                 merged=pr.merged,
                 hold=repo.pr.merge_hold(number),
             )
-            if hold.category == "success":
-                print(f"  PR #{number}: {hold.message}; walking past")
-                return
-            if hold.category == "in-progress":
-                if hold.state == "contexts-settling" and not settling_checked:
-                    settling_checked = True
-                    _refuse_unreported_contexts(repo, number)
-                if hold.state != last_state:
-                    last_state = hold.state
-                    print(f"  waiting: {hold.message}")
-                if hold.state == "ci-running":
-                    _wait_for_verdict(repo, number, local_head=local_head)
-                else:
-                    time.sleep(_HOLD_POLL)
-                continue
-            native = f"\n  the forge said: {hold.native}" if hold.native else ""
-            fail(f"PR #{number}: {hold.message}{native}")
+        if hold.category == "success":
+            print(f"  PR #{number}: {hold.message}; walking past")
+            return True
+        if hold.category == "in-progress":
+            if hold.state == "contexts-settling" and not settling_checked:
+                settling_checked = True
+                _refuse_unreported_contexts(repo, number)
+            if hold.state == "ci-running":
+                _wait_for_verdict(repo, number, local_head=local_head)
+            return Pending(f"  waiting: {hold.message}", key=hold.state)
+        native = f"\n  the forge said: {hold.native}" if hold.native else ""
+        fail(f"PR #{number}: {hold.message}{native}")
+
+    # A refusal other than the merge endpoint's two hold codes is the
+    # forge's answer, not a transient: it reaches the caller unretried.
+    follow(
+        repo,
+        read,
+        subject=f"PR #{number}",
+        interval=_HOLD_POLL,
+        timeout=None,
+        quiet=None,
+        retried=(),
+    )
 
 
 def _root() -> Path:
@@ -963,7 +982,9 @@ def submit_flow(
 
     while True:
         try:
-            follow(repo, plan.branch, root, interval=interval, timeout=timeout)
+            follow_pull_request(
+                repo, plan.branch, root, interval=interval, timeout=timeout
+            )
         except SystemExit as exc:
             code = exc.code if isinstance(exc.code, int) else 1
             if code == EXIT_DISARMED and not armed:
@@ -1206,30 +1227,14 @@ def merged_pull_request(
 ) -> PullRequest | None:
     """The merged pull request *branch* was the head of, or None.
 
-    By head branch first, then by the branch's head sha: a forge that
-    deletes the head branch on merge may clear the merged pull
-    request's head ref, and the sha persists after the branch is
-    gone. A pull request found by the sha is the branch's own only
-    when its head branch is *branch* or empty, and never while
-    *branch* is a stacked branch still at the commit it started from:
-    that commit is the parent's head, so the pull request found is the
-    parent's. A forge that cannot be asked raises.
+    [livery.workshop._forge_lane.pull_request_for][] finds it, by head
+    branch and then by the branch's head commit; a forge that cannot
+    be asked raises.
     """
-    pr = repo.pr.find_by_head(branch, state="all")
-    if pr is None:
-        sha = git.any_head(root, branch)
-        pr = repo.pr.find_by_head_sha(sha) if sha else None
-        if pr is not None and not _proposed_at(pr, root, branch, sha):
-            pr = None
+    from livery.workshop._forge_lane import pull_request_for
+
+    pr = pull_request_for(repo, root, branch)
     return pr if pr is not None and pr.merged else None
-
-
-def _proposed_at(pr: PullRequest, root: Path, branch: str, sha: str) -> bool:
-    """Whether *pr*, found by *branch*'s head *sha*, is *branch*'s own pull request."""
-    if pr.head_branch and pr.head_branch != branch:
-        return False
-    _parent, start = _stack.stack(root, branch)
-    return start != sha
 
 
 def _tidy_after_merge(

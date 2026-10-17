@@ -455,7 +455,7 @@ def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
     def following(repo: object, branch: str, git: object, **kw: float) -> None:
         followed.append((branch, kw["timeout"]))
 
-    monkeypatch.setattr("livery.workshop._verdict.follow", following)
+    monkeypatch.setattr("livery.workshop._verdict.follow_pull_request", following)
     run = SimpleNamespace(id=7, status="completed", url="https://forge.test/run/7")
     monkeypatch.setattr(
         _release_driver, "await_wave", lambda repo, *, before, timeout, transient: 7

@@ -22,7 +22,6 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
-import time
 from pathlib import Path
 from typing import Annotated
 
@@ -272,9 +271,17 @@ def wait_for_releases(
     always safe (re-entry resumes); non-interactive runs wait
     *timeout* then answer False, and the caller parks at exit 0.
     """
-    deadline = time.monotonic() + timeout
+    from livery.workshop._verdict import (
+        FollowTimedOut,
+        ForgeUnreachable,
+        Pending,
+        follow,
+    )
+
     announced = False
-    while True:
+
+    def read() -> bool | Pending:
+        nonlocal announced
         live = _live_releases(repo, root)
         if not live:
             return True
@@ -287,9 +294,22 @@ def wait_for_releases(
                 f" safe; run `{footman.prog()} workflow.update` any time to continue"
                 " later."
             )
-        if not interactive and time.monotonic() >= deadline:
-            return False
-        time.sleep(poll)
+        return Pending()
+
+    try:
+        follow(
+            repo,
+            read,
+            subject="the releases in flight",
+            interval=poll,
+            timeout=None if interactive else timeout,
+            quiet=None,
+        )
+    except FollowTimedOut:
+        return False
+    except ForgeUnreachable as exc:
+        fail(exc.line.strip())
+    return True
 
 
 def _drive(
