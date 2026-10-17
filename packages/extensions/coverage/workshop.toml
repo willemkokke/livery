@@ -11,23 +11,23 @@ description = "Each package's coverage floor in the livery workshop, judged on t
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.60.0"
+floor = "0.61.0"
 
 [[depends]]
 path = "packages/git"
 kind = "runtime"
-floor = "0.2.0"
+floor = "0.3.0"
 
 # The suite collects a run's rows through the forge's fake.
 [[depends]]
 path = "packages/forge"
 kind = "test"
-floor = "0.7.0"
+floor = "0.8.0"
 
 # The suite judges native packages whose lists hold conan.
 [[depends]]

@@ -36,8 +36,9 @@ from livery.workshop._envfile import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping
+    from collections.abc import Iterable, MutableMapping
 
+    from livery.workshop._declaration import DeclaredVariable
     from livery.workshop._packages import Package
     from livery.workshop._tools import ToolReceipt
 
@@ -78,7 +79,8 @@ def apply_cascade(inv: footman.Invocation) -> None:
     hold. Only absent keys are written, and what the hook itself
     contributed is remembered: those values look pre-existing to a
     later load, and the emitters must not misread them as the
-    shell's own.
+    shell's own. The variables the workspace's extensions declare
+    follow (`apply_declared`).
     """
     from livery.workshop._extensions import workspace_root
 
@@ -94,10 +96,49 @@ def apply_cascade(inv: footman.Invocation) -> None:
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
+    apply_declared(root, os.environ)
     # The tools' half of the entry contract: whatever launched this
     # process, it runs entered.
     apply_entry(root, os.environ)
     _warn_unmounted_extensions(root)
+
+
+def apply_declared(root: Path, environ: MutableMapping[str, str]) -> dict[str, str]:
+    """Set the variables the extensions of *root*'s set declare into *environ*.
+
+    On a CI job a value naming ``{place}`` takes the job's own
+    directory: ``RUNNER_TEMP`` on a GitHub or Gitea job, ``.workshop``
+    under ``CI_PROJECT_DIR`` on a GitLab one. Off a CI job it is not
+    set, and a desk keeps its own. A variable *environ* already
+    carries keeps its value, its declaration's ``always`` included: the
+    job's entry already placed it where the job's environment was
+    formed, and a nested run keeps the value its parent set. The
+    cascade's files count as the environment here, since they are folded
+    in first. What the hook contributes is remembered in `_APPLIED`. A
+    declaration that cannot be read costs these variables alone, said on
+    stderr, never the command: the mount and ``fm sync`` name it.
+
+    Returns:
+        The variables written, each to its value.
+    """
+    import sys
+
+    from livery.footman import Failed
+    from livery.workshop._declaration import DeclarationError
+    from livery.workshop._variables import job_place, placed, workspace_variables
+
+    try:
+        variables = workspace_variables(root)
+    except (DeclarationError, Failed) as error:
+        sys.stderr.write(f"declared variables skipped ({error})\n")
+        return {}
+    written: dict[str, str] = {}
+    for key, value in placed(variables, job_place(environ), environ).items():
+        if environ.get(key) != value:
+            environ[key] = value
+            _APPLIED[key] = value
+            written[key] = value
+    return written
 
 
 #: Whether this process's command had its checkout brought current:
@@ -244,8 +285,10 @@ class EnvDelta:
 WINDOWS_TEMP_VALUES = ("runner", "system")
 
 
-def runner_placements(environ: dict[str, str]) -> dict[str, str]:
-    """What a GitHub job places under the runner's temp: its caches and conan's home.
+def runner_placements(
+    environ: dict[str, str], variables: Iterable[DeclaredVariable] = ()
+) -> dict[str, str]:
+    """What a GitHub job places under the runner's temp: its caches and *variables*.
 
     The runner's temp is the working drive, where the checkout and the
     venv are; on a Windows runner the home directory is another drive,
@@ -263,48 +306,55 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     the emission, hands them on to the steps after it, where an export
     of a step's shell never reaches by itself.
 
-    Conan's home is different: conan's cache takes one process at a
-    time, and a runner may run several jobs at once. So conan's home is
-    always `conan` under the runner's temp, which is the job's own, and
-    a ``CONAN_HOME`` the runner sets for every job is not used. It is
-    also the path the workflow's conan cache step restores.
+    *variables* are the ones the workspace's extensions declare, which
+    `apply_declared` sets for each run where the environment carries
+    none. A value naming ``{place}`` takes the runner's temp, which is
+    the job's own. The emission forms the environment of the job's later
+    steps, so an ``always`` one beats a value the runner sets for every
+    job.
 
     Raises:
-        Failed: on a job (``GITHUB_ACTIONS`` set) whose runner names no
-            ``RUNNER_TEMP``, or when ``RUNNER_TEMP`` names no directory:
-            the job then has no directory of its own for conan's home.
+        Failed: when one of *variables* names ``{place}`` on a job
+            (``GITHUB_ACTIONS`` set) whose runner names no
+            ``RUNNER_TEMP``, or when ``RUNNER_TEMP`` names no directory,
+            naming each such variable and the extension that declares
+            it: the job then has no directory of its own to keep it in.
     """
     from livery.footman import directory_variable
+    from livery.workshop._variables import declarers, placed
 
+    held = tuple(variables)
+    needing = declarers(variable for variable in held if variable.placed)
     runner_temp = environ.get("RUNNER_TEMP", "")
     if not runner_temp:
-        if environ.get("GITHUB_ACTIONS"):
+        if environ.get("GITHUB_ACTIONS") and needing:
             fail(
-                "this job's runner sets no RUNNER_TEMP: a job keeps conan's home"
-                " in its own temporary directory, so run it on a runner that"
-                " sets one"
+                f"this job's runner sets no RUNNER_TEMP: {needing} in a directory"
+                " of the job's own, so run it on a runner that sets one"
             )
         return {}
-    if not Path(runner_temp).is_dir():
+    if needing and not Path(runner_temp).is_dir():
         fail(
-            f"RUNNER_TEMP names {runner_temp}, which is not a directory: a job"
-            " keeps conan's home in it, so its runner must create it first"
+            f"RUNNER_TEMP names {runner_temp}, which is not a directory: {needing}"
+            " in it, so its runner must create it first"
         )
     shared = {
         "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
         directory_variable("DATA_DIR"): f"{runner_temp}/footman",
     }
-    placed = {key: environ.get(key) or value for key, value in shared.items()}
-    placed["CONAN_HOME"] = f"{runner_temp}/conan"
-    return placed
+    found = {key: environ.get(key) or value for key, value in shared.items()}
+    found.update(placed(held, runner_temp, environ, forming=True))
+    return found
 
 
-def with_runner_placements(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:
+def with_runner_placements(
+    delta: EnvDelta, environ: dict[str, str], variables: Iterable[DeclaredVariable] = ()
+) -> EnvDelta:
     """*delta* with the runner's placements for a GitHub job, unchanged elsewhere."""
-    placed = runner_placements(environ)
-    if not placed:
+    found = runner_placements(environ, variables)
+    if not found:
         return delta
-    return EnvDelta(values={**delta.values, **placed}, paths=delta.paths)
+    return EnvDelta(values={**delta.values, **found}, paths=delta.paths)
 
 
 def windows_temp_policy(root: Path) -> str:
@@ -659,6 +709,8 @@ def env_emit(
     root, cwd = _workspace()
     dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
+        from livery.workshop._variables import workspace_variables
+
         environ = dict(os.environ)
         rung = rung_file(environ)
         if rung is not None:
@@ -666,7 +718,9 @@ def env_emit(
             # handed, and the steps after read it persisted.
             environ["WORKSHOP_SHARED_ENV_FILE"] = str(rung)
         delta, note = with_runner_temp(
-            with_runner_placements(workspace_delta(root, cwd, environ), environ),
+            with_runner_placements(
+                workspace_delta(root, cwd, environ), environ, workspace_variables(root)
+            ),
             root,
             environ,
         )

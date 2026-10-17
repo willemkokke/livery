@@ -121,9 +121,19 @@ def test_order_topologically_puts_dependencies_first(
     assert [p.directory.name for p in ordered] == ["core", "tool"]
 
 
-def test_floors_rise_within_the_set_in_both_homes(
+def test_a_member_released_alone_moves_no_floor(
     workspace: tuple[FakeForge, Path],
 ) -> None:
+    _fake, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    assert bump_set_floors(root, (MemberPlan(packages["tool"], "0.3.0"),)) == []
+    assert git.is_clean(root)
+
+
+def test_floors_rise_within_the_set_through_the_stamp_phase(
+    workspace: tuple[FakeForge, Path],
+) -> None:
+    skip_unless_installed("python")
     _fake, root = workspace
     packages = {p.directory.name: p for p in discover_packages(root)}
     plans = (
@@ -132,12 +142,17 @@ def test_floors_rise_within_the_set_in_both_homes(
     )
     changed = bump_set_floors(root, plans)
     tool = root / "packages" / "tool"
-    assert '"livery-core>=0.3.0"' in (tool / "pyproject.toml").read_text()
+    # python's stamp step raises the requirement, the base the edge.
+    pyproject = (tool / "pyproject.toml").read_text()
+    assert '"livery-core>=0.3.0"' in pyproject
     assert 'floor = "0.3.0"' in (tool / "workshop.toml").read_text()
     assert sorted(changed) == [
         "packages/tool/pyproject.toml",
         "packages/tool/workshop.toml",
     ]
+    # The phase ran at the version each member declares: the release's
+    # own stamp writes the new one.
+    assert 'version = "0.2.0"' in pyproject
 
 
 def _files(root: Path) -> dict[str, bytes]:
@@ -157,7 +172,9 @@ def test_the_local_act_refuses_an_edit_to_a_file_it_writes_and_writes_nothing(
     workspace: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The refusal first: core's pyproject has an edit of its own, which
-    # the restore after the act would discard.
+    # the restore after the act would discard. The pyproject is one of
+    # the files python's stamp writes.
+    skip_unless_installed("python")
     _fake, root = workspace
     monkeypatch.setattr(
         "livery.workshop._release_driver.bump_set_floors", _past_the_refusal
@@ -254,11 +271,50 @@ def test_a_first_release_failing_its_legs_leaves_the_tree_as_it_was(
     assert "could not restore" not in capsys.readouterr().out
 
 
+def test_the_local_act_refuses_a_root_module_without_its_version_before_any_leg(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skip_unless_installed("python")
+    # The fallback first: core's __init__.py keeps no __version__, so the
+    # stamp writes none and the publish job would refuse the member after
+    # its release merged. The local act runs that check on the stamped
+    # tree, before any leg, and leaves the tree as it found it.
+    _fake, root = workspace
+    init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
+    kept = [
+        line
+        for line in init.read_text().splitlines()
+        if not line.startswith("__version__")
+    ]
+    init.write_text("\n".join(kept) + "\n")
+    _git(root, "commit", "-am", "refactor: core's root module keeps no version")
+    _grow(root, "core", "feat: core grows (#1)")
+    before = _files(root)
+    legs: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, _dirs: legs.append(plan.package.name),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
+    )
+    with pytest.raises(
+        _FAILURES, match=re.escape("no __init__.py under src/ declares")
+    ):
+        local_release(root, resolve_set(root, ("core",)))
+    assert legs == []
+    assert _files(root) == before
+    assert git.is_clean(root)
+
+
 def test_a_rollback_that_cannot_restore_one_path_restores_the_rest_and_names_it(
     workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # Each member's pyproject is one of the files python's stamp writes.
+    skip_unless_installed("python")
     _fake, root = workspace
     members = resolve_set(root, ("core", "tool"))
     core = root / "packages" / "core"
@@ -298,6 +354,7 @@ def test_a_file_prepare_created_that_cannot_go_is_named_and_the_rest_go_back(
 ) -> None:
     from livery.workshop._publish import MANIFEST
 
+    skip_unless_installed("python")
     _fake, root = workspace
     pyproject = root / "packages" / "core" / "pyproject.toml"
     before = pyproject.read_text()
@@ -340,13 +397,31 @@ def test_rollback_restores_exactly_what_prepare_writes(
     from livery.workshop._release import prepare_release
 
     prepare_release(root, "packages/core", "9.9.9")
-    bump_set_floors(
+    reported = bump_set_floors(
         root,
         (MemberPlan(members[0], "9.9.9"), MemberPlan(members[1], "9.9.9")),
     )
-    rollback_prepare(root, members)
+    assert reported
+    rollback_prepare(root, members, reported)
     after = {path: path.read_text() for path in before}
     assert after == before
+    assert git.is_clean(root)
+
+
+def test_the_rollback_restores_a_reported_file_no_version_file_names(
+    workspace: tuple[FakeForge, Path],
+) -> None:
+    # A stamp step may write a file of its own beyond the version files:
+    # the rollback restores it because the phase reported it.
+    _fake, root = workspace
+    members = resolve_set(root, ("core",))
+    own = root / "packages" / "core" / "VERSION.txt"
+    own.write_text("0.2.0\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: a file of the step's own")
+    own.write_text("9.9.9\n")
+    rollback_prepare(root, members, ["packages/core/VERSION.txt"])
+    assert own.read_text() == "0.2.0\n"
     assert git.is_clean(root)
 
 

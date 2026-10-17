@@ -26,8 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.14"]
+        include:
+          - {os: ubuntu-latest, python: "3.14"}
+          - {os: macos-latest, python: "3.14", shard: 1of3}
+          - {os: macos-latest, python: "3.14", shard: 2of3}
+          - {os: macos-latest, python: "3.14", shard: 3of3}
+          - {os: windows-latest, python: "3.14", shard: 1of4}
+          - {os: windows-latest, python: "3.14", shard: 2of4}
+          - {os: windows-latest, python: "3.14", shard: 3of4}
+          - {os: windows-latest, python: "3.14", shard: 4of4}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,6 +57,7 @@ jobs:
         run: >-
           fm ci.run --point=gate --job=check
           --os="${{ matrix.os }}" --python="${{ matrix.python }}"
+          --shard="${{ matrix.shard }}"
   # The strict site build: broken links and orphan pages go red here,
   # required through the gate context, never inside the local check. On a
   # push the built site is kept for the gate job, which adds this run's

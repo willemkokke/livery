@@ -57,3 +57,27 @@ def declared(root: Path) -> tuple[git.Series | git.Keyed, ...]:
 
     kept = answer(root, STORE_SERIES)
     return BASE + tuple(item for item in kept if item not in BASE)
+
+
+def mirrored(item: git.Series | git.Keyed) -> bool:
+    """Whether a sync mirrors *item* into the checkout for a desk's gate to read.
+
+    A remote row series under the store's own namespace is mirrored.
+    A local series is in the checkout already, a keyed family is
+    fetched on read by the verb that needs it, through a live
+    snapshot, and a series of another namespace, a trace, is mirrored
+    by nothing.
+    """
+    return isinstance(item, git.Series) and not item.local and not item.namespace
+
+
+def mirrored_series(root: Path) -> tuple[str, ...]:
+    """The names of the series a sync mirrors for *root*, sorted.
+
+    What [livery.git.fetch_store][] is told to mirror: every declared
+    remote row series ([livery.workshop._series.mirrored][]) and never
+    a keyed family, so a desk's gate reads ``metrics``, ``verified``,
+    ``speed/marks`` and the listed extensions' own from the mirror,
+    and a verb that needs a family opens a live snapshot.
+    """
+    return tuple(sorted(item.name for item in declared(root) if mirrored(item)))

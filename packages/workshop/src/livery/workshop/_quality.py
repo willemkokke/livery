@@ -27,7 +27,14 @@ from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext, walk_steps
-from livery.workshop._shard import ONE, Shard, shard_of
+from livery.workshop._shard import (
+    ONE,
+    Shard,
+    checkout_time,
+    files_digest,
+    leave_shard,
+    shard_of,
+)
 
 # Re-exported by name: the drift step's body looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -625,6 +632,8 @@ def _run_check(
 
     root_for_ci = workspace_root()
     run = run_context()
+    if root_for_ci is not None and run is not None:
+        _leave_empty_share(root_for_ci, shard, attempt=run.attempt)
     # The nightly point pays the whole gate: the record it would skip on
     # was stamped by a run that selected the gate's tests, not its own,
     # and a narrowed nightly would be no nightly. A dispatched run sets
@@ -873,6 +882,33 @@ def _current_point() -> str:
     from livery.workshop._ci_context import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
+
+
+def _leave_empty_share(root: Path, shard: Shard, *, attempt: str = "") -> None:
+    """Leave the shard's record of an empty test-file set, before the gate decides.
+
+    The gate job's fold proves a platform's shards from the record each
+    one leaves of what it partitioned, and the test step leaves that
+    record only when it runs. A shard whose gate skips on the verified
+    record, finds nothing affected, or reaches no suite leaves this one
+    instead: no file, no durations row, the checkout's time as the
+    bound, the same on every shard of the platform, so the fold folds
+    the platform's skipped shards into one skipped leg. The test step's
+    own record replaces it when the step runs. One shard of one leaves
+    none. *attempt* is the run's attempt, recorded as the test step
+    records it.
+    """
+    if shard == ONE:
+        return
+    leave_shard(
+        root,
+        shard=shard,
+        digest=files_digest(()),
+        files=(),
+        rows=(),
+        before=checkout_time(root),
+        attempt=attempt,
+    )
 
 
 def _current_shard(given: str = "") -> Shard:

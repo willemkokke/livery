@@ -8,7 +8,7 @@ the forge times them, beside the per-task durations and lane waits
 the leg's own trace recorded, and the test time per package summed
 from the trace's pytest slices.
 
-Two writers, both inside CI. Each check leg ends with `put_leg`: it
+Three writers, all inside CI. Each check leg ends with `put_leg`: it
 reads the trace the profiled gate wrote and puts the task half of
 its row on the leg's per-run ref, in one write with every file the
 leg's other entries left in its spool (`LEG_SPOOL`); a leg that ran
@@ -18,13 +18,18 @@ leg. The run's gate job first folds each platform's shards into one
 ref ([livery.workshop._fold][]), then runs `collect`: it reads the
 per-run refs, asks the forge for the run's jobs, joins the two
 halves, folds in the sections the job's judges left (`RUN_ROW`),
-puts the run's file on the series under its window, writes each
+puts the run's file on the series under its window, and writes each
 check leg's seconds per test file onto its platform leg's series of
-the [livery.workshop.DURATIONS][] family, and drops the per-run
-refs; it fails open loudly, a printed reason and never a red job.
-Local runs read: `render` is what `fm ci.timings` prints, the latest
-value, p50, and p90 per metric over the window, the movers against a
-base window, and each section's trend.
+the [livery.workshop.DURATIONS][] family; it fails open loudly, a
+printed reason and never a red job. The run's last green job runs
+`drop_halves`: the per-run refs go once every job that writes a half
+has completed green, so a re-run of a red gate job still finds what
+its legs put, and a point with no gate job, where every job puts a
+half and collects, keeps each job's half until the last one has
+folded it in. Local runs read: `render` is what `fm ci.timings`
+prints, the latest value, p50, and p90 per metric over the window, a
+platform that ran as shards as one section with a line per shard, the
+movers against a base window, and each section's trend.
 """
 
 from __future__ import annotations
@@ -40,10 +45,10 @@ from typing import TYPE_CHECKING, Any
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._shard import DURATIONS, marker_fields, platform_leg, read_shard
-from livery.workshop._speed import leg_of
+from livery.workshop._speed import forge_shard_row, leg_of
 
 if TYPE_CHECKING:
-    from livery.forge import Job, Repository
+    from livery.forge import Job, Repository, Run
 
 #: The rows' schema. A reader skips a row of another version and
 #: names it; a new field is the same version, a changed meaning is
@@ -58,11 +63,10 @@ SERIES = git.Series("metrics", window=300, schema=SCHEMA)
 #: The per-run family: one series per run and check leg, keyed
 #: ``(run, leg)``, holding the leg's half of its timing row, and beside
 #: it every file the leg's entries left for its one write, until the
-#: run's gate job collects the halves and drops the refs, those files
-#: included. A half older than six hours outlived a run that was
-#: cancelled or died before its gate job could collect, and the janitor
-#: drops it: no run lasts that long, and the forge has no run-by-id
-#: lookup to ask.
+#: run's last green job drops the refs, those files included. A half
+#: older than six hours outlived a run that was cancelled or died
+#: before its last job could drop, and the janitor drops it: no run
+#: lasts that long, and the forge has no run-by-id lookup to ask.
 RUNS: git.Keyed = git.Keyed(
     "run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6)
 )
@@ -210,6 +214,14 @@ def _end(event: dict[str, Any]) -> float:
     return _start(event) + float(event.get("dur", 0.0))
 
 
+def _pair_id(event: dict[str, Any]) -> Any:
+    """What pairs an async begin with its end: the event's id, scoped or not."""
+    scoped = event.get("id2")
+    if isinstance(scoped, dict):
+        return scoped.get("local", scoped.get("global"))
+    return event.get("id")
+
+
 def _steps_by_task(
     spans: list[tuple[str, int, float, float]],
     ran: list[tuple[str, int, float, float, float]],
@@ -255,10 +267,14 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
 
     The trace is the Chrome trace the profiled gate wrote: every
     task's slice (its request address and duration), the lane waits,
-    and each pytest phase of every test as a slice of its own. The
-    row's ``files`` is the seconds each test file took, every phase of
-    every test in it summed, to a tenth. A missing or unreadable trace
-    is a reason, never a row.
+    each step inside its task, and each pytest phase of every test as
+    a slice of its own. A step is a slice nested in its task, or an
+    async pair (a begin and an end under one id) where it overlaps a
+    sibling on the task's track, which is how footman draws the steps
+    of one ``parallel()`` block; both read as the step's whole wall.
+    The row's ``files`` is the seconds each test file took, every
+    phase of every test in it summed, to a tenth. A missing or
+    unreadable trace is a reason, never a row.
     """
     if not trace.is_file():
         return None, f"no trace at {trace}: the gate did not run under --profile"
@@ -282,10 +298,30 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     calls: list[tuple[float, str]] = []
     begins: list[float] = []
     ends: list[float] = []
+    # A step that overlaps a sibling on its track is an async pair
+    # rather than a slice, since the slices on one track must nest.
+    # Its begin waits here for its end; the two are one span. A begin
+    # the trace never ends is no span.
+    begun: dict[tuple[Any, int, Any], dict[str, Any]] = {}
     for event in events:
-        if not isinstance(event, dict) or event.get("ph") != "X":
+        if not isinstance(event, dict):
             continue
+        phase = event.get("ph")
         cat = str(event.get("cat", ""))
+        if phase in ("b", "e"):
+            if cat != "step":
+                continue
+            key = (event.get("pid"), _track(event), _pair_id(event))
+            if phase == "b":
+                begun[key] = event
+            elif (opened := begun.pop(key, None)) is not None:
+                start, end = _start(opened), _start(event)
+                ms = round((end - start) / 1000.0, 1)
+                name = str(opened.get("name", ""))
+                ran.append((name, _track(event), start, end, ms))
+            continue
+        if phase != "X":
+            continue
         name = str(event.get("name", ""))
         if event.get("pid") == 1:
             begins.append(float(event.get("ts", 0.0)))
@@ -452,28 +488,68 @@ def _forge_row(job: Job, *, created: str, now: str) -> dict[str, Any]:
     }
 
 
+def _forge_jobs(
+    repo: Repository, run: RunContext, *, sha: str
+) -> tuple[Run | None, dict[str, Job], list[str]]:
+    """The forge's run for *run* and its jobs by name; the lines about the lookup.
+
+    The run is looked up under the head the runner's event names,
+    because a pull request's checkout is a merge commit the forge
+    never files a run under; *sha* is the checkout, the fallback. A
+    forge that numbers the run differently from the environment (a
+    pull request's merge sha, say) still yields the newest run for
+    the sha, named as a substitution.
+    """
+    from livery.forge import ForgeError
+
+    lines: list[str] = []
+    head = run.head_sha or sha
+    try:
+        runs = repo.checks.runs(head_sha=head)
+        forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
+        if forge_run is None and runs:
+            forge_run = runs[0]
+            lines.append(
+                f"  run {run.run_id}: not among the forge's runs for {head[:12]};"
+                f" using the newest, run {forge_run.id}"
+            )
+        jobs = (
+            {job.name: job for job in repo.checks.jobs(forge_run.id)}
+            if forge_run
+            else {}
+        )
+    except ForgeError as error:
+        # A job without a forge credential (one that only builds) can
+        # push its half and read nothing back: the record stays a
+        # record, never a verdict, so the question's refusal is a line.
+        lines.append(
+            f"  run {run.run_id}: the forge could not be asked for its jobs"
+            f" ({error}); the rows carry their trace halves alone"
+        )
+        return None, {}, lines
+    return forge_run, jobs, lines
+
+
 def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[str]:
     """Join the legs' halves with the forge's times into the run's file; what happened.
 
     Every line names what was done or why not. Nothing is written
-    when no leg left a row, and a per-run ref is dropped only after
-    the run's file landed and while no completed job is red: a failed
-    put or a red sibling job keeps the halves, since the forge's
-    re-run of the failed jobs runs the gate again without its legs,
-    and that union reads what the first attempt left. A job the forge
-    does not know keeps its trace half and
-    is named; a row of another schema is skipped and named. The run
-    is looked up under the head the runner's event names, because a
-    pull request's checkout is a merge commit the forge never files
-    a run under; *sha* is the checkout, the fallback and the row's
-    own record. Every job the forge lists is recorded, the legs with
-    their traces, the others with their forge times alone, and the
-    run's own wall from its start to this collection. A platform that
-    ran as shards has one row, folded under the platform's display
-    name before the collect ([livery.workshop._fold][]), a name the
-    forge never ran: the row takes the forge times of the first
-    shard's job and concludes as the shards' jobs did, and the forge's
-    rows of the shards stand beside it with their times alone, for
+    when no leg left a row. The per-run refs stay: `drop_halves`
+    takes them once every half is in, so a re-run of a red gate job
+    still unions what its legs put, and a point whose every job
+    collects folds each earlier job's half into its own write. A job
+    the forge does not know keeps its trace half and is named; a row
+    of another schema is skipped and named. The run is looked up
+    under the head the runner's event names (`_forge_jobs`); *sha*
+    is the checkout, the fallback and the row's own record. Every
+    job the forge lists is recorded, the legs with their traces, the
+    others with their forge times alone, and the run's own wall from
+    its start to this collection. A platform that ran as shards has
+    one row, folded under the platform's display name before the
+    collect ([livery.workshop._fold][]), a name the forge never ran:
+    the row takes the forge times of the first shard's job and
+    concludes as the shards' jobs did, and the forge's rows of the
+    shards stand beside it with their times alone, for
     ``fm ci.timings``. After the run's file lands, each check leg's
     seconds per test file go onto its platform leg's series of the
     [livery.workshop.DURATIONS][] family, one row per run, which the
@@ -488,10 +564,8 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             " nothing collected"
         ]
     halves: dict[str, dict[str, Any]] = {}
-    refs: list[str] = []
     for key in keys:
         series = RUNS.series(*key)
-        refs.append(series.ref)
         found, why = series.row(state_store(root), ROW_FILE)
         if why:
             lines.append(f"  {series.ref}: {why}; skipped")
@@ -503,23 +577,10 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     if not halves:
         lines.append(f"  run {run.run_id}: no leg left a row; nothing collected")
         return lines
-    # The run by its own id among the runs for this sha; a forge that
-    # numbers the run differently from the environment (a pull
-    # request's merge sha, say) still yields the newest run for the
-    # sha, named as a substitution.
     head = run.head_sha or sha
-    runs = repo.checks.runs(head_sha=head)
-    forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
-    if forge_run is None and runs:
-        forge_run = runs[0]
-        lines.append(
-            f"  run {run.run_id}: not among the forge's runs for {head[:12]};"
-            f" using the newest, run {forge_run.id}"
-        )
-    jobs = (
-        {job.name: job for job in repo.checks.jobs(forge_run.id)} if forge_run else {}
-    )
-    if forge_run is None:
+    forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
+    lines.extend(looked)
+    if forge_run is None and not looked:
         lines.append(
             f"  run {run.run_id}: the forge lists no such run for {head[:12]};"
             " the rows carry their trace halves alone"
@@ -593,17 +654,67 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         f"  {SERIES.ref}: run {run.run_id} recorded, {len(entry['jobs'])} job(s)"
     )
     lines.extend(_put_durations(root, run, halves))
-    red = sorted(
-        f"{name}: {job.conclusion}"
-        for name, job in jobs.items()
-        if job.status == "completed" and job.conclusion not in ("success", "skipped")
+    return lines
+
+
+def _green(job: Job) -> bool:
+    """Whether *job* has completed and did not fail."""
+    return job.status == "completed" and job.conclusion in ("success", "skipped")
+
+
+def drop_halves(
+    root: Path,
+    repo: Repository,
+    run: RunContext,
+    *,
+    sha: str,
+    job: str,
+    writers: tuple[str, ...],
+) -> list[str]:
+    """Drop the run's per-run refs once every half is in and nothing is red.
+
+    Runs as the last entry of a job that collected, after its own
+    verdict, so its own job is green when it runs and is left out of
+    the question. *writers* names the jobs that put a half, as the
+    schedule spells them (``check``); a forge job answers to a writer
+    by its display name's prefix (``check (ubuntu-latest, 3.14)``).
+    The refs stay, and the lines say so, while a writer other than
+    *job* has not completed green or any completed job is red: a
+    re-run of a red job finds what the legs put, and the last of a
+    point's collecting jobs is the one that drops. A job the forge
+    does not list, or a run it does not know, keeps the refs too; the
+    janitor's six-hour sweep is the net under every kept ref.
+    """
+    lines: list[str] = []
+    keys = RUNS.listed(state_store(root), run.run_id)
+    if keys is None:
+        return [f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed; kept"]
+    if not keys:
+        return [f"  run {run.run_id}: no per-run ref to drop"]
+    forge_run, jobs, looked = _forge_jobs(repo, run, sha=sha)
+    lines.extend(looked)
+    if forge_run is None:
+        lines.append(f"  run {run.run_id}: the forge's jobs are unknown; the refs stay")
+        return lines
+    waiting = sorted(
+        f"{name}: {found.conclusion or found.status}"
+        for name, found in jobs.items()
+        if name != job
+        and any(name == writer or name.startswith(f"{writer} (") for writer in writers)
+        and not _green(found)
     )
-    if red:
+    red = sorted(
+        f"{name}: {found.conclusion}"
+        for name, found in jobs.items()
+        if found.status == "completed" and not _green(found)
+    )
+    if waiting or red:
         lines.append(
-            "  the per-run refs stay for a re-run of the gate: " + ", ".join(red)
+            "  the per-run refs stay: " + ", ".join(dict.fromkeys([*red, *waiting]))
         )
         return lines
-    for ref in sorted(refs):
+    for key in sorted(keys):
+        ref = RUNS.series(*key).ref
         gone = git.drop(state_store(root), ref)
         lines.append(f"  {ref}: {gone or 'dropped'}")
     return lines
@@ -697,13 +808,20 @@ def _metrics(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
     """Every numeric metric of a run's file, by job then metric name.
 
     The run's own wall, start to collection, renders as the ``run``
-    group, so the floor the legs never touch has a row of its own.
+    group, so the floor the legs never touch has a row of its own. The
+    forge's own row of a shard
+    ([livery.workshop._speed.forge_shard_row][]) is left out: the
+    platform's folded row carries the shards' work, and `render` prints
+    each shard's times under it, so neither a section nor a mover is a
+    shard's.
     """
     out: dict[str, dict[str, float]] = {}
     wall = entry.get("run_wall_ms")
     if isinstance(wall, int | float):
         out["run"] = {"wall_ms": float(wall)}
     for name, row in sorted(entry.get("jobs", {}).items()):
+        if forge_shard_row(name, row):
+            continue
         metrics: dict[str, float] = {}
         for key in ("queued_ms", "wall_ms", "total_ms"):
             value = row.get(key)
@@ -733,8 +851,12 @@ def render(
     The window is every run the series holds. The latest *since* runs
     are the recent side; the *base* runs before them are the base the
     movers compare against, by the change of the recent median over
-    the base median. Nothing yet, an unreadable series, and a row of
-    another schema each say so.
+    the base median. A platform that ran as shards is one section, its
+    folded row, and under its metrics one line per shard with the
+    shard's wall and queue times from the newest run, read from the
+    forge's own rows of the shards; those rows are no sections of their
+    own, and the movers read the platform legs alone. Nothing yet, an
+    unreadable series, and a row of another schema each say so.
     """
     found = SERIES.rows(state_store(root))
     if found.failed:
@@ -770,12 +892,12 @@ def render(
         lines.append(f"    {'metric':<44} {'latest':>9} {'p50':>9} {'p90':>9}")
         for metric, values in sorted(series[job].items()):
             now = latest.get(job, {}).get(metric)
-            shown = f"{now / 1000:.1f}s" if now is not None else "-"
             lines.append(
-                f"    {metric[:44]:<44} {shown:>9}"
+                f"    {metric[:44]:<44} {_seconds(now):>9}"
                 f" {_percentile(values, 0.5) / 1000:8.1f}s"
                 f" {_percentile(values, 0.9) / 1000:8.1f}s"
             )
+        lines.extend(_shard_lines(newest, job))
     if base_entries and recent:
         deltas: list[tuple[float, str, str, float, float]] = []
         recent_series: dict[str, dict[str, list[float]]] = defaultdict(
@@ -811,6 +933,40 @@ def render(
                 f" ({then / 1000:.1f}s -> {now / 1000:.1f}s)"
             )
     lines.extend(_render_sections(entries))
+    return lines
+
+
+def _seconds(ms: Any) -> str:
+    """*ms* as seconds to a tenth, ``-`` when it is no number."""
+    return f"{ms / 1000:.1f}s" if isinstance(ms, int | float) else "-"
+
+
+def _shard_lines(entry: dict[str, Any], job: str) -> list[str]:
+    """One line per shard of *job* in *entry*: the shard's wall and queue times.
+
+    A platform's folded row lists its shards under ``shard.shards``,
+    each naming the forge's job the shard ran as; the forge's own row
+    of that job in the same run's file carries the shard's times. A row
+    without shards gives no line; a shard whose forge row the file
+    lacks, or whose time the forge did not set, shows ``-``.
+    """
+    jobs: Any = entry.get("jobs", {})
+    row: Any = jobs.get(job) if isinstance(jobs, dict) else None
+    shard: Any = row.get("shard") if isinstance(row, dict) else None
+    listed: Any = shard.get("shards") if isinstance(shard, dict) else None
+    if not isinstance(listed, list):
+        return []
+    lines: list[str] = []
+    for item in listed:
+        if not isinstance(item, dict):
+            continue
+        forge: Any = jobs.get(str(item.get("job", "")))
+        wall = forge.get("wall_ms") if isinstance(forge, dict) else None
+        queued = forge.get("queued_ms") if isinstance(forge, dict) else None
+        lines.append(
+            f"    shard {item.get('shard', '')}: wall {_seconds(wall)},"
+            f" queued {_seconds(queued)}"
+        )
     return lines
 
 

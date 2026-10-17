@@ -14,9 +14,9 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.forge import Conclusion, Repository
+from livery.forge import Conclusion, Repository, Run
 from livery.forge.testing import FakeForge
-from livery.workshop import _devenv, _e2e
+from livery.workshop import _devenv, _e2e, _e2e_rows
 from livery.workshop._ci_context import state_store
 from livery.workshop._declaration import Declaration
 from workshop_installed import skip_unless_installed
@@ -1225,6 +1225,36 @@ def test_a_red_run_is_re_run_once_and_red_twice_is_the_verdict(
         _e2e._watch("gitea", "url", "e" * 40, timeout=5, interval=0)
 
 
+def test_the_birth_watch_judges_the_runs_it_caused_and_names_a_foreign_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Refusal first: a dispatched red run the watch requires is its own,
+    # and red is the verdict. A dispatched red run it did not ask for,
+    # at the same commit (a wave the merge point re-dispatched), is
+    # named once and left to its scenario; the push's green run judges.
+    fake, repo = _proof_rig()
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (fake, "t"))
+    monkeypatch.setattr(_e2e, "_retry_red_once", lambda repo_, runs_: [])
+    sha = "d" * 40
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="success", sha=sha)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha)
+    # The wave, dispatched at the same commit after the push's run
+    # settled green, is the one run the outcome below reaches.
+    repo.checks.dispatch("release.yml", ref="main")
+    fake.set_outcome(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha, "failure")
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha)
+    with pytest.raises(_FAILURES, match=r"red runs on the loop: release\.yml"):
+        _e2e._watch(
+            "gitea", "url", sha, timeout=5, interval=0, require=("release.yml",)
+        )
+    capsys.readouterr()
+    _e2e._watch("gitea", "url", sha, timeout=5, interval=0)
+    out = capsys.readouterr().out
+    assert out.count("is not this pass's: dispatched at") == 1
+    assert "ci.yml         success" in out
+    assert "release.yml    failure" not in out
+
+
 class _SlowDeleteForge(FakeForge):
     """A forge whose delete outruns the client; *finishes*: the server completes it."""
 
@@ -1712,14 +1742,16 @@ def test_a_fresh_pass_stops_at_a_home_it_may_not_empty_and_changes_nothing(
     # them, so it built on a half-removed home.
     ports = iter((47615, 57713))
     monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
-    first = _e2e.enter_environment("e2e")
-    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "src" / "support"
+    first = _e2e.enter_environment("e2e", ())
+    held = (
+        first.directory / "conan" / "p" / "fmt80a1ffe0392cb" / "s" / "src" / "support"
+    )
     held.mkdir(parents=True)
     (held / "build.gradle").write_text("written by root\n")
     held.chmod(0o555)
     try:
         with pytest.raises(Failed) as refused:
-            _e2e.enter_environment("e2e", fresh=True)
+            _e2e.enter_environment("e2e", (), fresh=True)
         said = str(refused.value)
         assert f"e2e: {held} belongs to {getpass.getuser()}" in said
         assert "nothing was stopped or removed" in said
@@ -1730,7 +1762,7 @@ def test_a_fresh_pass_stops_at_a_home_it_may_not_empty_and_changes_nothing(
     finally:
         held.chmod(0o755)
     # Handed back, the fresh pass takes the whole environment and a new forge.
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", (), fresh=True)
     assert second.url == "http://localhost:57713"
     assert not held.exists()
 
@@ -1745,8 +1777,8 @@ def test_a_fresh_pass_finishes_a_removal_an_earlier_one_could_not(
     # the removal ran: the pass stops, and what stayed holds no environment.
     ports = iter((47615, 57713))
     monkeypatch.setattr(_devenv, "free_port", lambda: next(ports))
-    first = _e2e.enter_environment("e2e")
-    held = first.conan_home / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
+    first = _e2e.enter_environment("e2e", ())
+    held = first.directory / "conan" / "p" / "fmt80a1ffe0392cb" / "s" / "build.gradle"
     held.parent.mkdir(parents=True)
     held.write_text("held\n")
 
@@ -1757,14 +1789,14 @@ def test_a_fresh_pass_finishes_a_removal_an_earlier_one_could_not(
 
     monkeypatch.setattr(_devenv, "UNLINK", refusing)
     with pytest.raises(Failed, match=r"is not removed whole"):
-        _e2e.enter_environment("e2e", fresh=True)
+        _e2e.enter_environment("e2e", (), fresh=True)
     assert held.is_file() and not first.env_file.exists()
     # A pass that is not fresh refuses to bring an environment up there.
     with pytest.raises(Failed, match=r"holds what a refused removal left"):
-        _e2e.enter_environment("e2e")
+        _e2e.enter_environment("e2e", ())
     # A fresh pass removes what stayed, though no environment is named there.
     monkeypatch.setattr(_devenv, "UNLINK", os.unlink)
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", (), fresh=True)
     assert second.url == "http://localhost:57713"
     assert not held.exists()
 
@@ -1776,7 +1808,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    skip_unless_installed("python")
+    skip_unless_installed("python", "conan")
     # Two passes in one hosted job, the second fresh: the first's forge
     # listened on 47615 and its release pointed conan's remote there; the
     # second's forge listens on 57713, and its members' build asked
@@ -1787,7 +1819,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     # pass of the job inherits it.
     job_home = tmp_path / "job-conan"
     monkeypatch.setenv("CONAN_HOME", str(job_home))
-    first = _e2e.enter_environment("e2e")
+    first = _e2e.enter_environment("e2e", ("conan",))
     assert first.url == "http://localhost:47615"
     # The release points the remote at the pass's forge from the host, in
     # the home the pass runs conan with. A runner's job points it in its
@@ -1797,7 +1829,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     assert "CONAN_HOME" not in (first.runner_dir(1) / "config.yaml").read_text()
     first_home = Path(os.environ["CONAN_HOME"])
     assert _remotes(first_home, tmp_path)["workshop"] == _registry(47615)
-    second = _e2e.enter_environment("e2e", fresh=True)
+    second = _e2e.enter_environment("e2e", ("conan",), fresh=True)
     assert second.url == "http://localhost:57713"
     # Before the second pass's release runs, the home the pass builds
     # with names no earlier forge.
@@ -1805,17 +1837,17 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     assert not [url for url in _remotes(pass_home, tmp_path).values() if "47615" in url]
     _point_the_remote(_registry(57713), tmp_path)
     assert _remotes(pass_home, tmp_path)["workshop"] == _registry(57713)
-    # Both homes are the environment's own, and the job's home never held
-    # the loop's remote.
-    assert first_home == pass_home == second.conan_home
-    assert pass_environment["CONAN_HOME"] == str(second.conan_home)
+    # Both homes are the environment's own, placed there by conan's
+    # declaration, and the job's home never held the loop's remote.
+    assert first_home == pass_home == second.directory / "conan"
+    assert Path(pass_environment["CONAN_HOME"]) == second.directory / "conan"
     assert "CONAN_HOME" not in (second.runner_dir(1) / "config.yaml").read_text()
     assert "workshop" not in _remotes(job_home, tmp_path)
     # A pass that is not fresh keeps the environment, its forge, and the
     # remote that names it.
-    third = _e2e.enter_environment("e2e")
+    third = _e2e.enter_environment("e2e", ("conan",))
     assert third.url == "http://localhost:57713"
-    assert _remotes(third.conan_home, tmp_path)["workshop"] == _registry(57713)
+    assert _remotes(third.directory / "conan", tmp_path)["workshop"] == _registry(57713)
 
 
 def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks_it(
@@ -1866,17 +1898,20 @@ def test_a_workspace_s_origin_names_this_pass_s_forge_before_the_start_over_asks
 def test_a_docker_pass_runs_conan_with_the_docker_environment_s_own_home(
     rig: Path, pass_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    skip_unless_installed("conan")
     # The compose rig is long-lived and keeps its address, so nothing is
     # brought up or removed, fresh or not; conan's home is still the
     # environment's, never the person's own.
     monkeypatch.setenv("CONAN_HOME", str(rig / "person-conan"))
     docker = _devenv.environment("dev")
     docker.update({"MODE": "docker", "GITEA_URL": "http://localhost:3000"})
-    entered = _e2e.enter_environment("dev", fresh=True)
+    entered = _e2e.enter_environment("dev", ("conan",), fresh=True)
     assert entered.directory == docker.directory and docker.env_file.is_file()
     assert (_e2e.CURRENT.name, _e2e.CURRENT.mode) == ("dev", "docker")
-    assert os.environ["CONAN_HOME"] == str(docker.conan_home)
-    assert pass_environment["CONAN_HOME"] == str(docker.conan_home)
+    # The declared value joins its placeholder with a slash, which Windows
+    # takes as a separator too, so the homes compare as paths.
+    assert Path(os.environ["CONAN_HOME"]) == docker.directory / "conan"
+    assert Path(pass_environment["CONAN_HOME"]) == docker.directory / "conan"
 
 
 def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
@@ -2334,3 +2369,142 @@ def test_a_tree_whose_file_goes_under_the_walk_is_still_removed_whole(
     monkeypatch.setattr(Path, "chmod", vanishing)
     _e2e._rmtree(root)
     assert not root.exists()
+
+
+# --- the shards: the proofs, then the seeding --------------------------------
+
+_LEG = "check-ubuntu-latest-3.14"
+_JOB = "check (ubuntu-latest, 3.14)"
+_SHARD_JOBS = ("check (ubuntu-latest, 3.14, 1of2)", "check (ubuntu-latest, 3.14, 2of2)")
+
+
+def _fold(
+    files: tuple[int, ...] = (2, 1),
+    *,
+    count: int = 2,
+    rows: tuple[str, ...] = ("20261017T090000Z-76.json",),
+    digest: str = "ab" * 32,
+) -> _e2e_rows.FoldFacts:
+    """The fold's record of *count* shards that ran *files* each."""
+    shards = tuple(
+        _e2e_rows.ShardFacts(
+            f"{index}of{count}", f"{_LEG}-{index}of{count}", _SHARD_JOBS[index - 1], n
+        )
+        for index, n in enumerate(files, 1)
+    )
+    return _e2e_rows.FoldFacts(count, digest, rows, shards)
+
+
+def _facts(
+    fold: _e2e_rows.FoldFacts | None, *, shard_jobs: tuple[str, ...] = _SHARD_JOBS
+) -> _e2e_rows.RunFacts:
+    leg = _e2e_rows.LegFacts(_JOB, "affected", (), "", _LEG, (), fold=fold)
+    return _e2e_rows.RunFacts("77", {_JOB: leg}, {}, shard_jobs)
+
+
+def _run() -> Run:
+    return Run(
+        77, "ci.yml", "a" * 40, "push", "completed", "success", url="http://r/77"
+    )
+
+
+def test_the_shards_proof_refuses_a_leg_that_is_not_the_fold_of_the_shards() -> None:
+    run = _run()
+    # The leg ran as one shard of one.
+    with pytest.raises(_FAILURES, match="is not a fold"):
+        _e2e._require_shards(run, _facts(None), count=2, ran=True)
+    # Another count than the contract's.
+    with pytest.raises(_FAILURES, match=r"folds 1 shard\(s\) and lists 1 \("):
+        _e2e._require_shards(run, _facts(_fold((3,), count=1)), count=2, ran=True)
+    # A shard whose forge row the collect did not keep beside the fold's.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_shards(
+            run, _facts(_fold(), shard_jobs=_SHARD_JOBS[:1]), count=2, ran=True
+        )
+    assert f"the forge's rows of {_SHARD_JOBS[1]} are not beside the folded row" in str(
+        caught.value
+    )
+    # The leg ran, and the shards partitioned nothing or ran no file.
+    with pytest.raises(_FAILURES, match="ran no test file"):
+        _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=True)
+    with pytest.raises(_FAILURES, match="recorded no partition"):
+        _e2e._require_shards(run, _facts(_fold(digest="")), count=2, ran=True)
+    # Every shard skipped, and the fold records files ran or rows read.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_shards(run, _facts(_fold()), count=2, ran=False)
+    assert (
+        "every shard skipped, and the fold records 3 test file(s) ran and 1"
+        " durations row(s) read" in str(caught.value)
+    )
+    with pytest.raises(_FAILURES, match=r"0 test file\(s\) ran and 1 durations"):
+        _e2e._require_shards(run, _facts(_fold((0, 0))), count=2, ran=False)
+    # Then the shapes the loop proves: a leg that ran on a row, the
+    # first pass with no row yet (the first shard ran every file), and
+    # a leg whose every shard skipped.
+    _e2e._require_shards(run, _facts(_fold()), count=2, ran=True)
+    _e2e._require_shards(run, _facts(_fold((3, 0), rows=())), count=2, ran=True)
+    _e2e._require_shards(run, _facts(_fold((0, 0), rows=())), count=2, ran=False)
+
+
+def test_the_durations_proof_refuses_a_missing_row_on_a_run_and_a_row_on_a_skip(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _ci_context, _metrics, _shard
+
+    work = seeds("pushed", pushed) / "work"
+    ctx = _ci_context.RunContext("gitea", "77", "push", "refs/heads/main")
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: ctx)
+    run = _run()
+    series = _shard.DURATIONS.series(_LEG)
+    name = _metrics.run_file("77")
+    # Nothing on the store: the leg ran, so its row is missing.
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_durations(work, run, f"{_LEG}-1of2", written=True)
+    assert f"no row {name} naming a test file on {series.ref}" in str(caught.value)
+    _e2e._require_durations(work, run, f"{_LEG}-1of2", written=False)
+    _e2e._prove_shards(work, run, _facts(_fold((0, 0), rows=())), ran=False)
+    assert (
+        f"  shards: run 77's check leg skipped on every shard, folded into {_LEG};"
+        " no durations row written" in capsys.readouterr().out
+    )
+    # The row on the store: every shard skipped, so a row is wrong.
+    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5}}}
+    assert series.put(state_store(work), rows, message="durations: run 77") == ""
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._require_durations(work, run, _LEG, written=False)
+    assert f"{series.ref} holds {name} with 1 file(s), and every shard skipped" in (
+        str(caught.value)
+    )
+    _e2e._require_durations(work, run, f"{_LEG}-2of2", written=True)
+    _e2e._prove_shards(work, run, _facts(_fold()), ran=True)
+    assert (
+        f"  shards: run 77's check leg ran as 2 shards folded into {_LEG}; its"
+        " durations row is on the store" in capsys.readouterr().out
+    )
+
+
+def test_the_wiring_seeds_two_shards_on_the_pass_s_runner_and_keeps_a_declared_count(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import tomllib
+
+    _wiring_rig(monkeypatch, tmp_path)
+    monkeypatch.setattr(_e2e.CURRENT, "label", "e2e-linux-x64-01")
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    contract = (tmp_path / "workshop.toml").read_text("utf-8")
+    # The count names the environment's runner, the one the runners
+    # list names, inside the [ci] table the matrix reads.
+    assert 'runners = ["e2e-linux-x64-01"]' in contract
+    assert contract.count("shards =") == 1
+    assert tomllib.loads(contract)["ci"]["shards"] == {"e2e-linux-x64-01": _e2e.SHARDS}
+    # Wired again, nothing moves; a count set by hand stands.
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert (tmp_path / "workshop.toml").read_text("utf-8") == contract
+    by_hand = contract.replace(
+        f'shards = {{ "e2e-linux-x64-01" = {_e2e.SHARDS} }}',
+        'shards = { "e2e-linux-x64-01" = 3 }',
+    )
+    assert by_hand != contract
+    (tmp_path / "workshop.toml").write_text(by_hand, "utf-8")
+    _e2e._eat_dev_wheels(tmp_path, {})  # pyright: ignore[reportPrivateUsage]
+    assert (tmp_path / "workshop.toml").read_text("utf-8") == by_hand

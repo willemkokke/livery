@@ -9,6 +9,19 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.5.0] - 2026-10-17
+
+### Added
+
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+
+### Changed
+
+- The tool extensions sit inside the workshop's entry of the site's Packages tree, and five contracts state their description by @willemkokke
+- This repository's packages list their extensions by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+
 ## [0.4.0] - 2026-10-07
 
 ### Added

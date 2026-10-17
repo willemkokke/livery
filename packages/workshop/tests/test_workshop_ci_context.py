@@ -99,6 +99,24 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
     assert gitlab == _ci_context.RunContext("gitlab", "42", "push", "main")
 
 
+def test_the_run_context_attempt_is_the_runners_and_empty_elsewhere() -> None:
+    # Without the variable the attempt is empty, so a record written
+    # before attempts were recorded reads the same as one outside them.
+    base = {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_EVENT_NAME": "push"}
+    first = _ci_context.run_context(base)
+    assert first is not None and first.attempt == ""
+    rerun = _ci_context.run_context({**base, "GITHUB_RUN_ATTEMPT": "2"})
+    assert rerun is not None and rerun.attempt == "2"
+    gitea = _ci_context.run_context(
+        {**base, "GITEA_ACTIONS": "true", "GITHUB_RUN_ATTEMPT": "3"}
+    )
+    assert gitea is not None and gitea.forge == "gitea" and gitea.attempt == "3"
+    gitlab = _ci_context.run_context(
+        {"GITLAB_CI": "true", "CI_PIPELINE_ID": "42", "GITHUB_RUN_ATTEMPT": "2"}
+    )
+    assert gitlab is not None and gitlab.attempt == ""
+
+
 def test_the_run_context_shard_is_the_legs_and_one_without_a_label() -> None:
     from livery.workshop import Shard
 
@@ -445,6 +463,53 @@ def test_a_gitlab_pipeline_source_reads_in_the_one_event_vocabulary(
 
 
 # --- the fetched mirror: what a machine's gate reads ----------------------------
+
+
+def test_a_desk_reads_the_row_series_from_the_mirror_and_a_family_fails_naming_it(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate's reads, offline: metrics and verified answer, a family never does."""
+    from livery.workshop import _metrics, _verified
+    from livery.workshop._series import mirrored_series
+    from livery.workshop._sync import fetch_store_lines
+
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    run = _ci_context.RunContext("github", "7", "push", "refs/heads/main")
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: run)
+    assert (
+        _verified.SERIES.put(state_store(other), {"t": {"scope": "full"}}, message="v")
+        == ""
+    )
+    assert (
+        _metrics.SERIES.put(state_store(other), {"7": {"wall": 1}}, message="m") == ""
+    )
+    family = _metrics.RUNS.series("7", "check-a")
+    assert (
+        family.put(state_store(other), {"row.json": {"job": "check"}}, message="h")
+        == ""
+    )
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: None)
+    assert fetch_store_lines(work) == ["  store: 2 ref(s) changed, 2 mirrored"]
+    mirrored = git.list_refs(state_store(work), git.FETCHED_NAMESPACE)
+    assert mirrored is not None and set(mirrored) == {
+        git.FETCHED_NAMESPACE + "metrics",
+        git.FETCHED_NAMESPACE + "verified",
+    }
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with git.fetched_snapshot(state_store(work)):
+        # A family's series, held by origin, is outside the mirror.
+        found = family.rows(state_store(work))
+        assert found.failed and family.ref in found.reason
+        assert ", ".join(mirrored_series(work)) in found.reason
+        assert _metrics.RUNS.listed(state_store(work), "7") is None
+        # The row series answer from the mirror, with no network.
+        assert [row.name for row in _verified.SERIES.rows(state_store(work)).rows] == [
+            "t"
+        ]
+        assert [row.name for row in _metrics.SERIES.rows(state_store(work)).rows] == [
+            "7"
+        ]
 
 
 def test_the_sync_line_says_what_the_fetch_did(

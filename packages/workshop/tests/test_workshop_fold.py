@@ -38,6 +38,7 @@ DISPLAY = {
 BEFORE = "2026-10-17T09:30:00+00:00"
 FILES = ("packages/a/tests/test_a.py", "packages/a/tests/test_b.py", "tests/test_c.py")
 SET = _shard.files_digest(FILES)
+SUITES = ("packages/a", "tests")
 
 _FAILURES = (SystemExit, Failed)
 
@@ -70,6 +71,8 @@ def _marker(
     digest: str = SET,
     rows: Sequence[str] = ("r1.json",),
     before: str = BEFORE,
+    suites: Sequence[str] = SUITES,
+    attempt: str = "",
 ) -> dict[str, Any]:
     return {
         "shard": shard,
@@ -77,6 +80,8 @@ def _marker(
         "files": list(files),
         "rows": list(rows),
         "before": before,
+        "suites": list(suites),
+        "attempt": attempt,
     }
 
 
@@ -307,6 +312,24 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
         rf" \({WIN1} {SET[:12]}, {WIN2} {other[:12]}\)",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
+    # The suites partitioned are one more field the shards must agree on.
+    _two_shards(
+        work,
+        second=_row(WIN2, marker=_marker("2of2", FILES[1:], suites=("packages/a",))),
+    )
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: the shards partitioned different suites"
+        rf" \({WIN1} packages/a, tests, {WIN2} packages/a\)",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES[1:], suites=())))
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: the shards partitioned different suites"
+        rf" \({WIN1} packages/a, tests, {WIN2} none\)",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
     _two_shards(work, second=_row(WIN2, marker=_marker("2of2", FILES[1:], rows=())))
     with pytest.raises(
         _FAILURES,
@@ -324,6 +347,90 @@ def test_shards_of_different_sets_rows_or_bounds_refuse_naming_what_differs(
         rf" \({WIN1} {re.escape(BEFORE)}, {WIN2} {re.escape(later)}\)",
     ):
         _fold.fold_run(work, RUN, folders=FOLDERS)
+
+
+def _attempted(work: Path, first: dict[str, Any], second: dict[str, Any]) -> None:
+    """Windows as two shards whose records are *first* and *second*."""
+    _put(work, WIN1, _row(WIN1, marker=first, files={FILES[0]: 1.0}))
+    _put(work, WIN2, _row(WIN2, marker=second, files={FILES[1]: 0.3, FILES[2]: 0.2}))
+
+
+ATTEMPTS = (
+    rf"{WINDOWS}: its shards come from different attempts of the run"
+    rf" \({WIN1} attempt 1,"
+    rf" {WIN2} attempt 2\); a rerun of some jobs partitions afresh, so rerun the"
+    r" whole run \(\S+ ci.rerun\)"
+)
+
+
+def test_shards_from_different_attempts_whose_partitions_differ_name_the_attempts(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A rerun of the failed jobs keeps the passing shards' refs from the
+    # first attempt, and the rerun shard partitions afresh: whatever
+    # differs, the refusal names the attempts and the recovery, since
+    # the partitions cannot be reconciled from here.
+    one = _marker("1of2", FILES[:1], attempt="1")
+    other = _shard.files_digest(FILES[1:])
+    cases = [
+        _marker("2of2", FILES[1:], digest=other, attempt="2"),
+        _marker("2of2", FILES[1:], suites=("packages/a",), attempt="2"),
+        _marker("2of2", FILES[1:], rows=("r2.json",), attempt="2"),
+        _marker("2of2", FILES[1:], before="2026-10-17T10:00:00+00:00", attempt="2"),
+        _marker("2of2", FILES, attempt="2"),
+        _marker("2of2", FILES[1:2], attempt="2"),
+    ]
+    for second in cases:
+        _attempted(work, one, second)
+        capsys.readouterr()
+        with pytest.raises(_FAILURES, match=ATTEMPTS):
+            _fold.fold_run(work, RUN, folders=FOLDERS)
+        out = capsys.readouterr().out
+        assert re.search(rf"^  fold: {ATTEMPTS}$", out, re.MULTILINE), out
+    # A record without an attempt reads as attempt "", which differs
+    # from a recorded one: the refusal names it as unknown.
+    _attempted(work, _marker("1of2", FILES[:1]), cases[0])
+    with pytest.raises(
+        _FAILURES, match=rf"\({WIN1} attempt unknown, {WIN2} attempt 2\)"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+
+
+def test_shards_of_one_attempt_refuse_as_before_and_of_two_attempts_fold_alike(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # One attempt, two partitions: the proof names what differs, as it
+    # does for records without an attempt.
+    other = _shard.files_digest(FILES[1:])
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="2"),
+        _marker("2of2", FILES[1:], digest=other, attempt="2"),
+    )
+    with pytest.raises(
+        _FAILURES, match=rf"{WINDOWS}: the shards partitioned different test-file sets"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="2"),
+        _marker("2of2", FILES, attempt="2"),
+    )
+    with pytest.raises(_FAILURES, match=rf"{WINDOWS}: 1 file\(s\) ran in two shards"):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    # Two attempts with one partition fold: the proof does not care
+    # about the attempt by itself.
+    _attempted(
+        work,
+        _marker("1of2", FILES[:1], attempt="1"),
+        _marker("2of2", FILES[1:], attempt="2"),
+    )
+    capsys.readouterr()
+    _fold.fold_run(work, RUN, folders={})
+    assert capsys.readouterr().out == (
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 3 file(s) ran\n"
+    )
+    assert _refs(work) == {_metrics.run_ref(RUN, WINDOWS)}
 
 
 def test_a_file_in_two_shards_or_in_none_refuses(work: Path) -> None:
@@ -458,6 +565,7 @@ def test_the_fold_sums_the_shards_rows_folds_their_files_and_drops_their_refs(
     shard = row.data["shard"]
     assert shard["count"] == 2 and shard["digest"] == SET
     assert shard["rows"] == ["r1.json"] and shard["before"] == BEFORE
+    assert shard["suites"] == list(SUITES)
     listed = shard["shards"]
     assert [item["leg"] for item in listed] == [WIN1, WIN2]
     assert [item["job"] for item in listed] == [DISPLAY[WIN1], DISPLAY[WIN2]]
@@ -680,6 +788,10 @@ def test_the_stamp_and_the_speed_judge_read_the_platform_leg_past_the_shards_row
         ]
     )
     lines = _metrics.collect(work, repo, RUN, sha="d" * 40)
+    # The folded platform row, its two shards' forge rows and ubuntu's.
+    assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 4 job(s)" in lines
+    # The drop, the gate job's last entry, takes the folded ref too.
+    lines = _metrics.drop_halves(work, repo, RUN, sha="d" * 40, job="gate", writers=())
     assert f"  {_metrics.run_ref(RUN, WINDOWS)}: dropped" in lines
     # The stamp names the platform legs: the shards' forge rows carry
     # no scope and block nothing.
@@ -698,3 +810,82 @@ def test_the_stamp_and_the_speed_judge_read_the_platform_leg_past_the_shards_row
         (WINDOWS, "packages/a", 1.5),
         (WINDOWS, "packages/b", 0.2),
     ]
+
+
+# --- shards that partitioned nothing ----------------------------------------
+
+
+def test_shards_none_of_which_partitioned_fold_on_their_scopes_and_files_alone(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A gate that skipped on every shard left no record, and has no partition to prove.
+
+    The shards' one scope and their files are the whole proof; the
+    folded row records no digest, rows or bound, and the collect writes
+    no durations row for it. One shard with a record beside one
+    without is red by name, and without a matrix the labels' count
+    names a shard that left no ref.
+    """
+    _put(
+        work,
+        WIN1,
+        _row(WIN1, scope="verified"),
+        **{"coverage.json": _coverage(WIN1, {})},
+    )
+    _put(
+        work,
+        WIN2,
+        _row(WIN2, scope="verified", total=70.0),
+        **{"coverage.json": _coverage(WIN2, {})},
+    )
+    _fold.fold_run(work, RUN, folders=FOLDERS)
+    assert capsys.readouterr().out == (
+        f"  fold: {WINDOWS}: 2 shard(s) folded, 0 file(s) ran\n"
+        f"  fold: {WINDOWS}: no shard partitioned test files (verified); folded"
+        " without a partition\n"
+    )
+    folded = _metrics.RUNS.series(RUN.run_id, WINDOWS)
+    assert _refs(work) == {folded.ref}
+    row, why = folded.row(state_store(work), _metrics.ROW_FILE)
+    assert why == "" and row is not None
+    assert row.data["job"] == DISPLAY[WINDOWS]
+    assert (
+        row.data["scope"]["leg"] == WINDOWS and row.data["scope"]["scope"] == "verified"
+    )
+    assert row.data["files"] == {} and row.data["total_ms"] == 100.0
+    shard = row.data["shard"]
+    assert shard["count"] == 2 and shard["digest"] == "" and shard["suites"] == []
+    assert shard["rows"] == [] and shard["before"] == ""
+    assert [item["leg"] for item in shard["shards"]] == [WIN1, WIN2]
+    coverage, why = folded.row(state_store(work), "coverage.json")
+    assert why == "" and coverage is not None
+    assert coverage.data["leg"] == WINDOWS and coverage.data["units"] == {}
+    repo = _forge(
+        [
+            (DISPLAY[WIN1], "success", "2026-10-17T10:00:10Z"),
+            (DISPLAY[WIN2], "success", "2026-10-17T10:00:20Z"),
+        ]
+    )
+    lines = _metrics.collect(work, repo, RUN, sha="d" * 40)
+    assert (
+        f"  {DISPLAY[WINDOWS]}: the forge times of {DISPLAY[WIN1]}, the first of 2"
+        " shard(s)" in lines
+    )
+    assert not [line for line in lines if "durations" in line]
+    # One shard with a record beside one without.
+    _clear(work)
+    _put(work, WIN1, _row(WIN1, scope="verified"))
+    _put(work, WIN2, _row(WIN2, marker=_marker("2of2", FILES[1:])))
+    with pytest.raises(
+        _FAILURES,
+        match=rf"{WINDOWS}: {WIN1} left no shard record \(.workshop/fm-shard.json"
+        rf" rides the leg's row\) and {WIN2} did;",
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)
+    # Without a matrix, the labels' count names the shard that left no ref.
+    _clear(work)
+    _put(work, WIN1, _row(WIN1, scope="verified"))
+    with pytest.raises(
+        _FAILURES, match=rf"{WINDOWS}: {WIN2} left no ref \(1 of 2 shards did: {WIN1}\)"
+    ):
+        _fold.fold_run(work, RUN, folders=FOLDERS)

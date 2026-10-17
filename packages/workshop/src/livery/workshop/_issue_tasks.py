@@ -421,16 +421,7 @@ def start(
         path = worktree_path(root, work.number, work.title)
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
-    # One round trip: origin's heads for the base and the store for the
-    # worktree's first gate, the shape a sync's own fetch has.
-    from livery.git import fetch_store
-    from livery.workshop._sync import store_lines
-
-    fetched = fetch_store(state_store(root), branches=True)
-    if fetched.why:
-        fail(f"origin could not be fetched: {fetched.why}")
-    for line in store_lines(fetched):
-        print(line)
+    fetch_base(root)
     base = "main"
     if from_:
         if from_ == branch:
@@ -488,13 +479,60 @@ def start(
                 "  Or work in a linked worktree:       "
                 f"{footman.prog()} start {ref}"
             )
+    start_here(root, repo, branch, base=base, parent=from_, started=started)
+
+
+def fetch_base(root: Path) -> None:
+    """Fetch origin's heads and the state store in one round trip; print its lines.
+
+    What a start does before it cuts a branch: the base is origin's
+    and the store's row series are what the branch's first gate reads,
+    the shape a sync's own fetch has.
+
+    Raises:
+        Failed: when origin could not be fetched, in git's words.
+    """
+    from livery.git import fetch_store
+    from livery.workshop._series import mirrored_series
+    from livery.workshop._sync import store_lines
+
+    fetched = fetch_store(
+        state_store(root), series=mirrored_series(root), branches=True
+    )
+    if fetched.why:
+        fail(f"origin could not be fetched: {fetched.why}")
+    for line in store_lines(fetched):
+        print(line)
+
+
+def start_here(
+    root: Path,
+    repo: Repository,
+    branch: str,
+    *,
+    base: str = "main",
+    parent: str = "",
+    started: str = "",
+) -> None:
+    """Start *branch* in this checkout from ``origin/<base>``, or re-enter it.
+
+    The in-place half of ``start``, which the balancer's submit calls
+    too ([livery.workshop._balance.submit][]). A local *branch* that is
+    not finished work is switched to as it stands; one whose pull
+    request merged goes, and the start begins fresh. ``origin/<base>``
+    is read as the last fetch left it, so `fetch_base` comes first.
+    The working tree is the caller's to check: a dirty one carries
+    its changes onto the branch. *parent* records the branch ``fm
+    submit`` targets until it merges; *started* is how the branch is
+    announced, its name when empty.
+    """
     if _kept(repo, root, branch):
         git.switch(root, branch)
         print(f"  already started: back on {branch}")
         return
     git.run(root, "checkout", "-b", branch, f"origin/{base}")
-    print(f"  on {started}")
-    _record_parent(root, branch, from_)
+    print(f"  on {started or branch}")
+    _record_parent(root, branch, parent)
 
 
 def _started_at(root: Path, branch: str, path: Path) -> Path | None:

@@ -25,9 +25,17 @@ def profile(ctx: PhaseContext) -> None:
 
 
 def stamp(ctx: PhaseContext) -> None:
-    """Write the engine's version into the recipe's ``version`` attribute."""
+    """Write the engine's version into the recipe and raise its floors there.
+
+    The version goes into the recipe's ``version`` attribute; each
+    requirement on one of the engine's floors, a member released with
+    this one, takes that member's version.
+    """
     version = cast("str", ctx.read("version"))
-    ctx.provide("changed", _package.stamp_version(ctx.member).stamp(version))
+    floors = cast("Mapping[str, str]", ctx.read("floors"))
+    changed = _package.stamp_version(ctx.member).stamp(version)
+    changed += _package.raise_floors(ctx.member, floors)
+    ctx.provide("changed", list(dict.fromkeys(changed)))
 
 
 def build(ctx: PhaseContext) -> None:

@@ -70,7 +70,13 @@ from livery.extensions.coverage._format import (
     numbered,
     numbering,
 )
-from livery.workshop import WORKSPACE_TESTS, Package, RunContext, state_store
+from livery.workshop import (
+    WORKSPACE_TESTS,
+    Package,
+    RunContext,
+    platform_leg,
+    state_store,
+)
 
 #: The rows' shape: 4 holds a unit's parts in the line format's stored
 #: form, a python suite's naming the tests that reached each line. A
@@ -392,6 +398,20 @@ def record_bases(branch: str) -> tuple[str, ...]:
     return (branch, MAIN) if branch and branch != MAIN else (MAIN,)
 
 
+def record_prefixes(branch: str) -> tuple[str, ...]:
+    """The refs of the records a run reads, as prefixes: *branch*'s if any, then main's.
+
+    A check leg and the gate job hand them to
+    [livery.git.remote_snapshot][] as the refs to bring when the block
+    opens: one prefix per base `record_bases` names, spelled in full
+    as that base's refs are (``refs/workshop/coverage/<branch>/``), so
+    a run fetches the two records it reads and no other branch's. A
+    record outside them, the one of the branch a verified row names,
+    is brought on its first read, every leg of it, in one more fetch.
+    """
+    return tuple(f"{RECORD.prefix}{git.slug(base)}/" for base in record_bases(branch))
+
+
 def series(root: Path) -> tuple[git.Series | git.Keyed, ...]:
     """Answer ``store.series``: the coverage record and the coverage marks.
 
@@ -589,8 +609,6 @@ def fold_leg(shards: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             what differs: legs of two platforms, two scopes, two
             package lists, or a unit at two closures.
     """
-    from livery.workshop import platform_leg
-
     if not shards:
         raise ValueError("no shard left its coverage file; nothing to fold")
     legs = {str(shard.get("leg", "") or "") for shard in shards}
@@ -732,14 +750,16 @@ def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
     content, so its unit is a miss and is measured afresh. A row named
     by its unit, closure and moment (`kept_name`) is a kept one, named
     in the record and read, with its facts, only when the union asks
-    for it (`Record.at`). A leg without a label, or an empty base, has
-    no record to read.
+    for it (`Record.at`). The record is the platform leg's
+    ([livery.workshop.platform_leg][]), so a shard's label reads its
+    platform's. A leg without a label, or an empty base, has no record
+    to read.
     """
     if not leg:
         return Record({}, failed=True, reason="this leg has no label")
     if not base:
         return Record({}, failed=True, reason="no branch to read a record for")
-    series = RECORD.series(base, leg)
+    series = RECORD.series(base, platform_leg(leg))
     store = state_store(root)
     found = series.rows(store, only=_current_row)
     if found.failed:

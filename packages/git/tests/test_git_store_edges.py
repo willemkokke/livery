@@ -102,7 +102,26 @@ def test_fetch_store_names_a_stamp_that_could_not_be_written(
 ) -> None:
     _, work = repos
     monkeypatch.setattr(store_module, "put", lambda *a, **k: "the stamp refused")
-    assert git.fetch_store(store_of(work)) == git.Fetched(0, "the stamp refused")
+    fetched = git.fetch_store(store_of(work), series=("metrics",))
+    assert fetched == git.Fetched(0, "the stamp refused")
+
+
+def test_fetch_store_names_a_mirror_it_could_not_prune(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    store = store_of(work)
+    run_git(work, "update-ref", git.FETCHED_NAMESPACE + "fam/a/x", "HEAD")
+
+    def refusing(repo: object, ref: bytes) -> bool:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(_objects, "drop_ref", refusing)
+    fetched = git.fetch_store(store, series=("metrics",))
+    assert fetched == git.Fetched(0, "the mirror could not be pruned: read-only")
+    # The stray stands, and the stamp was not written over.
+    assert git.list_refs(store, git.FETCHED_NAMESPACE + "fam/") is not None
+    assert git.FETCHED.row(store, "origin") == (None, "")
 
 
 def test_a_fetched_block_inside_another_shares_it_and_lists_the_branches(
@@ -110,7 +129,7 @@ def test_a_fetched_block_inside_another_shares_it_and_lists_the_branches(
 ) -> None:
     _, work = repos
     store = store_of(work)
-    assert git.fetch_store(store, branches=True).why == ""
+    assert git.fetch_store(store, series=("metrics",), branches=True).why == ""
     with git.fetched_snapshot(store), git.fetched_snapshot(store):
         heads = git.list_refs(store, "refs/heads/")
     assert heads is not None and set(heads) == {"refs/heads/main"}
@@ -439,7 +458,7 @@ def test_the_mirrors_branches_leave_origins_head_out(repos: tuple[Path, Path]) -
     _, work = repos
     run_git(work, "remote", "set-head", "origin", "main")
     store = store_of(work)
-    assert git.fetch_store(store, branches=True).why == ""
+    assert git.fetch_store(store, series=("metrics",), branches=True).why == ""
     with git.fetched_snapshot(store):
         heads = git.list_refs(store, "refs/heads/")
     assert heads is not None and set(heads) == {"refs/heads/main"}

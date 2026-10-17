@@ -638,3 +638,45 @@ def test_the_merges_stamp_names_every_platform_after_a_one_platform_pull_request
     for leg in (UBUNTU, MACOS, WINDOWS):
         assert _quality.verified_already(work, leg=leg) == rows[tree]
         assert set(_verified.proved(work, leg)[0]) == {tree}
+
+
+def test_a_full_row_naming_the_platform_proves_the_tree_for_each_of_its_shards(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _shard
+
+    tree = _verified.tree_id(work)
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=(UBUNTU,)) == ""
+    found, why = _verified.record(work, tree)
+    assert why == "" and found is not None
+    # The fold stamps the platform leg; a shard reads the row as its
+    # own, and another platform's shard does not.
+    shard = f"{UBUNTU}-2of2"
+    assert _verified.proves(found, shard)
+    assert not _verified.proves(found, f"{MACOS}-1of2")
+    rows, why = _verified.proved(work, shard)
+    assert why == "" and set(rows) == {tree}
+    assert _quality.verified_already(work, leg=shard) == found
+    # The shard's gate skips on it, leaves the verified marker, and
+    # leaves the record of an empty test-file set for the gate job's
+    # fold, since no test step runs to leave one.
+    (work / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: _leg(shard))
+    monkeypatch.setattr(
+        "livery.workshop._quality._leg_plan",
+        lambda root, base, run: pytest.fail("ran"),
+    )
+    _quality.check()
+    assert leg_scope(work) == LegScope("verified", leg=shard)
+    marker, why = _shard.read_shard(work)
+    assert why == "" and marker is not None
+    assert marker.shard == _shard.Shard(2, 2) and marker.files == ()
+    assert marker.rows == () and marker.digest == _shard.files_digest(())
+    assert marker.before == _shard.checkout_time(work)
+    # One shard of one leaves no record.
+    (work / _shard.SHARD_FILE).unlink()
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: _leg(UBUNTU))
+    _quality.check()
+    assert leg_scope(work) == LegScope("verified", leg=UBUNTU)
+    assert not (work / _shard.SHARD_FILE).exists()

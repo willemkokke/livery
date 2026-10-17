@@ -36,6 +36,7 @@ from livery.workshop._points import (
     job_runners,
     job_seams,
     points,
+    pull_request_listed,
     pull_request_runners,
     shard_counts,
 )
@@ -112,9 +113,10 @@ ACTIONS: dict[str, dict[str, str]] = {
 #: can: the venv it would need is what the entry step makes.
 STORE_HOME = "${{ runner.temp }}/footman/toolroom"
 #: Where a GitHub job keeps conan's home: the working drive, the job's
-#: own, the same path the entry and
-#: `livery.workshop._env_tasks.runner_placements` export, so the cache
-#: step and every conan the job runs agree on one directory.
+#: own, the path conan's declared CONAN_HOME, ``{place}/conan``, takes
+#: on a GitHub job, where the entry and `fm env.emit --github` place it
+#: under the runner's temp, so the cache step and every conan the job
+#: runs agree on one directory.
 CONAN_HOME = "${{ runner.temp }}/conan"
 
 
@@ -432,19 +434,21 @@ def _shard_facts(
     shards = shard_counts(ci, key="shards", runners=runners, listed="[ci] runners")
     if ci.get("pull-request-shards") is None:
         return shards, {runner: shards[runner] for runner in narrowed}
-    listed = (
-        "[ci] pull-request-runners"
-        if ci.get("pull-request-runners") is not None
-        else "[ci] runners"
+    pull = shard_counts(
+        ci,
+        key="pull-request-shards",
+        runners=narrowed,
+        listed=pull_request_listed(ci),
     )
-    pull = shard_counts(ci, key="pull-request-shards", runners=narrowed, listed=listed)
     return shards, pull
 
 
 def _runners(answers: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Every event's runner labels, and a pull request's."""
     runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
-    narrowed = [str(runner) for runner in answers.get("pull_request_runners", runners)]
+    narrowed = [
+        str(runner) for runner in answers.get("pull_request_runners", runners[:1])
+    ]
     return runners, narrowed
 
 
@@ -462,12 +466,12 @@ def _split(counts: Mapping[str, int]) -> bool:
 
 
 def _carries_shards(answers: dict[str, Any]) -> bool:
-    """Whether the check matrix names a shard on every entry.
+    """Whether the check matrix is ``include`` entries carrying shards.
 
-    It does when any runner runs as more than one shard on any event:
-    the matrix is then ``include`` entries, each with its shard, on the
-    check job or in both of the legs job's literals, and the one call
-    passes the shard on every event.
+    It is when any runner runs as more than one shard on any event: the
+    entries of a split runner each name their shard, on the check job
+    or in both of the legs job's literals, and the one call passes
+    ``matrix.shard`` on every event, empty on a runner with one shard.
     """
     runners, narrowed = _runners(answers)
     return _split(_shards(answers, "shards", runners)) or _split(
@@ -492,15 +496,21 @@ def _narrows(answers: dict[str, Any]) -> bool:
 def _entries(
     runners: Sequence[str], pythons: Sequence[str], counts: Mapping[str, int]
 ) -> list[tuple[str, str, str]]:
-    """One ``(os, python, shard)`` per matrix entry, in that order, each naming its shard.
+    """One ``(os, python, shard)`` per matrix entry, in that order.
 
-    A runner with a count of one has its entry with ``1of1``, so every
-    entry carries the key and the call reads it on every leg.
+    A runner with a count of one has one entry per Python with an empty
+    shard: the forge then names its job as the unsplit leg, ``check
+    (ubuntu-latest, 3.14)``, the name the runner gives it and keys its
+    rows by, and the call's shard reaches the runner empty, which it
+    reads as one shard of one.
     """
     entries: list[tuple[str, str, str]] = []
     for runner in runners:
         count = counts.get(runner, 1)
         for python in pythons:
+            if count == 1:
+                entries.append((runner, python, ""))
+                continue
             for index in range(1, count + 1):
                 entries.append((runner, python, str(Shard(index, count))))
     return entries
@@ -515,13 +525,18 @@ def _literal(
 ) -> str:
     """One matrix as the JSON literal the legs job holds.
 
-    The ``include`` shape when *sharded*, the ``os`` and ``python``
-    lists otherwise.
+    The ``include`` shape when *sharded*, each entry of a split runner
+    with its shard and an entry of a runner with one shard without the
+    key; the ``os`` and ``python`` lists otherwise.
     """
     matrix: dict[str, Any] = (
         {
             "include": [
-                {"os": os_label, "python": python, "shard": shard}
+                {
+                    "os": os_label,
+                    "python": python,
+                    **({"shard": shard} if shard else {}),
+                }
                 for os_label, python, shard in _entries(runners, pythons, counts)
             ]
         }
@@ -883,13 +898,16 @@ def _actions_job(
         elif _carries_shards(answers):
             # One entry per os, python and shard: the forge names each
             # job by the entry's values in order, ``check (windows-latest,
-            # 3.14, 2of4)``, so the job carries no name of its own.
+            # 3.14, 2of4)``, so the job carries no name of its own, and
+            # a runner with one shard has no shard key, so its job is
+            # named as the unsplit leg the runner keys its rows by.
             lines.append("    strategy:\n      fail-fast: false\n      matrix:\n")
             lines.append("        include:\n")
             counts = _shards(answers, "shards", runners)
             for os_label, python, shard in _entries(runners, gate, counts):
+                tail = f", shard: {shard}" if shard else ""
                 lines.append(
-                    f'          - {{os: {os_label}, python: "{python}", shard: {shard}}}\n'
+                    f'          - {{os: {os_label}, python: "{python}"{tail}}}\n'
                 )
             lines.append("    runs-on: ${{ matrix.os }}\n")
         else:

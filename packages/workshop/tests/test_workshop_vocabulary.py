@@ -75,7 +75,6 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         "a GitHub job's conan cache key, read from the recipes; the CI"
         " placement review, #1534",
     ),
-    ("_devenv", "conan"): (1, "a loop environment's conan home; phase 15"),
     ("_e2e", "nanobind"): (
         1,
         "the loop's check that a native member's wheels were built ahead;"
@@ -96,14 +95,6 @@ ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
     ("_registries", "container"): (1, "the registry tables; phase 13"),
     ("_registries", "python"): (4, "the registry tables; phase 13"),
     ("_release", "python"): (1, "the python registry a release resolves; phase 13"),
-    ("_release_driver", "conanfile.py"): (
-        1,
-        "the manifests a release stamps and commits; phase 13",
-    ),
-    ("_release_driver", "pyproject.toml"): (
-        1,
-        "the manifests a release stamps and commits; phase 13",
-    ),
     ("_release_driver", "python"): (
         1,
         "the python registry the wave resolves; phase 13",
@@ -252,25 +243,13 @@ TOOL_ALLOWANCE: dict[tuple[str, str], tuple[int, str]] = {
         1,
         "a GitHub job's conan home; the CI placement review, #1534",
     ),
-    ("_devenv", "conan"): (1, "a loop environment's conan home; phase 15"),
     ("_e2e", "cmake"): (
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
     ),
-    ("_e2e", "conan"): (1, "the loop's conan home; phase 15"),
     ("_e2e", "ninja"): (
         1,
         "the loop's host allowance; phase 15 moves _e2e out of the base",
-    ),
-    ("_entry", "conan"): (
-        1,
-        "the entry script's note on what a native member builds with, and"
-        " the job's own conan home; the toolchains, phase 14",
-    ),
-    ("_env_tasks", "conan"): (
-        3,
-        "a GitHub job's conan home, and the two refusals of a job with no"
-        " temp of its own to keep it in (#1715); the CI placement review, #1534",
     ),
     ("_registries", "conan"): (6, "the registry tables; phase 13"),
     ("_new_project", "ruff"): (1, "fm new.project writes the stock list, as ruled"),

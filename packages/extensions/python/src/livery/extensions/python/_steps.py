@@ -13,9 +13,15 @@ if TYPE_CHECKING:
 
 
 def stamp(ctx: PhaseContext) -> None:
-    """Write the engine's version into ``pyproject.toml`` and every ``__version__``."""
+    """Write the engine's version into ``pyproject.toml`` and raise its floors there.
+
+    The version goes into ``pyproject.toml`` and every ``__version__``;
+    each requirement on one of the engine's floors, a member released
+    with this one, takes that member's version.
+    """
     version = cast("str", ctx.read("version"))
-    ctx.provide("changed", _backend.stamp_version(ctx.member).stamp(version))
+    floors = cast("Mapping[str, str]", ctx.read("floors"))
+    ctx.provide("changed", _backend.stamp(ctx.member, version, floors))
 
 
 def build(ctx: PhaseContext) -> None:

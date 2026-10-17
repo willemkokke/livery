@@ -69,19 +69,28 @@ That call puts `-n 0` after the words from the verb, so
 `fm test.pytest -- -n 4` cannot spread that suite across cores.
 
 On a check leg that runs as several shards, `test.pytest` runs on every
-shard, each over its share of the test files. The step lists the test
-files of every suite the run reaches, the files the run selects for a
-suite or every `test_*.py` and `*_test.py` under its `tests` directory,
-the workspace's own `tests` directory included, and packs them into the
-shard's count of slices by the platform leg's `durations` rows: longest
-first, each file into the slice with the least summed seconds, ties by
-name, a file no row names at the rows' median. The shard hands python's
-runner its slice as the selection the runner already takes, a suite with
+shard, each over its share of the test files. The step packs every
+test file the workspace holds, every `test_*.py` and `*_test.py` under
+each package's `tests` directory and the workspace's own `tests`
+directory, into the shard's count of slices by the platform leg's
+`durations` rows: longest first, each file into the slice with the
+least summed seconds, ties by name, a file no row names at the rows'
+median. Of the files of the suites the run reaches, the ones the run
+selects for a suite or all of a suite's, the shard runs those in its
+own slice. The packing is over the whole workspace and never over one
+run's suites, so a file has one shard however many runs of the step
+reach it on a leg, the gate's and the coverage top-up's. The shard
+hands python's runner its slice as the selection the runner already
+takes, a suite with
 no file in the slice left out of the call; a suite that is not
 worker-safe is sliced the same way and still runs under `-n 0`. The
-shard records its slice, the digest of the whole set and the rows it
-read in `.workshop/fm-shard.json`, for the gate job's proof that the
-shards of a platform partitioned one set from one row. With no row
+shard records its slice, the suites with a file in the set, the digest
+of the whole set and the rows it read in `.workshop/fm-shard.json`, for
+the gate job's proof that the shards of a platform partitioned one set
+from one row. A suite with no python test file, a native suite the
+cmake extension measures, is not partitioned: it runs whole on the
+first shard, with every step that does not read the shard, and the
+coverage leg expects its parts there alone. With no row
 before the checkout's committer time, or a store that cannot be read,
 the line says why, the first shard runs every file and the others run
 none. `fm check --shard=2of2` on a machine runs the share by name alone,

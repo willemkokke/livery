@@ -282,11 +282,44 @@ def test_the_entry_module_serves_what_the_defining_module_holds_at_each_read(
     assert conan_module.save_cache is _package.save_cache
     assert conan_module.__all__ == [
         "WORKSPACE_FILE",
+        "__version__",
+        "raise_floors",
         "restore_from_releases",
         "save_cache",
         "workspace_aside",
         "workspace_file",
     ]
+
+
+def test_conan_declares_its_home_in_a_directory_of_its_own_that_beats_the_runner_s(
+    tmp_path: Path,
+) -> None:
+    # conan's cache takes one writer at a time: each CI job, loop pass
+    # and scale fixture keeps a home of its own, whatever CONAN_HOME the
+    # runner sets for every job, and a desk keeps conan's default.
+    from livery.workshop._declaration import DeclaredVariable
+    from livery.workshop._extensions import declaration
+    from livery.workshop._variables import placed
+
+    declared = declaration("conan")
+    assert declared is not None
+    (home,) = declared.env
+    assert (home.name, home.value, home.always, home.extension) == (
+        "CONAN_HOME",
+        "{place}/conan",
+        True,
+        "conan",
+    )
+    assert home.doc.startswith("conan's cache takes one writer at a time")
+    assert isinstance(home, DeclaredVariable)
+    runner = {"CONAN_HOME": "/runner/conan"}
+    # Where a job's environment is formed, the declared home beats the
+    # runner's; a run nested in another keeps the home it inherits.
+    assert placed(declared.env, str(tmp_path), runner, forming=True) == {
+        "CONAN_HOME": f"{tmp_path}/conan"
+    }
+    assert placed(declared.env, str(tmp_path), runner) == runner
+    assert placed(declared.env, None, runner, forming=True) == {}
 
 
 def test_its_build_serves_the_isolated_side_alone() -> None:

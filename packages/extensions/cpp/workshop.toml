@@ -9,13 +9,13 @@ description = "C and C++ as languages, as an extension of the livery workshop: w
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 # The suite reads footman's refusals and mounts into its task tree.
 [[depends]]
 path = "packages/footman"
 kind = "test"
-floor = "0.60.0"
+floor = "0.61.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the

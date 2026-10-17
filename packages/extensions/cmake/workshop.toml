@@ -12,22 +12,22 @@ description = "CMake as an extension of the livery workshop: a package's gate bu
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.60.0"
+floor = "0.61.0"
 
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.11.0"
+floor = "0.12.0"
 
 [[depends]]
 path = "packages/git"
 kind = "runtime"
-floor = "0.2.0"
+floor = "0.3.0"
 
 # The suite judges the native parts and floors with coverage's code.
 [[depends]]

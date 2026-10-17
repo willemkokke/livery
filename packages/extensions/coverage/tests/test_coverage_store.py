@@ -231,17 +231,27 @@ def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(
     assert why == "" and lines is not None and lines.data["scope"] == "full"
 
 
-def test_collect_drops_the_legs_measured_lines_with_its_half(
+def test_the_drop_takes_the_legs_measured_lines_with_its_half(
     work: Path, tmp_path: Path
 ) -> None:
-    # The gate job's collect drops a leg's per-run ref once the run's
-    # file landed, and the suites the leg measured go with it.
+    # The gate job's collect leaves a leg's per-run ref for its last
+    # entry, the drop, which takes it once every leg is green; the
+    # suites the leg measured go with it.
     from livery.forge.testing import FakeForge
-    from livery.workshop._metrics import ROW_FILE, collect, put_leg, run_ref
+    from livery.workshop._metrics import (
+        ROW_FILE,
+        collect,
+        drop_halves,
+        put_leg,
+        run_ref,
+    )
 
     fake = FakeForge()
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
+    # The drop asks the forge for the run's jobs; a run the forge does
+    # not list keeps the refs, so the fake has one for this sha.
+    fake.push("owner", "repo", "main", sha="b" * 40)
     why = coverage_record.leave_run(
         work, RUN, leg=LEG, scope="verified", packages=(), units={}
     )
@@ -255,7 +265,9 @@ def test_collect_drops_the_legs_measured_lines_with_its_half(
     held = git.read(state_store(work), ref).files
     assert held is not None
     assert set(held) == {ROW_FILE, coverage_record.RUN_FILE}
-    lines = collect(work, repo, RUN, sha="b" * 40)
+    collect(work, repo, RUN, sha="b" * 40)
+    assert git.read(state_store(work), ref).files == held
+    lines = drop_halves(work, repo, RUN, sha="b" * 40, job="gate", writers=())
     assert f"  {ref}: dropped" in lines
     assert git.read(state_store(work), ref).files is None
     assert coverage_record.run_legs(work, RUN) == ([], "")
@@ -414,6 +426,24 @@ def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
     assert held.failed and "could not be read" in held.reason and held.units == {}
     legs, why = coverage_record.run_legs(work, RUN)
     assert legs == [] and why.endswith("the remote could not be listed")
+
+
+def test_a_shards_label_reads_its_platforms_record(work: Path) -> None:
+    from dataclasses import replace
+
+    from livery.extensions.coverage._leg import unrecorded
+
+    base, top = _packages(work)
+    key = coverage_record.closure_id(work, (base, top), base)
+    fresh = {"packages/base": _unit("packages/base", closure=key)}
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    # The record is the platform leg's, the key the gate job's fold
+    # writes under; a shard reads it by its own label.
+    held = coverage_record.recorded(work, leg=f"{LEG}-2of2")
+    assert not held.failed and held.units == fresh
+    assert held == coverage_record.recorded(work, leg=LEG)
+    shard = replace(RUN, leg=f"{LEG}-2of2")
+    assert unrecorded(work, shard, (base, top), (base,), bases=("main",)) == ()
 
 
 def test_a_row_of_the_old_schema_is_a_miss_and_the_unit_is_measured_afresh(
@@ -705,6 +735,64 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     assert coverage_record.recorded(work, leg="check-macos-3.13") == (
         coverage_record.Record({})
     )
+
+
+def test_the_record_prefixes_are_the_head_branch_s_and_main_s_and_no_other() -> None:
+    # A run reads two records, its head branch's and main's, so a check
+    # leg and the gate job bring those two and no other branch's.
+    assert coverage_record.record_prefixes("feat/x") == (
+        git.NAMESPACE + "coverage/feat-x/",
+        git.NAMESPACE + "coverage/main/",
+    )
+    for branch in ("", "main"):
+        assert coverage_record.record_prefixes(branch) == (
+            git.NAMESPACE + "coverage/main/",
+        )
+    # Each prefix is what every ref of that base's record starts with.
+    for base, prefix in zip(
+        coverage_record.record_bases("feat/x"),
+        coverage_record.record_prefixes("feat/x"),
+        strict=True,
+    ):
+        assert coverage_record.record_ref(LEG, base) == prefix + git.slug(LEG)
+
+
+def test_a_record_outside_the_prefixes_is_read_through_its_key_group(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.git import _store
+
+    # Main's run of a squashed tree brings main's record alone, and reads
+    # the record of the branch the verified row names all the same: its
+    # first read brings that record in one more fetch.
+    main = {"packages/base": _unit("packages/base", run="1")}
+    branch = {"packages/top": _unit("packages/top", run="2")}
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=main) == ""
+    assert (
+        coverage_record.put_record(work, PULL, leg=LEG, fresh=branch, base="feat/x")
+        == ""
+    )
+    origin = _git(work, "remote", "get-url", "origin").strip()
+    other = tmp_path / "other"
+    _git(tmp_path, "clone", "-q", origin, str(other))
+    brought: list[list[str]] = []
+    bring = _store._bring
+
+    def _counted(
+        store: git.StateStore, snapshot: _store._Snapshot, wanted: dict[str, str]
+    ) -> dict[str, str]:
+        brought.append(sorted(wanted))
+        return bring(store, snapshot, wanted)
+
+    monkeypatch.setattr(_store, "_bring", _counted)
+    prefixes = coverage_record.record_prefixes("")
+    with git.remote_snapshot(state_store(other), fetch=("verified", *prefixes)):
+        assert coverage_record.recorded(other, leg=LEG).units == main
+        assert coverage_record.recorded(other, leg=LEG, base="feat/x").units == branch
+    assert brought == [
+        [coverage_record.record_ref(LEG)],
+        [coverage_record.record_ref(LEG, "feat/x")],
+    ]
 
 
 # --- a row a write moves on from stays a day, refusals first -----------------

@@ -11,7 +11,7 @@ description = "The python API reference on the livery workshop's docs site, a pa
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 # The docs extension this one requires.
 [[depends]]
@@ -22,7 +22,7 @@ floor = "0.0.0"
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.60.0"
+floor = "0.61.0"
 
 # The suite reads the module roots python answers for a package.
 [[depends]]

@@ -19,21 +19,21 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "livery-footman>=0.60.0",
+    "livery-footman>=0.61.0",
     # Every git call goes through livery.git: the dates of the release
     # tags the site's release pages list.
-    "livery-git>=0.2.0",
+    "livery-git>=0.3.0",
     # The store's zensical, docker and ssh, each through its toolroom
     # handle, so the version is the one the checkout's lock pins.
-    "livery-toolroom>=0.11.0",
-    "livery-workshop>=0.10.0",
+    "livery-toolroom>=0.12.0",
+    "livery-workshop>=0.11.0",
 ]
 
 [project.optional-dependencies]
 # The members this package's tests need beyond its dependencies, one
 # for each test edge of its workshop.toml, at the edge's floor.
 test = [
-    "livery-forge>=0.7.0",
+    "livery-forge>=0.8.0",
     "livery-extensions-coverage>=0.0.0",
     "livery-extensions-nanobind>=0.0.0",
 ]

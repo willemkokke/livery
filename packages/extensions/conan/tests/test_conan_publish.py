@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -489,11 +491,33 @@ needs_conan = pytest.mark.skipif(bool(_CONAN_GAP), reason=_CONAN_GAP)
 ROOT = Path(__file__).resolve().parents[4]
 
 
-def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
+@pytest.fixture
+def conan_homes() -> Iterator[Callable[[], Path]]:
+    """Make conan homes under a short root, each removed afterwards.
+
+    conan nests a package's folders several levels deep under its home,
+    and pytest's per-test directory is already about 110 characters deep
+    on a Windows runner, so a home there can pass Windows' 260-character
+    path limit, depending on the worker and the test's name.
+    """
+    made: list[Path] = []
+
+    def make() -> Path:
+        home = Path(tempfile.mkdtemp(prefix="ch"))
+        made.append(home)
+        return home
+
+    yield make
+    for home in made:
+        shutil.rmtree(home, ignore_errors=True)
+
+
+def _render_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, home: Path
+) -> Package:
     """A rendered cpp-conan package, built into an isolated CONAN_HOME."""
     from livery.workshop._identity import project_facts
 
-    home = tmp_path / "conan-home"
     monkeypatch.setenv("CONAN_HOME", str(home))
     destination = tmp_path / "packages" / "geometry"
     answers = project_facts(ROOT)
@@ -518,10 +542,12 @@ def _render_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Package:
 
 @needs_conan
 def test_the_folder_target_round_trips(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    conan_homes: Callable[[], Path],
 ) -> None:
     skip_unless_installed("cmake")
-    package = _render_library(tmp_path, monkeypatch)
+    package = _render_library(tmp_path, monkeypatch, conan_homes())
     share = tmp_path / "share"
     assert _conan.publish(package, str(share), version="0.0.0", local=True)
     registry = _conan.ConanRegistry(
@@ -529,7 +555,7 @@ def test_the_folder_target_round_trips(
     )
     assert registry.versions("acme-geometry") == ("0.0.0",)
     # A clean home restores the package from the saved archive alone.
-    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
+    monkeypatch.setenv("CONAN_HOME", str(conan_homes()))
     restored = subprocess.run(
         [
             "conan",
@@ -549,7 +575,9 @@ def test_the_folder_target_round_trips(
 
 @needs_conan
 def test_the_rig_conan_registry_round_trips(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    conan_homes: Callable[[], Path],
 ) -> None:
     skip_unless_installed("cmake")
     import os
@@ -563,7 +591,7 @@ def test_the_rig_conan_registry_round_trips(
         urllib.request.urlopen(url, timeout=3)
     except OSError:
         pytest.skip(f"the rig at {url} is not answering")
-    package = _render_library(tmp_path, monkeypatch)
+    package = _render_library(tmp_path, monkeypatch, conan_homes())
     remote = f"{url.rstrip('/')}/api/packages/livery-admin/conan"
     monkeypatch.setenv("CONAN_LOGIN_USERNAME", "livery-admin")
     monkeypatch.setenv("CONAN_PASSWORD", token)
@@ -588,7 +616,7 @@ def test_the_rig_conan_registry_round_trips(
     )
     assert "0.0.0" in registry.versions("acme-geometry")
     # The consumer proof: a clean home installs it back from the rig.
-    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
+    monkeypatch.setenv("CONAN_HOME", str(conan_homes()))
     subprocess.run(["conan", "profile", "detect", "--exist-ok"], capture_output=True)
     subprocess.run(
         ["conan", "remote", "add", _conan.CONAN_REMOTE, remote, "--force"],
@@ -617,7 +645,9 @@ def test_the_rig_conan_registry_round_trips(
 
 @needs_conan
 def test_two_saved_caches_holding_one_package_restore_and_upload(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    conan_homes: Callable[[], Path],
 ) -> None:
     """Two hosts' files can hold one package, and both restore into one cache.
 
@@ -629,7 +659,7 @@ def test_two_saved_caches_holding_one_package_restore_and_upload(
     skip_unless_installed("cmake")
     import json
 
-    package = _render_library(tmp_path, monkeypatch)
+    package = _render_library(tmp_path, monkeypatch, conan_homes())
     saved = _conan.save_cache(package, "0.0.0", package.directory / "dist")
     other = next(
         host
@@ -640,14 +670,14 @@ def test_two_saved_caches_holding_one_package_restore_and_upload(
         saved, saved.with_name(_conan.cache_name("acme-geometry", "0.0.0", other))
     )
     assert len(_conan.collected_caches(package, "0.0.0")) == 2
-    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "publish-home"))
+    monkeypatch.setenv("CONAN_HOME", str(conan_homes()))
     share = tmp_path / "share"
     target = RegistryTarget(kind="conan", url=str(share), local=True)
     assert _conan.publish_artifact(
         package, tmp_path, version="0.0.0", target=target, prebuilt=True
     )
     # A clean home restores the one package from the folder target alone.
-    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "consumer-home"))
+    monkeypatch.setenv("CONAN_HOME", str(conan_homes()))
     restored = subprocess.run(
         ["conan", "cache", "restore", str(share / "acme-geometry-0.0.0.tgz")],
         capture_output=True,

@@ -9,17 +9,17 @@ description = "Git LFS for the livery workshop: the git-lfs tool locked, its hoo
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.10.0"
+floor = "0.11.0"
 
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.11.0"
+floor = "0.12.0"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.60.0"
+floor = "0.61.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the

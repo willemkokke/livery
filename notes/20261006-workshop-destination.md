@@ -806,6 +806,7 @@ until conan's per-host artifact replaces the saved cache (phase 13).
 | `WORKSPACE_FILE`, `workspace_file` | the conan workspace file at the root, each conan member from its source | nanobind |
 | `workspace_aside` | hides the conan workspace for a block, so members resolve from the cache | nanobind |
 | `save_cache`, `restore_from_releases` | saves this host's built package out of the conan cache, and restores a member's from its release | nanobind |
+| `stamp` (python), `raise_floors` (conan) | python's stamp of a package's version and floors, and the raise of a conan recipe's floors, which nanobind's own stamp step calls | nanobind |
 
 ### What leaves the public surface, and the break each causes
 
@@ -1840,10 +1841,7 @@ neither needs nor rules out).
 | `livery-extensions-python`'s floor `livery-workshop>=0.10.0`, below the first workshop that exports what python reads | the release wave raising the floor within its set (step 8's R1) |
 | `livery-extensions-nanobind`'s floor `livery-extensions-python>=0.0.0`, and the `livery-extensions-python>=0.0.0` line in the `test` extras of basedpyright, changelog, claude, coverage, mkdocstrings and pytest | the release wave raising it with python's first release (step 8's R2) |
 | `livery-extensions-conan`'s and `livery-extensions-nanobind`'s floor `livery-extensions-cpp>=0.0.0` | the release wave raising it with cpp's first release (step 8's R2) |
-| each CI job's conan home in the base: `_entry`'s setup places `CONAN_HOME` in the job's own directory, and `_env_tasks.runner_placements` refuses a runner without one | conan's declared `[env.CONAN_HOME]`, `{place}/conan` with `always`, placed per job (#1731) |
-| the conan home of a development environment, a loop pass and the scale fixture, in the base's `_devenv`, `_e2e` and `_scale` | the same declaration, placed per environment, loop pass and fixture (#1731) |
-| the release driver's `conanfile.py` floor bump and its rollback, in `_release_driver` | python's and conan's stamp steps raising floors in their own files (#1731) |
-| `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache` and `restore_from_releases` to nanobind | conan's per-host artifact (phase 13) |
+| `livery.extensions.conan`'s entry module, serving `WORKSPACE_FILE`, `workspace_file`, `workspace_aside`, `save_cache`, `restore_from_releases` and `raise_floors` to nanobind | conan's per-host artifact (phase 13) |
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
@@ -3907,6 +3905,23 @@ neither needs nor rules out).
   `python.docs-group`, since every workspace's root is the runtime's
   uv project that installs `fm` and the listed extensions, listed
   python or not; their temporary row goes.
+
+- 2026-10-17, #1731, built: the base names no conan outside comments
+  and the rows #1534 and phase 13 keep (the `conan-cache` key, the
+  `conan` registry kind). An extension declares its environment
+  variables (`[env.<NAME>]`, `value` in the step words' grammar,
+  `{place}` its first placeholder, `always`, `doc`); conan declares
+  `CONAN_HOME = "{place}/conan"` with `always`. Decided without
+  Willem: `always` beats the environment only where an environment is
+  formed (the CI entry script, `runner_placements`, a loop pass, the
+  scale fixture), and every other `fm` run lets the environment win,
+  so a nested `fm` keeps the home its parent set. The stamp phase
+  takes `floors`; python's, conan's and the base's own steps raise
+  them, and the release driver holds no file name or pattern of its
+  own. nanobind has a stamp step of its own, since one step per
+  package provides `changed`, and answers `version-files` with its
+  consumer recipe, so the local act's refusal covers the floors it
+  raises there.
 
 ## Open
 

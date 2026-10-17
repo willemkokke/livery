@@ -185,97 +185,77 @@ def member_pairs_at(root: Path, ref: str) -> list[tuple[str, str]] | None:
     return pairs
 
 
-#: The files in a member's directory that can declare a floor on a
-#: sibling: the pyproject requirement, the ``[[depends]]`` floor, and a
-#: conan reference's version range.
-FLOOR_HOMES = ("pyproject.toml", "workshop.toml", "conanfile.py")
-
-
 def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
-    """Raise floors between co-released members; the files changed.
+    """Raise floors between co-released members through the stamp phase; the files.
 
     Within the set only (contract: a solo release never moves a
-    floor): a member depending on a co-member gets the co-released
-    version, in every home it is declared (``FLOOR_HOMES``), the
-    pyproject requirement, the ``[[depends]]`` floor, and a conan
-    reference's version range.
+    floor): each member's stamp phase runs at the version it declares
+    now, with every other member's version as its floors, so the
+    version stays for `prepare_release` to stamp. Each step raises the
+    floors in its own manifests, and the base those of the member's
+    ``[[depends]]`` edges, as `livery.workshop._lifecycle.stamp` says.
+    The files are the ones the phase reported, relative to *root*.
     """
-    import re
-
-    versions = {plan.package.name: plan.version for plan in plans}
-    members = {plan.package.name: plan.package.member for plan in plans}
+    if len(plans) < 2:
+        return []
     changed: list[str] = []
     for plan in plans:
-        for home in FLOOR_HOMES:
-            path = plan.package.directory / home
-            if not path.is_file():
-                continue
-            text = original = path.read_text("utf-8")
-            for name, version in versions.items():
-                if name == plan.package.name:
-                    continue
-                text = re.sub(
-                    rf'("{re.escape(name)}\s*>=\s*)[0-9][^"]*(")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                )
-                # The conan range form the lint teaches:
-                # "name/[>=version]".
-                text = re.sub(
-                    rf'("{re.escape(name)}/\[>=)[^\]"]+(\]")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                )
-                member = re.escape(members[name])
-                text = re.sub(
-                    rf'(path = "packages/{member}"'
-                    rf'[^[]*?floor = ")[^"]+(")',
-                    rf"\g<1>{version}\g<2>",
-                    text,
-                    flags=re.S,
-                )
-            if text != original:
-                path.write_text(text, encoding="utf-8")
-                changed.append(path.relative_to(root).as_posix())
+        package = plan.package
+        floors = {
+            other.package.path: other.version
+            for other in plans
+            if other.package.path != package.path
+        }
+        current = _lifecycle.current_version(package)
+        stamped = _lifecycle.stamp(package, root, current, floors=floors)
+        changed += [
+            (package.directory / name).relative_to(root).as_posix() for name in stamped
+        ]
     return changed
 
 
-def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
+def rollback_prepare(
+    root: Path, members: tuple[Package, ...], reported: Sequence[str] = ()
+) -> None:
     """Restore exactly the files prepare writes; never raises.
 
     The error being unwound is the one worth seeing, so this raises
-    nothing of its own: each member's changelog, pyproject, contract,
-    and version files return to HEAD, and so do the set's manifest and
-    the workspace lock the stamp refreshed. One of these files on disk
-    that HEAD lacks is one prepare created, as a first release's
-    changelog and manifest are, and it is removed, so the switch back
-    to the base does not carry it along. Each restore reads HEAD, never
-    the index: a commit that failed (a signing agent that refused) has
-    already staged every change, and a restore from the index would
-    keep them. Each path the rollback could not put back is printed
-    with the reason, and the other paths are put back all the same.
+    nothing of its own: each member's changelog, contract and version
+    files return to HEAD, and so do the files the stamp phase
+    *reported* raising floors in (relative to *root*), the set's
+    manifest and the workspace lock the stamp refreshed. One of these
+    files on disk that HEAD lacks is one prepare created, as a first
+    release's changelog and manifest are, and it is removed, so the
+    switch back to the base does not carry it along. Each restore reads
+    HEAD, never the index: a commit that failed (a signing agent that
+    refused) has already staged every change, and a restore from the
+    index would keep them. Each path the rollback could not put back is
+    printed with the reason, and the other paths are put back all the
+    same.
     """
-    for path, reason in _put_back(root, _prepare_paths(root, members)):
+    for path, reason in _put_back(root, _prepare_paths(root, members, reported)):
         print(f"  the rollback could not restore {path}: {reason}")
 
 
-def _prepare_paths(root: Path, members: tuple[Package, ...]) -> tuple[str, ...]:
+def _prepare_paths(
+    root: Path, members: tuple[Package, ...], reported: Sequence[str] = ()
+) -> tuple[str, ...]:
     """The paths prepare may write for *members*, each once, from *root*.
 
-    Each member's changelog, its floor homes and the files its set's
-    stamp writes a version into, then the workspace lock and the set's
+    The files the stamp phase *reported* raising floors in, then each
+    member's changelog, its contract and the files its set's stamp
+    writes a version into, then the workspace lock and the set's
     manifest, with forward slashes. The rollback puts back exactly
     these, and the local act refuses while one of them has changes of
     its own, so the two read the same list.
     """
+    from livery.workshop._contract import CONTRACT
     from livery.workshop._publish import MANIFEST
 
-    paths: list[str] = []
+    paths = [Path(name).as_posix() for name in reported]
     for package in members:
         base = package.directory.relative_to(root)
-        paths.extend(
-            (base / name).as_posix() for name in ("CHANGELOG.md", *FLOOR_HOMES)
-        )
+        paths.extend((base / name).as_posix() for name in ("CHANGELOG.md", CONTRACT))
         # Every file the set's stamp writes a version into. A set that
         # cannot name them restores the rest regardless.
         with contextlib.suppress(Exception):
@@ -356,6 +336,28 @@ def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
             if refused:
                 failed.append((path, refused))
     return failed
+
+
+def verify_set(root: Path, plans: tuple[MemberPlan, ...]) -> None:
+    """Run the publish job's own checks over the stamped set, before any leg.
+
+    The wave refuses a member whose version homes disagree with its tag,
+    whose release notes are unsound, or whose floor names an unreleased
+    version, and it refuses only after the release has merged. The same
+    checks on the stamped tree refuse before a release pull request
+    exists. The set's own tags count as released, as the wave counts them.
+
+    Raises:
+        Failed: as the publish job's check refuses, naming the member and
+            each problem.
+    """
+    from livery.workshop._release import verify_release
+
+    coreleased = frozenset(f"{plan.package.path}/v{plan.version}" for plan in plans)
+    for plan in plans:
+        verify_release(
+            root, f"{plan.package.path}/v{plan.version}", coreleased=coreleased
+        )
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
@@ -744,6 +746,7 @@ class ReleaseDriver:
         kept = self.legs_kept(plans, mined_at)
         git.create_branch(root, self.branch)
         prepared = False
+        floor_changes: list[str] = []
         try:
             floor_changes = bump_set_floors(self._root, plans)
             if floor_changes:
@@ -771,6 +774,7 @@ class ReleaseDriver:
                 # failed), and the manifest alone is what lets the
                 # squash's discovery still name the whole set.
                 git.commit_all(root, "chore(release): the set manifest")
+            verify_set(self._root, plans)
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
@@ -786,7 +790,7 @@ class ReleaseDriver:
             prepared = True
         finally:
             if not prepared:
-                rollback_prepare(self._root, self._members)
+                rollback_prepare(self._root, self._members, floor_changes)
                 git.switch(root, self.base)
                 git.delete_branch(root, self.branch)
         title = release_title([(plan.package.name, plan.version) for plan in plans])
@@ -980,11 +984,13 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     fresh_receipts(root)
     plans = derive_plans(root, members)
     print("  act: local; nothing leaves this machine")
+    floor_changes: list[str] = []
     try:
-        bump_set_floors(root, plans)
+        floor_changes = bump_set_floors(root, plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
             _lifecycle.build_release(plan.package, root)
+        verify_set(root, plans)
         release_dirs = _wheel_dists(plans)
         for plan in plans:
             validate_member(root, plan, release_dirs)
@@ -992,7 +998,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         print(f"  would release: {listed}")
         print("  wheels in each member's dist/; the tree is restored")
     finally:
-        rollback_prepare(root, members)
+        rollback_prepare(root, members, floor_changes)
 
 
 #: The release workflow, as the forges address one for a dispatch and
@@ -1100,6 +1106,7 @@ def dispatch_flow(
     base: str = "main",
     at: str = "",
     workshop: str = "",
+    again: bool = False,
     timeout: float = 60.0,
     interval: float = 2.0,
 ) -> list[str]:
@@ -1115,13 +1122,19 @@ def dispatch_flow(
     every member's receipt tag is already on the remote: the
     manifest is permanent residue of the last release, so presence
     is not the signal, missing receipts are. A wave already in
-    flight is reported green with its run id. Otherwise the wave is
-    dispatched on *base* with the commit that stamped the manifest
-    as its ``ref`` input, never this run's own sha, so an unrelated
-    merge landing first cannot move the wave onto another tree; the
-    dispatch is confirmed by the run id that appears, or refused
-    with the reason. Remote state only, receipts by ``ls-remote`` and
-    runs by the forge, so any checkout answers the same as CI.
+    flight is reported green with its run id. A wave that already ran
+    at the squash with the squash's own driver and ended failure is
+    reported green too, with its run and the recoveries, and nothing
+    is dispatched: the same wave fails the same way, and every merge
+    would otherwise start one more copy of it. *again* dispatches it
+    anyway, the gesture by hand once the cause is gone, and a named
+    *workshop* is another wave. Otherwise the wave is dispatched on
+    *base* with the commit that stamped the manifest as its ``ref``
+    input, never this run's own sha, so an unrelated merge landing
+    first cannot move the wave onto another tree; the dispatch is
+    confirmed by the run id that appears, or refused with the reason.
+    Remote state only, receipts by ``ls-remote`` and runs by the
+    forge, so any checkout answers the same as CI.
     """
     from livery.workshop._publish import MANIFEST, read_manifest
 
@@ -1147,6 +1160,20 @@ def dispatch_flow(
             f"  {MANIFEST} is at {where} but no commit touches it: nothing to dispatch"
         ]
     _require_release_squash(root, stamping, base)
+    if not workshop and not again:
+        failed = _failed_wave_at(root, repo, stamping)
+        if failed is not None:
+            prog = footman.prog()
+            return [
+                f"  a wave already ran at {stamping[:12]} and ended failure: run"
+                f" {failed.id} ({repo.web_url()}/actions/runs/{failed.id}); the same"
+                f" wave fails the same way, so none is dispatched. Uncut:"
+                f" {', '.join(missing)}",
+                f"  to run it again once the cause is gone: `{prog}"
+                " workflow.release.dispatch --again`; with a released driver:"
+                f" `--workshop=<version>`; to give the release up: `{prog}"
+                " workflow.release --abandon`",
+            ]
     seen = {run.id for run in _wave_runs(repo)}
     inputs = {"ref": stamping}
     if workshop:
@@ -1180,6 +1207,30 @@ def dispatch_flow(
         f" {timeout:.0f}s; re-run `{footman.prog()} workflow.release.dispatch`,"
         " which reports a wave that has since appeared"
     ]
+
+
+def _failed_wave_at(root: Path, repo: Repository, squash: str) -> Run | None:
+    """The newest dispatched wave about *squash* that ended failure, or None.
+
+    The runs about the squash are the forge's listing for it and the
+    runs that recorded themselves as its (`runs_about`), since a wave
+    the forge filed under a tip that moved on is still the squash's.
+    A cancelled wave, or one that never ran, is not a failure here:
+    the next merge dispatches again for those, as for a died merge
+    run.
+    """
+    from livery.workshop._traces import runs_about
+
+    caused, _lines = runs_about(root, repo, squash)
+    ids = {item.run_id for item in caused if item.event == "workflow_dispatch"}
+    failed = [
+        run
+        for run in _wave_runs(repo)
+        if str(run.id) in ids
+        and run.status == "completed"
+        and run.conclusion == "failure"
+    ]
+    return max(failed, key=lambda run: run.id) if failed else None
 
 
 def _require_release_squash(root: Path, stamping: str, base: str) -> None:
@@ -1506,16 +1557,21 @@ def workflow_release_dispatch(
     workshop: Annotated[
         str, doc("a released livery-workshop version to drive the wave")
     ] = "",
+    again: Annotated[
+        bool, doc("dispatch although a wave already failed at the squash")
+    ] = False,
 ) -> None:
     """Dispatch the release wave for a merged, unpublished release; green otherwise.
 
     The merge point's last task, and the recovery gesture by hand:
     it reads the manifest at HEAD and the receipts on the remote, so
     on a normal day it prints green, after a died merge run it
-    dispatches, and a wave in flight is reported with its run id.
-    ``--at`` names an older release squash a later release has moved
-    past; ``--workshop`` names a released driver for a wave whose own
-    workshop was the fault.
+    dispatches, a wave in flight is reported with its run id, and a
+    wave that already failed at the squash is reported with its run
+    and dispatched again only on ``--again``. ``--at`` names an older
+    release squash a later release has moved past; ``--workshop``
+    names a released driver for a wave whose own workshop was the
+    fault.
     """
     from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_repository
@@ -1523,7 +1579,9 @@ def workflow_release_dispatch(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    for line in dispatch_flow(root, this_repository(root), at=at, workshop=workshop):
+    for line in dispatch_flow(
+        root, this_repository(root), at=at, workshop=workshop, again=again
+    ):
         print(line)
 
 

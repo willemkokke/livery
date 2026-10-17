@@ -223,25 +223,27 @@ def set_floors(root: Path, plans: tuple[DevPlan, ...]) -> Generator[list[str]]:
     and a dev build needs the same: a dev version sorts below the release
     it leads to, so a floor that names that release, or ``0.0.0`` for a
     member never released, admits no dev wheel of it. Each floor names
-    the co-member's public dev version instead, in every home the train
-    moves. A set of one moves no floor, as a release of one moves none.
+    the co-member's public dev version instead, raised by the stamp
+    phase the train runs. A set of one moves no floor, as a release of
+    one moves none.
 
-    The raise lasts for the block alone: every file it may touch is
-    restored from an in-memory snapshot when the block ends, a failure
-    included, with its timestamps, as the build restores what it
-    stamps. Yields the files the raise changed, relative to *root*.
+    The raise lasts for the block alone: every file the phase may touch,
+    each member's version files and its contract, is restored from an
+    in-memory snapshot when the block ends, a failure included, with its
+    timestamps, as the build restores what it stamps. Yields the files
+    the phase reported, relative to *root*.
     """
-    from livery.workshop._release_driver import (
-        FLOOR_HOMES,
-        MemberPlan,
-        bump_set_floors,
-    )
+    from livery.workshop._contract import CONTRACT
+    from livery.workshop._release_driver import MemberPlan, bump_set_floors
 
     homes = [
-        plan.package.directory / home
+        home
         for plan in plans
-        for home in FLOOR_HOMES
-        if (plan.package.directory / home).is_file()
+        for home in (
+            *_lifecycle.version_files(plan.package),
+            plan.package.directory / CONTRACT,
+        )
+        if home.is_file()
     ]
     snapshots = {path: path.read_bytes() for path in homes}
     stamps = {path: path.stat() for path in homes}

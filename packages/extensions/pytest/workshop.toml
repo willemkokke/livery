@@ -12,7 +12,7 @@ description = "pytest as a check of the livery workshop: each python package's s
 [[depends]]
 path = "packages/workshop"
 kind = "runtime"
-floor = "0.6.0"
+floor = "0.11.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the
@@ -22,7 +22,7 @@ floor = 100
 [[depends]]
 path = "packages/footman"
 kind = "test"
-floor = "0.58.0"
+floor = "0.61.0"
 
 [docs]
 # Inside the workshop's entry of the site's Packages tree.
@@ -31,7 +31,7 @@ name = "workshop.extensions.pytest"
 [[depends]]
 path = "packages/git"
 kind = "test"
-floor = "0.1.0"
+floor = "0.3.0"
 
 [[depends]]
 path = "packages/extensions/cmake"

@@ -1,5 +1,81 @@
 # Changelog
 
+## [0.11.0] - 2026-10-17
+
+### Added
+
+- Cmake declares its configure, compile and ctest steps, the build steps' gate side registers in the gate, and the base imports no extension by @willemkokke
+- An extension declares the templates fm new.package creates a package from, the seed trees become the first templates, and python's scripts are what fm run starts by @willemkokke
+- Fm sync refreshes the completion manifest in the background when it changed what is installed by @willemkokke
+- Fm ci.dispatch follows the run it started: the run the forge names, or the one new dispatched run of its ref and commit, and two such runs refuse naming both by @willemkokke
+- The agent's guidance gives each installed extension a block read from its declaration, and the kit holds every declaration to its docs by @willemkokke
+- Each installed template is a verb, fm new.package.<template> <name>, whose declared creation options are its options; python-library's --command replaces python-cli, workshop-extension's App comes with --app, and cpp-package with --package-type replaces cpp-library and cpp-executable by @willemkokke
+- Fm submit --every-runner labels a pull request ci:every-runner so the gate runs every runner for it, the forge adds labels to a pull request on every backend and refuses an unknown one by name, the gate workflow runs on labeled and its legs job picks the full matrix while the label is there, the repository configuration creates the label, and the coverage union expects every leg from a labelled pull request by @willemkokke
+- Fm ci.balance reads each platform's full green timing rows, predicts its wall at one to several shards, and proposes the counts by @willemkokke
+- Shard spelling, test-file partition and the durations family by @willemkokke
+- Fm ci.run --shard names the shard in the leg's label and display by @willemkokke
+- Fm check --shard runs one shard's share of the sharded steps by @willemkokke
+- The check matrix renders the shards the contract declares by @willemkokke
+- The gate job folds a platform's shards by @willemkokke
+- Fm ci.timings shows a platform's shards beside its folded row by @willemkokke
+- Fm ci.footprint sums the runner-minutes the metrics window holds, and prices them where GitHub gives them away by @willemkokke
+- A pull request's check legs default to the first runner the contract names by @willemkokke
+- Fm sync mirrors the store's row series alone, and a read outside the mirror names the scope by @willemkokke
+- Every job of a point without a gate job records the run's row by @willemkokke
+- The loop runs its check leg as two shards by @willemkokke
+
+### Fixed
+
+- Fm sync hands itself to a fresh process when its uv sync moves or removes the distribution of the workshop or of an extension it mounted by @willemkokke
+- Coverage writes each set of test indexes as digits and commas, in version 3 of the line format, so no store push holds a token shape GitHub's push protection refuses by @willemkokke
+- Fm sync installs a newly listed extension through the project file's dev group and uv sync, so its path or git source applies by @willemkokke
+- Conan's sync step makes the one default profile once per sync, and a registered phase's workspace step runs only while a package holds an extension it names by @willemkokke
+- Every CI job keeps conan's home in a directory of its own, so two jobs on one runner never write one conan cache at once by @willemkokke
+- A release's publish job restores every host's saved conan cache the run collected, so the upload sends every host's binary by @willemkokke
+- Read the verified record per platform leg: a check leg skips only on a full row naming its own leg, and the stamp names the legs' labels by @willemkokke
+- The loop's contributed point asks for the environment's runner, never ubuntu-latest by @willemkokke
+- The release rehearsal passes and leaves its tree as it found it by @willemkokke
+- Pin every action by commit and hand the secrets to the entry step by @willemkokke
+- Drop the shard key from a one-shard runner's entry in a sharded matrix by @willemkokke
+- The shard record names its suites by @willemkokke
+- The loop's watch judges the runs it caused and names a dispatched run as foreign by @willemkokke
+- The test session scrubs the leg's label from the runner's environment by @willemkokke
+- The merge point dispatches no copy of a wave that already failed at the squash by @willemkokke
+- A leg's timing row reads a gate step drawn as an async span by @willemkokke
+- The extensions' entry modules carry their version, and rehearsals check it by @willemkokke
+- A file has one shard whatever run of the test step reaches it by @willemkokke
+- A dispatch test runs as a CI run, and real-conan tests keep short homes by @willemkokke
+
+### Changed
+
+- The in-wheel extensions call the workshop's public names where one exists by @willemkokke
+- Undeployed is a public name of the workshop, and cmake and conan call it there by @willemkokke
+- Every extension is one kind: an extension declares no levels, either list takes any extension, and the installed set is the root's set and every package's set by @willemkokke
+- No extension list's order means anything: composition order decides, the root list is written in its canonical form, and fm new.project takes --extensions in place of --stack by @willemkokke
+- The workspace's own tests hold the root's set, so a root whose set holds no python runs none of them and says why, and fm new.project's stock list names python by @willemkokke
+- Fm new.package offers the installed set's templates, a template needing an extension the workspace does not have refuses naming it, and a creation installs nothing by @willemkokke
+- A root entry's without names the targets its extension contributes nothing to, in place of for, so cooperation stays greedy and fm extensions prints what each entry leaves out by @willemkokke
+- A package listing an extension that composes nothing in a package refuses and the gate's fix moves the entry to the root list, a template listing one refuses, and the conformance kit gains template-composes by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+- The cmake extension leaves the workshop's wheel for livery-extensions-cmake, and a test edge renders into the package's test extra by @willemkokke
+- Git LFS becomes the lfs extension in its own distribution, the CI checkout takes inputs extensions answer, and the sync phase runs over the workspace by @willemkokke
+- Mkdocstrings reads public names alone: extension_set, step_extensions and step_enabled join the workshop's API, step_option answers from the installed declaration, and the docs extension gets an entry module by @willemkokke
+- The mkdocstrings extension leaves the workshop's wheel for livery-extensions-mkdocstrings by @willemkokke
+- Docs reads public names alone, its override template is a fragment, and a docs step declares the outputs a build clears once it stops running by @willemkokke
+- A removed key, option, template or name has no code of its own: the ordinary refusal of an unknown one covers it by @willemkokke
+- The docs extension leaves the workshop's wheel for livery-extensions-docs by @willemkokke
+- Coverage reads public names alone: the CI run's state store, legs, run-row sections, leg scope, verified branch and tested units join the workshop's API by @willemkokke
+- The coverage extension leaves the workshop wheel for its own distribution, livery-extensions-coverage, taking Pygments with it by @willemkokke
+- Nanobind reads public names alone: the release build, the release's members, the CI matrix, the job-built members query, the tool receipts and the store home join the workshop's API, and python and conan get entry modules by @willemkokke
+- The nanobind extension leaves the workshop wheel for its own distribution, livery-extensions-nanobind by @willemkokke
+- Conan reads public names alone: a package's workspace root, the requirement writer protocol and the registry target read from the publish phase's table join the workshop's API, and python reads them too by @willemkokke
+- The conan extension leaves the workshop wheel for its own distribution, livery-extensions-conan by @willemkokke
+- The cpp extension leaves the workshop wheel for its own distribution, livery-extensions-cpp by @willemkokke
+- Python reads public names alone: the source records, the reference map, the graph widening, a venv's paths and the example and speed names join the workshop's API, python's upload moves into python, and the dev act publishes through each member's publish phase by @willemkokke
+- One follow() for every wait on the forge in the workflow lane by @willemkokke
+- Python leaves the workshop wheel, which now ships the base alone by @willemkokke
+- The loop proves each scenario from the rows the legs write, not from their log lines by @willemkokke
+
 ## [0.10.0] - 2026-10-14
 
 ### Added
