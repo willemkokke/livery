@@ -1278,6 +1278,10 @@ BUILTIN: tuple[Entry, ...] = (
     # its own. The judges the extensions add run after it, before the
     # collect, so what they leave rides the run's row.
     Entry("gate", "gate", "workflow.release.check-title"),
+    # The fold next, before any judge reads the run's refs: a platform
+    # that ran as shards has one ref per shard, and the judges, the
+    # collect and the stamp read one leg per platform.
+    Entry("gate", "gate", "ci.fold"),
     Entry("gate", "gate", COLLECT),
     # The speed judge reads the run's row the collect just put: a
     # suite over its mark for the second run in a row is red here,
@@ -1807,9 +1811,10 @@ def run_point(
     contract splits; empty runs as one shard of one. A count above
     one ends the label and the display name
     (``check-windows-latest-3.14-2of4``, ``check (windows-latest,
-    3.14, 2of4)``), and an entry declared ``sharded`` takes
-    ``--shard=2of4``; one shard of one leaves the label, the display
-    name and every call as the unsplit leg's. A spelling outside
+    3.14, 2of4)``, and on GitLab ``check: [2of4]``, as it lists a job
+    run as ``parallel: matrix``), and an entry declared ``sharded``
+    takes ``--shard=2of4``; one shard of one leaves the label, the
+    display name and every call as the unsplit leg's. A spelling outside
     ``<i>of<n>`` fails naming it, before any entry runs. An entry
     with ``once`` runs on the first leg's first shard alone, and the
     skip line names the shard when the leg is the first. An entry
@@ -1846,7 +1851,8 @@ def run_point(
     # the collect step joins the leg's row with the forge's job by it:
     # GitHub and Gitea show a matrix job as ``check (ubuntu-latest,
     # 3.14)``; GitLab names the job by its key alone, the matrix
-    # riding its variables and never its name.
+    # riding its variables and never its name, except that a job run
+    # as ``parallel: matrix`` is listed as ``check: [2of4]``.
     run = run_context()
     # Only the dimensions the matrix actually has: the nightly point runs a
     # matrix of pythons and no runners, and the forge lists that job as
@@ -1858,8 +1864,11 @@ def run_point(
     # as the platform leg every record is keyed by.
     if split.count > 1:
         parts.append(str(split))
-    matrix = bool(parts) and (run is None or run.forge != "gitlab")
-    display = f"{job} ({', '.join(parts)})" if matrix else job
+    gitlab = run is not None and run.forge == "gitlab"
+    if gitlab:
+        display = f"{job}: [{split}]" if split.count > 1 else job
+    else:
+        display = f"{job} ({', '.join(parts)})" if parts else job
     label = "-".join([job, *parts])
     facts = {
         "display": display,

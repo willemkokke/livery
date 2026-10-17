@@ -1444,6 +1444,29 @@ absence.
   count through `parallel: matrix`, `SHARD` taking `1of2` and `2of2`,
   and its call passes `--shard="$SHARD"`; GitLab reads the first
   runner's count alone, since its one document serves every event.
+  Each shard leaves what
+  it partitioned in `.workshop/fm-shard.json`, and its one write
+  carries that record in its timing row. The gate job's `ci.fold`
+  entry, before any judge reads the run's refs, folds each platform's
+  shards into one leg: it refuses, naming the platform, the shards and
+  what differs, unless every shard the matrix produces left a ref with
+  a row and its record, the shards name one scope, one test-file set,
+  one list of durations rows read under one bound, no test file ran in
+  two shards, and the files they ran are together the set they
+  partitioned. The folded ref is keyed by the platform leg: the timing
+  row with the first shard's tasks, every shard's package sums added
+  and seconds per test file merged, named by the platform's own display
+  name, and every other file the shards' entries left folded by the
+  extension that leaves it, through the `ci.fold` query (the coverage
+  extension concatenates its parts per suite). The shards' refs are
+  dropped once the folded ref is put, so a fold that dies midway is
+  re-run as its own recovery. Below the fold the coverage records, the
+  verified stamp, the speed marks and the janitor's key set see one
+  leg per platform; the forge's rows of the shards stay in the run's
+  `metrics` file, times alone, for `fm ci.timings`. A run with no
+  sharded platform says so and folds nothing. On GitLab a job run as
+  `parallel: matrix` is listed as `check: [<i>of<n>]`, and the job's
+  display name spells the shard that way.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
@@ -1748,7 +1771,7 @@ package each, which `fm ci.timings` renders as a trend.
 | --- | --- | --- | --- |
 | `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
-| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job |
+| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job's collect, after the fold |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
@@ -1759,8 +1782,10 @@ package each, which `fm ci.timings` renders as a trend.
 
 The `durations` family is one series per platform leg,
 `check-<os>-<python>`, one row per run, `{"run": "<id>", "files":
-{"<path>": <seconds>}}`, the newest thirty kept; a series of a leg the
-matrix no longer produces is the janitor's to drop. A shard of that
+{"<path>": <seconds>}}`, the newest thirty kept, written by the gate
+job's collect from each check leg's folded row once the run's `metrics`
+file has landed; a series of a leg the matrix no longer produces is the
+janitor's to drop. A shard of that
 leg reads the newest five rows stamped before the committer time of
 the commit it checked out and takes the median per file; a row the
 store stamped at or after that time reaches no shard, so every shard

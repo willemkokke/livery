@@ -1221,6 +1221,16 @@ combine = "livery.workshop._queries:merged"
 level = "workspace"
 combine = "livery.workshop._ci_generate:checkout_inputs"
 
+# How the gate job folds a file a check leg's shards each left on their
+# per-run refs into the platform leg's one file, by the file's name:
+# each listed extension answers for the files its leg entry leaves, a
+# function called with the shards' files in shard order that returns
+# the folded file, or raises ValueError naming what differs. A file two
+# answers fold refuses; a file nobody folds is red by name in the fold.
+[queries."ci.fold"]
+level = "workspace"
+combine = "livery.workshop._queries:merged"
+
 # The base's templates, in the grammar an extension declares one in
 # under the same table of its extension.toml; their files live under
 # content/templates/<name>/ beside this file. The extension format is

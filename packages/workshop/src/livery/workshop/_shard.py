@@ -310,6 +310,45 @@ class ShardMarker:
     before: datetime
 
 
+def marker_fields(marker: ShardMarker) -> dict[str, Any]:
+    """*marker* as `SHARD_FILE` holds it, and a leg's row under ``shard``."""
+    return {
+        "shard": str(marker.shard),
+        "digest": marker.digest,
+        "files": list(marker.files),
+        "rows": list(marker.rows),
+        "before": marker.before.isoformat(),
+    }
+
+
+def parse_marker(loaded: Any, *, source: str) -> tuple[ShardMarker | None, str]:
+    """The record *loaded* holds, as `marker_fields` wrote it; or why it is none.
+
+    *source* names where it came from, for the reason.
+
+    Returns:
+        ``(record, "")`` when it reads; ``(None, reason)`` when *loaded*
+        is not a record.
+    """
+    if not isinstance(loaded, dict):
+        return None, f"{source} is not a JSON object"
+    try:
+        shard = Shard.parse(str(loaded.get("shard", "")))
+    except ValueError as error:
+        return None, f"{source}: {error}"
+    stamp = str(loaded.get("before", "") or "")
+    before = _moment(stamp)
+    if before is None:
+        return None, f"{source}: {stamp!r} is not a time"
+    return ShardMarker(
+        shard=shard,
+        digest=str(loaded.get("digest", "") or ""),
+        files=tuple(str(name) for name in loaded.get("files", []) or []),
+        rows=tuple(str(name) for name in loaded.get("rows", []) or []),
+        before=before,
+    ), ""
+
+
 def leave_shard(
     root: Path,
     *,
@@ -321,24 +360,16 @@ def leave_shard(
 ) -> Path:
     """Leave the shard's record in `SHARD_FILE` at *root*, for the gate job's proof.
 
+    The leg's one write copies the record into its timing row under
+    ``shard``, where the gate job's fold reads it.
+
     Returns:
         The path of the file left.
     """
     path = root / SHARD_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "shard": str(shard),
-                "digest": digest,
-                "files": list(files),
-                "rows": list(rows),
-                "before": before.isoformat(),
-            },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
+    marker = ShardMarker(shard, digest, tuple(files), tuple(rows), before)
+    path.write_text(json.dumps(marker_fields(marker), sort_keys=True), encoding="utf-8")
     return path
 
 
@@ -356,20 +387,4 @@ def read_shard(root: Path) -> tuple[ShardMarker | None, str]:
         loaded: Any = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError) as error:
         return None, f"{SHARD_FILE} does not parse ({error})"
-    if not isinstance(loaded, dict):
-        return None, f"{SHARD_FILE} is not a JSON object"
-    try:
-        shard = Shard.parse(str(loaded.get("shard", "")))
-    except ValueError as error:
-        return None, f"{SHARD_FILE}: {error}"
-    stamp = str(loaded.get("before", "") or "")
-    before = _moment(stamp)
-    if before is None:
-        return None, f"{SHARD_FILE}: {stamp!r} is not a time"
-    return ShardMarker(
-        shard=shard,
-        digest=str(loaded.get("digest", "") or ""),
-        files=tuple(str(name) for name in loaded.get("files", []) or []),
-        rows=tuple(str(name) for name in loaded.get("rows", []) or []),
-        before=before,
-    ), ""
+    return parse_marker(loaded, source=SHARD_FILE)
