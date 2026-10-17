@@ -127,7 +127,9 @@ def test_a_push_with_no_proved_tree_in_reach_pays_the_whole_gate_never_the_merge
         ]
     )
     monkeypatch.setattr(
-        _gate_record, "leg_plan", lambda root, *, base, branch, leg: next(plans)
+        _gate_record,
+        "leg_plan",
+        lambda root, *, base, branch, leg, before=None: next(plans),
     )
     # The fallback first: on main the merge base is HEAD, so the step
     # would be empty; the push pays the whole gate instead.
@@ -209,7 +211,9 @@ def test_a_leg_says_where_it_measures_from_and_why(
     )
     asked: list[tuple[str, str, str]] = []
 
-    def _plan(root: Path, *, base: str, branch: str, leg: str) -> Plan:
+    def _plan(
+        root: Path, *, base: str, branch: str, leg: str, before: object = None
+    ) -> Plan:
         asked.append((base, branch, leg))
         return next(plans)
 

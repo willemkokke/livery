@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -237,17 +238,47 @@ def verified_branch(root: Path) -> VerifiedBranch:
     return VerifiedBranch(row.branch if row is not None else "")
 
 
-def record(root: Path, tree: str) -> tuple[Verified | None, str]:
+def record(
+    root: Path, tree: str, *, before: datetime | None = None
+) -> tuple[Verified | None, str]:
     """The entry for *tree*, or ``(None, reason)``; an absent entry has no reason.
 
     A read the transport could not answer falls open with its words,
     and so does an entry that is not a row of the record's schema:
     the gate runs, and the line says why the record did not decide.
+    With *before*, an entry the store stamped at or after it, or never
+    stamped, reads as absent (`written_before`).
     """
     row, why = SERIES.row(state_store(root), tree)
     if row is None:
         return None, why
+    if not written_before(row.when, before):
+        return None, ""
     return _entry(tree, row.data), ""
+
+
+def written_before(when: str, before: datetime | None) -> bool:
+    """Whether a row stamped *when* counts under the bound *before*.
+
+    Every row counts without a bound. With one, a row counts when the
+    store stamped it before the bound; an unstamped row or a stamp
+    that does not parse never does. The shards of a check leg read the
+    record under one bound, the committer time of the commit they all
+    checked out, so a row another run writes while they start counts
+    for all of them or for none.
+    """
+    if before is None:
+        return True
+    try:
+        moment = datetime.fromisoformat(when) if when else None
+    except ValueError:
+        moment = None
+    if moment is None:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    bound = before if before.tzinfo is not None else before.replace(tzinfo=UTC)
+    return moment < bound
 
 
 def _entry(tree: str, entry: dict[str, Any]) -> Verified:
@@ -282,18 +313,25 @@ def proves(row: Verified, leg: str = "") -> bool:
     return not leg or platform in {platform_leg(leg_label(name)) for name in row.legs}
 
 
-def proved(root: Path, leg: str = "") -> tuple[dict[str, Verified], str]:
+def proved(
+    root: Path, leg: str = "", *, before: datetime | None = None
+) -> tuple[dict[str, Verified], str]:
     """The rows that prove their trees for *leg*, by tree, newest first, in one read.
 
     ``({}, reason)`` when the record could not be read. With a leg,
     the full rows that name it (`proves`); without one, every full
     row. A row of a narrowed scope proves nothing and is left out, as
-    a file that is not a row of the record's schema is.
+    a file that is not a row of the record's schema is. With *before*,
+    only the rows the store stamped before it (`written_before`).
     """
     found = SERIES.rows(state_store(root))
     if found.failed:
         return {}, found.reason
-    rows = (_entry(row.name, row.data) for row in found.rows)
+    rows = (
+        _entry(row.name, row.data)
+        for row in found.rows
+        if written_before(row.when, before)
+    )
     return {entry.tree: entry for entry in rows if proves(entry, leg)}, ""
 
 
