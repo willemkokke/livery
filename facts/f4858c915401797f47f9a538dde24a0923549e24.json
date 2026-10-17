@@ -1,0 +1,1 @@
+{"excluded":"22-23,25,37-38,46-47,50-53","regions":[["class","ReleaseNotes",28,"32-37,40-46,49-50"],["function","ReleaseNotes.entry",31,"32-37"],["function","ReleaseNotes.record",39,"40-46"],["function","ReleaseNotes.verify",48,"49-50"],["function","release_notes",59,"60-69"]],"spans":[[1,14],[32,36],[40,45],[60,68]],"statements":"16,18,20,28,31,39,48,56,59,69,73"}
