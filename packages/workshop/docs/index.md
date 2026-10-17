@@ -1727,6 +1727,33 @@ named, and a store that cannot be read prints why and proposes
 nothing. The verb changes nothing: a count lands in the contract by
 pull request.
 
+## The runner footprint
+
+`fm ci.footprint` sums the same timing rows into runner-minutes, so a
+workspace that inherited a runner matrix sees what it spends. Every
+job of every run in the window, or of the newest `--since` runs, is
+counted on one runner label: a check leg on the runner its job name
+lists, `check (macos-latest, 3.14)` or `check (windows-latest, 3.14,
+2of4)`, and every other job, the gate job, the docs build and the
+release jobs, on the first runner `[ci] runners` names, where the
+workflow places them. The folded row of a platform's shards is not a
+job the forge ran and is left out; the shards' own rows carry its
+minutes. The verb prints the window, its first and last day and its
+span, one line per runner label and kind with the jobs and the
+minutes, the total, and the minutes per 30 days from the span, at
+least one day. A job without a wall time, still running when the
+gate job collected or never started, is counted apart and priced as
+nothing. On GitHub, when the repository is public, the same minutes
+are also priced at GitHub's published
+[rates for the standard runners](https://docs.github.com/en/billing/reference/actions-runner-pricing)
+of a private repository, by the class the label names (ubuntu or
+linux, windows, macos), a label of no class named as unpriced, with
+the total and the USD per 30 days: a public repository is not billed
+for standard runners, and the price says what the matrix would cost
+one that is. On another forge, or on a private GitHub repository,
+nothing is priced. An empty window fails naming what fills it: the
+gate job of a run on the forge writes one row per run.
+
 ## The state store
 
 Every row the workshop keeps across runs is a row of the state
