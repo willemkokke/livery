@@ -506,6 +506,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         row: dict[str, Any] = {
             "total_ms": half.get("total_ms"),
             "tasks": half.get("tasks", {}),
+            "task_steps": half.get("task_steps", {}),
             "waits_ms": half.get("waits_ms", {}),
             "packages": half.get("packages", {}),
             "slowest": half.get("slowest", []),

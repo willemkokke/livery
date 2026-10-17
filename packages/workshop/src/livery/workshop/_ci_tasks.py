@@ -16,9 +16,11 @@ runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
-that store (livery.workshop._metrics); the hidden ``ci.metrics.collect``
-is the gate job's writer ``ci.run`` schedules, and the hidden
-``ci.leg`` is each check leg's one write of its row.
+that store (livery.workshop._metrics), and ``ci.balance`` reads the
+same rows to predict each platform's wall at one to several shards
+and propose the counts (livery.workshop._balance); the hidden
+``ci.metrics.collect`` is the gate job's writer ``ci.run`` schedules,
+and the hidden ``ci.leg`` is each check leg's one write of its row.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from livery.forge import (
     Run,
     Unsupported,
 )
+from livery.workshop._balance import MAX_SHARDS
 from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._points import TRACE
@@ -1209,3 +1212,54 @@ def ci_timings(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     timings_flow(root, since=since, base=base)
+
+
+def balance_flow(root: Path, *, cap: int) -> None:
+    """Print the balancer's window line, its tables and its proposal."""
+    from livery.git import remote_snapshot
+    from livery.workshop._balance import render
+
+    with remote_snapshot(state_store(root), fetch=("metrics",)):
+        for line in render(root, cap=cap):
+            print(line)
+
+
+@ci.task(name="balance")
+def ci_balance(
+    max_: Annotated[int, doc("the largest shard count a platform may take")] = (
+        MAX_SHARDS
+    ),
+) -> None:
+    """Predict each check platform's wall at one to several shards; propose the counts.
+
+    Reads the metrics series the gate job writes; CI is its only
+    writer, a local run reads. Per platform, a runner and a Python,
+    the newest ten rows whose check jobs ran the full gate and
+    succeeded give the medians of four measures: F, the setup and
+    teardown the forge timed around the call; O, the longest gate
+    step that is not the test step; S, the summed test time over
+    every package; and p, the parallelism the test step reached, S
+    over its wall. The shards of a platform fold into one reading.
+    The wall at n shards is predicted as F + max(O, S / (p n)) and
+    the runner seconds as about n F + S / p + O; the table prints
+    both for every count up to ``--max``.
+
+    The proposal: the slowest platform, the largest wall at one
+    shard, takes the largest count whose every added shard saved at
+    least F; every other platform takes the smallest count whose
+    wall is within 15% of the slowest platform's, or the cap, named.
+    The pull request counts follow the same rule over
+    ``[ci] pull-request-runners`` when that list is shorter than
+    ``[ci] runners``. The proposal prints as the TOML ``[ci] shards``
+    and ``[ci] pull-request-shards`` would hold, with the predicted
+    wall of the slowest leg beside its wall at one shard.
+
+    A platform with fewer than three such rows keeps its count and is
+    named. A store that cannot be read prints why and proposes
+    nothing. Changes nothing: a count lands in the contract by pull
+    request.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    balance_flow(root, cap=max_)
