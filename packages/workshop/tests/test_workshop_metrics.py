@@ -421,7 +421,11 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
         ),
         Step("Gate", "success", "2026-09-09T00:49:37Z", "2026-09-09T00:49:42Z"),
     )
-    trace = _trace(tmp_path / "t.json", tasks={"check": 4100.0})
+    trace = _trace(
+        tmp_path / "t.json",
+        tasks={"check": 4100.0},
+        steps=[{"name": "test.pytest", "tid": 1, "ts": 1500.0, "dur": 2_000_000}],
+    )
     assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace)[1] == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
@@ -436,6 +440,10 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
         {"name": "Gate", "ms": 5000.0},
     ]
     assert job["tasks"] == {"check": 4100.0}
+    # The steps a task ran ride under their task's address, so a
+    # reader of the run's file sees the gate's steps, the test step
+    # among them.
+    assert job["task_steps"] == {"check/test.pytest": 2000.0}
     assert entry["created_at"] == "2026-09-09T00:49:13Z"
     assert git.list_refs(state_store(work), git.RUN_PREFIX) == {}
 
