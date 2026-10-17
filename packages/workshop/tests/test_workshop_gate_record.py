@@ -272,12 +272,24 @@ def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
         == ""
     )
     monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: None)
-    assert git.fetch_store(state_store(work))[:2] == (1, "")
+    from livery.workshop._series import mirrored_series
+
+    assert "verified" in mirrored_series(work)
+    assert git.fetch_store(state_store(work), series=mirrored_series(work))[:2] == (
+        1,
+        "",
+    )
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     with counting_spawns() as spawned, git.fetched_snapshot(state_store(work)):
         assert _gate_record.verified_roots(work, "main") == ({base}, "")
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
-    # Never fetched: rootless, and the line names the sync.
+    # A stamp of another schema: rootless, and the line names the sync.
+    older = git.Series("fetched", window=1, ci_only=False, schema=1, local=True)
+    assert older.put(state_store(work), {"origin": {"refs": 1}}, message="old") == ""
+    with git.fetched_snapshot(state_store(work)):
+        roots, why = _gate_record.verified_roots(work, "main")
+    assert roots == set() and "has not been fetched" in why and "sync`" in why
+    # Never fetched: the same.
     _git(work, "update-ref", "-d", git.FETCHED.ref)
     with git.fetched_snapshot(state_store(work)):
         roots, why = _gate_record.verified_roots(work, "main")

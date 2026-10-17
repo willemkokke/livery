@@ -79,10 +79,40 @@ def test_an_unreadable_series_fails_with_the_stores_reason(
         _store_tasks.show_flow(work, "metrics")
     listed = _store_tasks.ls_flow(work)
     assert any(
-        line.startswith("  metrics: remote, window 300; the metrics series could not")
+        line.startswith(
+            "  metrics: remote, mirrored by sync, window 300; the metrics series"
+            " could not"
+        )
         for line in listed
     )
-    assert "  run/<run>/<leg>: remote, no window; could not be listed" in listed
+    assert (
+        "  run/<run>/<leg>: remote, fetched on read, no window; could not be listed"
+        in listed
+    )
+
+
+def test_the_sync_mirrors_the_remote_row_series_and_no_family_or_local_series(
+    work: Path,
+) -> None:
+    """What `fetch_store` is told to mirror: a desk's gate reads these alone."""
+    from livery.workshop._series import declared, mirrored, mirrored_series
+
+    names = mirrored_series(work)
+    assert names == ("metrics", "speed/marks", "verified")
+    for item in declared(work):
+        if isinstance(item, git.Keyed) or item.local or item.namespace:
+            assert not mirrored(item) and item.name not in names
+        else:
+            assert mirrored(item) and item.name in names
+    # An extension's series joins while it is listed; its family never does.
+    skip_unless_installed("coverage")
+    (work / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    assert mirrored_series(work) == (
+        "coverage/marks",
+        "metrics",
+        "speed/marks",
+        "verified",
+    )
 
 
 def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> None:
@@ -95,11 +125,14 @@ def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> No
     skip_unless_installed("coverage")
     (work / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
     listed = _store_tasks.ls_flow(work)
-    assert "  metrics: remote, window 300; 0 row(s)" in listed
-    assert "  durations/<leg>: remote, window 30; 0 key(s)" in listed
-    assert "  verified: remote, window 200; 1 row(s)" in listed
-    assert "  coverage/<base>/<leg>: remote, no window; 0 key(s)" in listed
-    assert "  coverage/marks: remote, window 400; 0 row(s)" in listed
+    assert "  metrics: remote, mirrored by sync, window 300; 0 row(s)" in listed
+    assert "  durations/<leg>: remote, fetched on read, window 30; 0 key(s)" in listed
+    assert "  verified: remote, mirrored by sync, window 200; 1 row(s)" in listed
+    assert (
+        "  coverage/<base>/<leg>: remote, fetched on read, no window; 0 key(s)"
+        in listed
+    )
+    assert "  coverage/marks: remote, mirrored by sync, window 400; 0 row(s)" in listed
     assert "  gate-record: local, window 200; 0 row(s)" in listed
     assert "  diagnostics: local, window 20; 0 row(s)" in listed
 

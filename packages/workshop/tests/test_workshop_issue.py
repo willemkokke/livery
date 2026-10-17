@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -273,7 +274,7 @@ def test_start_fails_when_origin_cannot_be_fetched(
     monkeypatch.setattr(
         git,
         "fetch_store",
-        lambda at, *, branches=False: git.Fetched(0, "could not resolve host"),
+        lambda at, *, series, branches=False: git.Fetched(0, "could not resolve host"),
     )
     monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     with pytest.raises(_FAILURES, match="could not be fetched: could not resolve host"):
@@ -290,16 +291,22 @@ def test_start_fetches_origins_heads_and_the_store_in_one_round_trip(
     root, fake = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("one trip")
-    fetches: list[tuple[Path, bool]] = []
+    fetches: list[tuple[Path, tuple[str, ...], bool]] = []
 
-    def fetch_store(at: git.StateStore, *, branches: bool = False) -> git.Fetched:
-        fetches.append((at.root, branches))
+    def fetch_store(
+        at: git.StateStore, *, series: Iterable[str], branches: bool = False
+    ) -> git.Fetched:
+        fetches.append((at.root, tuple(series), branches))
         return git.Fetched(3, "", 1)
 
     monkeypatch.setattr(git, "fetch_store", fetch_store)
     monkeypatch.setattr(git, "fetch", lambda root: pytest.fail("a second fetch"))
     start(str(created.number), worktree=False)
-    assert fetches == [(root, True)]
+    # The row series the workspace declares, never a family.
+    from livery.workshop._series import mirrored_series
+
+    assert fetches == [(root, mirrored_series(root), True)]
+    assert "metrics" in fetches[0][1] and "run" not in fetches[0][1]
     assert "store: 1 ref(s) changed, 3 mirrored" in capsys.readouterr().out
     assert git.current_branch(root) == f"feat/{created.number}-one-trip"
 

@@ -3,7 +3,8 @@
 Every row the workshop keeps is a declared series of the state store
 ([livery.git][]), gathered in one place
 ([livery.workshop._series][]). ``store.ls`` names each series and
-family with its scope, its window, and what it holds; ``store.show``
+family with its scope (local, or remote and mirrored by a sync, or
+remote and fetched on read), its window, and what it holds; ``store.show``
 prints a series' rows newest first through the same reader the
 verdicts use, so what a person reads is what the gate judged. Both
 only read: the gate's verbs write, and the janitor bounds.
@@ -37,8 +38,17 @@ def _declared(root: Path) -> tuple[git.Series | git.Keyed, ...]:
 
 
 def _scope(item: git.Series | git.Keyed) -> str:
+    """Where *item* lives, how a desk reads it, and its window."""
+    from livery.workshop._series import mirrored
+
     window = "no window" if item.window is None else f"window {item.window}"
-    return f"{'local' if item.local else 'remote'}, {window}"
+    if item.local:
+        where = "local"
+    elif mirrored(item):
+        where = "remote, mirrored by sync"
+    else:
+        where = "remote, fetched on read"
+    return f"{where}, {window}"
 
 
 def ls_flow(root: Path) -> list[str]:

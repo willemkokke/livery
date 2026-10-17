@@ -447,6 +447,53 @@ def test_a_gitlab_pipeline_source_reads_in_the_one_event_vocabulary(
 # --- the fetched mirror: what a machine's gate reads ----------------------------
 
 
+def test_a_desk_reads_the_row_series_from_the_mirror_and_a_family_fails_naming_it(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate's reads, offline: metrics and verified answer, a family never does."""
+    from livery.workshop import _metrics, _verified
+    from livery.workshop._series import mirrored_series
+    from livery.workshop._sync import fetch_store_lines
+
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    run = _ci_context.RunContext("github", "7", "push", "refs/heads/main")
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: run)
+    assert (
+        _verified.SERIES.put(state_store(other), {"t": {"scope": "full"}}, message="v")
+        == ""
+    )
+    assert (
+        _metrics.SERIES.put(state_store(other), {"7": {"wall": 1}}, message="m") == ""
+    )
+    family = _metrics.RUNS.series("7", "check-a")
+    assert (
+        family.put(state_store(other), {"row.json": {"job": "check"}}, message="h")
+        == ""
+    )
+    monkeypatch.setattr(_ci_context, "run_context", lambda environ=None: None)
+    assert fetch_store_lines(work) == ["  store: 2 ref(s) changed, 2 mirrored"]
+    mirrored = git.list_refs(state_store(work), git.FETCHED_NAMESPACE)
+    assert mirrored is not None and set(mirrored) == {
+        git.FETCHED_NAMESPACE + "metrics",
+        git.FETCHED_NAMESPACE + "verified",
+    }
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with git.fetched_snapshot(state_store(work)):
+        # A family's series, held by origin, is outside the mirror.
+        found = family.rows(state_store(work))
+        assert found.failed and family.ref in found.reason
+        assert ", ".join(mirrored_series(work)) in found.reason
+        assert _metrics.RUNS.listed(state_store(work), "7") is None
+        # The row series answer from the mirror, with no network.
+        assert [row.name for row in _verified.SERIES.rows(state_store(work)).rows] == [
+            "t"
+        ]
+        assert [row.name for row in _metrics.SERIES.rows(state_store(work)).rows] == [
+            "7"
+        ]
+
+
 def test_the_sync_line_says_what_the_fetch_did(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:

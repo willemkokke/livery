@@ -421,12 +421,15 @@ def start(
         path = worktree_path(root, work.number, work.title)
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
-    # One round trip: origin's heads for the base and the store for the
-    # worktree's first gate, the shape a sync's own fetch has.
+    # One round trip: origin's heads for the base and the store's row
+    # series for the worktree's first gate, the shape a sync's own fetch has.
     from livery.git import fetch_store
+    from livery.workshop._series import mirrored_series
     from livery.workshop._sync import store_lines
 
-    fetched = fetch_store(state_store(root), branches=True)
+    fetched = fetch_store(
+        state_store(root), series=mirrored_series(root), branches=True
+    )
     if fetched.why:
         fail(f"origin could not be fetched: {fetched.why}")
     for line in store_lines(fetched):
