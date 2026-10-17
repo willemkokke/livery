@@ -282,6 +282,7 @@ def test_the_entry_module_serves_what_the_defining_module_holds_at_each_read(
     assert conan_module.save_cache is _package.save_cache
     assert conan_module.__all__ == [
         "WORKSPACE_FILE",
+        "__version__",
         "restore_from_releases",
         "save_cache",
         "workspace_aside",
