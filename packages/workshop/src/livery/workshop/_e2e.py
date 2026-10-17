@@ -1857,6 +1857,21 @@ def _align_main(root: Path) -> None:
         print(f"  pruned pass-owned branch: {name}")
 
 
+def _main_settled(root: Path, kind: str) -> None:
+    """Wait until main's push run at the aligned tip has completed.
+
+    The loop cuts its next branch right after a merge, and the one
+    runner may run the new pull request's check job before main's push
+    job has written main's record; a leg then reads a record that holds
+    nothing and measures every suite afresh. The push run is waited for
+    here, so what a branch's leg reuses is on the record before the leg
+    reads it. A red push run fails the pass as any red run does.
+    """
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    _completed_run(repo, git.head_sha(root), event="push")
+
+
 def _fresh_branch(root: Path, name: str) -> None:
     """A pass-owned branch, recreated from an aligned main.
 
@@ -2495,6 +2510,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     never empty.
     """
     _fresh_branch(root, "chore/scoped-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     probe = root / "packages" / "loop-echo" / "tests" / "test_scoped_leg.py"
     probe.write_text(
@@ -2596,6 +2612,7 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     skipped, is the failure this proof exists for.
     """
     _align_main(root)
+    _main_settled(root, kind)
     before = git.head_sha(root)
     git.switch_new(root, "chore/unproven-push", f"{before}~1")
     probe = root / "packages" / "loop-native" / "tests" / "test_unproven_push.py"
@@ -2657,6 +2674,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     after the squash skips too.
     """
     _fresh_branch(root, "chore/prose-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     note = root / "notes" / "loop-prose.md"
     note.parent.mkdir(exist_ok=True)
@@ -2710,6 +2728,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     with main's tip as the stamp.
     """
     _fresh_branch(root, "chore/tests-leg")
+    _main_settled(root, kind)
     stamp = git.head_sha(root)
     probe = root / "tests" / "test_tests_leg.py"
     probe.write_text(
