@@ -1653,7 +1653,8 @@ the check among them, saying so; a name the nightly does not run
 refuses before anything is dispatched. A rehearsal of a branch runs the
 loop alone: `fm ci.dispatch --point=nightly --ref=<branch> --only=ci.e2e`.
 A tool refresh asked to submit observes nothing off the default branch,
-since it submits from the default branch alone.
+since it submits from the default branch alone; the balancer asked to
+submit does the same.
 A package contributes a point of its own with `[[ci.point]]` in its
 `workshop.toml`: `name` (a workflow file name and a job name at once),
 `task`, and optionally `args`, `every`, `runners` (the root contract's
@@ -1730,7 +1731,8 @@ package; and the parallelism p the test step reached, S over its
 wall. It predicts the leg's wall at n shards as F + max(O, S / (p n)),
 since the first shard runs the unsplit steps beside its slice, and
 the runner seconds as about n F + S / p + O, and prints both for every
-count up to `--max`, 4 by default. The slowest platform takes the
+count up to the cap, `[ci] shards-max` (4 when absent) or a `--max`
+under it. The slowest platform takes the
 largest count whose every added shard saved at least its own setup;
 every other platform takes the smallest count whose wall is within
 15% of the slowest platform's, or the cap, named. The pull request
@@ -1740,8 +1742,44 @@ are fewer than `[ci] runners` names. The proposal prints as the TOML
 predicted wall of the slowest leg beside its wall at one shard. A
 platform with fewer than three such rows keeps its count and is
 named, and a store that cannot be read prints why and proposes
-nothing. The verb changes nothing: a count lands in the contract by
-pull request.
+nothing. Without a flag the verb changes nothing.
+
+`fm ci.balance --write` rewrites `[ci] shards`, and `[ci]
+pull-request-shards` when the pull request runners are fewer, in the
+root `workshop.toml`, when a count differs from the contract's and
+the predicted wall at the proposed counts differs from the wall at the
+contract's counts by more than 10%: the hysteresis, so two readings
+that predict about the same wall do not move a count back and forth.
+The run wall decides, over `[ci] runners`; when only the pull
+request's counts differ, the pull request wall does. The rewrite
+keeps every comment and every other key, writes each table on one
+line, leaves a count of one out of a table and removes a table that
+would be empty, and adds a key the contract lacks under a one-line
+comment; `[ci] shards-max` is read and never written. It prints what
+each key becomes and the wall it read, or why nothing was written: no
+platform with enough rows, no count changed, or a wall that moved
+less. The workflows carry the counts as literals, so `fm sync`
+renders them next, which the last line says.
+
+`fm ci.balance --submit` lands the same change for a person to merge:
+from origin's default branch alone, and on another branch it names
+the branch, writes nothing and exits green, so a nightly dispatched on
+a branch skips it. A change that is due goes on the day's branch,
+`chore/balance-<date>`, started in this checkout from a fetched
+`origin/main`; the contract is rewritten, `fm sync` renders the
+workflows at the counts, the change is committed as `chore(ci): the
+check legs run as <counts>` and submitted unarmed, its gate run by the
+submit, and the checkout returns to where it was. Origin is asked for
+the day's branch before anything in the checkout changes: one holding
+these counts means the day's balance is already submitted, and one
+holding other counts stops, naming both, for a person to merge or
+close its pull request first. Nothing due means no branch and no pull
+request. The pull request is never armed: a count change is merged by
+hand. This repository's nightly runs it once a day through a
+`[[ci.schedule]]` entry, `task = "ci.balance"` with `args =
+["--submit"]` and `once = true`, before the tool refresh. A count can
+also be set by hand in the contract; the next write that is due
+replaces it.
 
 ## The runner footprint
 

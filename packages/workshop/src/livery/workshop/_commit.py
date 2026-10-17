@@ -64,47 +64,33 @@ def _run_check() -> None:
     check(fix=True)
 
 
-@footman.task(serial=True)
-def commit(
-    type: Arg[str] = "",
-    subject: Arg[str] = "",
-    body: Annotated[str, doc("the commit body, after the subject")] = "",
-    scope: Annotated[
-        str, doc("the scope; derived from the changed paths when absent")
-    ] = "",
-    only: Annotated[
-        str, doc("stage these paths alone, comma-separated; everything when absent")
-    ] = "",
-    breaking: Annotated[
-        bool, doc("mark the commit as a break (the ! before the colon)")
-    ] = False,
-    check: Annotated[
-        bool, doc("run the affected gate first, healing what is mechanical")
-    ] = True,
-) -> None:
-    """Commit the change as ``type(scope): subject`` on a proved tree.
+def commit_flow(
+    root: Path,
+    type: str,
+    subject: str,
+    *,
+    body: str = "",
+    scope: str = "",
+    only: str = "",
+    breaking: bool = False,
+    check: bool = True,
+) -> str:
+    """Commit the change in *root* as ``type(scope): subject``; the subject written.
 
-    TYPE is one of the conventional types the release train reads and
-    SUBJECT says what the change does. The scope is the packages the
-    staged change touches, by directory name, or none for a change
-    outside every package; ``--scope`` overrides it. A package whose
-    only changes are the files the engine composes into it is left
-    out. The affected gate runs first in its fix mode, so mechanical
-    findings heal into the commit and nothing unproved is committed;
-    ``--no-check`` skips it. Everything is staged unless ``--only``
-    names the paths. Refuses on ``main``, on a reserved branch, and
-    with nothing to commit.
+    The verb's act after its argument refusals, which another verb
+    calls to commit through the same rules: the balancer's submit
+    ([livery.workshop._balance.submit][]) among them. Refuses on
+    ``main``, on a reserved branch, and with nothing to commit. With
+    *check* the affected gate runs first in its fix mode; a caller
+    whose next step is a gate of the same tree passes False. The
+    scope is the packages the staged change touches (`scope_of`)
+    unless *scope* gives it; *only* stages those comma-separated paths
+    alone; *breaking* marks the break.
+
+    Raises:
+        Failed: naming the refusal, or git's words when it refuses the
+            commit, the change left staged.
     """
-    if type not in TYPES:
-        fail(
-            f"the type is one of {', '.join(TYPES)}:"
-            f' `{footman.prog()} commit feat "the subject"`'
-        )
-    if not subject.strip():
-        fail("name the subject: what the change does, in the imperative")
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no workshop.toml above the working directory")
     branch = git.current_branch(root)
     if not branch:
         fail("HEAD is detached: check out a branch first")
@@ -151,3 +137,57 @@ def commit(
         f"  scope: {scope or 'none'} ({'given' if given else 'from the changed paths'})"
     )
     print(f"  committed {git.head_sha(root)[:8]}: {title}")
+    return title
+
+
+@footman.task(serial=True)
+def commit(
+    type: Arg[str] = "",
+    subject: Arg[str] = "",
+    body: Annotated[str, doc("the commit body, after the subject")] = "",
+    scope: Annotated[
+        str, doc("the scope; derived from the changed paths when absent")
+    ] = "",
+    only: Annotated[
+        str, doc("stage these paths alone, comma-separated; everything when absent")
+    ] = "",
+    breaking: Annotated[
+        bool, doc("mark the commit as a break (the ! before the colon)")
+    ] = False,
+    check: Annotated[
+        bool, doc("run the affected gate first, healing what is mechanical")
+    ] = True,
+) -> None:
+    """Commit the change as ``type(scope): subject`` on a proved tree.
+
+    TYPE is one of the conventional types the release train reads and
+    SUBJECT says what the change does. The scope is the packages the
+    staged change touches, by directory name, or none for a change
+    outside every package; ``--scope`` overrides it. A package whose
+    only changes are the files the engine composes into it is left
+    out. The affected gate runs first in its fix mode, so mechanical
+    findings heal into the commit and nothing unproved is committed;
+    ``--no-check`` skips it. Everything is staged unless ``--only``
+    names the paths. Refuses on ``main``, on a reserved branch, and
+    with nothing to commit.
+    """
+    if type not in TYPES:
+        fail(
+            f"the type is one of {', '.join(TYPES)}:"
+            f' `{footman.prog()} commit feat "the subject"`'
+        )
+    if not subject.strip():
+        fail("name the subject: what the change does, in the imperative")
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    commit_flow(
+        root,
+        type,
+        subject,
+        body=body,
+        scope=scope,
+        only=only,
+        breaking=breaking,
+        check=check,
+    )

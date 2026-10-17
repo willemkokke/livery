@@ -43,7 +43,6 @@ from livery.forge import (
     Run,
     Unsupported,
 )
-from livery.workshop._balance import MAX_SHARDS
 from livery.workshop._ci_context import state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._points import TRACE
@@ -1397,21 +1396,38 @@ def ci_timings(
     timings_flow(root, since=since, base=base)
 
 
-def balance_flow(root: Path, *, cap: int) -> None:
-    """Print the balancer's window line, its tables and its proposal."""
+def balance_flow(root: Path, *, cap: int, write: bool) -> None:
+    """Print the balancer's window line, its tables and its proposal; *write* writes."""
     from livery.git import remote_snapshot
-    from livery.workshop._balance import render
+    from livery.workshop import _balance
 
     with remote_snapshot(state_store(root), fetch=("metrics",)):
-        for line in render(root, cap=cap):
-            print(line)
+        balance = _balance.read(root, cap=cap)
+    for line in balance.lines:
+        print(line)
+    if write and _balance.write(root, balance) is not None:
+        print(f"  run `{footman.prog()} sync` to render the workflows with the counts")
 
 
 @ci.task(name="balance")
 def ci_balance(
-    max_: Annotated[int, doc("the largest shard count a platform may take")] = (
-        MAX_SHARDS
-    ),
+    max_: Annotated[
+        int,
+        doc(
+            "the largest shard count a platform may take; 0 reads [ci] shards-max,"
+            " 4 when the contract is silent"
+        ),
+    ] = 0,
+    write: Annotated[
+        bool, doc("rewrite [ci] shards and [ci] pull-request-shards when due")
+    ] = False,
+    submit: Annotated[
+        bool,
+        doc(
+            "write, commit on the day's branch and open its pull request, unarmed"
+            " (implies --write)"
+        ),
+    ] = False,
 ) -> None:
     """Predict each check platform's wall at one to several shards; propose the counts.
 
@@ -1425,7 +1441,8 @@ def ci_balance(
     over its wall. The shards of a platform fold into one reading.
     The wall at n shards is predicted as F + max(O, S / (p n)) and
     the runner seconds as about n F + S / p + O; the table prints
-    both for every count up to ``--max``.
+    both for every count up to the cap, ``[ci] shards-max`` or
+    ``--max`` under it.
 
     The proposal: the slowest platform, the largest wall at one
     shard, takes the largest count whose every added shard saved at
@@ -1435,17 +1452,37 @@ def ci_balance(
     ``[ci] pull-request-runners`` when that list is shorter than
     ``[ci] runners``. The proposal prints as the TOML ``[ci] shards``
     and ``[ci] pull-request-shards`` would hold, with the predicted
-    wall of the slowest leg beside its wall at one shard.
+    wall of the slowest leg beside its wall at one shard. A platform
+    with fewer than three such rows keeps its count and is named. A
+    store that cannot be read prints why and proposes nothing.
 
-    A platform with fewer than three such rows keeps its count and is
-    named. A store that cannot be read prints why and proposes
-    nothing. Changes nothing: a count lands in the contract by pull
-    request.
+    Without a flag the verb changes nothing. ``--write`` rewrites the
+    two keys in the root ``workshop.toml`` when a count differs from
+    the contract's and the predicted wall at the proposed counts
+    differs from the wall at the contract's counts by more than 10%,
+    so a count does not move back and forth; every comment and every
+    other key stay, a count of one is left out of a table, a table
+    that would be empty is removed, and ``[ci] shards-max`` is read
+    and never written. It prints what each key becomes, or why nothing
+    was written: no platform with enough rows, no count changed, or a
+    wall that moved less. The workflows follow at the next ``fm sync``,
+    which the last line says. ``--submit`` writes the same change on
+    the day's branch, ``chore/balance-<date>``, renders the workflows,
+    commits it as ``chore(ci): the check legs run as <counts>`` and
+    submits it unarmed, for a person to merge; it runs from origin's
+    default branch alone and says so otherwise, and a day whose branch
+    origin already holds at these counts submits nothing and says so.
+    The nightly runs it once a day. A count can also be set by hand.
     """
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    balance_flow(root, cap=max_)
+    if submit:
+        from livery.workshop import _balance
+
+        _balance.submit(root, cap=max_)
+        return
+    balance_flow(root, cap=max_, write=write)
 
 
 def _github_public(root: Path, repo: Repository) -> tuple[bool, str]:
