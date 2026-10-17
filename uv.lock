@@ -892,7 +892,7 @@ docs = [
 
 [[package]]
 name = "livery-extensions-basedpyright"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/extensions/basedpyright" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -920,7 +920,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-changelog"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/changelog" }
 dependencies = [
     { name = "livery-footman" },
@@ -950,7 +950,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-clang-format"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/clang-format" }
 dependencies = [
     { name = "livery-footman" },
@@ -978,7 +978,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-clang-tidy"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/clang-tidy" }
 dependencies = [
     { name = "livery-footman" },
@@ -1006,7 +1006,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-claude"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/claude" }
 dependencies = [
     { name = "livery-footman" },
@@ -1215,7 +1215,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-mypy"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/mypy" }
 dependencies = [
     { name = "livery-footman" },
@@ -1266,7 +1266,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-pyrefly"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/pyrefly" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -1288,7 +1288,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-pytest"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/pytest" }
 dependencies = [
     { name = "livery-workshop" },
@@ -1341,7 +1341,7 @@ requires-dist = [
 
 [[package]]
 name = "livery-extensions-ruff"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/ruff" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -1363,7 +1363,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-ty"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/extensions/ty" }
 dependencies = [
     { name = "livery-toolroom" },
@@ -1385,7 +1385,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-footman"
-version = "0.60.0"
+version = "0.61.0"
 source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
@@ -1419,7 +1419,7 @@ provides-extras = ["uv", "test"]
 
 [[package]]
 name = "livery-forge"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "packages/forge" }
 
 [package.optional-dependencies]
@@ -1441,7 +1441,7 @@ provides-extras = ["github-secrets", "test"]
 
 [[package]]
 name = "livery-git"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/git" }
 dependencies = [
     { name = "dulwich" },
@@ -1463,12 +1463,12 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-strongroom"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/strongroom" }
 
 [[package]]
 name = "livery-toolroom"
-version = "0.11.0"
+version = "0.12.0"
 source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]
@@ -1482,7 +1482,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-bench"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "packages/toolroom-bench" }
 dependencies = [
     { name = "livery-footman" },
@@ -1508,7 +1508,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-toolroom-store"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/toolroom-store" }
 dependencies = [
     { name = "livery-strongroom" },
@@ -1530,7 +1530,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
-version = "0.10.0"
+version = "0.11.0"
 source = { editable = "packages/workshop" }
 dependencies = [
     { name = "livery-footman" },

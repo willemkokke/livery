@@ -338,6 +338,28 @@ def _put_back(root: Path, paths: tuple[str, ...]) -> list[tuple[str, str]]:
     return failed
 
 
+def verify_set(root: Path, plans: tuple[MemberPlan, ...]) -> None:
+    """Run the publish job's own checks over the stamped set, before any leg.
+
+    The wave refuses a member whose version homes disagree with its tag,
+    whose release notes are unsound, or whose floor names an unreleased
+    version, and it refuses only after the release has merged. The same
+    checks on the stamped tree refuse before a release pull request
+    exists. The set's own tags count as released, as the wave counts them.
+
+    Raises:
+        Failed: as the publish job's check refuses, naming the member and
+            each problem.
+    """
+    from livery.workshop._release import verify_release
+
+    coreleased = frozenset(f"{plan.package.path}/v{plan.version}" for plan in plans)
+    for plan in plans:
+        verify_release(
+            root, f"{plan.package.path}/v{plan.version}", coreleased=coreleased
+        )
+
+
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
     """The find-links dirs: each member's ``dist/`` that exists, in set order.
 
@@ -752,6 +774,7 @@ class ReleaseDriver:
                 # failed), and the manifest alone is what lets the
                 # squash's discovery still name the whole set.
                 git.commit_all(root, "chore(release): the set manifest")
+            verify_set(self._root, plans)
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
@@ -967,6 +990,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
             _lifecycle.build_release(plan.package, root)
+        verify_set(root, plans)
         release_dirs = _wheel_dists(plans)
         for plan in plans:
             validate_member(root, plan, release_dirs)
@@ -1082,6 +1106,7 @@ def dispatch_flow(
     base: str = "main",
     at: str = "",
     workshop: str = "",
+    again: bool = False,
     timeout: float = 60.0,
     interval: float = 2.0,
 ) -> list[str]:
@@ -1097,13 +1122,19 @@ def dispatch_flow(
     every member's receipt tag is already on the remote: the
     manifest is permanent residue of the last release, so presence
     is not the signal, missing receipts are. A wave already in
-    flight is reported green with its run id. Otherwise the wave is
-    dispatched on *base* with the commit that stamped the manifest
-    as its ``ref`` input, never this run's own sha, so an unrelated
-    merge landing first cannot move the wave onto another tree; the
-    dispatch is confirmed by the run id that appears, or refused
-    with the reason. Remote state only, receipts by ``ls-remote`` and
-    runs by the forge, so any checkout answers the same as CI.
+    flight is reported green with its run id. A wave that already ran
+    at the squash with the squash's own driver and ended failure is
+    reported green too, with its run and the recoveries, and nothing
+    is dispatched: the same wave fails the same way, and every merge
+    would otherwise start one more copy of it. *again* dispatches it
+    anyway, the gesture by hand once the cause is gone, and a named
+    *workshop* is another wave. Otherwise the wave is dispatched on
+    *base* with the commit that stamped the manifest as its ``ref``
+    input, never this run's own sha, so an unrelated merge landing
+    first cannot move the wave onto another tree; the dispatch is
+    confirmed by the run id that appears, or refused with the reason.
+    Remote state only, receipts by ``ls-remote`` and runs by the
+    forge, so any checkout answers the same as CI.
     """
     from livery.workshop._publish import MANIFEST, read_manifest
 
@@ -1129,6 +1160,20 @@ def dispatch_flow(
             f"  {MANIFEST} is at {where} but no commit touches it: nothing to dispatch"
         ]
     _require_release_squash(root, stamping, base)
+    if not workshop and not again:
+        failed = _failed_wave_at(root, repo, stamping)
+        if failed is not None:
+            prog = footman.prog()
+            return [
+                f"  a wave already ran at {stamping[:12]} and ended failure: run"
+                f" {failed.id} ({repo.web_url()}/actions/runs/{failed.id}); the same"
+                f" wave fails the same way, so none is dispatched. Uncut:"
+                f" {', '.join(missing)}",
+                f"  to run it again once the cause is gone: `{prog}"
+                " workflow.release.dispatch --again`; with a released driver:"
+                f" `--workshop=<version>`; to give the release up: `{prog}"
+                " workflow.release --abandon`",
+            ]
     seen = {run.id for run in _wave_runs(repo)}
     inputs = {"ref": stamping}
     if workshop:
@@ -1162,6 +1207,30 @@ def dispatch_flow(
         f" {timeout:.0f}s; re-run `{footman.prog()} workflow.release.dispatch`,"
         " which reports a wave that has since appeared"
     ]
+
+
+def _failed_wave_at(root: Path, repo: Repository, squash: str) -> Run | None:
+    """The newest dispatched wave about *squash* that ended failure, or None.
+
+    The runs about the squash are the forge's listing for it and the
+    runs that recorded themselves as its (`runs_about`), since a wave
+    the forge filed under a tip that moved on is still the squash's.
+    A cancelled wave, or one that never ran, is not a failure here:
+    the next merge dispatches again for those, as for a died merge
+    run.
+    """
+    from livery.workshop._traces import runs_about
+
+    caused, _lines = runs_about(root, repo, squash)
+    ids = {item.run_id for item in caused if item.event == "workflow_dispatch"}
+    failed = [
+        run
+        for run in _wave_runs(repo)
+        if str(run.id) in ids
+        and run.status == "completed"
+        and run.conclusion == "failure"
+    ]
+    return max(failed, key=lambda run: run.id) if failed else None
 
 
 def _require_release_squash(root: Path, stamping: str, base: str) -> None:
@@ -1488,16 +1557,21 @@ def workflow_release_dispatch(
     workshop: Annotated[
         str, doc("a released livery-workshop version to drive the wave")
     ] = "",
+    again: Annotated[
+        bool, doc("dispatch although a wave already failed at the squash")
+    ] = False,
 ) -> None:
     """Dispatch the release wave for a merged, unpublished release; green otherwise.
 
     The merge point's last task, and the recovery gesture by hand:
     it reads the manifest at HEAD and the receipts on the remote, so
     on a normal day it prints green, after a died merge run it
-    dispatches, and a wave in flight is reported with its run id.
-    ``--at`` names an older release squash a later release has moved
-    past; ``--workshop`` names a released driver for a wave whose own
-    workshop was the fault.
+    dispatches, a wave in flight is reported with its run id, and a
+    wave that already failed at the squash is reported with its run
+    and dispatched again only on ``--again``. ``--at`` names an older
+    release squash a later release has moved past; ``--workshop``
+    names a released driver for a wave whose own workshop was the
+    fault.
     """
     from livery.workshop._extensions import workspace_root
     from livery.workshop._forge_lane import this_repository
@@ -1505,7 +1579,9 @@ def workflow_release_dispatch(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    for line in dispatch_flow(root, this_repository(root), at=at, workshop=workshop):
+    for line in dispatch_flow(
+        root, this_repository(root), at=at, workshop=workshop, again=again
+    ):
         print(line)
 
 

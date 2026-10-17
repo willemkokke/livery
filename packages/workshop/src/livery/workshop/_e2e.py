@@ -4,7 +4,9 @@ The workshop's own development substrate: provision a scratch
 repository on the seeded local forge, and drive the emitted
 workflows through a real runner against the forge's own package
 registry, so the whole second world runs consequence-free before
-anything reaches a public forge.
+anything reaches a public forge. The loop's workspace splits its one
+runner's check leg into two shards, so every pass proves the slice,
+the gate job's fold and the durations row beside the gate itself.
 
 The verb registers only where the workshop develops itself, the way
 ``fm forge.fixtures.record`` does: a consumer checkout does not
@@ -40,6 +42,7 @@ from livery.workshop._ci_context import state_store
 from livery.workshop._ci_tasks import ci
 from livery.workshop._e2e_rows import (
     RunFacts,
+    durations_row,
     marks,
     record_units,
     run_facts,
@@ -73,6 +76,11 @@ DEV_MEMBER = "packages/workshop"
 #: What a reset of the loop's tree keeps: the directories `fm sync`
 #: materialises, gitignored and read by the gate on the desk.
 KEPT_BY_SYNC = (".venv", "typings", ".workshop")
+
+#: How many shards the loop's workspace splits its one runner's check
+#: leg into: every check leg of a pass runs as this many jobs, which
+#: the gate job folds into one leg before anything reads the run.
+SHARDS = 2
 
 
 @dataclass
@@ -1494,6 +1502,14 @@ def _eat_dev_wheels(
         contract_text = contract_text.replace(
             "\n[ci]\n", "\n[ci]\nspeed-marks = true\n", 1
         )
+    if re.search(r"^shards *=", contract_text, re.MULTILINE) is None:
+        # The check leg runs as shards on the environment's runner, the
+        # one `[ci] runners` names, so every pass proves the slice, the
+        # fold and the durations row; a contract that declares a count
+        # keeps it.
+        contract_text = contract_text.replace(
+            "\n[ci]\n", f'\n[ci]\nshards = {{ "{CURRENT.label}" = {SHARDS} }}\n', 1
+        )
     if "host-allowed" not in contract_text:
         # The allowance for the build tools: a runner with cmake and
         # ninja on PATH serves them from the host, one without takes
@@ -1779,27 +1795,48 @@ def _watch(
 ) -> None:
     """Follow *sha*'s runs to their verdicts; red fails verbatim after one re-run.
 
-    *require* names workflows that must appear before the wait ends:
-    a workflow triggered by the push registers its run a beat after
-    the others, and a watch that settles on the early arrivals would
-    call the commit green while the required one is still unstarted.
-    A run that ended failure is re-run once and followed again; red
-    twice is the verdict.
+    The runs judged are the ones this pass caused: every run the
+    commit's own events started, and the dispatched runs *require*
+    names. A run dispatched at the same commit by something else (the
+    merge point re-dispatching a wave that already failed there) is
+    named once and left to the scenario that owns it, so a birth is
+    never judged by a wave it did not cause. *require* names
+    workflows that must appear before the wait ends: a workflow
+    triggered by the push registers its run a beat after the others,
+    and a watch that settles on the early arrivals would call the
+    commit green while the required one is still unstarted. A run
+    that ended failure is re-run once and followed again; red twice
+    is the verdict.
     """
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     retried = False
+    foreign: set[int] = set()
+
+    def own(runs: tuple[Run, ...]) -> tuple[Run, ...]:
+        mine: list[Run] = []
+        for run in runs:
+            if run.event != "workflow_dispatch" or run.workflow in require:
+                mine.append(run)
+            elif run.id not in foreign:
+                foreign.add(run.id)
+                print(
+                    f"  {run.workflow} run {run.id} is not this pass's: dispatched"
+                    f" at {sha[:10]} by something else; left to its own scenario"
+                )
+        return tuple(mine)
 
     def all_completed(runs: tuple[Run, ...]) -> tuple[Run, ...] | Pending:
         nonlocal retried
-        present = {run.workflow for run in runs}
+        mine = own(runs)
+        present = {run.workflow for run in mine}
         if (
-            runs
-            and all(r.status == "completed" for r in runs)
+            mine
+            and all(r.status == "completed" for r in mine)
             and all(name in present for name in require)
         ):
-            if retried or not _retry_red_once(repo, runs):
-                return runs
+            if retried or not _retry_red_once(repo, mine):
+                return mine
             retried = True
         missing = ", ".join(sorted(set(require) - present))
         return Pending(key=missing)
@@ -2241,6 +2278,26 @@ def _log_says(
         )
 
 
+def _require_task(facts: RunFacts, prefix: str, task: str) -> None:
+    """Fail unless a job of *facts* named by *prefix* ran *task*, by its row.
+
+    A matrix job is several forge jobs under one name (``nightly
+    (3.14)``), so any one of them running the task is the proof.
+    """
+    found = [job for name, job in facts.jobs.items() if name.startswith(prefix)]
+    if not found:
+        fail(
+            f"run {facts.run}: the row names no job starting with {prefix!r};"
+            f" its jobs are {', '.join(sorted(facts.jobs)) or 'none'}"
+        )
+    if not any(task in job.tasks for job in found):
+        ran = sorted({t for job in found for t in job.tasks})
+        fail(
+            f"run {facts.run}: no {prefix} job ran {task}; the row names"
+            f" {', '.join(ran) or 'no task'}"
+        )
+
+
 def _require_scope(
     run: Run,
     facts: RunFacts,
@@ -2346,6 +2403,98 @@ def _require_mark(
         )
 
 
+def _require_shards(run: Run, facts: RunFacts, *, count: int, ran: bool) -> None:
+    """Fail unless *run*'s check leg is the fold of *count* shards, each with its row.
+
+    The fold's row lists each shard with its job, and the forge's row of
+    that job stands beside it. *ran* says whether the leg ran its gate:
+    then the shards partitioned a test-file set and ran its files;
+    otherwise every shard skipped, so the fold names no file ran and
+    no durations row read.
+    """
+    leg = facts.job("check")
+    fold = leg.fold
+    if fold is None:
+        fail(
+            f"run {run.id}: the check leg's row ({leg.leg}) is not a fold; the"
+            f" loop's contract splits the leg into {count} shards; {run.url}"
+        )
+    labels = ", ".join(shard.leg for shard in fold.shards)
+    if fold.count != count or len(fold.shards) != count:
+        fail(
+            f"run {run.id}: the check leg's row folds {fold.count} shard(s) and"
+            f" lists {len(fold.shards)} ({labels or 'none'}), expected {count};"
+            f" {run.url}"
+        )
+    missing = [shard.job for shard in fold.shards if shard.job not in facts.shard_jobs]
+    if missing:
+        fail(
+            f"run {run.id}: the forge's rows of {', '.join(missing)} are not beside"
+            " the folded row; the collect keeps each shard's job with its times;"
+            f" {run.url}"
+        )
+    files = sum(shard.files for shard in fold.shards)
+    if ran and (not fold.digest or not files):
+        fail(
+            f"run {run.id}: the check leg ran and its shards ({labels}) ran no test"
+            f" file; the fold recorded no partition; {run.url}"
+        )
+    if not ran and (files or fold.rows):
+        fail(
+            f"run {run.id}: every shard skipped, and the fold records {files} test"
+            f" file(s) ran and {len(fold.rows)} durations row(s) read ({labels});"
+            f" {run.url}"
+        )
+
+
+def _require_durations(root: Path, run: Run, leg: str, *, written: bool) -> None:
+    """Fail unless *run*'s durations row on *leg*'s platform is there, or is not.
+
+    *written* says the gate job's collect wrote the row, naming at
+    least one test file; otherwise the leg ran no test file and the
+    series holds no row of the run.
+    """
+    row = durations_row(root, run.id, leg)
+    if written and not row.files:
+        fail(
+            f"run {run.id}: no row {row.name} naming a test file on {row.ref}; the"
+            " gate job's collect wrote no seconds per test file for the leg;"
+            f" {run.url}"
+        )
+    if not written and row.files is not None:
+        fail(
+            f"run {run.id}: {row.ref} holds {row.name} with {len(row.files)}"
+            " file(s), and every shard skipped; a leg that ran no test file leaves"
+            f" no durations; {run.url}"
+        )
+
+
+def _prove_shards(root: Path, run: Run, facts: RunFacts, *, ran: bool) -> None:
+    """Prove *run*'s check leg ran as the loop's shards and folded into one leg.
+
+    The loop's contract splits its one runner's check leg into `SHARDS`
+    shards, so every run's metrics row has the fold's row for the
+    platform leg, with the forge's rows of the shards beside it. Where
+    the leg ran its gate (*ran*), the shards partitioned the test files
+    and the gate job's collect wrote the run's durations row on the
+    platform leg's series; where every shard skipped, the fold names no
+    file and no row is written.
+    """
+    _require_shards(run, facts, count=SHARDS, ran=ran)
+    leg = facts.job("check").leg
+    _require_durations(root, run, leg, written=ran)
+    if ran:
+        print(
+            f"  shards: run {run.id}'s check leg ran as {SHARDS} shards folded into"
+            f" {leg}; its durations row is on the store"
+        )
+    else:
+        print(
+            f"  shards: run {run.id}'s check leg skipped on every shard, folded into"
+            f" {leg}; no durations row written"
+        )
+
+
 def _units(root: Path) -> tuple[list[str], bool]:
     """The newborn's units: its members' paths, and whether its own tests are one."""
     from livery.workshop._packages import discover_packages, workspace_suite
@@ -2398,9 +2547,10 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     main's. The rows say so: the check leg's scope is ``verified``,
     the tree's verified row names the setup branch, main's record
     holds every unit measured by another run, and the gate job judged
-    each member. A skipped leg reddening the union, passing it with
-    nothing counted, or measuring what the branch already measured is
-    the failure this proof exists for.
+    each member; the leg's shards both skipped, folded into one leg,
+    and no durations row was written. A skipped leg reddening the
+    union, passing it with nothing counted, or measuring what the
+    branch already measured is the failure this proof exists for.
     """
     _align_main(root)
     head = git.head_sha(root)
@@ -2428,6 +2578,7 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     leg = facts.job("check").leg
     _require_record(root, run, "main", leg, fresh=(), carried=units)
     _require_judged(run, facts, dict.fromkeys(members, 100.0))
+    _prove_shards(root, run, facts, ran=False)
     print(
         f"  verified skip: proven on main's run {run.id}; the gate skipped,"
         f" nothing was measured, and main copied {_SETUP_BRANCH}'s record"
@@ -2514,12 +2665,13 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     that one member against main; the branch's record holds that
     member measured by this run and the others carried from main's;
     the gate job judged every member; the ratchet member's mark, which
-    the pass accepted down to 90, is back at 100 by this run; and the
-    stamp composed with main's verified tree. Main's push run after
-    the squash then skips the gate on that composed row, measures
-    nothing, and copies the branch's record into main's. Re-run on a
-    pass-owned branch with main's tip as the stamp, so the diff is
-    never empty.
+    the pass accepted down to 90, is back at 100 by this run; the stamp
+    composed with main's verified tree; and the leg's shards
+    partitioned the member's test files, folded into one leg, and the
+    run's durations row is on the store. Main's push run after the
+    squash then skips the gate on that composed row, measures nothing,
+    and copies the branch's record into main's. Re-run on a pass-owned
+    branch with main's tip as the stamp, so the diff is never empty.
     """
     _fresh_branch(root, "chore/scoped-leg")
     _main_settled(root, kind)
@@ -2573,6 +2725,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         by=f"run {run.id}",
     )
     _require_verified(root, run, composed=True, branch="chore/scoped-leg")
+    _prove_shards(root, run, facts, ran=True)
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
         " packages/loop-echo; the union reused the other members from main's"
@@ -2604,6 +2757,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         carried=[*members, *(["tests"] if tests else [])],
     )
     _require_judged(run, facts, judged)
+    _prove_shards(root, run, facts, ran=False)
     print(
         f"  composed skip: proven on main's run {run.id} after the member-only"
         " squash; nothing was measured, and main copied the branch's record"
@@ -2668,6 +2822,7 @@ def _prove_unproven_push(root: Path, kind: str) -> None:
     )
     _require_judged(run, facts, dict.fromkeys(members, 100.0))
     _require_verified(root, run, composed=True)
+    _prove_shards(root, run, facts, ran=True)
     print(
         f"  unproven push: proven on main's run {run.id}; the leg measured from the"
         " previous push's tree, ran loop-native alone, and the stamp composed"
@@ -2718,6 +2873,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     )
     _require_judged(run, facts, dict.fromkeys(members, 100.0))
     _require_verified(root, run, composed=True, branch="chore/prose-leg")
+    _prove_shards(root, run, facts, ran=False)
     print(
         f"  prose leg: proven on a note-only pull request (run {run.id}: the"
         " check leg skipped, the union reused every unit from main's record"
@@ -2781,6 +2937,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     )
     _require_judged(run, facts, dict.fromkeys(members, 100.0))
     _require_verified(root, run, composed=True, branch="chore/tests-leg")
+    _prove_shards(root, run, facts, ran=True)
     print(
         f"  tests leg: proven on a workspace-tests pull request (run {run.id}: the"
         " check leg ran the workspace tests alone, the union reused every member"
@@ -2814,10 +2971,9 @@ def _prove_nightly(root: Path, kind: str) -> None:
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, "nightly", limit=1)[0]
-    jobs = repo.checks.jobs(run.id)
-    # The nightly's job writes no row of its own yet (#1748), so the
-    # verification's own line is the proof it ran.
-    _log_says(repo, run, jobs, "nightly", " passes its own tests from site-packages")
+    # The nightly's jobs record the run's row themselves; the row names
+    # the scheduled verification among the tasks a job ran.
+    _require_task(run_facts(root, run.id), "nightly", VERIFY_TASK)
     print(
         f"  nightly: proven by hand (run {run.id}: dispatched, followed to green,"
         " the scheduled verification ran, and the point read back green)"
@@ -2852,7 +3008,9 @@ def _prove_dispatched_gate(root: Path, kind: str) -> None:
             f"the newest gate run {run.id} is a {run.event} run, not the"
             f" dispatched one: {run.url}"
         )
-    _require_scope(run, run_facts(root, run.id), scope="full")
+    facts = run_facts(root, run.id)
+    _require_scope(run, facts, scope="full")
+    _prove_shards(root, run, facts, ran=True)
     print(
         f"  gate: proven by hand (run {run.id}: dispatched, followed to green,"
         " the full gate ran, and the point read back green)"
@@ -2885,17 +3043,9 @@ def _prove_contributed_point(root: Path, kind: str) -> None:
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     run = point_runs(repo, CONTRIBUTED_POINT, root)[0]
-    jobs = repo.checks.jobs(run.id)
-    # The point's job writes no row of its own yet (#1748), so the
-    # task's own line is the proof it ran.
-    _log_says(
-        repo,
-        run,
-        jobs,
-        CONTRIBUTED_POINT,
-        f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: extensions"
-        f" (packages/{CONTRIBUTING_MEMBER})",
-    )
+    # The point's job records the run's row itself; the row names the
+    # member's declared task among the tasks the job ran.
+    _require_task(run_facts(root, run.id), CONTRIBUTED_POINT, "extensions")
     print(
         f"  {CONTRIBUTED_POINT}: proven by hand (run {run.id}: the contributed"
         " point dispatched, its task run, and the point read back green)"

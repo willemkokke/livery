@@ -301,6 +301,17 @@ class ShardMarker:
         rows: The durations rows it read, newest first.
         before: The bound it read them under, the checkout's committer
             time.
+        suites: The units whose test files were in the set, by path. A
+            unit the record does not name ran whole on the first shard,
+            with every step that does not read the shard, so the first
+            shard leaves its parts. A record written without the key
+            names none.
+        attempt: The attempt of the run the shard ran in, as the runner
+            counts them ([livery.workshop.RunContext][]'s ``attempt``);
+            empty when the runner did not say, and for a record written
+            without the key. Two shards of one platform from two
+            attempts partitioned from the record as it was each time,
+            which the fold names when their partitions differ.
     """
 
     shard: Shard
@@ -308,6 +319,8 @@ class ShardMarker:
     files: tuple[str, ...]
     rows: tuple[str, ...]
     before: datetime
+    suites: tuple[str, ...] = ()
+    attempt: str = ""
 
 
 def marker_fields(marker: ShardMarker) -> dict[str, Any]:
@@ -318,6 +331,8 @@ def marker_fields(marker: ShardMarker) -> dict[str, Any]:
         "files": list(marker.files),
         "rows": list(marker.rows),
         "before": marker.before.isoformat(),
+        "suites": list(marker.suites),
+        "attempt": marker.attempt,
     }
 
 
@@ -346,6 +361,8 @@ def parse_marker(loaded: Any, *, source: str) -> tuple[ShardMarker | None, str]:
         files=tuple(str(name) for name in loaded.get("files", []) or []),
         rows=tuple(str(name) for name in loaded.get("rows", []) or []),
         before=before,
+        suites=tuple(str(name) for name in loaded.get("suites", []) or []),
+        attempt=str(loaded.get("attempt", "") or ""),
     ), ""
 
 
@@ -357,9 +374,14 @@ def leave_shard(
     files: Iterable[str],
     rows: Iterable[str],
     before: datetime,
+    suites: Iterable[str] = (),
+    attempt: str = "",
 ) -> Path:
     """Leave the shard's record in `SHARD_FILE` at *root*, for the gate job's proof.
 
+    *suites* names the units whose test files are in the set; a unit
+    left out ran whole on the first shard. *attempt* is the run's
+    attempt the shard ran in, the run context's; empty when unknown.
     The leg's one write copies the record into its timing row under
     ``shard``, where the gate job's fold reads it.
 
@@ -368,7 +390,9 @@ def leave_shard(
     """
     path = root / SHARD_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    marker = ShardMarker(shard, digest, tuple(files), tuple(rows), before)
+    marker = ShardMarker(
+        shard, digest, tuple(files), tuple(rows), before, tuple(suites), attempt
+    )
     path.write_text(json.dumps(marker_fields(marker), sort_keys=True), encoding="utf-8")
     return path
 

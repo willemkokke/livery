@@ -1,20 +1,140 @@
 {
  "schema": 1,
- "mined-at": "d0dc551efa398bb84f4aa724ff8884a5e18b41da",
+ "mined-at": "c8713647afe4b9d090f806f7db382aa787db36d4",
  "members": [
+  {
+   "dir": "footman",
+   "name": "livery-footman",
+   "version": "0.61.0"
+  },
+  {
+   "dir": "forge",
+   "name": "livery-forge",
+   "version": "0.8.0"
+  },
+  {
+   "dir": "strongroom",
+   "name": "livery-strongroom",
+   "version": "0.5.0"
+  },
+  {
+   "dir": "toolroom",
+   "name": "livery-toolroom",
+   "version": "0.12.0"
+  },
   {
    "dir": "git",
    "name": "livery-git",
-   "version": "0.2.0"
+   "version": "0.3.0"
+  },
+  {
+   "dir": "toolroom-store",
+   "name": "livery-toolroom-store",
+   "version": "0.5.0"
+  },
+  {
+   "dir": "toolroom-bench",
+   "name": "livery-toolroom-bench",
+   "version": "0.4.0"
   },
   {
    "dir": "workshop",
    "name": "livery-workshop",
-   "version": "0.10.0"
+   "version": "0.11.0"
+  },
+  {
+   "dir": "extensions/cpp",
+   "name": "livery-extensions-cpp",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/conan",
+   "name": "livery-extensions-conan",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/lfs",
+   "name": "livery-extensions-lfs",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/mypy",
+   "name": "livery-extensions-mypy",
+   "version": "0.2.0"
+  },
+  {
+   "dir": "extensions/pyrefly",
+   "name": "livery-extensions-pyrefly",
+   "version": "0.2.0"
+  },
+  {
+   "dir": "extensions/python",
+   "name": "livery-extensions-python",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/claude",
+   "name": "livery-extensions-claude",
+   "version": "0.1.0"
+  },
+  {
+   "dir": "extensions/coverage",
+   "name": "livery-extensions-coverage",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/nanobind",
+   "name": "livery-extensions-nanobind",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/cmake",
+   "name": "livery-extensions-cmake",
+   "version": "0.0.0"
   },
   {
    "dir": "extensions/basedpyright",
    "name": "livery-extensions-basedpyright",
+   "version": "0.3.0"
+  },
+  {
+   "dir": "extensions/changelog",
+   "name": "livery-extensions-changelog",
+   "version": "0.1.0"
+  },
+  {
+   "dir": "extensions/clang-format",
+   "name": "livery-extensions-clang-format",
+   "version": "0.2.0"
+  },
+  {
+   "dir": "extensions/clang-tidy",
+   "name": "livery-extensions-clang-tidy",
+   "version": "0.1.0"
+  },
+  {
+   "dir": "extensions/docs",
+   "name": "livery-extensions-docs",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/mkdocstrings",
+   "name": "livery-extensions-mkdocstrings",
+   "version": "0.0.0"
+  },
+  {
+   "dir": "extensions/pytest",
+   "name": "livery-extensions-pytest",
+   "version": "0.1.0"
+  },
+  {
+   "dir": "extensions/ruff",
+   "name": "livery-extensions-ruff",
+   "version": "0.2.0"
+  },
+  {
+   "dir": "extensions/ty",
+   "name": "livery-extensions-ty",
    "version": "0.2.0"
   }
  ]

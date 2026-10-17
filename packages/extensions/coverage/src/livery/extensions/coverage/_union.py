@@ -31,9 +31,10 @@ def expected_legs(root: Path, run: RunContext) -> tuple[list[str], list[str]]:
     """The check legs the gate produces, and the ones *run*'s event runs.
 
     A pull request runs the legs ``[ci] pull-request-runners`` names,
-    unless it carries [livery.workshop.EVERY_RUNNER_LABEL][]; every
-    other event runs them all. Both empty without a root contract, as
-    a test workspace may be.
+    the first runner's alone while that key is absent, unless it
+    carries [livery.workshop.EVERY_RUNNER_LABEL][]; every other event
+    runs them all. Both empty without a root contract, as a test
+    workspace may be.
     """
     from livery.workshop import EVERY_RUNNER_LABEL, check_legs, pull_request_legs
 

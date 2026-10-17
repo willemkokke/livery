@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from livery.footman import _context as context
-from livery.footman import _manifest
+from livery.footman import _manifest, _notes
 from livery.footman import _registry as registry
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_tasks.py"
@@ -234,3 +234,20 @@ def pytest_runtest_makereport(
     lines.extend(tasks_modules or ["no footman_tasks_* modules loaded"])
     report.longrepr = f"{report.longrepr}\n" + "\n".join(lines)
     return report
+
+
+@pytest.fixture(autouse=True)
+def default_note_policy():
+    """Every test starts from the default note policy and a fresh dedup set.
+
+    An app run installs its project's note policy for the whole process
+    and leaves it there; a test that drives chains without an app would
+    inherit whatever the worker ran before it, and a test's own environ
+    write would then be a banned note. The reset before and after keeps
+    each test's notes its own.
+    """
+    _notes.install_policy(None)
+    _notes.reset()
+    yield
+    _notes.install_policy(None)
+    _notes.reset()

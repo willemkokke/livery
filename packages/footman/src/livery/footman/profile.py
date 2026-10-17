@@ -271,6 +271,21 @@ def _box() -> str | None:
     return sink if sink and Path(sink).is_dir() else None
 
 
+def parent_box() -> Path | None:
+    """The box this process was handed, where its siblings' fragments are.
+
+    A profiled run claims [livery.footman.profile.DROP][] for the children
+    it spawns, so a task reading the environment sees its own run's box,
+    empty until its children end. This is the one it was handed instead:
+    the box the parent that spawned this run opened, which holds the
+    fragments of every entry that ran there before this one. For a run
+    the plugin never armed, the box in the environment. `None` when
+    nothing handed one, or the one handed is already gone.
+    """
+    handed = _parent_box if _mode != _OFF else _box()
+    return Path(handed) if handed and Path(handed).is_dir() else None
+
+
 def _epoch_origin(moment: float) -> float:
     """*moment* on the run clock, as wall-clock microseconds.
 

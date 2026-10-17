@@ -1091,26 +1091,163 @@ def test_the_fetched_snapshot_fails_every_read_until_the_store_was_fetched(
     assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
 
 
-def test_fetch_store_mirrors_origins_namespace_prunes_and_stamps(
+def test_a_read_outside_the_mirror_fails_naming_the_ref_and_the_scope(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """The mirror holds the named series alone: any other remote ref is no absence."""
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False)
+    key = family.series("a", "x")
+    assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
+    assert key.put(_store(other), {"r": {"x": "fam"}}, message="fam") == ""
+    assert git.fetch_store(_store(work), series=("alpha", "beta"))[:2] == (1, "")
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
+        # A family's series origin holds is outside the mirror: the
+        # reason names the ref, the mirror's scope, and the sync.
+        found = key.rows(_store(work))
+        assert found.failed and not found.rows
+        assert key.ref in found.reason
+        assert "alpha, beta" in found.reason and "sync`" in found.reason
+        one, why = key.row(_store(work), "r")
+        assert one is None and key.ref in why
+        # So is a trace, which no fetch mirrors.
+        trace = git.read(_store(work), git.TRACE_NAMESPACE + "about/abc")
+        assert trace.failed and trace.reason.startswith(git.TRACE_NAMESPACE)
+        # A named series origin holds no ref for yet is absence.
+        beta = git.Series("beta", window=50, ci_only=False)
+        assert git.read(_store(work), beta.ref) == git.Read(None, None, failed=False)
+        assert not beta.rows(_store(work)).failed
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+
+
+def test_a_listing_under_a_prefix_the_mirror_does_not_hold_is_unlistable_not_empty(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False)
+    assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
+    assert family.series("a", "x").put(_store(other), {"r": {}}, message="fam") == ""
+    assert git.fetch_store(_store(work), series=("alpha",))[:2] == (1, "")
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
+        # The family's keys, the whole namespace and the traces: none
+        # of them is the mirror's to answer.
+        assert family.listed(_store(work)) is None
+        assert git.list_refs(_store(work), git.NAMESPACE) is None
+        assert git.list_refs(_store(work), git.TRACE_NAMESPACE) is None
+        # A prefix at a mirrored series answers, and so do the branches.
+        listed = git.list_refs(_store(work), alpha.ref)
+        assert listed is not None and set(listed) == {alpha.ref}
+        heads = git.list_refs(_store(work), "refs/heads/")
+        assert heads is not None and set(heads) == {"refs/heads/main"}
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+
+
+def test_a_stamp_of_another_schema_or_naming_no_series_reads_as_not_fetched(
+    repos: tuple[Path, Path],
+) -> None:
+    """The gate names the sync, which takes the mirror again under this scope."""
+    _, work = repos
+    assert git.fetch_store(_store(work), series=("alpha",))[:2] == (0, "")
+    older = git.Series("fetched", window=1, ci_only=False, schema=1, local=True)
+    assert older.put(_store(work), {"origin": {"refs": 3}}, message="old") == ""
+    with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
+        found = git.read(_store(work), REF)
+        assert found.failed
+        assert "has not been fetched" in found.reason and "sync`" in found.reason
+        assert git.list_refs(_store(work), git.NAMESPACE + "alpha") is None
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+    # A row of the schema that names no series, or names one that is
+    # not a name, reads the same way.
+    for series in (None, ["alpha", 7]):
+        row: dict[str, Any] = {"schema": git.FETCHED.schema, "refs": 0, "when": "2026"}
+        if series is not None:
+            row["series"] = series
+        bare = json.dumps(row)
+        assert (
+            git.put(_store(work), git.FETCHED.ref, {"origin": bare}, message="x") == ""
+        )
+        with git.fetched_snapshot(_store(work)):
+            found = git.read(_store(work), REF)
+        assert found.failed
+        assert "has not been fetched" in found.reason and "sync`" in found.reason
+    # The sync's own stamp reads again.
+    assert git.fetch_store(_store(work), series=("alpha",))[:2] == (0, "")
+    with git.fetched_snapshot(_store(work)):
+        assert not git.read(_store(work), git.NAMESPACE + "alpha").failed
+
+
+def test_fetch_store_takes_out_of_the_mirror_what_a_wider_fetch_left(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """A whole-namespace mirror holds a family's refs; the next fetch drops them."""
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = git.Series("alpha", window=50, ci_only=False)
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False)
+    assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
+    assert family.series("a", "x").put(_store(other), {"r": {}}, message="fam") == ""
+    _git(
+        work,
+        "fetch",
+        "--quiet",
+        "origin",
+        f"+{git.NAMESPACE}*:{git.FETCHED_NAMESPACE}*",
+    )
+    wider = git.list_refs(_store(work), git.FETCHED_NAMESPACE)
+    assert wider is not None and len(wider) == 2
+    # The family's ref goes, and counts as a change; alpha stands.
+    assert git.fetch_store(_store(work), series=("alpha",)) == git.Fetched(1, "", 1)
+    assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) == {
+        git.FETCHED_NAMESPACE + "alpha": wider[git.FETCHED_NAMESPACE + "alpha"]
+    }
+    # Origin keeps the family: the mirror alone was pruned.
+    assert family.listed(_store(work)) == [("a", "x")]
+    # Named no series and no branches, nothing is fetched and the
+    # mirror is emptied; the stamp names no series.
+    with counting_spawns() as spawned:
+        assert git.fetch_store(_store(work), series=()) == git.Fetched(0, "", 1)
+    assert spawned["git fetch"] == 0
+    assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) == {}
+    stamped, why = git.FETCHED.row(_store(work), "origin")
+    assert why == "" and stamped is not None and stamped.data["series"] == []
+
+
+def test_fetch_store_mirrors_the_named_series_alone_prunes_and_stamps(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
     _, work = repos
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     alpha = git.Series("alpha", window=50, ci_only=False)
     beta = git.Series("beta", window=50, ci_only=False)
-    for item in (alpha, beta):
+    family = git.Keyed("fam", ("leg", "unit"), ci_only=False)
+    for item in (alpha, beta, family.series("a", "x")):
         assert item.put(_store(other), {"r": {"x": item.name}}, message=item.name) == ""
-    assert git.fetch_store(_store(work))[:2] == (2, "")
+    # Two of the three named series exist on origin; the family never
+    # comes, and a series origin holds no ref for costs nothing.
+    with counting_spawns() as spawned:
+        assert git.fetch_store(_store(work), series=("beta", "alpha", "gamma"))[:2] == (
+            2,
+            "",
+        )
+    assert spawned["git fetch"] == 1 and spawned["git ls-remote"] == 0
     mirrored = git.list_refs(_store(work), git.FETCHED_NAMESPACE)
     assert mirrored is not None and set(mirrored) == {
         git.FETCHED_NAMESPACE + "alpha",
         git.FETCHED_NAMESPACE + "beta",
     }
     stamped, why = git.FETCHED.row(_store(work), "origin")
-    assert why == "" and stamped is not None and stamped.data["refs"] == 2
+    assert why == "" and stamped is not None
+    assert stamped.data["refs"] == 2
+    assert stamped.data["series"] == ["alpha", "beta", "gamma"]
     # A ref origin dropped goes from the mirror on the next fetch.
     assert git.drop(_store(other), beta.ref) == ""
-    assert git.fetch_store(_store(work))[:2] == (1, "")
+    assert git.fetch_store(_store(work), series=("alpha", "beta"))[:2] == (1, "")
     assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) == {
         git.FETCHED_NAMESPACE + "alpha": mirrored[git.FETCHED_NAMESPACE + "alpha"]
     }
@@ -1121,7 +1258,7 @@ def test_fetch_store_mirrors_origins_namespace_prunes_and_stamps(
     )
     # An origin that cannot answer is the reason, and the last mirror stands.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    fetched = git.fetch_store(_store(work))
+    fetched = git.fetch_store(_store(work), series=("alpha",))
     assert fetched.held == 0 and fetched.why and fetched.changed == 0
     assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) is not None
 
@@ -1139,18 +1276,24 @@ def test_fetch_store_brings_origins_branches_in_the_same_fetch_when_asked(
     _git(other, "commit", "-m", "feat: theirs")
     _git(other, "push", "-u", "origin", "feat/9-theirs")
     # The narrow fetch first: the store alone, no branch comes with it.
-    assert git.fetch_store(_store(work))[:2] == (1, "")
+    assert git.fetch_store(_store(work), series=("alpha",))[:2] == (1, "")
     assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
     # Asked for the branches, one fetch brings the store and origin's
     # heads, and a branch origin dropped goes from the remote-tracking
     # refs the way a dropped ref goes from the mirror.
     with counting_spawns() as spawned:
-        assert git.fetch_store(_store(work), branches=True)[:2] == (1, "")
+        assert git.fetch_store(_store(work), series=("alpha",), branches=True)[:2] == (
+            1,
+            "",
+        )
     assert spawned["git fetch"] == 1
     assert "origin/feat/9-theirs" in _git(work, "branch", "-r")
     assert git.list_refs(_store(work), git.FETCHED_NAMESPACE) is not None
     _git(other, "push", "origin", "--delete", "feat/9-theirs")
-    assert git.fetch_store(_store(work), branches=True)[:2] == (1, "")
+    assert git.fetch_store(_store(work), series=("alpha",), branches=True)[:2] == (
+        1,
+        "",
+    )
     assert "origin/feat/9-theirs" not in _git(work, "branch", "-r")
 
 
@@ -1161,19 +1304,19 @@ def test_fetch_store_counts_what_moved_and_a_quiet_origin_moves_nothing(
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     # A failed fetch first: nothing held, nothing changed, the reason.
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    failed = git.fetch_store(_store(work))
+    failed = git.fetch_store(_store(work), series=("alpha",))
     assert failed.held == 0 and failed.changed == 0 and failed.why
     _git(work, "remote", "set-url", "origin", str(tmp_path / "origin.git"))
     alpha = git.Series("alpha", window=50, ci_only=False)
     assert alpha.put(_store(other), {"r": {"x": "one"}}, message="one") == ""
-    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 1)
+    assert git.fetch_store(_store(work), series=("alpha",)) == git.Fetched(1, "", 1)
     # Quiet origin: the round trip is the whole cost and nothing moves.
-    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 0)
+    assert git.fetch_store(_store(work), series=("alpha",)) == git.Fetched(1, "", 0)
     # A moved ref and a pruned one each count once.
     assert alpha.put(_store(other), {"r": {"x": "two"}}, message="two") == ""
-    assert git.fetch_store(_store(work)) == git.Fetched(1, "", 1)
+    assert git.fetch_store(_store(work), series=("alpha",)) == git.Fetched(1, "", 1)
     assert git.drop(_store(other), alpha.ref) == ""
-    assert git.fetch_store(_store(work)) == git.Fetched(0, "", 1)
+    assert git.fetch_store(_store(work), series=("alpha",)) == git.Fetched(0, "", 1)
 
 
 def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
@@ -1183,7 +1326,7 @@ def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
     other = _clone(tmp_path, "other", tmp_path / "origin.git")
     alpha = git.Series("alpha", window=50, ci_only=False)
     assert alpha.put(_store(other), {"r": {"x": "alpha"}}, message="alpha") == ""
-    assert git.fetch_store(_store(work))[:2] == (1, "")
+    assert git.fetch_store(_store(work), series=("alpha", "beta"))[:2] == (1, "")
     # A ref written after the fetch is not in the mirror: the snapshot
     # is what the last sync saw, by design.
     beta = git.Series("beta", window=50, ci_only=False)
@@ -1193,7 +1336,7 @@ def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
     with counting_spawns() as spawned, git.fetched_snapshot(_store(work)):
         assert [row.data["x"] for row in alpha.rows(_store(work)).rows] == ["alpha"]
         assert git.read(_store(work), beta.ref) == git.Read(None, None, failed=False)
-        listed = git.list_refs(_store(work), git.NAMESPACE)
+        listed = git.list_refs(_store(work), alpha.ref)
         assert listed is not None and set(listed) == {alpha.ref}
         heads = git.list_refs(_store(work), "refs/heads/")
         assert heads is not None and set(heads) == {"refs/heads/main"}
@@ -1214,16 +1357,21 @@ def test_the_mirror_that_cannot_be_listed_and_a_stamp_that_is_not_a_row_are_reas
 ) -> None:
     """Every fallback is a printed reason, never an absence."""
     _, work = repos
-    assert git.fetch_store(_store(work))[:2] == (0, "")
+    named = ("metrics",)
+    assert git.fetch_store(_store(work), series=named)[:2] == (0, "")
     # A stamp that is not a row of the schema: the reason names it.
     assert git.put(_store(work), git.FETCHED.ref, {"origin": "junk"}, message="x") == ""
     with git.fetched_snapshot(_store(work)):
         found = git.read(_store(work), REF)
     assert found.failed and "origin:" in found.reason
-    assert git.fetch_store(_store(work))[:2] == (0, "")  # the stamp is a row again
+    # The stamp is a row again.
+    assert git.fetch_store(_store(work), series=named)[:2] == (0, "")
     # git refusing the listing, on the fetch and under the snapshot.
     monkeypatch.setattr(store_module, "_local_refs", lambda root, prefix: None)
-    assert git.fetch_store(_store(work))[:2] == (0, "the mirror could not be listed")
+    assert git.fetch_store(_store(work), series=named)[:2] == (
+        0,
+        "the mirror could not be listed",
+    )
     with git.fetched_snapshot(_store(work)):
         found = git.read(_store(work), REF)
     assert found.failed and found.reason.endswith("the mirror could not be listed")

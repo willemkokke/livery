@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom-bench"
-version = "0.3.0"
+version = "0.4.0"
 description = "The bench where toolroom's typed tool handles are made and refreshed."
 readme = "README.md"
 license = "MIT"
@@ -26,9 +26,9 @@ classifiers = [
 # the store: all three are runtime dependencies, and a consumer of the
 # handles never installs the bench.
 dependencies = [
-    "livery-footman>=0.59.0",
-    "livery-toolroom>=0.11.0",
-    "livery-toolroom-store>=0.3.0",
+    "livery-footman>=0.61.0",
+    "livery-toolroom>=0.12.0",
+    "livery-toolroom-store>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +39,7 @@ test = [
     # cannot introspect.
     "mkdocs>=1.6",
     # The suite drives the store's records, which strongroom names.
-    "livery-strongroom>=0.4.0",
+    "livery-strongroom>=0.5.0",
 ]
 
 [project.entry-points."footman.tasks"]

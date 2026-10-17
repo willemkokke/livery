@@ -14,6 +14,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The check legs' matrix, two literals: a pull request's runners and
+  # every runner. A pull request without the ci:every-runner label takes
+  # the first, every other run the second, and the check job reads the
+  # pick from this job's output.
+  legs:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.legs.outputs.matrix }}
+    steps:
+      - id: legs
+        env:
+          LEGS: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:every-runner') && '{"os":["ubuntu-latest"],"python":["3.13","3.14"]}' || '{"os":["ubuntu-latest","windows-latest"],"python":["3.13","3.14"]}' }}
+        run: echo "matrix=$LEGS" >> "$GITHUB_OUTPUT"
   # The check legs: each runs the gate, and its row rides its per-run ref
   # on the state store, in one write with the files its other entries
   # left, for the gate job. The scoped gate measures from the proved tree
@@ -21,11 +34,10 @@ jobs:
   # commits among them, or from the merge base with the pull request's
   # base branch; each needs history a shallow clone lacks.
   check:
+    needs: [legs]
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.13", "3.14"]
+      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

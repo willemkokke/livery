@@ -13,7 +13,7 @@ description = "Git access for the livery ecosystem: every call a function of the
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.11.0"
+floor = "0.12.0"
 
 [coverage]
 # The coverage high-water mark the gate enforces; raise it as the

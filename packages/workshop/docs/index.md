@@ -1439,9 +1439,13 @@ absence.
   without a separate working drive; `"runner"` asks for the move on
   any forge.
 - A pull request's check legs run on the runners
-  `[ci] pull-request-runners` names, every runner when the key is
-  absent; a push to main, a dispatch and the nightly run every runner
-  `[ci] runners` names. The rendered gate workflow carries both lists
+  `[ci] pull-request-runners` names, the first runner `[ci] runners`
+  names when the key is absent; a push to main, a dispatch and the
+  nightly run every runner `[ci] runners` names. A one-runner pull
+  request carries the other legs' coverage rows from main's record, so
+  a package whose floor needs the platform legs' fresh rows on a pull
+  request lists every runner, as the workshop's own repository does.
+  The rendered gate workflow carries both lists
   as literals and a `legs` job picks one by the event, computing
   nothing. A pull request that changes a line only another platform
   reaches is red by name on a narrowed run: `fm submit --every-runner`
@@ -1481,10 +1485,13 @@ absence.
   count is one, its matrix is the `os` and `python` lists; when any
   count is above one it is `include` entries, one per runner, Python
   and shard in that order, each `{os, python, shard}` with the shard
-  spelled `<i>of<n>`, and a runner with one shard has its entry with
-  `1of1`, so every entry carries the key and the one call passes
-  `--shard="${{ matrix.shard }}"`. The forge names each job by the
-  entry's values in order, `check (windows-latest, 3.14, 2of4)`. When
+  spelled `<i>of<n>`; a runner with one shard has its entry without
+  the shard key, and the one call passes
+  `--shard="${{ matrix.shard }}"`, which reaches that runner's leg
+  empty and runs it as one shard of one. The forge names each job by
+  the entry's values in order, `check (windows-latest, 3.14, 2of4)`,
+  and a one-shard runner's as the unsplit leg, `check (ubuntu-latest,
+  3.14)`, the name its rows are keyed by. When
   a pull request's runners or counts differ from every other event's,
   a `legs` job holds both matrices as literals, the event picks one,
   and the check job reads it with `fromJSON`; both literals take the
@@ -1512,10 +1519,25 @@ absence.
   re-run as its own recovery. Below the fold the coverage records, the
   verified stamp, the speed marks and the janitor's key set see one
   leg per platform; the forge's rows of the shards stay in the run's
-  `metrics` file, times alone, for `fm ci.timings`. A run with no
-  sharded platform says so and folds nothing. On GitLab a job run as
-  `parallel: matrix` is listed as `check: [<i>of<n>]`, and the job's
-  display name spells the shard that way.
+  `metrics` file, times alone, and `fm ci.timings` prints each
+  shard's wall and queue times under the platform's section. A
+  platform none of whose shards left a record partitioned nothing:
+  the gate skipped on every shard, the tree already proved or
+  nothing affected, or no step that reads the shard ran. Its shards
+  fold on their scopes and files alone and the fold says so; one
+  shard with a record beside one without is red by name. Each record
+  names the attempt of the run the shard ran in, as the runner counts
+  them: a rerun of the failed jobs alone keeps the per-run refs the
+  first attempt's passing shards left, and the shard that reruns
+  partitions afresh from the record as it then is, so the fold reads
+  one platform from two attempts with two partitions. Where the
+  partitions differ and the attempts differ, the refusal names the
+  attempts and says to rerun the whole run; `fm ci.rerun` does that
+  by itself whenever the contract splits a check leg, and says so in
+  one line. A run with
+  no sharded platform says so and folds nothing. On GitLab a job run
+  as `parallel: matrix` is listed as `check: [<i>of<n>]`, and the
+  job's display name spells the shard that way.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
@@ -1766,14 +1788,41 @@ count up to `--max`, 4 by default. The slowest platform takes the
 largest count whose every added shard saved at least its own setup;
 every other platform takes the smallest count whose wall is within
 15% of the slowest platform's, or the cap, named. The pull request
-counts follow the same rule over `[ci] pull-request-runners` when that
-list is shorter than `[ci] runners`. The proposal prints as the TOML
+counts follow the same rule over the pull request's runners when they
+are fewer than `[ci] runners` names. The proposal prints as the TOML
 `[ci] shards` and `[ci] pull-request-shards` would hold, with the
 predicted wall of the slowest leg beside its wall at one shard. A
 platform with fewer than three such rows keeps its count and is
 named, and a store that cannot be read prints why and proposes
 nothing. The verb changes nothing: a count lands in the contract by
 pull request.
+
+## The runner footprint
+
+`fm ci.footprint` sums the same timing rows into runner-minutes, so a
+workspace that inherited a runner matrix sees what it spends. Every
+job of every run in the window, or of the newest `--since` runs, is
+counted on one runner label: a check leg on the runner its job name
+lists, `check (macos-latest, 3.14)` or `check (windows-latest, 3.14,
+2of4)`, and every other job, the gate job, the docs build and the
+release jobs, on the first runner `[ci] runners` names, where the
+workflow places them. The folded row of a platform's shards is not a
+job the forge ran and is left out; the shards' own rows carry its
+minutes. The verb prints the window, its first and last day and its
+span, one line per runner label and kind with the jobs and the
+minutes, the total, and the minutes per 30 days from the span, at
+least one day. A job without a wall time, still running when the
+gate job collected or never started, is counted apart and priced as
+nothing. On GitHub, when the repository is public, the same minutes
+are also priced at GitHub's published
+[rates for the standard runners](https://docs.github.com/en/billing/reference/actions-runner-pricing)
+of a private repository, by the class the label names (ubuntu or
+linux, windows, macos), a label of no class named as unpriced, with
+the total and the USD per 30 days: a public repository is not billed
+for standard runners, and the price says what the matrix would cost
+one that is. On another forge, or on a private GitHub repository,
+nothing is priced. An empty window fails naming what fills it: the
+gate job of a run on the forge writes one row per run.
 
 ## The state store
 
@@ -1788,12 +1837,18 @@ the library's. A default
 clone or fetch never downloads the remote namespace, no refspec
 names the local one, and every row carries the schema the store
 stamped and the time it wrote it. A machine's gate never reaches
-origin: `fm sync` and `fm start` mirror the remote namespace into
-`refs/workshop-origin/*` and stamp the fetch, and `fm check` reads
-the store from that mirror alone, so a hung SSH agent cannot hold
-the gate. The mirror is what the last sync saw, by design; a
+origin: `fm sync` and `fm start` mirror the remote row series the
+workspace declares, `metrics`, `verified`, `speed/marks` and the listed
+extensions' own, into `refs/workshop-origin/*`, one ref per series and
+never a keyed family, and stamp the fetch with the names; `fm check`
+reads those series from the mirror alone, so a hung SSH agent cannot
+hold the gate. The mirror is what the last sync saw, by design; a
 checkout the store was never fetched into reads it as unreachable,
-roots its chain on a full gate, and names the sync. The remote series are written by
+roots its chain on a full gate, and names the sync. A read inside
+that gate of any other remote ref, a family's key or a listing of its
+keys, fails naming the ref and the mirror's scope, never as an
+absence: a verb that needs a family opens a live snapshot. `fm store.ls`
+says which of the two each remote item is. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
 checkout's worktrees share and a fresh clone starts without. Only the
@@ -1819,19 +1874,25 @@ per-run ref once, in its last entry, `ci.leg`: its timing row and
 every file the leg's other entries left for it, the coverage
 extension's measured suites among them. The gate job's collect folds
 the sections its judges left into the run's row, a number per
-package each, which `fm ci.timings` renders as a trend.
+package each, which `fm ci.timings` renders as a trend, and the
+job's last entry drops the per-run refs once every leg has completed
+green, so a red attempt leaves them for its re-run. A point with no
+gate job (the nightly, the release, a point a package contributes)
+ends each of its jobs with `ci.metrics.record`: the job's half from
+the traces its entries left, the run's row collected from every half
+present, and the refs dropped by the last job to finish.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
-| `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
-| `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
+| `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job; each job of a point without one |
+| `run/<id>/<leg>` | a job's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the run's last green job drops it | none | the leg |
 | `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job's collect, after the fold |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
-| `fetched` (local) | when origin's namespace was last mirrored into `refs/workshop-origin/*`, and how many refs | 1 | `fm sync`, `fm start` |
+| `fetched` (local) | when origin's row series were last mirrored into `refs/workshop-origin/*`, which series, and how many refs | 1 | `fm sync`, `fm start` |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
 
 The `durations` family is one series per platform leg,
@@ -1852,7 +1913,11 @@ leg runs as one shard of one; an absent series reads as no rows.
 the verdicts use, `--key=<leg>,<package>` for one series of a family
 and `--json` for the rows as they are. `fm ci.timings` renders the
 `metrics` series: per job and metric the latest, p50, and p90 over
-the window, then the movers. `fm janitor` bounds every series in the
+the window, then the movers. A platform that ran as shards is one
+section, its folded row, with a line per shard under it giving the
+shard's wall and queue times from the newest run; the shards' own
+rows are no sections, and the movers and the speed and coverage
+sections read the platform legs alone. `fm janitor` bounds every series in the
 scope it runs in, windows, ages, and orphans, the remote ones from
 the merge point's gate job after every green run. The site's deploy
 phase draws its coverage pages from main's coverage record, the union

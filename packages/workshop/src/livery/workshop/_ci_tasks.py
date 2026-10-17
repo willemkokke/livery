@@ -16,9 +16,12 @@ runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
-that store (livery.workshop._metrics), and ``ci.balance`` reads the
+that store (livery.workshop._metrics), ``ci.balance`` reads the
 same rows to predict each platform's wall at one to several shards
-and propose the counts (livery.workshop._balance); the hidden
+and propose the counts (livery.workshop._balance), and
+``ci.footprint`` sums the same rows into runner-minutes per runner
+label, priced where GitHub would bill them
+(livery.workshop._footprint); the hidden
 ``ci.metrics.collect`` is the gate job's writer ``ci.run`` schedules,
 the hidden ``ci.fold`` folds each platform's shards into one leg
 before the judges read, and the hidden ``ci.leg`` is each check leg's
@@ -142,7 +145,12 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
     contains. The head commit's runs are the common case, but a
     workflow triggered on an earlier commit (a merged release squash,
     a path-filtered job) keeps its verdict until it re-runs, so
-    scoping to the head sha alone would miss it. Each rerun is read
+    scoping to the head sha alone would miss it. With *failed_only*
+    the failed jobs alone rerun, except where the contract splits a
+    check leg into shards ([livery.workshop._points.sharded_legs][]):
+    a rerun of one shard partitions afresh and the gate job's fold
+    would read one platform from two attempts, so the whole run reruns
+    and one line says why. Each rerun is read
     back: a forge that quietly ignores the request is named, never
     reported as re-running. Off main, a run on a commit main already
     contains is main's verdict (a scheduled nightly, a merge-point
@@ -200,6 +208,20 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
             print(f"  nothing failed on this branch as of {sha[:10]}")
         return
     verdict_jobs = {entry.job for entry in BUILTIN if entry.task == "ci.verdict"}
+    if failed_only:
+        # A rerun of the failed jobs alone keeps the per-run refs the
+        # first attempt's passing shards left, and the shard that reruns
+        # partitions afresh from the record as it then is; the gate
+        # job's fold reads one platform from two attempts and refuses.
+        from livery.workshop._points import sharded_legs
+
+        sharded = sharded_legs(root)
+        if sharded:
+            print(
+                f"  rerun: every job, since {len(sharded)} check leg(s) run as"
+                " shards and a rerun of one shard partitions afresh"
+            )
+            failed_only = False
     for run in failed:
         workflow = (run.workflow or "").rsplit("/", 1)[-1]
         # A release wave is the train's: its recovery re-dispatches
@@ -248,7 +270,13 @@ def rerun_flow(repo: Repository, root: Path, *, failed_only: bool = True) -> Non
 def ci_rerun(
     failed_only: Annotated[bool, doc("re-run only the failed jobs")] = True,
 ) -> None:
-    """Re-run the head commit's failed runs."""
+    """Re-run the head commit's failed runs.
+
+    The failed jobs alone by default; the whole run under
+    ``--no-failed-only``, and whenever the contract splits a check leg
+    into shards, since a rerun of one shard partitions the test files
+    afresh and the gate job's fold refuses shards of two attempts.
+    """
     repo, root = _resolved()
     rerun_flow(repo, root, failed_only=failed_only)
 
@@ -1155,14 +1183,123 @@ def ci_metrics_collect() -> None:
 
     Runs in the gate job before its verdict. Reads the per-run refs
     the legs wrote, asks the forge for the run's jobs and their
-    steps, puts the run's file on the metrics series under its
-    window, and drops the per-run refs when every completed job is
-    green; a red job keeps them, since the forge's re-run of the
-    failed jobs runs this gate again without its legs. Fails open
-    loudly: every reason is printed and the exit stays 0.
+    steps, and puts the run's file on the metrics series under its
+    window. The per-run refs stay for `ci.metrics.drop`, the job's
+    last entry, so a red verdict leaves them for the forge's re-run
+    of the job, which runs without its legs. Fails open loudly: every
+    reason is printed and the exit stays 0.
     """
     repo, root = _resolved()
     metrics_collect_flow(root, repo)
+
+
+def drop_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
+    """Drop the run's per-run refs once every half is in; print every line."""
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._metrics import drop_halves
+    from livery.workshop._points import half_writers
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: the run's per-run refs are dropped by CI only")
+        return
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/",)):
+        for line in drop_halves(
+            root,
+            repo,
+            run,
+            sha=git.head_sha(root),
+            job=job,
+            writers=half_writers(root, point),
+        ):
+            print(line)
+
+
+@metrics.task(name="drop")
+def ci_metrics_drop(
+    *,
+    point: Annotated[str, doc("the point whose jobs put the run's halves")] = "",
+    job: Annotated[str, doc("this job's name as the forge lists it")] = "",
+) -> None:
+    """Drop the run's per-run refs, once every job that put a half is green.
+
+    The last entry of a job that collected the run's row, after its
+    verdict: this job is green when it runs. The refs stay while
+    another job that puts a half (a check leg, or a sibling job of a
+    point with no gate job) has not completed green, or any completed
+    job is red, so a re-run finds what the legs put and the last of a
+    point's collecting jobs is the one that drops. Fails open loudly:
+    every reason is printed and the exit stays 0.
+    """
+    repo, root = _resolved()
+    drop_flow(root, repo, point=point, job=job)
+
+
+def record_flow(root: Path, repo: Repository, *, point: str, job: str) -> None:
+    """Put this job's half from its box, collect the run's row, drop when last.
+
+    Every line is printed and none is a verdict: the row is a record
+    of what the job did, and a job with no gate job to judge it stays
+    green whatever its record could not do. The three steps share one
+    listing of the store, taken here: the put records its ref in it,
+    so the collect and the drop after it see the half it just put.
+    """
+    from livery.footman.profile import as_trace, parent_box, swept
+    from livery.git import remote_snapshot
+    from livery.workshop._ci_context import run_context
+    from livery.workshop._metrics import put_leg
+    from livery.workshop._points import trace_file
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: a job's row is put by CI only")
+        return
+    with remote_snapshot(state_store(root), fetch=(f"run/{run.run_id}/", "metrics")):
+        # The job's box, where the entries before this one left their
+        # fragments: this process was handed it, and runs profiled
+        # itself, so the environment names its own, empty, box instead.
+        box = parent_box()
+        if box is None:
+            print(
+                "  no profile box in this job's environment; the job's half stays"
+                " unwritten"
+            )
+        else:
+            events, origin = swept(box)
+            trace = root / trace_file("job row")
+            trace.write_text(as_trace(events, origin=origin), encoding="utf-8")
+            lines, why = put_leg(root, run, job=job, label=run.leg, trace=trace)
+            for line in lines:
+                print(line)
+            if why:
+                print(
+                    f"  {job}: the half could not be put ({why}); the row goes"
+                    " without it"
+                )
+        metrics_collect_flow(root, repo)
+        drop_flow(root, repo, point=point, job=job)
+
+
+@metrics.task(name="record")
+def ci_metrics_record(
+    *,
+    point: Annotated[str, doc("the point this job belongs to")] = "",
+    job: Annotated[str, doc("this job's name as the forge lists it")] = "",
+) -> None:
+    """Record this job's run: its half, the run's row, the refs dropped when last.
+
+    The last entry of every job of a point with no gate job (the
+    nightly, the release, a point a package contributes). The half is
+    the union of the traces the job's entries left in its profile
+    box, put on the job's per-run ref; the collect then writes the
+    run's row from every half present, so each job's write carries
+    the jobs before it; the drop takes the refs once every job of the
+    point has completed green. Fails open loudly: every reason is
+    printed and the exit stays 0.
+    """
+    repo, root = _resolved()
+    record_flow(root, repo, point=point, job=job)
 
 
 profile = ci.group("profile", help="A run as one timeline")
@@ -1247,10 +1384,12 @@ def ci_timings(
 
     Reads the metrics series the gate job writes; CI is its only
     writer, a local run reads. Per job, every metric's latest value
-    and its median and ninetieth percentile over the series' window,
-    then the biggest movers: the recent runs' median against the
-    base runs' median. Then the speed marks, each package's mark on
-    each leg beside the newest run's time.
+    and its median and ninetieth percentile over the series' window;
+    a platform that ran as shards is one job, its folded row, with a
+    line per shard under it giving the shard's wall and queue times
+    from the newest run. Then the biggest movers: the recent runs'
+    median against the base runs' median. Then the speed marks, each
+    package's mark on each leg beside the newest run's time.
     """
     root = workspace_root()
     if root is None:
@@ -1307,3 +1446,93 @@ def ci_balance(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     balance_flow(root, cap=max_)
+
+
+def _github_public(root: Path, repo: Repository) -> tuple[bool, str]:
+    """Whether *repo* is a public repository on GitHub, and why that is unknown.
+
+    False with no reason on another forge, or when GitHub says the
+    repository is private. False with the reason when GitHub did not
+    answer, or knows no such repository: the caller prints it, so a
+    missing price is never silent on the one forge that prices.
+    """
+    from livery.workshop._forge_lane import forge_kind, this_forge
+
+    if forge_kind(root) != "github":
+        return False, ""
+    try:
+        info = this_forge(root).get_repo(repo.owner, repo.name)
+    except ForgeError as error:
+        return False, (
+            f"GitHub did not say whether {repo.owner}/{repo.name} is public: {error}"
+        )
+    if info is None:
+        return False, f"GitHub knows no repository {repo.owner}/{repo.name}"
+    return not info.private, ""
+
+
+def footprint_flow(root: Path, repo: Repository, *, since: int) -> None:
+    """Print the window's runner-minutes by runner label; price them where GitHub would.
+
+    Fails when the window holds no row, naming what writes one.
+    """
+    from livery.git import remote_snapshot
+    from livery.workshop._footprint import default_runner, footprint, price, render
+    from livery.workshop._metrics import SERIES
+
+    if since < 0:
+        fail(f"--since={since} names no count of runs: 0 reads the whole window")
+    with remote_snapshot(state_store(root), fetch=("metrics",)):
+        found = SERIES.rows(state_store(root))
+    if found.failed:
+        fail(found.reason)
+    for skipped in found.skipped:
+        print(f"  {skipped}")
+    entries = [row.data for row in found.rows[: since or None]]
+    if not entries:
+        fail(
+            "the metrics window is empty: the gate job of a run on the forge"
+            " writes one row per run; nothing to sum"
+        )
+    runner = default_runner(root)
+    summed = footprint(entries, default_runner=runner)
+    for line in render(summed, default_runner=runner):
+        print(line)
+    public, why = _github_public(root, repo)
+    if why:
+        print(f"  not priced: {why}")
+    elif public:
+        for line in price(summed):
+            print(line)
+
+
+@ci.task(name="footprint")
+def ci_footprint(
+    since: Annotated[int, doc("the newest runs read; 0 reads the whole window")] = 0,
+) -> None:
+    """Sum the window's runner-minutes by runner label; price them where GitHub would.
+
+    Reads the metrics series the gate job writes; CI is its only
+    writer, a local run reads. Every job of every run in the window,
+    or of the newest ``--since`` runs, is counted on one runner label:
+    a check leg on the runner its job name lists, every other job (the
+    gate job, the docs build, the release jobs) on the first runner
+    ``[ci] runners`` names, where the workflow places them. Per label
+    and kind the jobs and the minutes, then the total and the minutes
+    per 30 days from the window's span. A job without a wall time,
+    still running when the gate job collected or never started, is
+    counted apart and priced as nothing.
+
+    On GitHub, when the repository is public, the same minutes are
+    priced at GitHub's rates for the standard runners of a private
+    repository, by the class the label names (linux, windows, macos),
+    with the total, the USD per 30 days and the source page: a public
+    repository is not billed for them, and the price says what the
+    matrix would cost one that is. On another forge, or on a private
+    GitHub repository, nothing is priced.
+
+    Fails when the window holds no row: the gate job of a run on the
+    forge writes one.
+    """
+    repo, root = _resolved()
+    footprint_flow(root, repo, since=since)

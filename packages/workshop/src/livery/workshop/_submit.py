@@ -775,8 +775,8 @@ def _heal_context_rename(
 def label_every_runner(repo: Repository, number: int) -> None:
     """Put [livery.workshop.EVERY_RUNNER_LABEL][] on pull request *number*.
 
-    The gate then runs every runner for it, where
-    ``[ci] pull-request-runners`` names fewer. Idempotent: a label the
+    The gate then runs every runner for it, where its check legs run on
+    fewer. Idempotent: a label the
     pull request already carries stays. A forge that refuses, one
     whose repository does not carry the label among them, fails with
     the forge's words; the pull request exists by then, so a re-run
@@ -1149,8 +1149,8 @@ def submit_default(
         bool,
         doc(
             f"label the PR {EVERY_RUNNER_LABEL} so the gate runs every runner: for"
-            " a change only another platform reaches while [ci]"
-            " pull-request-runners names fewer"
+            " a change only another platform reaches while the pull request's"
+            " legs run on fewer"
         ),
     ] = False,
     follow: Annotated[bool, doc("watch until it lands or says what stopped it")] = True,
@@ -1168,9 +1168,9 @@ def submit_default(
     submits without the close footer, for a branch that carries
     preparatory work on an issue the merge must leave open.
     ``--every-runner`` labels the pull request ``ci:every-runner``, so
-    the gate runs every runner for it where ``[ci]
-    pull-request-runners`` names fewer: for a change to a line only
-    another platform reaches, which a narrowed run judges red by name.
+    the gate runs every runner for it where its check legs run on
+    fewer: for a change to a line only another platform reaches, which
+    a narrowed run judges red by name.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository

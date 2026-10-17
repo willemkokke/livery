@@ -53,7 +53,7 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._shard import ONE, Shard
+from livery.workshop._shard import ONE, Shard, platform_leg, shard_of
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -1256,6 +1256,16 @@ def due(every: str, on: date) -> tuple[bool, date]:
 #: the run's row is folded in.
 COLLECT = "ci.metrics.collect"
 
+#: The task that drops the run's per-run refs, the last entry of a job
+#: that collected: after its verdict, and only once every job that
+#: puts a half has completed green.
+DROP_TASK = "ci.metrics.drop"
+
+#: The task that ends every job of a point with no verdict job: it
+#: puts the job's half from the traces its entries left, collects the
+#: run's row, and drops the refs when it is the run's last green job.
+RECORD_TASK = "ci.metrics.record"
+
 #: The workshop's own schedule. Every entry runs profiled, so a job's
 #: own timeline is the union of the work it did; the gate's check job
 #: also records the leg's timing row, and its verdict job collects the
@@ -1293,12 +1303,17 @@ BUILTIN: tuple[Entry, ...] = (
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.
     Entry("gate", "gate", "ci.verified.stamp"),
-    # Last, so the forge's merge follows it as closely as it can: a
-    # release pull request whose base moved under its set is refused
-    # before the merge, where the publish would refuse it after. Green
-    # off a release branch. The stamp before it holds either way: it
-    # records the tree, and the tree is green.
+    # After the stamp, so the forge's merge follows it as closely as
+    # it can: a release pull request whose base moved under its set is
+    # refused before the merge, where the publish would refuse it
+    # after. Green off a release branch. The stamp before it holds
+    # either way: it records the tree, and the tree is green.
     Entry("gate", "gate", "workflow.release.check-fresh"),
+    # Last of all, after a green verdict and whatever the extensions
+    # add: the legs' per-run refs go only once this job has nothing
+    # left to read from them, so a red attempt leaves them for its
+    # re-run, which runs this job again without its legs.
+    Entry("gate", "gate", DROP_TASK, ("--point=gate", "--job={display}"), last=True),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     # The wave is dispatched from the gate job itself, right after
     # main's own verdict: the verb reads the manifest at HEAD and the
@@ -1312,10 +1327,13 @@ BUILTIN: tuple[Entry, ...] = (
     # not own.
     Entry("merge", "gate", "janitor", last=True),
     # The clock's point: the doctor first, so the night's record opens
-    # with the runner's and the forge's state, then the whole check with
-    # the tests that declare the nightly point selected in, on every
-    # python of the matrix.
-    Entry("nightly", "nightly", "doctor"),
+    # with the runner's and the forge's state, mending what footman
+    # can (a runner that keeps its caches across jobs holds the scratch
+    # of processes that died there; a finding that stands after the
+    # mend is still red), then the whole check with the tests that
+    # declare the nightly point selected in, on every python of the
+    # matrix.
+    Entry("nightly", "nightly", "doctor", ("--fix",)),
     Entry("nightly", "nightly", "check"),
     # The wave, at the squash the dispatch names: the publish that cuts
     # the receipts. The verb decides for itself what the ref holds, and
@@ -1432,11 +1450,72 @@ def _join_entries(composed: list[Entry], item: JobContribution) -> None:
 
 
 def schedule(root: Path) -> tuple[Entry, ...]:
-    """Every entry: the builtin ones, the packages' contributed ones, the contract's."""
-    return (
+    """Every entry: the builtin ones, the packages' contributed ones, the contract's.
+
+    Then the record each job of a point without a verdict job ends
+    with (`recording`), after every entry the contract gave the job.
+    """
+    scheduled = (
         builtin_schedule()
         + tuple(item.entry for item in contributed(root))
         + declared(root)
+    )
+    return scheduled + recording(root, scheduled)
+
+
+def _has_verdict_job(point: Point) -> bool:
+    """Whether *point*, or the point it inherits, declares a verdict job."""
+    verdicts = {name for name, _job in verdict_jobs()}
+    return point.name in verdicts or point.inherits in verdicts
+
+
+def recording(root: Path, scheduled: tuple[Entry, ...]) -> tuple[Entry, ...]:
+    """The record ending every job of each point of *root* with no verdict job.
+
+    A verdict job collects what its point's legs put; a point without
+    one (the nightly, the release, every point a package contributes)
+    would leave no row of its run, so each of its jobs ends with
+    `RECORD_TASK`, which puts the job's own half, collects the run's
+    row and drops the per-run refs when it is the run's last green
+    job. The jobs are the point's declared ones and any a
+    ``[[ci.schedule]]`` entry in *scheduled* names.
+    """
+    entries: list[Entry] = []
+    for point in points(root):
+        if _has_verdict_job(point):
+            continue
+        jobs = [job.name for job in point.jobs]
+        for entry in scheduled:
+            if entry.point == point.name and entry.job not in jobs:
+                jobs.append(entry.job)
+        entries.extend(
+            Entry(
+                point.name,
+                job,
+                RECORD_TASK,
+                (f"--point={point.name}", "--job={display}"),
+                last=True,
+            )
+            for job in jobs
+        )
+    return tuple(entries)
+
+
+def half_writers(root: Path, point: str) -> tuple[str, ...]:
+    """The jobs of *point* that put a half of the run's row, by their schedule names.
+
+    The check legs of a point with a verdict job (`ci.leg`), and every
+    job of a point without one (`RECORD_TASK`). A forge lists a matrix
+    job's legs under the job's name with the leg in brackets, so a
+    reader matches by prefix.
+    """
+    return tuple(
+        dict.fromkeys(
+            entry.job
+            for entry in schedule(root)
+            if entry.task in ("ci.leg", RECORD_TASK)
+            and entry.point in (INHERITS.get(point), point)
+        )
     )
 
 
@@ -1553,7 +1632,7 @@ def asked_tasks(root: Path, point: str, only: str) -> tuple[str, ...]:
 
 
 #: The label a pull request carries so the gate runs every runner for
-#: it, where ``[ci] pull-request-runners`` names fewer. `fm submit
+#: it, where its check legs run on fewer. `fm submit
 #: --every-runner` sets it through the forge, and a person sets it on
 #: the forge by hand; the gate workflow runs on ``labeled``, its legs
 #: job picks the full matrix while the label is there, and the coverage
@@ -1566,14 +1645,18 @@ def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     """The runners a pull request's check legs fan out to.
 
     ``[ci] pull-request-runners`` when the contract declares it, else
-    every runner ``[ci] runners`` names. A label the runners list does
-    not name refuses naming both lists, since a pull request's legs run
-    on runners every event runs on; an empty list refuses too.
+    the first runner ``[ci] runners`` names (``ubuntu-latest`` without
+    that key). A one-runner pull request carries the other legs'
+    coverage rows from main's record, so a package whose floor needs
+    the platform legs' fresh rows on a pull request lists every runner.
+    A label the runners list does not name refuses naming both lists,
+    since a pull request's legs run on runners every event runs on; an
+    empty list refuses too.
     """
     runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
     declared: Any = ci.get("pull-request-runners")
     if declared is None:
-        return runners
+        return runners[:1]
     chosen = [str(runner) for runner in declared]
     strangers = [runner for runner in chosen if runner not in runners]
     if strangers:
@@ -1585,16 +1668,28 @@ def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     if not chosen:
         fail(
             "[ci] pull-request-runners is empty; name a runner [ci] runners"
-            " lists, or remove the key so every runner runs"
+            " lists, or remove the key so the first runner runs"
         )
     return chosen
+
+
+def pull_request_listed(ci: dict[str, Any]) -> str:
+    """Name the list a pull request's runners come from, for a shard refusal.
+
+    ``[ci] pull-request-runners`` when the contract declares it. When
+    the key is absent the refusal names it and the first runner
+    ``[ci] runners`` names, which stands in for it.
+    """
+    if ci.get("pull-request-runners") is not None:
+        return "[ci] pull-request-runners"
+    return "[ci] pull-request-runners (absent, so the first of [ci] runners)"
 
 
 def pull_request_legs(root: Path) -> list[str]:
     """Name the check legs a pull request's run produces, ``check-<os>-<python>`` each.
 
     One per runner the root contract's ``[ci] pull-request-runners``
-    names and Python the gate runs; every leg
+    names and Python the gate runs; the first runner's legs among those
     [livery.workshop.check_legs][] names when the key is absent. The
     task fails, naming both lists, when the key names a runner
     ``[ci] runners`` does not list, and when it is empty.
@@ -1749,15 +1844,32 @@ def pull_request_shards(root: Path) -> list[str]:
         every = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
         counts = shard_counts(ci, key="shards", runners=every, listed="[ci] runners")
     else:
-        listed = (
-            "[ci] pull-request-runners"
-            if ci.get("pull-request-runners") is not None
-            else "[ci] runners"
-        )
         counts = shard_counts(
-            ci, key="pull-request-shards", runners=runners, listed=listed
+            ci,
+            key="pull-request-shards",
+            runners=runners,
+            listed=pull_request_listed(ci),
         )
     return _shard_legs(runners, gate_pythons(root), counts)
+
+
+def sharded_legs(root: Path) -> list[str]:
+    """The platform legs the contract splits into shards, on any event.
+
+    Each platform leg once, in matrix order: one ``[ci] shards`` or
+    ``[ci] pull-request-shards`` gives above one
+    ([livery.workshop.check_shards][],
+    [livery.workshop.pull_request_shards][]). Empty without a root
+    contract. The task fails as those fail, naming the key and the
+    runner.
+    """
+    if not (root / "workshop.toml").is_file():
+        return []
+    found: dict[str, None] = {}
+    for leg in (*check_shards(root), *pull_request_shards(root)):
+        if shard_of(leg) != ONE:
+            found.setdefault(platform_leg(leg), None)
+    return list(found)
 
 
 def effective_point(point: str) -> str:
@@ -1955,7 +2067,13 @@ def run_point(
                 if entry.sharded and split.count > 1:
                     argv.append(f"--shard={split}")
                 print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
-                code = spawn(argv, env)
+                # The record lists the store for itself: a sibling job's
+                # half may have landed after this job's listing was
+                # taken, and the job's listing never learns a new ref.
+                handed = env
+                if entry.task == RECORD_TASK:
+                    handed = {k: v for k, v in env.items() if k != SNAPSHOT_VARIABLE}
+                code = spawn(argv, handed)
                 if code != 0:
                     reason = f"{resolved}/{job}: {entry.task} exited {code}"
                     if entry.source == "builtin" or entry.judges:

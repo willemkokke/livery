@@ -28,7 +28,9 @@ if TYPE_CHECKING:
     )
     from livery.extensions.python._backend import stamp as stamp
 
-__all__ = ["module_docs", "run_isolated_test", "stamp"]
+__version__ = "0.0.0"
+
+__all__ = ["__version__", "module_docs", "run_isolated_test", "stamp"]
 
 # The module each lazily served name lives in.
 _EXPORTS: dict[str, str] = {

@@ -301,7 +301,7 @@ if TYPE_CHECKING:
     from livery.workshop._verified import leg_scope as leg_scope
     from livery.workshop._verified import verified_branch as verified_branch
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "AGENT",

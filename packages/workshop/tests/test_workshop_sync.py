@@ -127,6 +127,43 @@ def test_a_frozen_sync_of_a_current_checkout_runs_no_local_step_and_says_nothing
     assert capsys.readouterr().out == ""
 
 
+def test_a_sync_mirrors_the_store_again_only_when_the_mount_changed_the_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The one fetch names the series declared before the mount; the mount may add."""
+    from livery import git
+    from livery.workshop import _sync
+
+    root = _workspace(tmp_path)
+    monkeypatch.chdir(root)
+    steps = _recorded_steps(monkeypatch)
+    monkeypatch.setattr(git, "has_commits", lambda at: True)
+    fetched: list[tuple[str, ...]] = []
+
+    def fetch_origin(at: Path, series: tuple[str, ...]) -> Callable[[], bool]:
+        fetched.append(series)
+        return lambda: True
+
+    monkeypatch.setattr(_sync, "fetch_origin", fetch_origin)
+    monkeypatch.setattr(
+        _sync, "bring_checkout_current", lambda at, *, fetched: lambda: None
+    )
+    # The mount installs an extension keeping a series the fetch could
+    # not name: the store is mirrored again, once.
+    declared = iter([("metrics",), ("coverage/marks", "metrics")])
+    monkeypatch.setattr(_sync, "_mirrored", lambda at: next(declared))
+    assert _sync.sync() is True
+    assert fetched == [("metrics",)]
+    assert steps.count("store") == 1
+    # Unchanged by the mount: the one fetch is the whole cost.
+    fetched.clear()
+    steps.clear()
+    monkeypatch.setattr(_sync, "_mirrored", lambda at: ("metrics",))
+    assert _sync.sync() is True
+    assert fetched == [("metrics",)]
+    assert "store" not in steps
+
+
 def test_a_plain_sync_of_a_current_checkout_still_renders_and_installs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

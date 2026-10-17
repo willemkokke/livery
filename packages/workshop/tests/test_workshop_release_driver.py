@@ -271,6 +271,43 @@ def test_a_first_release_failing_its_legs_leaves_the_tree_as_it_was(
     assert "could not restore" not in capsys.readouterr().out
 
 
+def test_the_local_act_refuses_a_root_module_without_its_version_before_any_leg(
+    workspace: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skip_unless_installed("python")
+    # The fallback first: core's __init__.py keeps no __version__, so the
+    # stamp writes none and the publish job would refuse the member after
+    # its release merged. The local act runs that check on the stamped
+    # tree, before any leg, and leaves the tree as it found it.
+    _fake, root = workspace
+    init = root / "packages" / "core" / "src" / "livery" / "core" / "__init__.py"
+    kept = [
+        line
+        for line in init.read_text().splitlines()
+        if not line.startswith("__version__")
+    ]
+    init.write_text("\n".join(kept) + "\n")
+    _git(root, "commit", "-am", "refactor: core's root module keeps no version")
+    _grow(root, "core", "feat: core grows (#1)")
+    before = _files(root)
+    legs: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, _dirs: legs.append(plan.package.name),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._lifecycle.build_release", lambda package, root, **kw: None
+    )
+    with pytest.raises(
+        _FAILURES, match=re.escape("no __init__.py under src/ declares")
+    ):
+        local_release(root, resolve_set(root, ("core",)))
+    assert legs == []
+    assert _files(root) == before
+    assert git.is_clean(root)
+
+
 def test_a_rollback_that_cannot_restore_one_path_restores_the_rest_and_names_it(
     workspace: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,

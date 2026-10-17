@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from livery.footman import Failed
-from livery.workshop import _ci_context, _e2e_rows, _metrics, _verified
+from livery.workshop import _ci_context, _e2e_rows, _metrics, _shard, _verified
 from livery.workshop._ci_context import state_store
 from livery.workshop._verified import tree_id
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -16,6 +17,16 @@ from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 RUN = _ci_context.RunContext("gitea", "77", "push", "refs/heads/main")
 LEG = "check-ubuntu-latest-3.14"
 JOB = "check (ubuntu-latest, 3.14)"
+SHARD1 = "check (ubuntu-latest, 3.14, 1of2)"
+SHARD2 = "check (ubuntu-latest, 3.14, 2of2)"
+#: The forge's row of a shard, as the collect keeps it beside the fold's row.
+FORGE_ROW: dict[str, object] = {
+    "conclusion": "success",
+    "status": "completed",
+    "queued_ms": 10.0,
+    "wall_ms": 20.0,
+    "complete": True,
+}
 _FAILURES = (SystemExit, Failed)
 
 
@@ -61,11 +72,13 @@ def test_a_row_naming_two_jobs_of_one_prefix_fails_naming_them(
         facts.job("docs")
 
 
-def _put_metrics(work: Path, jobs: dict[str, dict[str, object]]) -> None:
+def _put_metrics(
+    work: Path, jobs: dict[str, dict[str, object]], run: str = "77"
+) -> None:
     entry = {
         "schema": _metrics.SCHEMA,
         "when": "2026-10-17T10:00:00+00:00",
-        "run": "77",
+        "run": run,
         "jobs": jobs,
         "sections": {
             "coverage": {
@@ -75,9 +88,146 @@ def _put_metrics(work: Path, jobs: dict[str, dict[str, object]]) -> None:
         },
     }
     why = _metrics.SERIES.put(
-        state_store(work), {_metrics.run_file("77"): entry}, message="metrics: run 77"
+        state_store(work),
+        {_metrics.run_file(run): entry},
+        message=f"metrics: run {run}",
     )
     assert why == ""
+
+
+def _folded(files: tuple[int, int] = (2, 1)) -> dict[str, object]:
+    """The fold's row of the platform: two shards, *files* each, one row read."""
+    return {
+        "scope": {
+            "scope": "affected",
+            "packages": ["packages/loop-echo"],
+            "leg": LEG,
+            "base_tree": "",
+        },
+        "tasks": {"check": 12.0},
+        "conclusion": "success",
+        "shard": {
+            "count": 2,
+            "digest": "ab" * 32,
+            "rows": ["20261017T090000Z-76.json"],
+            "before": "2026-10-17T09:30:00+00:00",
+            "shards": [
+                {
+                    "shard": f"{index}of2",
+                    "leg": f"{LEG}-{index}of2",
+                    "job": job,
+                    "when": "2026-10-17T09:5{index}:00+00:00",
+                    "files": count,
+                    "total_ms": 100.0,
+                    "packages": {},
+                }
+                for index, (job, count) in enumerate(
+                    zip((SHARD1, SHARD2), files, strict=True), 1
+                )
+            ],
+        },
+    }
+
+
+def test_a_shards_row_with_no_folded_one_fails_naming_the_fold(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _as_ci(monkeypatch)
+    # The forge's rows of the shards alone: the fold left no row for
+    # their platform, so no reader takes one of them as the leg.
+    _put_metrics(work, {SHARD1: FORGE_ROW, SHARD2: FORGE_ROW, "gate": {}})
+    facts = _e2e_rows.run_facts(work, "77")
+    assert facts.shard_jobs == (SHARD1, SHARD2) and set(facts.jobs) == {"gate"}
+    with pytest.raises(_FAILURES) as caught:
+        facts.job("check")
+    message = str(caught.value)
+    assert f"names {SHARD1}, {SHARD2} and no folded row" in message
+    assert "the gate job's fold did not run" in message
+    # One shard's own row, its record unfolded: the collect joined it
+    # with the forge's times because the fold did not run.
+    own: dict[str, object] = {
+        "scope": {"scope": "full", "packages": [], "leg": f"{LEG}-1of2"},
+        "shard": {
+            "shard": "1of2",
+            "digest": "ab" * 32,
+            "files": ["tests/test_a.py"],
+            "rows": [],
+            "before": "2026-10-17T09:30:00+00:00",
+        },
+        "conclusion": "success",
+    }
+    _put_metrics(work, {SHARD1: own, "gate": {}}, run="78")
+    facts = _e2e_rows.run_facts(work, "78")
+    leg = facts.jobs[SHARD1]
+    assert leg.shard == "1of2" and leg.fold is None and leg.leg == f"{LEG}-1of2"
+    with pytest.raises(_FAILURES) as caught:
+        facts.job("check")
+    message = str(caught.value)
+    assert f"holds {SHARD1} (1of2), one shard's own row each" in message
+    assert "the gate job's fold did not run" in message
+    # A shard's row without its record is known by its label alone.
+    _put_metrics(work, {SHARD2: {"scope": {"leg": f"{LEG}-2of2"}}}, run="79")
+    assert _e2e_rows.run_facts(work, "79").jobs[SHARD2].shard == "2of2"
+
+
+def test_a_folded_row_answers_for_the_platform_past_the_shards_forge_rows(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _as_ci(monkeypatch)
+    _put_metrics(
+        work,
+        {
+            JOB: _folded(),
+            SHARD1: FORGE_ROW,
+            SHARD2: FORGE_ROW,
+            "gate": {"conclusion": "success"},
+        },
+    )
+    facts = _e2e_rows.run_facts(work, "77")
+    assert facts.shard_jobs == (SHARD1, SHARD2)
+    assert set(facts.jobs) == {JOB, "gate"}
+    leg = facts.job("check")
+    assert leg.leg == LEG and leg.scope == "affected" and leg.shard == ""
+    assert leg.fold is not None
+    assert leg.fold.count == 2 and leg.fold.digest == "ab" * 32
+    assert leg.fold.rows == ("20261017T090000Z-76.json",)
+    assert [(s.shard, s.leg, s.job, s.files) for s in leg.fold.shards] == [
+        ("1of2", f"{LEG}-1of2", SHARD1, 2),
+        ("2of2", f"{LEG}-2of2", SHARD2, 1),
+    ]
+    # A job that ran as one shard of one carries no fold.
+    assert facts.job("gate").fold is None and facts.job("gate").shard == ""
+
+
+def test_a_runs_durations_row_is_read_on_the_platform_leg_or_is_none(
+    work: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _as_ci(monkeypatch)
+    series = _shard.DURATIONS.series(LEG)
+    name = _metrics.run_file("77")
+    # An absent series is no row, not a failure.
+    assert _e2e_rows.durations_row(work, "77", f"{LEG}-2of2") == (
+        _e2e_rows.DurationsRow(series.ref, name, None)
+    )
+    rows = {name: {"run": "77", "files": {"tests/test_a.py": 1.5, "tests/b.py": "x"}}}
+    assert series.put(state_store(work), rows, message="durations: run 77") == ""
+    # A shard's label reads its platform's series; a number is a reading.
+    found = _e2e_rows.durations_row(work, "77", f"{LEG}-2of2")
+    assert found == _e2e_rows.DurationsRow(series.ref, name, {"tests/test_a.py": 1.5})
+    assert _e2e_rows.durations_row(work, 77, LEG) == found
+    assert _e2e_rows.durations_row(work, "78", LEG).files is None
+    # A series that cannot be read fails naming it.
+    subprocess.run(
+        ["git", "remote", "set-url", "origin", str(tmp_path / "gone.git")],
+        cwd=work,
+        check=True,
+    )
+    with pytest.raises(_FAILURES) as caught:
+        _e2e_rows.durations_row(work, "77", LEG)
+    message = str(caught.value)
+    assert (
+        series.ref in message and "could not be read" in message and "run 77" in message
+    )
 
 
 def test_a_run_s_row_answers_each_job_s_scope_its_tasks_and_what_was_judged(

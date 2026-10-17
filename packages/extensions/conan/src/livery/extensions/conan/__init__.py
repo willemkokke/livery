@@ -35,8 +35,11 @@ if TYPE_CHECKING:
     from livery.extensions.conan._package import workspace_aside as workspace_aside
     from livery.extensions.conan._package import workspace_file as workspace_file
 
+__version__ = "0.0.0"
+
 __all__ = [
     "WORKSPACE_FILE",
+    "__version__",
     "raise_floors",
     "restore_from_releases",
     "save_cache",

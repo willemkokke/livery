@@ -99,6 +99,100 @@ def test_a_wave_in_flight_is_reported_not_redispatched(
     assert len(repo.checks.runs(event="workflow_dispatch")) == 1
 
 
+def test_a_wave_that_already_failed_at_the_squash_is_not_dispatched_again(
+    rig: tuple[FakeForge, Path],
+) -> None:
+    # The merge after a failed wave finds the receipts uncut and no wave
+    # in flight, and would start one more copy that fails the same way.
+    # It names the failed run and the recoveries instead, green; --again
+    # and a named driver are the gestures by hand that still dispatch.
+    fake, root = rig
+    squash = _stamp(root, fake, ("thing", "1.2.0"))
+    fake.settle(OWNER, NAME, squash)
+    repo = fake.repository(OWNER, NAME)
+    repo.checks.dispatch("release.yml", ref="main", inputs={"ref": squash})
+    fake.set_outcome(OWNER, NAME, squash, "failure")
+    fake.settle(OWNER, NAME, squash)
+    (failed,) = repo.checks.runs(event="workflow_dispatch")
+    assert failed.conclusion == "failure"
+    first, second = dispatch_flow(root, repo)
+    assert first.startswith(
+        f"  a wave already ran at {squash[:12]} and ended failure: run {failed.id}"
+    )
+    assert first.endswith("Uncut: packages/thing/v1.2.0")
+    assert "workflow.release.dispatch --again" in second
+    assert "--workshop=<version>" in second and "workflow.release --abandon" in second
+    assert len(repo.checks.runs(event="workflow_dispatch")) == 1
+    (line,) = dispatch_flow(root, repo, again=True, timeout=5, interval=0.05)
+    assert line.startswith(f"  dispatched the wave at {squash[:12]}: run")
+    assert len(repo.checks.runs(event="workflow_dispatch")) == 2
+    fake.set_outcome(OWNER, NAME, squash, "failure")
+    fake.settle(OWNER, NAME, squash)
+    (line,) = dispatch_flow(root, repo, workshop="0.2.0", timeout=5, interval=0.05)
+    assert "driven by 0.2.0" in line
+    assert len(repo.checks.runs(event="workflow_dispatch")) == 3
+
+
+def test_a_failed_wave_the_forge_filed_elsewhere_is_known_by_its_own_record(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A merge landing between the dispatch and the run moves the base's
+    # tip, so the forge files the wave under the new tip; the wave
+    # recorded the squash it ran on itself, and the dispatch reads it.
+    from livery.workshop._ci_context import state_store
+    from livery.workshop._traces import ABOUT
+
+    # The wave's own record is a series only a CI run writes, so the
+    # test runs as one wherever it runs, a desk or a release leg
+    # included; the runner's own payload and refs are scrubbed.
+    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITEA_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "1013")
+    fake, root = rig
+    squash = _stamp(root, fake, ("thing", "1.2.0"))
+    fake.settle(OWNER, NAME, squash)
+    (root / "README.md").write_text("moved on\n")
+    _git(root, "add", "README.md")
+    _git(root, "commit", "-qm", "docs: unrelated")
+    _git(root, "push", "-q", "origin", "main")
+    tip = _git(root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "main", sha=tip)
+    fake.settle(OWNER, NAME, tip)
+    repo = fake.repository(OWNER, NAME)
+    repo.checks.dispatch("release.yml", ref="main", inputs={"ref": squash})
+    fake.set_outcome(OWNER, NAME, tip, "failure")
+    fake.settle(OWNER, NAME, tip)
+    (failed,) = repo.checks.runs(event="workflow_dispatch")
+    assert failed.head_sha == tip
+    # Without the run's own record the dispatch knows nothing of it.
+    (line,) = dispatch_flow(root, repo, timeout=5, interval=0.05)
+    assert line.startswith(f"  dispatched the wave at {squash[:12]}")
+    fake.set_outcome(OWNER, NAME, tip, "failure")
+    fake.settle(OWNER, NAME, tip)
+    newest = max(repo.checks.runs(event="workflow_dispatch"), key=lambda r: r.id)
+    assert (
+        ABOUT.series(squash).put(
+            state_store(root),
+            {
+                str(newest.id): {
+                    "run": str(newest.id),
+                    "event": "workflow_dispatch",
+                    "ref": "main",
+                }
+            },
+            message="about: the wave ran on the squash",
+        )
+        == ""
+    )
+    first, _second = dispatch_flow(root, repo)
+    assert first.startswith(
+        f"  a wave already ran at {squash[:12]} and ended failure: run {newest.id}"
+    )
+    assert len(repo.checks.runs(event="workflow_dispatch")) == 2
+
+
 def test_a_refused_dispatch_names_the_reason(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

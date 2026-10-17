@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     )
     from livery.extensions.docs._taskref import task_page as task_page
 
+__version__ = "0.0.0"
+
 __all__ = [
     "ALL_MEMBERS",
     "MEMBERS",
@@ -46,6 +48,7 @@ __all__ = [
     "TASK_REFERENCE",
     "Scope",
     "Writer",
+    "__version__",
     "advertised_providers",
     "task_page",
 ]

@@ -35,12 +35,15 @@ differs: the ref moves by an in-process compare-and-swap on the old
 value, in place of a push with a lease.
 
 The gate reads the remote namespace without the network. `fetch_store`
-mirrors origin's namespace under ``refs/workshop-origin/`` and stamps
-the fetch on the local `FETCHED` series; `fetched_snapshot` then
-serves every read from that mirror, refuses every write of a remote
-series, and, in a checkout the store was never fetched into, fails
-every read naming the sync, never as an absence. `fm sync` and `fm
-start` fetch; `fm check` reads.
+mirrors the row series its caller names, and only them, under
+``refs/workshop-origin/``, one ref per series and never a keyed
+family, and stamps the fetch and the names on the local `FETCHED`
+series; `fetched_snapshot` then serves every read of a named series
+from that mirror, fails a read or a listing of any other remote ref
+naming the ref and the mirror's scope, refuses every write of a
+remote series, and, in a checkout the store was never fetched into,
+fails every read naming the sync, never as an absence. `fm sync` and
+`fm start` fetch; `fm check` reads.
 
 The rules, ported from hse's stamp transport:
 
@@ -101,17 +104,19 @@ NAMESPACE = "refs/workshop/"
 LOCAL_NAMESPACE = "refs/workshop-local/"
 
 #: The traces' own namespace: pushed to origin like a shared series
-#: and mirrored by nothing, because the one refspec `fetch_store`
-#: names is ``refs/workshop/*``. So a sync brings no traces, a gate
-#: reads none, and a checkout pays for them only when someone asks
-#: for one. A push here starts no workflow, for the same reason a
-#: push under `NAMESPACE` does not: it is neither a branch nor a tag.
+#: and mirrored by nothing, because every refspec `fetch_store` names
+#: is a row series under `NAMESPACE`. So a sync brings no traces, a
+#: gate reads none, and a checkout pays for them only when someone
+#: asks for one. A push here starts no workflow, for the same reason
+#: a push under `NAMESPACE` does not: it is neither a branch nor a tag.
 TRACE_NAMESPACE = "refs/workshop-trace/"
 
-#: Origin's store as this checkout last fetched it: every ref under
-#: `NAMESPACE` mirrored here by `fetch_store`, which `fm sync` and
-#: `fm start` run. A `fetched_snapshot` block reads the remote
-#: namespace from this mirror alone, so the gate never reaches origin.
+#: Origin's store as this checkout last fetched it: the row series
+#: `fetch_store` was told to mirror, which `fm sync` and `fm start`
+#: name, each at ``refs/workshop-origin/<name>``, and nothing else. A
+#: `fetched_snapshot` block reads those series from this mirror alone,
+#: so the gate never reaches origin, and fails a read of any other
+#: remote ref naming the mirror's scope.
 FETCHED_NAMESPACE = "refs/workshop-origin/"
 
 #: The per-run refs' prefix, for the janitor's orphan rule: one ref
@@ -614,6 +619,11 @@ class _Snapshot:
         offline: Whether the listing is the checkout's mirror of
             origin, never origin itself: every commit is local, and a
             write of a remote series is refused.
+        mirrored: The refs the mirror is scoped to, one per series
+            `fetch_store` was told to mirror, under `NAMESPACE`; or
+            ``None`` for a live listing. A read or a listing of a
+            remote ref outside them fails naming the scope, never
+            as an absence, since the mirror never held it.
     """
 
     refs: dict[str, str] | None
@@ -621,6 +631,7 @@ class _Snapshot:
     local: set[str] = field(default_factory=set)
     published: Path | None = None
     offline: bool = False
+    mirrored: frozenset[str] | None = None
 
 
 #: The *fetch* of a `remote_snapshot` that wants every ref of the
@@ -632,9 +643,13 @@ WHOLE: tuple[str, ...] = ("",)
 _SNAPSHOTS: dict[Path, _Snapshot] = {}
 
 #: The stamp `fetch_store` leaves: one row, ``origin``, saying when the
-#: mirror was last taken and how many refs it holds. Its presence is
-#: what lets a `fetched_snapshot` read a missing ref as absent.
-FETCHED = Series("fetched", window=1, ci_only=False, local=True)
+#: mirror was last taken, how many refs it holds, and which series it
+#: was told to mirror, sorted. Its presence is what lets a
+#: `fetched_snapshot` read a missing ref of a named series as absent,
+#: and the names are the mirror's scope. The schema changes with the
+#: row's meaning, so a stamp of another schema reads as no stamp and
+#: the gate names the sync, which takes the mirror again.
+FETCHED = Series("fetched", window=1, ci_only=False, schema=2, local=True)
 
 #: The ref namespaces one listing carries: the store's own, and the
 #: branches the coverage families' current keys are told by.
@@ -796,35 +811,62 @@ class Fetched(NamedTuple):
     """The refs this fetch added, moved or pruned; zero on a quiet origin."""
 
 
-def fetch_store(store: StateStore, *, branches: bool = False) -> Fetched:
-    """Mirror origin's namespace under `FETCHED_NAMESPACE` and stamp it.
+def fetch_store(
+    store: StateStore, *, series: Iterable[str], branches: bool = False
+) -> Fetched:
+    """Mirror the row series *series* under `FETCHED_NAMESPACE` and stamp it.
 
-    One fetch with an explicit refspec, pruned, so a ref origin dropped
-    goes from the mirror too; then the ``origin`` row of `FETCHED`,
-    which is what tells a `fetched_snapshot` that a ref missing from
-    the mirror is absent rather than never fetched. With *branches*
-    the same fetch brings origin's heads into ``refs/remotes/origin/``,
-    pruned the same way, so a sync that needs both pays one round trip.
-    A fetch transfers only what the checkout lacks: on a quiet origin
-    the round trip is the whole cost and nothing changes.
+    One fetch, pruned, with one refspec per name below `NAMESPACE`:
+    ``metrics`` lands at ``refs/workshop-origin/metrics``, a series
+    origin holds no ref for yet costs nothing, and a ref origin
+    dropped goes from the mirror. Afterwards the mirror holds the
+    named series alone: every ref under it that is not one of them,
+    such as a family's key a fetch of a wider scope left, is deleted
+    here. Then the ``origin`` row of `FETCHED` records the time, the
+    count of refs, and the names, sorted. The names are the mirror's
+    scope: a `fetched_snapshot` reads a missing ref of a named series
+    as absent and fails a read of any other remote ref. With
+    *branches* the same fetch brings origin's heads into
+    ``refs/remotes/origin/``, pruned the same way, so a sync that
+    needs both pays one round trip. A fetch transfers only what the
+    checkout lacks: on a quiet origin the round trip is the whole
+    cost and nothing changes. Named no series and no branches, the
+    fetch is skipped and the mirror is emptied.
 
     Returns:
         The refs the mirror holds and how many this fetch changed, or
-        zero of each and the reason when the fetch or the stamp failed,
-        with git's words; nothing here raises or prints.
+        zero of each and the reason when the fetch, the prune or the
+        stamp failed, with git's words; nothing here raises or prints.
     """
+    names = sorted(set(series))
     before = _local_refs(store, FETCHED_NAMESPACE) or {}
-    refspecs = [f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*"]
+    # A pattern anchored on the whole series name, not the bare name:
+    # git refuses a fetch that names an exact ref origin does not hold
+    # (a series nobody has written yet) and tolerates a pattern that
+    # matches nothing. The one ref such a pattern brings beyond its
+    # series is one whose name extends the series' name, which the
+    # deletion below takes out of the mirror again.
+    refspecs = [f"+{NAMESPACE}{name}*:{FETCHED_NAMESPACE}{name}*" for name in names]
     if branches:
         refspecs.insert(0, "+refs/heads/*:refs/remotes/origin/*")
-    fetched = _git(store.root, "fetch", "--quiet", "--prune", "origin", *refspecs)
-    if fetched.code != 0:
-        return Fetched(0, _words(fetched))
+    if refspecs:
+        fetched = _git(store.root, "fetch", "--quiet", "--prune", "origin", *refspecs)
+        if fetched.code != 0:
+            return Fetched(0, _words(fetched))
     mirrored = _local_refs(store, FETCHED_NAMESPACE)
     if mirrored is None:
         return Fetched(0, "the mirror could not be listed")
+    kept = {FETCHED_NAMESPACE + name for name in names}
+    strays = sorted(name for name in mirrored if name not in kept)
+    if strays:
+        why = _drop_mirror_refs(store, strays)
+        if why:
+            return Fetched(0, why)
+        mirrored = {name: sha for name, sha in mirrored.items() if name in kept}
     why = FETCHED.put(
-        store, {"origin": {"refs": len(mirrored)}}, message="fetched origin's store"
+        store,
+        {"origin": {"refs": len(mirrored), "series": names}},
+        message="fetched origin's store",
     )
     if why:
         return Fetched(0, why)
@@ -836,6 +878,28 @@ def fetch_store(store: StateStore, *, branches: bool = False) -> Fetched:
     return Fetched(len(mirrored), "", changed)
 
 
+def _drop_mirror_refs(store: StateStore, refs: Sequence[str]) -> str:
+    """Delete *refs* from the mirror, in-process; ``""`` or the reason."""
+    try:
+        with _objects.opened(store.root) as repo:
+            for ref in refs:
+                _objects.drop_ref(repo, ref.encode())
+    except (_objects.NotGitRepository, OSError) as error:
+        return f"the mirror could not be pruned: {error}"
+    return ""
+
+
+def _stamped_series(stamp: Row) -> tuple[str, ...] | None:
+    """The series the `FETCHED` row *stamp* names, or ``None`` when it names none."""
+    names: object = stamp.data.get("series")
+    if not isinstance(names, list):
+        return None
+    listed: list[object] = names
+    if not all(isinstance(name, str) for name in listed):
+        return None
+    return tuple(name for name in listed if isinstance(name, str))
+
+
 @contextmanager
 def fetched_snapshot(store: StateStore) -> Generator[None]:
     """Read the remote namespace from the checkout's mirror of origin, for the block.
@@ -844,21 +908,31 @@ def fetched_snapshot(store: StateStore) -> Generator[None]:
     `fetch_store` took, with origin's branches beside it from the
     remote-tracking refs, every commit is local already, and a write
     of a remote series is refused with its reason; a local series
-    reads and writes as ever. In a checkout `fetch_store` never
-    stamped, the listing is a failure naming the sync, so every read
-    inside fails the way an unreachable origin fails, never as an
-    absence, and every caller falls open on it. A block opened inside
-    another snapshot for the same checkout shares the outer one.
+    reads and writes as ever. The series the stamp names are the
+    mirror's scope: a read of one of them answers from the mirror, a
+    missing ref among them is absence, and a read or a listing of any
+    other remote ref, a keyed family's refs among them, fails naming
+    the ref and the scope, never as an absence, since the mirror never
+    held it; a live `remote_snapshot` reads those. In a checkout
+    `fetch_store` never stamped, or stamped under another schema, the
+    listing is a failure naming the sync, so every read inside fails
+    the way an unreachable origin fails, never as an absence, and
+    every caller falls open on it. A block opened inside another
+    snapshot for the same checkout shares the outer one.
     """
     key = store.root.resolve()
     if key in _SNAPSHOTS:
         yield
         return
     stamped, why = FETCHED.row(store, "origin")
-    if stamped is None:
-        reason = why or (
-            "origin's state store has not been fetched into this checkout:"
-            f" run `{store.prog} sync`"
+    names = None if stamped is None else _stamped_series(stamped)
+    if stamped is not None and names is None:
+        why = "origin: the stamp names no series"
+    if names is None:
+        detail = f" ({why})" if why else ""
+        reason = (
+            "origin's state store has not been fetched into this checkout"
+            f"{detail}: run `{store.prog} sync`"
         )
         snapshot = _Snapshot(None, reason, offline=True)
     else:
@@ -875,7 +949,13 @@ def fetched_snapshot(store: StateStore) -> Generator[None]:
                 short = name.removeprefix("refs/remotes/origin/")
                 if short != "HEAD":
                     refs["refs/heads/" + short] = sha
-            snapshot = _Snapshot(refs, "", set(refs.values()), offline=True)
+            snapshot = _Snapshot(
+                refs,
+                "",
+                set(refs.values()),
+                offline=True,
+                mirrored=frozenset(NAMESPACE + name for name in names),
+            )
     _SNAPSHOTS[key] = snapshot
     try:
         yield
@@ -993,6 +1073,16 @@ def _no_repository(store: StateStore) -> str:
     return f"{store.root} is not a git repository"
 
 
+def _outside_mirror(store: StateStore, snapshot: _Snapshot, ref: str) -> str:
+    """The reason a read of *ref* gives when the snapshot's mirror never held it."""
+    names = sorted(name.removeprefix(NAMESPACE) for name in snapshot.mirrored or ())
+    scope = ", ".join(names) or "no series"
+    return (
+        f"{ref} is outside the mirror `{store.prog} sync` takes, which holds the"
+        f" series {scope} and nothing else; a live snapshot reads it"
+    )
+
+
 def _git(root: Path, *args: str) -> tools.Result:
     return tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
 
@@ -1051,6 +1141,10 @@ def read(
                 failed=True,
                 reason=f"the remote could not be listed: {snapshot.reason}",
             )
+        if snapshot.mirrored is not None and ref not in snapshot.mirrored:
+            return Read(
+                None, None, failed=True, reason=_outside_mirror(store, snapshot, ref)
+            )
         listed = snapshot.refs.get(ref)
         if listed is None:
             return Read(None, None, failed=False)
@@ -1108,13 +1202,22 @@ def list_refs(store: StateStore, prefix: str) -> dict[str, str] | None:
     A prefix under the local namespace, the mirror, or the
     remote-tracking refs is listed from the checkout's git directory;
     any other answers from the open snapshot when one covers it, and
-    from origin otherwise.
+    from origin otherwise. A snapshot of the mirror covers the
+    branches and a prefix at or below one of its series; a wider
+    prefix under a remote namespace, a keyed family's, is unlistable
+    from it, never empty, since the mirror holds none of its refs.
     """
     if prefix.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE, "refs/remotes/")):
         return _local_refs(store, prefix)
     snapshot = _snapshot(store)
     if snapshot is not None and prefix.startswith(LISTED):
         if snapshot.refs is None:
+            return None
+        if (
+            snapshot.mirrored is not None
+            and not prefix.startswith("refs/heads/")
+            and not any(prefix.startswith(ref) for ref in snapshot.mirrored)
+        ):
             return None
         return {
             name: sha for name, sha in snapshot.refs.items() if name.startswith(prefix)
