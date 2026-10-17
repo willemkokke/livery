@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-latest, python: "3.14", shard: 1of1}
+          - {os: ubuntu-latest, python: "3.14"}
           - {os: macos-latest, python: "3.14", shard: 1of3}
           - {os: macos-latest, python: "3.14", shard: 2of3}
           - {os: macos-latest, python: "3.14", shard: 3of3}
