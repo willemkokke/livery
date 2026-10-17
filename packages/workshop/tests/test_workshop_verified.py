@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 import stat
@@ -314,10 +315,12 @@ def _rows(
     run: _ci_context.RunContext,
     scopes: dict[str, str],
     bases: dict[str, str] | None = None,
+    labels: dict[str, str] | None = None,
 ) -> None:
     """The run's metrics row: one check leg per name, with the scope it left.
 
-    *bases* names, per leg, the tree its narrowed gate measured from.
+    *bases* names, per leg, the tree its narrowed gate measured from;
+    *labels* the leg label a job's marker carried, under ``scope.leg``.
     """
     entry = {
         "schema": _metrics.SCHEMA,
@@ -327,6 +330,7 @@ def _rows(
                     "scope": scope,
                     "packages": [],
                     "base_tree": (bases or {}).get(name, ""),
+                    "leg": (labels or {}).get(name, ""),
                 }
             }
             for name, scope in scopes.items()
@@ -466,3 +470,121 @@ def test_a_merge_checkouts_stamp_names_the_two_commits_it_merged(work: Path) -> 
     _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
     found, _ = _verified.record(work, _verified.tree_id(work))
     assert found is not None and (found.base_sha, found.head_sha) == ("", "")
+
+
+# --- the proof per platform: a row proves its tree for the legs it names -----
+
+UBUNTU = "check-ubuntu-latest-3.14"
+MACOS = "check-macos-latest-3.14"
+WINDOWS = "check-windows-latest-3.14"
+
+#: The legs' display names as GitHub and Gitea list the jobs, by label.
+DISPLAY = {
+    UBUNTU: "check (ubuntu-latest, 3.14)",
+    MACOS: "check (macos-latest, 3.14)",
+    WINDOWS: "check (windows-latest, 3.14)",
+}
+
+
+def _leg(label: str) -> _ci_context.RunContext:
+    """Main's push run as the entries of the check leg *label* see it."""
+    return dataclasses.replace(RUN, leg=label)
+
+
+def test_a_full_row_naming_another_platforms_leg_proves_nothing_for_this_one(
+    work: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = _verified.tree_id(work)
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=(UBUNTU,)) == ""
+    # The read for a leg leaves the row out; the read without one keeps it.
+    assert _verified.proved(work, MACOS) == ({}, "")
+    rows, why = _verified.proved(work)
+    assert why == "" and set(rows) == {tree}
+    assert _verified.proves(rows[tree], UBUNTU)
+    assert not _verified.proves(rows[tree], MACOS)
+    # The leg's own check names the row it found, and runs the gate.
+    assert _quality.verified_already(work, leg=MACOS) is None
+    assert (
+        f"verified: tree {tree[:12]} proved green by run 1013 on {UBUNTU}, not on"
+        f" {MACOS}; running the gate" in capsys.readouterr().out
+    )
+    # The gate itself walks the registry and leaves a full marker, not a
+    # verified one.
+    (work / "workshop.toml").write_text("[workspace]\nextensions = []\n")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: work)
+    monkeypatch.setattr("livery.workshop._ci_context.run_context", lambda: _leg(MACOS))
+    walked: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._quality.walk",
+        lambda ctx, **kwargs: walked.append("walked"),
+    )
+    _quality.check()
+    assert walked == ["walked"]
+    assert leg_scope(work) == LegScope("full", leg=MACOS)
+
+
+def test_a_row_with_display_names_proves_the_leg_it_names(work: Path) -> None:
+    tree = _verified.tree_id(work)
+    display = DISPLAY[UBUNTU]
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=(display,)) == ""
+    found, why = _verified.record(work, tree)
+    assert why == "" and found is not None and found.legs == (display,)
+    assert _verified.proves(found, UBUNTU) and not _verified.proves(found, WINDOWS)
+    rows, why = _verified.proved(work, UBUNTU)
+    assert why == "" and set(rows) == {tree}
+    assert _verified.proved(work, WINDOWS) == ({}, "")
+    assert _quality.verified_already(work, leg=UBUNTU) == found
+    assert _quality.verified_already(work, leg=WINDOWS) is None
+
+
+def test_the_stamp_names_the_legs_labels(work: Path) -> None:
+    # A leg writes its label into its row on every forge; GitLab's job
+    # is the bare name, so its label is what names the platform; a row
+    # without a label reads the forge's display name as the label.
+    _rows(
+        work,
+        RUN,
+        {DISPLAY[UBUNTU]: "full", "check": "full", DISPLAY[WINDOWS]: "full"},
+        labels={DISPLAY[UBUNTU]: UBUNTU, "check": MACOS},
+    )
+    line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
+    tree = _verified.tree_id(work)
+    assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1013"
+    found, _ = _verified.record(work, tree)
+    assert found is not None and found.legs == (MACOS, UBUNTU, WINDOWS)
+
+
+def test_the_merges_stamp_names_every_platform_after_a_one_platform_pull_request(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = _verified.tree_id(work)
+    labels = {display: label for label, display in DISPLAY.items()}
+    # The pull request ran on linux alone: its row names one platform,
+    # and the other platforms' legs find no proof in it.
+    _rows(work, PULL, {DISPLAY[UBUNTU]: "full"}, labels=labels)
+    line = _verified.stamp_from_metrics(work, PULL, sha="a" * 40)
+    assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1014"
+    found, _ = _verified.record(work, tree)
+    assert found is not None and found.legs == (UBUNTU,)
+    assert _quality.verified_already(work, leg=UBUNTU) == found
+    assert _quality.verified_already(work, leg=MACOS) is None
+    assert _quality.verified_already(work, leg=WINDOWS) is None
+    capsys.readouterr()
+    # The merge's run on the same tree: the linux leg skipped on the
+    # record, the others ran the whole gate. One row per tree, so the
+    # stamp replaces the pull request's row with one naming all three.
+    _rows(
+        work,
+        RUN,
+        {DISPLAY[UBUNTU]: "verified", DISPLAY[MACOS]: "full", DISPLAY[WINDOWS]: "full"},
+        labels=labels,
+    )
+    line = _verified.stamp_from_metrics(work, RUN, sha="b" * 40)
+    assert line == f"  verified: tree {tree[:12]} recorded as proved green by run 1013"
+    rows, why = _verified.proved(work)
+    assert why == "" and list(rows) == [tree]
+    assert rows[tree].run == "1013" and rows[tree].sha == "b" * 40
+    assert rows[tree].legs == (MACOS, UBUNTU, WINDOWS)
+    for leg in (UBUNTU, MACOS, WINDOWS):
+        assert _quality.verified_already(work, leg=leg) == rows[tree]
+        assert set(_verified.proved(work, leg)[0]) == {tree}

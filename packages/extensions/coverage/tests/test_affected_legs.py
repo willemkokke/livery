@@ -349,7 +349,7 @@ def _proved(
         "t", "5", "a" * 40, "full", ("check-a",), branch="feat/x"
     )
     monkeypatch.setattr(
-        "livery.workshop._quality.verified_already", lambda root: proved
+        "livery.workshop._quality.verified_already", lambda root, leg="": proved
     )
     monkeypatch.setattr(_verified, "tree_id", lambda root, ref="HEAD": "t")
     monkeypatch.setattr(_verified, "record", lambda root, tree: (proved, ""))

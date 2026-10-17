@@ -228,15 +228,17 @@ def ci_changes(root: Path) -> Changes | None:
     return Changes(root, paths, before)
 
 
-def verified_already(root: Path) -> Verified | None:
-    """The record's full row for this checkout's tree, or ``None`` to run the gate.
+def verified_already(root: Path, leg: str = "") -> Verified | None:
+    """The record's full row for this tree and *leg*, or ``None`` to run the gate.
 
     Prints the run that proved it when it does, and the reason when
     the record could not decide (an unreadable store, an entry of
     another shape); an absent entry or a narrowed scope is the
-    ordinary case and stays quiet. Never skips on anything but a
-    full entry for this exact tree. The row names the branch whose
-    run proved it.
+    ordinary case and stays quiet. A full entry that names other
+    legs and not *leg* is named, and the gate runs: a row proves its
+    tree for the platforms that ran it. With *leg* empty any full
+    entry counts. Never skips on anything but a full entry for this
+    exact tree. The row names the branch whose run proved it.
     """
     from livery.workshop import _verified
 
@@ -250,6 +252,12 @@ def verified_already(root: Path) -> Verified | None:
         print(f"  verified: {why}; running the gate")
         return None
     if found is None or found.scope != _verified.FULL:
+        return None
+    if not _verified.proves(found, leg):
+        print(
+            f"  verified: tree {tree[:12]} proved green by run {found.run} on"
+            f" {', '.join(found.legs)}, not on {leg}; running the gate"
+        )
         return None
     basis = f" on top of tree {found.base_tree[:12]}" if found.base_tree else ""
     print(
@@ -272,7 +280,7 @@ def _leg_plan(root: Path, base: str, run: RunContext) -> Plan:
     from livery.workshop._gate_record import Plan
 
     git.fetch(root)
-    step = _gate_record.leg_plan(root, base=base, branch=run.head_ref)
+    step = _gate_record.leg_plan(root, base=base, branch=run.head_ref, leg=run.leg)
     if run.event == "push" and step.mode == _gate_record.MERGE_BASE:
         # On the pushed branch the merge base is HEAD itself, and a step
         # from it would judge nothing: a push with no proved tree in
@@ -335,11 +343,12 @@ def check(
     configured whole either way.
 
     Inside CI, when the contract declares ``[ci] affected-legs``, a
-    pull request's legs measure by the same rule from CI's own record:
-    from the proved tree nearest the checkout's, an earlier push's
-    merge among them, or from the merge base with the pull request's
-    base when the record proves none. Without the key they run the
-    whole workspace. The local record is never read or written there.
+    pull request's legs measure by the same rule from CI's own record,
+    read for the leg's own platform: from the proved tree nearest the
+    checkout's, an earlier push's merge among them, or from the merge
+    base with the pull request's base when the record proves none.
+    Without the key they run the whole workspace. The local record is
+    never read or written there.
 
     ``--fix`` runs format and lint in their fix modes: each prints
     what it found, rewrites what is mechanical, and still fails on
@@ -592,7 +601,7 @@ def _run_check(
         from livery.git import remote_snapshot
 
         with remote_snapshot(state_store(root_for_ci), fetch=("verified",)):
-            proved = verified_already(root_for_ci)
+            proved = verified_already(root_for_ci, leg=run.leg)
             if proved is not None:
                 _verified.write_marker(root_for_ci, _verified.VERIFIED, leg=run.leg)
                 return

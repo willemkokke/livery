@@ -376,8 +376,14 @@ PULL = _ci_context.RunContext(
 )
 
 
-def _stamped(work: Path, tree: str, *, merged: tuple[str, str] | None = None) -> None:
-    """*tree* on CI's record in full, as a run of feat/one stamps it."""
+def _stamped(
+    work: Path,
+    tree: str,
+    *,
+    merged: tuple[str, str] | None = None,
+    legs: tuple[str, ...] = ("check (a)",),
+) -> None:
+    """*tree* on CI's record in full, as a run of feat/one stamps it, naming *legs*."""
     from livery.workshop import _verified
 
     with pytest.MonkeyPatch.context() as ci:
@@ -387,7 +393,7 @@ def _stamped(work: Path, tree: str, *, merged: tuple[str, str] | None = None) ->
             PULL,
             tree=tree,
             sha="a" * 40,
-            legs=("check (a)",),
+            legs=legs,
             branch="feat/one",
             merged=merged,
         )
@@ -472,3 +478,39 @@ def test_a_second_push_steps_from_the_first_pushs_merge(work: Path) -> None:
     step = _gate_record.leg_plan(work, base="main", branch="feat/one")
     assert (step.mode, step.base_tree, step.paths) == ("step", first, ("two.txt",))
     assert step.why == f"run 8's merge of {head[:12]} onto {base[:12]}"
+
+
+def test_a_leg_steps_only_from_a_tree_the_record_proves_for_its_platform(
+    work: Path,
+) -> None:
+    main = tree_id(work)
+    _git(work, "checkout", "-q", "-b", "feat/one")
+    _commit(work, "one.txt")
+    _merged(work, "feat/one")
+    # The refusal first: main's tree proved on linux alone is no base
+    # for the macos leg, and the line names the leg.
+    _stamped(work, main, legs=("check-ubuntu-latest-3.14",))
+    step = _gate_record.leg_plan(
+        work, base="main", branch="feat/one", leg="check-macos-latest-3.14"
+    )
+    assert step.mode == _gate_record.MERGE_BASE and step.base_tree == main
+    assert step.why == "CI's record proves no tree in reach for check-macos-latest-3.14"
+    # The leg the row names steps from it.
+    step = _gate_record.leg_plan(
+        work, base="main", branch="feat/one", leg="check-ubuntu-latest-3.14"
+    )
+    assert (step.mode, step.base_tree, step.paths) == ("step", main, ("one.txt",))
+    assert step.why == "proved by run 8"
+    # A row written with the forge's display name proves the leg it names.
+    _stamped(work, main, legs=("check (macos-latest, 3.14)",))
+    step = _gate_record.leg_plan(
+        work, base="main", branch="feat/one", leg="check-macos-latest-3.14"
+    )
+    assert (step.mode, step.base_tree) == ("step", main)
+    step = _gate_record.leg_plan(
+        work, base="main", branch="feat/one", leg="check-ubuntu-latest-3.14"
+    )
+    assert step.mode == _gate_record.MERGE_BASE
+    # Without a leg, any full row is a base.
+    step = _gate_record.leg_plan(work, base="main", branch="feat/one")
+    assert (step.mode, step.base_tree) == ("step", main)

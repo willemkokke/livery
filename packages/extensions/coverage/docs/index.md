@@ -139,11 +139,12 @@ leg skipped on. A kept row is named by the moment it was kept and its
 closure, and ends in its suite's own row name, so git can store it as
 the difference from its suite's other rows. A leg itself skips on
 current rows alone. At the merge main's run finds its tree on the
-verified record, which names the branch, skips the gate, and copies the
-branch's record into main's without measuring; a squash of a stale
-branch has another tree and pays the full gate. A suite neither record
-holds is measured on the spot. The janitor drops a branch's record once
-the branch is gone from origin.
+verified record, which names the branch and the legs that proved it; a
+leg whose platform the record names skips the gate, and the union
+copies the branch's record into main's for what no leg measured; a
+squash of a stale branch has another tree and pays the full gate. A
+suite neither record holds is measured on the spot. The janitor drops a
+branch's record once the branch is gone from origin.
 
 ## The preview
 

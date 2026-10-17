@@ -1,14 +1,24 @@
-"""The verified-tree record: which trees a green gate already proved.
+"""The verified-tree record: which trees a green gate already proved, per platform.
 
 A push to main reruns the gate on a squash that, for a branch that
 sat on main's tip, is byte for byte the tree its pull request just
 verified. The gate job stamps the tree id it proved green on the
 `workshop/verified` series after its verdict, with the run, the
-commit, and the scope its check legs ran; every check leg reads the
-record first and skips the gate when a full entry names its own
-tree. Tree identity, not merge shape, is the test, so the skip
-reaches reverts and manual re-runs, and a squash of a stale branch
-pays in full.
+commit, the scope its check legs ran, and the legs' labels
+(``check-ubuntu-latest-3.14``); every check leg reads the record
+first and skips the gate when a full entry names its own tree for
+its own platform leg. Tree identity, not merge shape, is the test,
+so the skip reaches reverts and manual re-runs, and a squash of a
+stale branch pays in full.
+
+A row proves its tree for the legs it names and for no other
+platform. After a pull request's run on one platform, the merge's
+run on that platform ends its check at once, the other platforms run
+the whole gate, and the stamp names every leg of the run, the
+skipped one included, so the tree's row then names them all. The
+machine's reflex ([livery.workshop._gate_record.plan][]) is not a
+leg: it roots on any row (`held`), since a machine is its own
+platform and its gate is the reflex, not the verdict.
 
 The record is advisory in the safe direction only: a missing entry,
 an unreachable store, another tree, or a narrowed scope runs the
@@ -39,6 +49,7 @@ from typing import Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
+from livery.workshop._speed import leg_label, leg_of
 
 #: The series: one row per tree id, the newest kept.
 SERIES = git.Series("verified", window=200)
@@ -70,7 +81,10 @@ class Verified:
         sha: The commit the run checked out.
         scope: ``full`` when every check leg ran the whole gate, or
             when narrowed legs composed with a full base.
-        legs: The check legs' names, as the forge lists them.
+        legs: The check legs' labels (``check-ubuntu-latest-3.14``),
+            one per check leg of the run. A row written with the
+            legs' display names, as the forge lists them, reads
+            through [livery.workshop._speed.leg_label][].
         base_tree: The tree a composed row rests on; empty otherwise.
         base_run: The run that proved that base; empty otherwise.
         branch: The pull request branch whose run proved the tree, whose
@@ -251,21 +265,39 @@ def _entry(tree: str, entry: dict[str, Any]) -> Verified:
     )
 
 
-def proved(root: Path) -> tuple[dict[str, Verified], str]:
-    """Every full row, by tree, newest first, in one read; or ``({}, reason)``.
+def proves(row: Verified, leg: str = "") -> bool:
+    """Whether *row* proves its tree for *leg*: a full row that names the leg.
 
-    A row of a narrowed scope proves nothing and is left out, as a
-    file that is not a row of the record's schema is.
+    With *leg* empty, any full row does. Each stored name is read
+    through [livery.workshop._speed.leg_label][], so a row written
+    with the forge's display names counts for the leg it names.
+    """
+    if row.scope != FULL:
+        return False
+    return not leg or leg in {leg_label(name) for name in row.legs}
+
+
+def proved(root: Path, leg: str = "") -> tuple[dict[str, Verified], str]:
+    """The rows that prove their trees for *leg*, by tree, newest first, in one read.
+
+    ``({}, reason)`` when the record could not be read. With a leg,
+    the full rows that name it (`proves`); without one, every full
+    row. A row of a narrowed scope proves nothing and is left out, as
+    a file that is not a row of the record's schema is.
     """
     found = SERIES.rows(state_store(root))
     if found.failed:
         return {}, found.reason
     rows = (_entry(row.name, row.data) for row in found.rows)
-    return {entry.tree: entry for entry in rows if entry.scope == FULL}, ""
+    return {entry.tree: entry for entry in rows if proves(entry, leg)}, ""
 
 
 def held(root: Path, trees: Iterable[str]) -> tuple[set[str], str]:
-    """The trees among *trees* the record holds, in one read.
+    """The trees among *trees* the record holds, in one read, whatever legs they name.
+
+    The machine's reflex roots its chain here and asks for no leg: a
+    machine is its own platform, and its gate is the reflex, not the
+    verdict, so any tree CI's record holds is a root.
 
     ``(set(), reason)`` when the record could not be read. A file that
     is not a row of the record's schema is skipped the way every read
@@ -292,9 +324,10 @@ def stamp(
 ) -> str:
     """Record *tree* as proved green by *run*; ``""`` or the reason.
 
-    Only a CI run writes. The legs named all ran the full gate, or
-    ran narrowed on top of *base*, a full row the caller read from
-    the record; a composed row names that base and its run. *branch*
+    Only a CI run writes. *legs* are the labels of the run's check
+    legs: each ran the full gate, skipped on a full row that named
+    it, or ran narrowed on top of *base*, a full row the caller read
+    from the record; a composed row names that base and its run. *branch*
     is the pull request branch the run came from, so main's run after
     the squash knows whose records the tree carries. *merged*
     are the base branch's commit and the head a merge checkout joined,
@@ -329,8 +362,12 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
 
     Reads the run's file on the metrics series, which the collect
     step put before the verdict; each check leg's row carries the
-    scope its marker named. Every leg full: the tree is stamped.
-    Legs narrowed (``affected``, or ``nothing`` for a prose-only
+    scope its marker named and the leg's label, which the stamp
+    names ([livery.workshop._speed.leg_of][]), so GitLab's bare job
+    name records its platform too. Every leg full, or skipped on the
+    record: the tree is stamped naming every leg, so after a pull
+    request's run on one platform the merge's run leaves a row naming
+    every platform. Legs narrowed (``affected``, or ``nothing`` for a prose-only
     diff): the tree is stamped when every narrowed leg measured from
     one tree and the record names that tree as full, and the row
     names that base; otherwise nothing is written and the line says
@@ -348,13 +385,14 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     jobs = row.data.get("jobs", {})
     if not isinstance(jobs, dict):
         jobs = {}
-    legs = tuple(sorted(name for name in jobs if name.startswith("check")))
-    if not legs:
+    names = sorted(name for name in jobs if name.startswith("check"))
+    if not names:
         return "  verified: no stamp, the run had no check leg"
     scopes = {
         name: str((jobs[name].get("scope") or {}).get("scope", "unknown"))
-        for name in legs
+        for name in names
     }
+    legs = tuple(sorted(leg_of(name, jobs[name]) for name in names))
     unknown = [name for name, scope in scopes.items() if scope not in KNOWN]
     if unknown:
         return f"  verified: no stamp, {', '.join(unknown)} left no scope"
