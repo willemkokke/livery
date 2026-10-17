@@ -214,7 +214,7 @@ def test_a_dispatched_run_sets_the_verified_record_aside(
     monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
     monkeypatch.setenv("GITHUB_RUN_ID", "7")
 
-    def never(root: Path) -> None:
+    def never(root: Path, leg: str = "") -> None:
         raise AssertionError(f"the verified record was read for {root}")
 
     monkeypatch.setattr(_quality, "verified_already", never)

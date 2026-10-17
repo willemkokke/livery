@@ -1323,13 +1323,18 @@ absence.
   run rebuilds that merge and gates only what changed since it. The
   workspace steps are selected the same way, and the gate job after
   a green verdict stamps the tree it proved on the `workshop/verified`
-  record, so a later run of the same tree, such as main's run after
-  a squash of a branch on its tip, skips the gate in seconds. A
-  narrowed run stamps too when the tree it narrowed against is on
-  the record in full: every package it skipped is byte-identical to
-  that base tree's, so their verdicts carry over, and the row names
-  the base. Without such a base a narrowed run stamps nothing. The
-  release train reads the same record before it waits on main's run.
+  record, naming the check legs that ran, so a later run of the same
+  tree, such as main's run after a squash of a branch on its tip,
+  skips the gate in seconds on every leg whose platform the entry
+  names. An entry proves its tree for those platforms alone: after a
+  pull request's run on one platform, the merge's run ends that
+  platform's leg at once, runs the whole gate on the others, and its
+  stamp names every platform. A narrowed run stamps too when the
+  tree it narrowed against is on the record in full: every package
+  it skipped is byte-identical to that base tree's, so their
+  verdicts carry over, and the row names the base. Without such a
+  base a narrowed run stamps nothing. The release train reads the
+  same record before it waits on main's run.
 - `fm <phase>` and `fm <phase>.<step>`: one phase's steps, or one
   step, generated from the step registry and run over the named
   paths or the workspace the way `fm check <paths>` runs them, with

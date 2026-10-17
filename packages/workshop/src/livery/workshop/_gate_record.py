@@ -20,7 +20,8 @@ so. The rows key the working tree's id, which a commit that takes
 everything shares, so a check before the commit proves the commit.
 
 A CI check leg chooses where to measure from by the same rule
-(`leg_plan`), over CI's own record alone.
+(`leg_plan`), over CI's own record alone, read for the leg's own
+platform.
 
 The record is a local series of the state store
 ([livery.git][]): it lives in the checkout's git
@@ -374,7 +375,7 @@ def _fewest(
     return best
 
 
-def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
+def leg_plan(root: Path, *, base: str, branch: str, leg: str = "") -> Plan:
     """Where a CI check leg measures its change from; the reflex's rule on CI's record.
 
     The candidates are the merge base with *base*, HEAD's first-parent
@@ -385,12 +386,13 @@ def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
     is rebuilt from them, `MERGES` rows deep, and counts only when it
     yields the row's tree, which also puts that tree in this clone for
     every reader of the step's base. Of the candidates the record
-    proves in full, the one with the fewest paths changed to HEAD's
-    tree is the step's base: the earlier push's merge, when the base
-    branch has not moved far, or the base branch's tip. With none, or
-    a record that cannot be read, the step is taken from the merge
-    base (`MERGE_BASE`), and *why* says so. Without a merge base the
-    mode is ``full``.
+    proves in full for *leg*'s platform (any full row when *leg* is
+    empty), the one with the fewest paths changed to HEAD's tree is
+    the step's base: the earlier push's merge, when the base branch
+    has not moved far, or the base branch's tip. With none, or a
+    record that cannot be read, the step is taken from the merge base
+    (`MERGE_BASE`), and *why* says so, naming the leg. Without a merge
+    base the mode is ``full``.
     """
     from livery.git import remote_snapshot
     from livery.workshop import _verified
@@ -405,7 +407,7 @@ def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
     except git.GitError:
         merged = None
     with remote_snapshot(state_store(root), fetch=("verified",)):
-        rows, unread = _verified.proved(root)
+        rows, unread = _verified.proved(root, leg)
     candidates = [merge_base, *git.first_parent_trees(root, REACH)]
     rebuilt = _rebuilt(root, rows, branch) if merged is not None else []
     best = _fewest(
@@ -420,10 +422,11 @@ def leg_plan(root: Path, *, base: str, branch: str) -> Plan:
             else f"proved by run {row.run}"
         )
         return Plan("step", tree, base_tree=base_tree, paths=paths, why=why)
+    for_leg = f" for {leg}" if leg else ""
     why = (
         f"CI's record could not be read ({unread})"
         if unread
-        else "CI's record proves no tree in reach"
+        else f"CI's record proves no tree in reach{for_leg}"
     )
     try:
         paths = tuple(git.tree_diff(root, merge_base, tree))

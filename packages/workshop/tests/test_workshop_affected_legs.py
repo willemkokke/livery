@@ -127,7 +127,7 @@ def test_a_push_with_no_proved_tree_in_reach_pays_the_whole_gate_never_the_merge
         ]
     )
     monkeypatch.setattr(
-        _gate_record, "leg_plan", lambda root, *, base, branch: next(plans)
+        _gate_record, "leg_plan", lambda root, *, base, branch, leg: next(plans)
     )
     # The fallback first: on main the merge base is HEAD, so the step
     # would be empty; the push pays the whole gate instead.
@@ -207,10 +207,10 @@ def test_a_leg_says_where_it_measures_from_and_why(
             ),
         ]
     )
-    asked: list[tuple[str, str]] = []
+    asked: list[tuple[str, str, str]] = []
 
-    def _plan(root: Path, *, base: str, branch: str) -> Plan:
-        asked.append((base, branch))
+    def _plan(root: Path, *, base: str, branch: str, leg: str) -> Plan:
+        asked.append((base, branch, leg))
         return next(plans)
 
     monkeypatch.setattr(_gate_record, "leg_plan", _plan)
@@ -221,6 +221,7 @@ def test_a_leg_says_where_it_measures_from_and_why(
         "refs/pull/3/merge",
         base_ref="main",
         head_ref="feat/x",
+        leg="check-a",
     )
     _quality._leg_plan(root, "main", run)
     assert (
@@ -232,7 +233,8 @@ def test_a_leg_says_where_it_measures_from_and_why(
         "since tree bbbbbbbbbbbb (proved by run 8): 2 path(s) changed"
         in capsys.readouterr().out
     )
-    assert asked == [("main", "feat/x"), ("main", "feat/x")]
+    # The leg hands its own label on, so the record is read for its platform.
+    assert asked == [("main", "feat/x", "check-a"), ("main", "feat/x", "check-a")]
 
 
 # --- the happy path ----------------------------------------------------------
