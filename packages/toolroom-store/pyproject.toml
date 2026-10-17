@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom-store"
-version = "0.4.0"
+version = "0.5.0"
 description = "The pinned tool store over strongroom: specs, a machine-wide home, verified installs."
 readme = "README.md"
 license = "MIT"
@@ -25,13 +25,13 @@ classifiers = [
 # refs and views; footman only where a verb runs, through a test extra
 # and the plugin entry that a later phase adds.
 dependencies = [
-    "livery-strongroom>=0.4.0",
-    "livery-toolroom>=0.11.0",
+    "livery-strongroom>=0.5.0",
+    "livery-toolroom>=0.12.0",
 ]
 
 [project.optional-dependencies]
 test = [
-    "livery-footman>=0.60.0",
+    "livery-footman>=0.61.0",
 ]
 
 [project.urls]

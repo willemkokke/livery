@@ -5,6 +5,24 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.12.0] - 2026-10-17
+
+### Added
+
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- An mkdocstrings extension draws the python API reference and writes its handler's tables through docs.config, the docstring checks move to it, and the kind's extractor goes by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+
+### Fixed
+
+- A bytes stdin takes footman's run and the toolroom's handle down a binary lane, no newline translation and the capture decoded with surrogateescape, and the state store writes every blob, the tree and the commit with one fast-import through it by @willemkokke
+
+### Changed
+
+- Raise toolroom's coverage floor to 95 and toolroom-bench's to 89, just under the 95.8% and 89.1% the CI union measures by @willemkokke
+- This repository's packages list their extensions by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+
 ## [0.11.0] - 2026-10-08
 
 ### Added

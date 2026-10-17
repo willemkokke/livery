@@ -9,6 +9,31 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.4.0] - 2026-10-17
+
+### Added
+
+- Footman.scratch_dir makes a process's scratch under the cache, named for its owner, and the collector removes what a gone process left; the replay, the shell, the two isolation plugins and the playground cache use it by @willemkokke
+- A dispatched nightly runs only the scheduled tasks --only names, so a rehearsal runs the loop alone, and the tool refresh observes nothing off the default branch by @willemkokke
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- A package's [docs] table is the docs extension's, every docs build removes what earlier builds generated, and the base's docs contract goes by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+
+### Fixed
+
+- The tool refresh reads and deletes only what it installed, so the run's own venv survives to start the submit; a refresh whose day's branch origin already holds builds on it or says the day's refresh is already submitted; the nightly refreshes once, on the first leg by @willemkokke
+- The tool refresh never moves the checkout onto origin's day branch; it compares, says the day's refresh is already submitted, or stops for a person by @willemkokke
+- The tool refresh submits only from the history of origin's default branch, so a nightly dispatched on a feature branch cuts no refresh branch from it by @willemkokke
+
+### Changed
+
+- The lifecycle phases and the gate share one walk: every step is a footman step inside parallel(), a package step once per package, ordered by after and by provides and reads; pre and post go, every step reads into the one record and DeclaredPhase goes, and GateContext folds into PhaseContext by @willemkokke
+- Raise toolroom's coverage floor to 95 and toolroom-bench's to 89, just under the 95.8% and 89.1% the CI union measures by @willemkokke
+- This repository's packages list their extensions by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+- Mkdocstrings reads public names alone: extension_set, step_extensions and step_enabled join the workshop's API, step_option answers from the installed declaration, and the docs extension gets an entry module by @willemkokke
+- Docs reads public names alone, its override template is a fragment, and a docs step declares the outputs a build clears once it stops running by @willemkokke
+
 ## [0.3.0] - 2026-10-08
 
 ### Added

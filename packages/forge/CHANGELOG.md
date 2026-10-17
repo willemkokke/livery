@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0] - 2026-10-17
+
+### Added
+
+- [coverage] replaces [qa]: the coverage extension declares a package's floor, epsilon and required, a package with tests and no floor is judged at 100, and new projects list coverage by @willemkokke
+- The docs extension declares a docs phase and a deploy phase, and the task reference, the package generators and coverage's pages become their steps by @willemkokke
+- Every package lists its extensions, a contract's kind refuses naming the list to write, and the kind fallbacks, the backend protocol and the kind guards go by @willemkokke
+- Fm ci.dispatch follows the run it started: the run the forge names, or the one new dispatched run of its ref and commit, and two such runs refuse naming both by @willemkokke
+- Fm submit --every-runner labels a pull request ci:every-runner so the gate runs every runner for it, the forge adds labels to a pull request on every backend and refuses an unknown one by name, the gate workflow runs on labeled and its legs job picks the full matrix while the label is there, the repository configuration creates the label, and the coverage union expects every leg from a labelled pull request by @willemkokke
+
+### Fixed
+
+- The Gitea adapter reads an epoch timestamp as a time the server has not set, and a job still running when the gate job collects is measured to the collection and named incomplete by @willemkokke
+- Credentials in command lines reach a profile trace as ***, and a test's mounts and environment writes are undone before the next test by @willemkokke
+
+### Changed
+
+- This repository's packages list their extensions by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+
 ## [0.7.0] - 2026-10-08
 
 ### Added
