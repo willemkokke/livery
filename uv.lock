@@ -1441,7 +1441,7 @@ provides-extras = ["github-secrets", "test"]
 
 [[package]]
 name = "livery-git"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/git" }
 dependencies = [
     { name = "dulwich" },

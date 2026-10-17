@@ -9,6 +9,17 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.3.0] - 2026-10-17
+
+### Added
+
+- The coverage union carries a reading at a file's earlier content across the change, keeping it at the lines the change left in place and dropping the rest by name, and livery.git reads a blob by its id by @willemkokke
+
+### Changed
+
+- No extension list's order means anything: composition order decides, the root list is written in its canonical form, and fm new.project takes --extensions in place of --stack by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+
 ## [0.2.0] - 2026-10-14
 
 ### Added
