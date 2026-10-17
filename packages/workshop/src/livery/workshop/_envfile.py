@@ -28,6 +28,10 @@ from pathlib import Path
 #: Name suffixes whose values are masked in display output.
 SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY", "_API_KEY")
 
+#: The prefix under which the emitted entry step carries each declared
+#: key's CI secret; the emission strips it when it writes the shared slot.
+RUNG_PREFIX = "RUNG_"
+
 #: Matches a ``KEY=value`` assignment line in an env file.
 KEY_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)")
 
@@ -257,9 +261,10 @@ def load_cascade(
 
     *shared_dir* is where ``.repo.shared.env`` lives; None means the
     runner's own config directory, asked of footman. Under CI the
-    emitted rung step points ``WORKSHOP_SHARED_ENV_FILE`` at a
-    runner-local file, and that file IS the shared slot: same
-    precedence, same masking, gone with the runner. *environ*
+    entry's emission points ``WORKSHOP_SHARED_ENV_FILE`` at a
+    runner-local file it wrote from the job's secrets, and that file
+    IS the shared slot: same precedence, same masking, gone with the
+    runner. *environ*
     defaults to ``os.environ`` and is injectable for tests.
     """
     env = dict(os.environ) if environ is None else environ
@@ -325,7 +330,7 @@ def shared_file(shared_dir: Path | None, environ: dict[str, str]) -> Path:
     """The shared rung's file: the CI rung when the runner set one.
 
     ``WORKSHOP_SHARED_ENV_FILE`` names a runner-local file the
-    emitted CI step materialised from the repository's secrets; when
+    entry's emission materialised from the repository's secrets; when
     it is unset the rung is ``.repo.shared.env`` in *shared_dir*
     (the runner's config directory when None).
     """

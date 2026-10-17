@@ -24,12 +24,14 @@ import livery.toolroom.tools as toolroom
 from livery.footman import Arg, Stdout, doc, fail, group, pre_task, pre_tasks
 from livery.forge import RepoConfig
 from livery.workshop._envfile import (
+    RUNG_PREFIX,
     Source,
     cascade_dirs,
     is_secret_name,
     load_cascade,
     member_keys,
     parse_env_file,
+    quote_value,
     set_value,
 )
 
@@ -373,17 +375,21 @@ def venv_bin(root: Path) -> Path:
     return scripts_dir(root / ".venv")
 
 
-def workspace_delta(root: Path, cwd: Path) -> EnvDelta:
+def workspace_delta(
+    root: Path, cwd: Path, environ: dict[str, str] | None = None
+) -> EnvDelta:
     """The delta an entered shell needs for this workspace.
 
     The cascade's managed values, plus the venv: ``VIRTUAL_ENV`` and
     the venv's bin on PATH, so ``fm`` and the venv tools resolve.
-    The seam a tool store would extend.
+    The seam a tool store would extend. *environ* is the process
+    environment the cascade reads; None means ``os.environ``.
     """
-    stack = load_cascade(root, cwd)
+    seen = dict(os.environ) if environ is None else environ
+    stack = load_cascade(root, cwd, environ=seen)
     values = dict(stack.managed())
     for key, value in _APPLIED.items():
-        values.setdefault(key, os.environ.get(key, value))
+        values.setdefault(key, seen.get(key, value))
     values["VIRTUAL_ENV"] = str(root / ".venv")
     paths, env = _receipts_emission(root)
     values.update(env)
@@ -539,6 +545,59 @@ def agent_delta(root: Path, cwd: Path, environ: dict[str, str]) -> EnvDelta:
     return EnvDelta(values=values, paths=(str(venv_bin(root)), *paths))
 
 
+def rung_file(environ: dict[str, str]) -> Path | None:
+    """Write the secrets the entry step carries into the shared slot's file.
+
+    The rendered entry step hands each declared key's CI secret to the
+    emission as ``RUNG_<KEY>``. The non-empty ones land in
+    ``repo-shared.env`` under the runner's temp, readable by its owner
+    alone, and the cascade reads that file as the shared slot
+    (``WORKSHOP_SHARED_ENV_FILE``): the precedence of a machine's
+    shared file, gone with the runner. An absent secret arrives empty
+    and writes nothing, so it cannot mask a committed value; a job
+    whose secrets all arrive empty still points the slot at the empty
+    file, so a self-hosted runner's own shared file is never read.
+
+    Returns:
+        The file's path, or None when the step carries no key at all.
+
+    Raises:
+        Failed: on a step carrying keys whose runner names no
+            ``RUNNER_TEMP`` directory, since the file is the job's own;
+            or on a secret with a line break, which one line of an env
+            file cannot hold.
+    """
+    carried = {
+        key[len(RUNG_PREFIX) :]: value
+        for key, value in environ.items()
+        if key.startswith(RUNG_PREFIX) and len(key) > len(RUNG_PREFIX)
+    }
+    if not carried:
+        return None
+    runner_temp = environ.get("RUNNER_TEMP", "")
+    if not runner_temp or not Path(runner_temp).is_dir():
+        fail(
+            "this job's runner names no RUNNER_TEMP directory: the entry keeps"
+            " the secrets' file in the job's own temporary directory, so run"
+            " it on a runner that sets one"
+        )
+    lines: list[str] = []
+    for key, value in sorted(carried.items()):
+        if not value:
+            continue
+        try:
+            lines.append(f"{key}={quote_value(value)}\n")
+        except ValueError:
+            fail(
+                f"the secret {key} carries a line break, which one line of"
+                " the shared slot's file cannot hold; store it without one"
+            )
+    path = Path(runner_temp) / "repo-shared.env"
+    path.write_text("".join(lines), encoding="utf-8")
+    path.chmod(0o600)
+    return path
+
+
 def github_persist(delta: EnvDelta, environ: dict[str, str]) -> list[str]:
     """Append *delta* to GITHUB_ENV and GITHUB_PATH; what was written.
 
@@ -600,12 +659,23 @@ def env_emit(
     root, cwd = _workspace()
     dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
+        environ = dict(os.environ)
+        rung = rung_file(environ)
+        if rung is not None:
+            # The cascade reads the slot from the environment it is
+            # handed, and the steps after read it persisted.
+            environ["WORKSHOP_SHARED_ENV_FILE"] = str(rung)
         delta, note = with_runner_temp(
-            with_runner_placements(workspace_delta(root, cwd), dict(os.environ)),
+            with_runner_placements(workspace_delta(root, cwd, environ), environ),
             root,
-            dict(os.environ),
+            environ,
         )
-        written = github_persist(delta, dict(os.environ))
+        if rung is not None:
+            delta = EnvDelta(
+                values={**delta.values, "WORKSHOP_SHARED_ENV_FILE": str(rung)},
+                paths=delta.paths,
+            )
+        written = github_persist(delta, environ)
         if target:
             return "\n".join(emit_lines(delta, dialect))
         return "\n".join([*written, note] if note else written)
@@ -699,12 +769,12 @@ def env_set(
     ``shared`` the person-wide ``.repo.shared.env`` in the runner's
     config directory,
     ``repo`` the committed ``.repo.env``. ``ci`` writes a CI secret
-    through the forge protocol: under CI the emitted rung step
-    materialises the declared keys' secrets into the shared slot, so
-    a secret overrides the committed value the way the shared file
-    does on a machine. After a write the higher-precedence sources
-    are checked: a shadowed value is named rather than discovered
-    later.
+    through the forge protocol: under CI the entry step hands the
+    declared keys' secrets to the emission, which materialises them
+    into the shared slot, so a secret overrides the committed value
+    the way the shared file does on a machine. After a write the
+    higher-precedence sources are checked: a shadowed value is named
+    rather than discovered later.
     """
     root, _cwd = _workspace()
     if scope == "ci":
@@ -863,7 +933,7 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
     if key not in committed:
         print(
             f"  note: {key} is not declared in the committed .repo.env, so"
-            " the emitted rung step will not carry it into CI jobs;"
+            " the emitted entry step will not carry it into CI jobs;"
             f" declare it with `{footman.prog()} env.set {key}"
             " --scope=repo` (any value) to give the secret its slot"
         )
