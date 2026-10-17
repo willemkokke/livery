@@ -1770,27 +1770,48 @@ def _watch(
 ) -> None:
     """Follow *sha*'s runs to their verdicts; red fails verbatim after one re-run.
 
-    *require* names workflows that must appear before the wait ends:
-    a workflow triggered by the push registers its run a beat after
-    the others, and a watch that settles on the early arrivals would
-    call the commit green while the required one is still unstarted.
-    A run that ended failure is re-run once and followed again; red
-    twice is the verdict.
+    The runs judged are the ones this pass caused: every run the
+    commit's own events started, and the dispatched runs *require*
+    names. A run dispatched at the same commit by something else (the
+    merge point re-dispatching a wave that already failed there) is
+    named once and left to the scenario that owns it, so a birth is
+    never judged by a wave it did not cause. *require* names
+    workflows that must appear before the wait ends: a workflow
+    triggered by the push registers its run a beat after the others,
+    and a watch that settles on the early arrivals would call the
+    commit green while the required one is still unstarted. A run
+    that ended failure is re-run once and followed again; red twice
+    is the verdict.
     """
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     retried = False
+    foreign: set[int] = set()
+
+    def own(runs: tuple[Run, ...]) -> tuple[Run, ...]:
+        mine: list[Run] = []
+        for run in runs:
+            if run.event != "workflow_dispatch" or run.workflow in require:
+                mine.append(run)
+            elif run.id not in foreign:
+                foreign.add(run.id)
+                print(
+                    f"  {run.workflow} run {run.id} is not this pass's: dispatched"
+                    f" at {sha[:10]} by something else; left to its own scenario"
+                )
+        return tuple(mine)
 
     def all_completed(runs: tuple[Run, ...]) -> tuple[Run, ...] | Pending:
         nonlocal retried
-        present = {run.workflow for run in runs}
+        mine = own(runs)
+        present = {run.workflow for run in mine}
         if (
-            runs
-            and all(r.status == "completed" for r in runs)
+            mine
+            and all(r.status == "completed" for r in mine)
             and all(name in present for name in require)
         ):
-            if retried or not _retry_red_once(repo, runs):
-                return runs
+            if retried or not _retry_red_once(repo, mine):
+                return mine
             retried = True
         missing = ", ".join(sorted(set(require) - present))
         return Pending(key=missing)

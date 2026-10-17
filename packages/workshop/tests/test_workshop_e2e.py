@@ -1225,6 +1225,36 @@ def test_a_red_run_is_re_run_once_and_red_twice_is_the_verdict(
         _e2e._watch("gitea", "url", "e" * 40, timeout=5, interval=0)
 
 
+def test_the_birth_watch_judges_the_runs_it_caused_and_names_a_foreign_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Refusal first: a dispatched red run the watch requires is its own,
+    # and red is the verdict. A dispatched red run it did not ask for,
+    # at the same commit (a wave the merge point re-dispatched), is
+    # named once and left to its scenario; the push's green run judges.
+    fake, repo = _proof_rig()
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (fake, "t"))
+    monkeypatch.setattr(_e2e, "_retry_red_once", lambda repo_, runs_: [])
+    sha = "d" * 40
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="success", sha=sha)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha)
+    # The wave, dispatched at the same commit after the push's run
+    # settled green, is the one run the outcome below reaches.
+    repo.checks.dispatch("release.yml", ref="main")
+    fake.set_outcome(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha, "failure")
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, sha)
+    with pytest.raises(_FAILURES, match=r"red runs on the loop: release\.yml"):
+        _e2e._watch(
+            "gitea", "url", sha, timeout=5, interval=0, require=("release.yml",)
+        )
+    capsys.readouterr()
+    _e2e._watch("gitea", "url", sha, timeout=5, interval=0)
+    out = capsys.readouterr().out
+    assert out.count("is not this pass's: dispatched at") == 1
+    assert "ci.yml         success" in out
+    assert "release.yml    failure" not in out
+
+
 class _SlowDeleteForge(FakeForge):
     """A forge whose delete outruns the client; *finishes*: the server completes it."""
 
