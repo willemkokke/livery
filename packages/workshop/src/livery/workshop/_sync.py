@@ -803,10 +803,10 @@ def sync_checkout(
     # build, and the last delivery and the generated files read the locks
     # both halves just wrote.
     fetched = False
-    stored = False
+    mirrored: tuple[str, ...] | None = None
     if not local_only and not offline and git.has_commits(root):
-        fetched = fetch_origin(root)()
-        stored = True
+        mirrored = _mirrored(root)
+        fetched = fetch_origin(root, mirrored)()
     if not local_only and not git.has_commits(root):
         print("  no git history here: nothing to bring current")
     elif not local_only:
@@ -845,7 +845,10 @@ def sync_checkout(
     if offline:
         if not skipped:
             print("  store: not fetched (--offline); the last snapshot stands")
-    elif not stored:
+    elif mirrored is None or _mirrored(root) != mirrored:
+        # The fetch above named the series declared before the mount. An
+        # extension the mount installed keeps series that fetch could
+        # not name, so the mirror is taken again, and only then.
         fetch_store_mirror(root)()
     if skipped:
         return False
@@ -981,17 +984,26 @@ def sweep_residue(root: Path) -> list[str]:
 
 
 def fetch_store_lines(root: Path) -> list[str]:
-    """Mirror origin's state store into the checkout; the line to print.
+    """Mirror the store's row series into the checkout; the line to print.
 
     The mirror is what a machine's ``check`` reads
-    ([livery.git.fetched_snapshot][]), so a sync or a
-    start refreshes it while it has the network. A fetch that fails
-    prints its reason and stops nothing: the gate falls open on a
-    store it cannot read, and the last mirror stands.
+    ([livery.git.fetched_snapshot][]): the remote row series the
+    workspace declares ([livery.workshop._series.mirrored_series][]),
+    never a keyed family, so a sync or a start refreshes it while it
+    has the network. A fetch that fails prints its reason and stops
+    nothing: the gate falls open on a store it cannot read, and the
+    last mirror stands.
     """
     from livery.git import fetch_store
 
-    return store_lines(fetch_store(state_store(root)))
+    return store_lines(fetch_store(state_store(root), series=_mirrored(root)))
+
+
+def _mirrored(root: Path) -> tuple[str, ...]:
+    """The series a sync mirrors: the remote row series *root* declares now."""
+    from livery.workshop._series import mirrored_series
+
+    return mirrored_series(root)
 
 
 def store_lines(fetched: Fetched) -> list[str]:
@@ -1006,16 +1018,17 @@ def store_lines(fetched: Fetched) -> list[str]:
     return [f"  store: {fetched.changed} ref(s) changed, {fetched.held} mirrored"]
 
 
-def _fetch_origin(root: Path) -> bool:
-    """One round trip: origin's heads for the bring-current, the store for the gate.
+def _fetch_origin(root: Path, series: tuple[str, ...]) -> bool:
+    """One round trip: origin's heads for the bring-current, the series for the gate.
 
-    Prints the store's line. Returns whether the fetch succeeded, so the
-    bring-current knows origin's heads are fresh; after a failed fetch it
-    fetches for itself and fails in its own words.
+    Mirrors *series* and prints the store's line. Returns whether the
+    fetch succeeded, so the bring-current knows origin's heads are
+    fresh; after a failed fetch it fetches for itself and fails in its
+    own words.
     """
     from livery.git import fetch_store
 
-    fetched = fetch_store(state_store(root), branches=True)
+    fetched = fetch_store(state_store(root), series=series, branches=True)
     for line in store_lines(fetched):
         print(line)
     return not fetched.why

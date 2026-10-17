@@ -1774,12 +1774,18 @@ the library's. A default
 clone or fetch never downloads the remote namespace, no refspec
 names the local one, and every row carries the schema the store
 stamped and the time it wrote it. A machine's gate never reaches
-origin: `fm sync` and `fm start` mirror the remote namespace into
-`refs/workshop-origin/*` and stamp the fetch, and `fm check` reads
-the store from that mirror alone, so a hung SSH agent cannot hold
-the gate. The mirror is what the last sync saw, by design; a
+origin: `fm sync` and `fm start` mirror the remote row series the
+workspace declares, `metrics`, `verified`, `speed/marks` and the listed
+extensions' own, into `refs/workshop-origin/*`, one ref per series and
+never a keyed family, and stamp the fetch with the names; `fm check`
+reads those series from the mirror alone, so a hung SSH agent cannot
+hold the gate. The mirror is what the last sync saw, by design; a
 checkout the store was never fetched into reads it as unreachable,
-roots its chain on a full gate, and names the sync. The remote series are written by
+roots its chain on a full gate, and names the sync. A read inside
+that gate of any other remote ref, a family's key or a listing of its
+keys, fails naming the ref and the mirror's scope, never as an
+absence: a verb that needs a family opens a live snapshot. `fm store.ls`
+says which of the two each remote item is. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
 checkout's worktrees share and a fresh clone starts without. Only the
@@ -1817,7 +1823,7 @@ package each, which `fm ci.timings` renders as a trend.
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
-| `fetched` (local) | when origin's namespace was last mirrored into `refs/workshop-origin/*`, and how many refs | 1 | `fm sync`, `fm start` |
+| `fetched` (local) | when origin's row series were last mirrored into `refs/workshop-origin/*`, which series, and how many refs | 1 | `fm sync`, `fm start` |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
 
 The `durations` family is one series per platform leg,
