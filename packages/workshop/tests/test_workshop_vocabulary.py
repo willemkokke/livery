@@ -34,7 +34,11 @@ MANIFESTS = ("pyproject.toml", "conanfile.py")
 
 #: The base's own python runtime: (module, word) to (count, reason).
 RUNTIME: dict[tuple[str, str], tuple[int, str]] = {
-    ("_ci_generate", "python"): (1, "the entry's interpreter matrix"),
+    ("_ci_generate", "python"): (
+        3,
+        "the GitLab image's interpreter tag, and the leg's interpreter as the"
+        " key of the two matrix shapes the legs job holds",
+    ),
     ("_fragments", "pyproject.toml"): (1, "the root pyproject's fragments"),
     ("_packages", "python"): (
         1,
