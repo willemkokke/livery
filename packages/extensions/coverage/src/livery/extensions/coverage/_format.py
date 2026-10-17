@@ -114,14 +114,17 @@ count]`` for each range that ran.
 one off the format, naming where it came from and the key;
 [livery.extensions.coverage._format.encode][] writes one.
 [livery.extensions.coverage._format.merge][] combines parts across
-units and legs, [livery.extensions.coverage._format.numbers][] counts a
-file as coverage.py counts it, and
+units and legs, carrying a reading of a file's earlier content across
+the change to its current one where it can,
+[livery.extensions.coverage._format.numbers][] counts a file as
+coverage.py counts it, and
 [livery.extensions.coverage._format.region_rows][] narrows a file to
 its functions or classes.
 """
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -1250,13 +1253,17 @@ class Combined:
         files: Each file's merged reading, by path.
         contexts: The contexts the merged readings' ``reached`` indexes
             name, sorted.
-        left_out: A line for each reading left out of its file's merge:
-            one taken at other content, or by another measurer.
+        left_out: A line for each reading left out of its file's merge,
+            one taken at other content or by another measurer, and one
+            for each reading carried across a change into it, saying
+            how many of its measured lines were kept and dropped.
+        carried: How many readings were carried across a change.
     """
 
     files: Mapping[str, Merged]
     contexts: tuple[str, ...]
     left_out: tuple[str, ...]
+    carried: int = 0
 
 
 def merge(
@@ -1264,6 +1271,7 @@ def merge(
     current: Mapping[str, str] | None = None,
     *,
     contexts: bool = True,
+    source: Callable[[str], str] | None = None,
 ) -> Combined:
     """Merge *parts*: each file's readings at one content and by one measurer.
 
@@ -1283,6 +1291,25 @@ def merge(
     With *contexts* false the merge leaves the contexts out, for a
     reader that counts alone: no merged reading holds a ``reached``,
     and the result names no context.
+
+    *source* gives a digest's text, its line endings LF, or empty text
+    when that content is not at hand. With it, a reading of a file at
+    another digest is carried across the change instead of left out,
+    when the kept readings are at the checkout's digest, the reading's
+    measurer identity is theirs, and both texts are at hand. The diff
+    between the two texts maps each line the change left in place to
+    its line in the checkout's content, and the reading keeps at the
+    mapped lines alone: its counts and the contexts that reached them,
+    where the line is a statement of the current content; a branch
+    whose two ends map to a branch the current content has, with its
+    runs; and a count of a line's branches where the current content
+    counts as many. The statements, the excluded lines, the spans, the
+    regions and the ranges are the content's facts, which the kept
+    readings supply. A carried reading joins the merge and is named in
+    ``left_out`` with how many of its measured lines were kept and how
+    many dropped, so a reading on a line the change touched or removed
+    is dropped by name, never moved by guess. A reading the carry does
+    not apply to is left out and named as without *source*.
     """
     readings: dict[str, list[tuple[Part, Entry]]] = {}
     names: set[str] = set()
@@ -1301,14 +1328,31 @@ def merge(
     index_of = {name: index for index, name in enumerate(numbered_by)}
     files: dict[str, Merged] = {}
     left_out: list[str] = []
+    carried = 0
     for name in sorted(readings):
-        chosen, others = _chosen(readings[name], (current or {}).get(name))
+        at_checkout = (current or {}).get(name)
+        chosen, others = _chosen(readings[name], at_checkout)
         kept = _reading(*chosen[0])
-        left_out.extend(
-            f"{name}: left out the reading of {_reading(part, entry)}; the union"
-            f" keeps the one of {kept}"
-            for part, entry in others
-        )
+        kept_entry = chosen[0][1]
+        at_current = [entry for _, entry in chosen]
+        for part, entry in others:
+            moved = None
+            if source is not None and kept_entry.digest == at_checkout:
+                moved = _carried(part, entry, chosen[0][0], at_current, source)
+            if moved is None:
+                left_out.append(
+                    f"{name}: left out the reading of {_reading(part, entry)}; the"
+                    f" union keeps the one of {kept}"
+                )
+                continue
+            reading, total, dropped = moved
+            left_out.append(
+                f"{name}: carried the reading of {_reading(part, entry)} across the"
+                f" change: {total - dropped} of {total} measured line(s) kept,"
+                f" {dropped} dropped"
+            )
+            chosen.append((part, reading))
+            carried += 1
         files[name] = Merged(
             measurer=chosen[0][0].measurer,
             entry=_merged(
@@ -1324,7 +1368,7 @@ def merge(
             ),
             units=tuple(dict.fromkeys(part.unit for part, _ in chosen)),
         )
-    return Combined(files, numbered_by, tuple(left_out))
+    return Combined(files, numbered_by, tuple(left_out), carried)
 
 
 def _reading(part: Part, entry: Entry) -> str:
@@ -1350,6 +1394,116 @@ def _chosen(
 
     best = min(groups, key=rank)
     return groups[best], [item for key in groups if key != best for item in groups[key]]
+
+
+def _carried(
+    part: Part,
+    entry: Entry,
+    kept: Part,
+    held: Sequence[Entry],
+    source: Callable[[str], str],
+) -> tuple[Entry, int, int] | None:
+    """*entry* carried across the change to *held*'s content, when the carry applies.
+
+    *held* are the kept readings, at the checkout's content, and
+    *kept* the part of the first. Returns the carried reading, how
+    many lines *entry* measured, and how many of them were dropped;
+    ``None`` when *part*'s measurer identity is not *kept*'s, or when
+    *source* lacks either content's text.
+    """
+    if part.measurer.identity != kept.measurer.identity:
+        return None
+    digest = held[0].digest
+    old, new = source(entry.digest), source(digest)
+    if not old or not new:
+        return None
+    mapped = _line_map(old, new)
+    statements = {line for item in held for line in item.statements}
+    counts = {
+        mapped[line]: runs
+        for line, runs in entry.counts.items()
+        if line in mapped and mapped[line] in statements
+    }
+    reached = {
+        mapped[line]: held_by
+        for line, held_by in entry.reached.items()
+        if line in mapped and mapped[line] in statements
+    }
+    by_target = {
+        (branch.source, branch.target): branch
+        for item in held
+        for branch in item.branches
+        if branch.target is not None
+    }
+    by_index = {
+        (branch.source, branch.index): branch
+        for item in held
+        for branch in item.branches
+        if branch.target is None
+    }
+    branches: list[Branch] = []
+    for branch in entry.branches:
+        line = mapped.get(branch.source)
+        if line is None:
+            continue
+        if branch.target is None:
+            known = by_index.get((line, branch.index))
+        else:
+            # A negative target names the exit of the function that
+            # starts on that line: the line maps, the sign stays.
+            target = mapped.get(abs(branch.target))
+            if target is None:
+                continue
+            known = by_target.get((line, -target if branch.target < 0 else target))
+        if known is not None:
+            branches.append(
+                Branch(known.source, known.target, known.index, branch.taken)
+            )
+    totals = {line: total for item in held for line, total, _ in item.branch_counts}
+    branch_counts = tuple(
+        (mapped[line], total, taken)
+        for line, total, taken in entry.branch_counts
+        if line in mapped and totals.get(mapped[line]) == total
+    )
+    reading = Entry(
+        digest=digest,
+        counts=counts,
+        branches=tuple(sorted(branches, key=_branch_order)),
+        branch_counts=branch_counts,
+        reached=reached,
+    )
+    return reading, len(entry.counts), len(entry.counts) - len(counts)
+
+
+def _line_map(old: str, new: str) -> dict[int, int]:
+    """Each line of *old* the change left in place, mapped to its line in *new*.
+
+    The lines are numbered from 1. The diff's equal blocks map, and
+    nothing else does: a line the change replaced or removed is
+    absent, as is a line it moved past an edit.
+    """
+    matcher = difflib.SequenceMatcher(
+        None, _split_lines(old), _split_lines(new), autojunk=False
+    )
+    mapped: dict[int, int] = {}
+    for tag, old_start, old_end, new_start, _ in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(old_end - old_start):
+                mapped[old_start + offset + 1] = new_start + offset + 1
+    return mapped
+
+
+def _split_lines(text: str) -> list[str]:
+    """*text*'s lines, split at LF alone, as a measurer numbers them.
+
+    `str.splitlines` splits at a form feed and other separators too,
+    which a measurer counts as no line, and every line after one would
+    be numbered off by one.
+    """
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 def _reindexed(

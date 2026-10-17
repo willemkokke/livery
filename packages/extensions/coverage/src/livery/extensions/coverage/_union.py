@@ -59,9 +59,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     so a miss here is a leg that narrowed without the records, or a
     record moved on since, never a smaller union. Every unit's parts
     merge by the line format's rules: one file's readings merge at the
-    content the checkout holds and by one measurer, and every reading
-    left out is named. The merged files go to the union file, which the
-    floors read; no union file outlives a run that did not write one.
+    content the checkout holds and by one measurer, a reading at an
+    earlier content the checkout's object store holds is carried
+    across the change line by line, and every reading left out is
+    named. The merged files go to the union file, which the floors
+    read; no union file outlives a run that did not write one.
 
     The union is written back per leg: a pull request's run onto its
     branch's record, main's run onto main's. The leg's fresh units
@@ -81,7 +83,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     outside ``[ci] pull-request-runners``, is carried whole from the
     records, so the narrowed run judges the same global union and a
     line only another platform reaches stays covered by main's
-    measurement of it.
+    measurement of it. A file the change touched keeps that leg's
+    reading at every line the change left in place, carried across the
+    diff; its reading on a line the change touched is dropped by name,
+    so a changed line only that platform reaches is red until a run of
+    every leg measures it.
 
     A leg the run runs and that left no ref is red by name, never
     carried: it died before its write, or its write was refused, and
@@ -346,11 +352,15 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
     """Merge every unit's parts and write the union file; each left-out reading named.
 
     A file's readings merge at the content the checkout holds, so the
-    checkout's digest of every file the parts name is read first. Each
-    part is read from its stored form with the fixed facts its unit
-    holds. The union file holds what the floors count, so the tests
-    that reached each line stay in the parts: the pages read them from
-    the record.
+    checkout's digest of every file the parts name is read first. A
+    reading at another digest is carried across the change when the
+    checkout's object store holds the content it was taken at, read by
+    its blob id ([livery.git.blob_at][]); the checkout's own content
+    is read from the file, its CRLF line endings as LF, the bytes its
+    digest names. Each part is read from its stored form with the
+    fixed facts its unit holds. The union file holds what the floors
+    count, so the tests that reached each line stay in the parts: the
+    pages read them from the record.
 
     Raises:
         Failed: when a part is off the line format, or names fixed
@@ -380,14 +390,45 @@ def _write_merged(root: Path, merged: list[tuple[Unit, str]]) -> None:
         for name in names
         if (root / name).is_file()
     }
-    combined = merge(parts, current, contexts=False)
+    by_digest = {held: name for name, held in current.items()}
+    texts: dict[str, str] = {}
+
+    def text_of(held: str) -> str:
+        if held not in texts:
+            texts[held] = _content(root, by_digest.get(held), held)
+        return texts[held]
+
+    combined = merge(parts, current, contexts=False, source=text_of)
     for line in combined.left_out:
         print(f"  coverage: {line}")
     write_union(root, combined, [unit.path for unit, _source in merged])
+    carried = (
+        f", {combined.carried} reading(s) carried across a change"
+        if combined.carried
+        else ""
+    )
     print(
         f"  coverage: {len(combined.files)} file(s) unioned from {len(parts)}"
-        f" part(s), written to {UNION}"
+        f" part(s){carried}, written to {UNION}"
     )
+
+
+def _content(root: Path, name: str | None, held: str) -> str:
+    """The text whose blob id is *held*: the checkout's *name*, or the store's blob.
+
+    The checkout's file is read with each CRLF as LF, the bytes its
+    digest was computed from. Without a *name* the blob is read from
+    the object store by its id; empty when the store does not hold it,
+    and when *root* is no repository, so the reading is left out as a
+    reading at other content is.
+    """
+    if name is not None:
+        content = (root / name).read_bytes().replace(b"\r\n", b"\n")
+        return content.decode("utf-8", "replace")
+    try:
+        return git.blob_at(root, held)
+    except git.GitError:
+        return ""
 
 
 def _numbered_like(

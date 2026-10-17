@@ -348,6 +348,34 @@ def test_tree_diffs_and_first_parent_trees(repo: tuple[Path, Path]) -> None:
     assert git.commits_since(clone, "HEAD~1") == 1
 
 
+def test_blob_at_answers_empty_for_what_is_no_blob_of_the_store(
+    repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    clone, _ = repo
+    assert git.blob_at(clone, "") == ""
+    assert git.blob_at(clone, "nonesuch") == ""
+    assert git.blob_at(clone, "0" * 40) == ""
+    # An id the store holds that names no blob: a commit, a tree.
+    assert git.blob_at(clone, git.head_sha(clone)) == ""
+    assert git.blob_at(clone, git.object_id(clone, "HEAD^{tree}")) == ""
+    # A full id alone is read: an abbreviation names nothing here.
+    assert git.blob_at(clone, git.object_id(clone, "HEAD:seed.txt")[:12]) == ""
+    with pytest.raises(git.GitError, match="not a git repository"):
+        git.blob_at(tmp_path / "nowhere", "0" * 40)
+
+
+def test_blob_at_reads_a_blob_by_its_id_after_a_change_replaced_it(
+    repo: tuple[Path, Path],
+) -> None:
+    clone, _ = repo
+    seed = git.object_id(clone, "HEAD:seed.txt")
+    assert git.blob_at(clone, seed) == "seed\n"
+    _commit(clone, "seed.txt", "changed\n", "feat: change")
+    assert git.file_at(clone, "HEAD", "seed.txt") == "changed\n"
+    # No tree names the old content any more; the store still holds it.
+    assert git.blob_at(clone, seed) == "seed\n"
+
+
 def test_sha_of_resolves_names_and_answers_empty_for_nothing(
     repo: tuple[Path, Path],
 ) -> None:
