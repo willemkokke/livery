@@ -1048,6 +1048,12 @@ def test_the_record_stays_green_without_a_run_or_a_box(
     monkeypatch.setattr(
         "livery.workshop._points.half_writers", lambda root, point: ("nightly",)
     )
+    # A footman profile test earlier in this worker may have armed the
+    # plugin; the record here reads an unarmed process's environment.
+    from livery.footman import profile
+
+    monkeypatch.setattr(profile, "_mode", profile._OFF)
+    monkeypatch.setattr(profile, "_parent_box", None)
     for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITHUB_RUN_ID"):
         monkeypatch.delenv(name)
     _ci_tasks.record_flow(work, repo, point="nightly", job="nightly (3.14)")
@@ -1085,6 +1091,12 @@ def test_the_record_puts_the_jobs_half_from_its_box_collects_and_drops_when_last
     monkeypatch.setattr(
         "livery.workshop._points.half_writers", lambda root, point: ("nightly",)
     )
+    # A footman profile test earlier in this worker may have armed the
+    # plugin; the record here reads an unarmed process's environment.
+    from livery.footman import profile
+
+    monkeypatch.setattr(profile, "_mode", profile._OFF)
+    monkeypatch.setattr(profile, "_parent_box", None)
     first = _trace(tmp_path / "first.json", tasks={"check": 50.0})
     assert (
         _metrics.put_leg(
