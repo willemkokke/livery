@@ -904,3 +904,134 @@ def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> 
     bare = {_metrics.run_file("9"): json.dumps({"schema": _metrics.SCHEMA, "jobs": {}})}
     assert git.put(state_store(work), _metrics.SERIES.ref, bare, message="bare") == ""
     assert "  coverage" in _metrics.render(work)  # older rows still carry it
+
+
+# --- a platform's shards in the rendering ------------------------------------
+
+
+def _run_entry(run: int, jobs: dict[str, dict[str, object]]) -> str:
+    return json.dumps(
+        {
+            "schema": _metrics.SCHEMA,
+            "run": str(run),
+            "sha": "d" * 40,
+            "run_wall_ms": 300000.0,
+            "jobs": jobs,
+        }
+    )
+
+
+def _leg_entry(
+    *, queued: float, wall: float, total: float, shard: dict[str, object] | None = None
+) -> dict[str, object]:
+    """A leg's row as the collect joins it: its trace half and the forge's times."""
+    row: dict[str, object] = {
+        "total_ms": total,
+        "tasks": {"check": total},
+        "waits_ms": {},
+        "packages": {"a": {"tests_ms": 1500.0, "tests": 5}},
+        "slowest": [],
+        "scope": {"scope": "full", "packages": [], "leg": "check-ubuntu-latest-3.14"},
+        "conclusion": "success",
+        "complete": True,
+        "queued_ms": queued,
+        "wall_ms": wall,
+        "steps": [{"name": "Gate", "ms": 260000.0}],
+    }
+    if shard is not None:
+        row["shard"] = shard
+    return row
+
+
+def _forge_entry(*, queued: float, wall: float) -> dict[str, object]:
+    """A job's row from the forge's times alone, as a shard's or the gate's is."""
+    return {
+        "conclusion": "success",
+        "status": "completed",
+        "complete": True,
+        "queued_ms": queued,
+        "wall_ms": wall,
+        "steps": [],
+    }
+
+
+def test_render_of_an_unsharded_platform_is_one_section_per_job(work: Path) -> None:
+    jobs = {
+        JOB: _leg_entry(queued=10000.0, wall=290000.0, total=250000.0),
+        "gate": _forge_entry(queued=5000.0, wall=60000.0),
+    }
+    files = {_metrics.run_file("1013"): _run_entry(1013, jobs)}
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
+    expected = """\
+  1 run(s), latest 1013 at dddddddddddd
+  check (ubuntu-latest, 3.14)
+    metric                                          latest       p50       p90
+    queued_ms                                        10.0s     10.0s     10.0s
+    step Gate                                       260.0s    260.0s    260.0s
+    task check                                      250.0s    250.0s    250.0s
+    tests a                                           1.5s      1.5s      1.5s
+    total_ms                                        250.0s    250.0s    250.0s
+    wall_ms                                         290.0s    290.0s    290.0s
+  gate
+    metric                                          latest       p50       p90
+    queued_ms                                         5.0s      5.0s      5.0s
+    wall_ms                                          60.0s     60.0s     60.0s
+  run
+    metric                                          latest       p50       p90
+    wall_ms                                         300.0s    300.0s    300.0s
+"""
+    assert "\n".join(_metrics.render(work)) + "\n" == expected
+
+
+def test_render_folds_a_platforms_shards_into_its_section_with_a_line_per_shard(
+    work: Path,
+) -> None:
+    """The folded row is the platform's section; each shard is a line under it.
+
+    The shards' own rows carry the forge's times and no scope: they
+    are no sections of their own, and no mover names one. A shard the
+    run's file has no forge row for shows no times.
+    """
+    shards = [
+        {
+            "shard": f"{index}of3",
+            "leg": f"check-ubuntu-latest-3.14-{index}of3",
+            "job": f"check (ubuntu-latest, 3.14, {index}of3)",
+            "when": "",
+            "files": 2,
+            "total_ms": 250000.0,
+            "packages": {},
+        }
+        for index in (1, 2, 3)
+    ]
+    folded = {
+        "count": 3,
+        "digest": "abc",
+        "rows": ["r1.json"],
+        "before": "2026-10-17T09:30:00+00:00",
+        "shards": shards,
+    }
+    jobs = {
+        JOB: _leg_entry(queued=10000.0, wall=290000.0, total=250000.0, shard=folded),
+        "check (ubuntu-latest, 3.14, 1of3)": _forge_entry(
+            queued=10000.0, wall=290000.0
+        ),
+        "check (ubuntu-latest, 3.14, 2of3)": _forge_entry(
+            queued=12000.0, wall=200000.0
+        ),
+        "gate": _forge_entry(queued=5000.0, wall=60000.0),
+    }
+    files = {_metrics.run_file(str(n)): _run_entry(n, jobs) for n in (1, 2)}
+    assert git.put(state_store(work), _metrics.SERIES.ref, files, message="rows") == ""
+    lines = _metrics.render(work, since=1, base=5)
+    assert "  check (ubuntu-latest, 3.14)" in lines
+    assert [line for line in lines if "of3" in line] == [
+        "    shard 1of3: wall 290.0s, queued 10.0s",
+        "    shard 2of3: wall 200.0s, queued 12.0s",
+        "    shard 3of3: wall -, queued -",
+    ]
+    # Under the platform's own metrics, before the next section.
+    at = lines.index("    shard 1of3: wall 290.0s, queued 10.0s")
+    assert lines[at - 1].startswith("    wall_ms")
+    assert lines[at + 3] == "  gate"
+    assert "  movers: the last 1 run(s) against the 1 before" in lines

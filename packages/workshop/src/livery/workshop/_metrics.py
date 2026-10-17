@@ -23,8 +23,9 @@ check leg's seconds per test file onto its platform leg's series of
 the [livery.workshop.DURATIONS][] family, and drops the per-run
 refs; it fails open loudly, a printed reason and never a red job.
 Local runs read: `render` is what `fm ci.timings` prints, the latest
-value, p50, and p90 per metric over the window, the movers against a
-base window, and each section's trend.
+value, p50, and p90 per metric over the window, a platform that ran as
+shards as one section with a line per shard, the movers against a base
+window, and each section's trend.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ from typing import TYPE_CHECKING, Any
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._shard import DURATIONS, marker_fields, platform_leg, read_shard
-from livery.workshop._speed import leg_of
+from livery.workshop._speed import forge_shard_row, leg_of
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -697,13 +698,20 @@ def _metrics(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
     """Every numeric metric of a run's file, by job then metric name.
 
     The run's own wall, start to collection, renders as the ``run``
-    group, so the floor the legs never touch has a row of its own.
+    group, so the floor the legs never touch has a row of its own. The
+    forge's own row of a shard
+    ([livery.workshop._speed.forge_shard_row][]) is left out: the
+    platform's folded row carries the shards' work, and `render` prints
+    each shard's times under it, so neither a section nor a mover is a
+    shard's.
     """
     out: dict[str, dict[str, float]] = {}
     wall = entry.get("run_wall_ms")
     if isinstance(wall, int | float):
         out["run"] = {"wall_ms": float(wall)}
     for name, row in sorted(entry.get("jobs", {}).items()):
+        if forge_shard_row(name, row):
+            continue
         metrics: dict[str, float] = {}
         for key in ("queued_ms", "wall_ms", "total_ms"):
             value = row.get(key)
@@ -733,8 +741,12 @@ def render(
     The window is every run the series holds. The latest *since* runs
     are the recent side; the *base* runs before them are the base the
     movers compare against, by the change of the recent median over
-    the base median. Nothing yet, an unreadable series, and a row of
-    another schema each say so.
+    the base median. A platform that ran as shards is one section, its
+    folded row, and under its metrics one line per shard with the
+    shard's wall and queue times from the newest run, read from the
+    forge's own rows of the shards; those rows are no sections of their
+    own, and the movers read the platform legs alone. Nothing yet, an
+    unreadable series, and a row of another schema each say so.
     """
     found = SERIES.rows(state_store(root))
     if found.failed:
@@ -770,12 +782,12 @@ def render(
         lines.append(f"    {'metric':<44} {'latest':>9} {'p50':>9} {'p90':>9}")
         for metric, values in sorted(series[job].items()):
             now = latest.get(job, {}).get(metric)
-            shown = f"{now / 1000:.1f}s" if now is not None else "-"
             lines.append(
-                f"    {metric[:44]:<44} {shown:>9}"
+                f"    {metric[:44]:<44} {_seconds(now):>9}"
                 f" {_percentile(values, 0.5) / 1000:8.1f}s"
                 f" {_percentile(values, 0.9) / 1000:8.1f}s"
             )
+        lines.extend(_shard_lines(newest, job))
     if base_entries and recent:
         deltas: list[tuple[float, str, str, float, float]] = []
         recent_series: dict[str, dict[str, list[float]]] = defaultdict(
@@ -811,6 +823,40 @@ def render(
                 f" ({then / 1000:.1f}s -> {now / 1000:.1f}s)"
             )
     lines.extend(_render_sections(entries))
+    return lines
+
+
+def _seconds(ms: Any) -> str:
+    """*ms* as seconds to a tenth, ``-`` when it is no number."""
+    return f"{ms / 1000:.1f}s" if isinstance(ms, int | float) else "-"
+
+
+def _shard_lines(entry: dict[str, Any], job: str) -> list[str]:
+    """One line per shard of *job* in *entry*: the shard's wall and queue times.
+
+    A platform's folded row lists its shards under ``shard.shards``,
+    each naming the forge's job the shard ran as; the forge's own row
+    of that job in the same run's file carries the shard's times. A row
+    without shards gives no line; a shard whose forge row the file
+    lacks, or whose time the forge did not set, shows ``-``.
+    """
+    jobs: Any = entry.get("jobs", {})
+    row: Any = jobs.get(job) if isinstance(jobs, dict) else None
+    shard: Any = row.get("shard") if isinstance(row, dict) else None
+    listed: Any = shard.get("shards") if isinstance(shard, dict) else None
+    if not isinstance(listed, list):
+        return []
+    lines: list[str] = []
+    for item in listed:
+        if not isinstance(item, dict):
+            continue
+        forge: Any = jobs.get(str(item.get("job", "")))
+        wall = forge.get("wall_ms") if isinstance(forge, dict) else None
+        queued = forge.get("queued_ms") if isinstance(forge, dict) else None
+        lines.append(
+            f"    shard {item.get('shard', '')}: wall {_seconds(wall)},"
+            f" queued {_seconds(queued)}"
+        )
     return lines
 
 

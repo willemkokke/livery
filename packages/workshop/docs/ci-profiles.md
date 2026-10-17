@@ -72,7 +72,10 @@ base's run and the wave.
 ## What the file holds
 
 - One track per job, named as the forge names it. Jobs that ran at the same
-  time read as the parallel work they were.
+  time read as the parallel work they were. A check leg that runs as shards
+  is one track per shard, named as the forge names the shard's job
+  (`check (windows-latest, 3.14, 2of4)`), laid beside the others with its own
+  timeline beneath it.
 - The wait before a job, as its own span, where the run's acceptance time is
   known.
 - The job's steps, inside the job.

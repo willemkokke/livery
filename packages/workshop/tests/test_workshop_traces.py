@@ -1306,3 +1306,76 @@ def test_the_assembler_brings_every_legs_trace_in_one_fetch(
     assert spawned["git fetch"] == 1 and spawned["git ls-remote"] == 1, spawned
     tasks = {e["name"] for e in made.events if e.get("cat") == "task"}
     assert tasks == {"check", "docs", "gate"}
+
+
+def test_a_platforms_shards_are_tracks_of_their_own_beside_each_other(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each shard's trace joins the shard's job by the display name the runner wrote.
+
+    The forge lists a sharded leg as one job per shard, ``check
+    (ubuntu-latest, 3.14, 1of2)`` and ``2of2``, and each shard pushes
+    its trace under that name, so the shards land as tracks beside
+    each other, each with its own timeline beneath it.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    first = "check (ubuntu-latest, 3.14, 1of2)"
+    second = "check (ubuntu-latest, 3.14, 2of2)"
+    began = {first: "2026-09-27T10:00:05Z", second: "2026-09-27T10:00:07Z"}
+    _pushed(
+        work,
+        monkeypatch,
+        leg="check-ubuntu-latest-3.14-1of2",
+        origin=_epoch(began[first]),
+        tasks={"check": 1_000_000.0},
+        job=first,
+    )
+    _pushed(
+        work,
+        monkeypatch,
+        leg="check-ubuntu-latest-3.14-2of2",
+        origin=_epoch(began[second]),
+        tasks={"check": 2_000_000.0},
+        job=second,
+    )
+    jobs = (
+        _job(first, started=began[first], completed="2026-09-27T10:00:09Z"),
+        _job(second, started=began[second], completed="2026-09-27T10:00:12Z"),
+        _job("gate", started="2026-09-27T10:00:20Z", completed="2026-09-27T10:00:30Z"),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    made = _traces.assemble(work, repo, "77")
+    tracks = [
+        e["args"]["name"]
+        for e in made.events
+        if e["ph"] == "M" and e["name"] == "thread_name" and e["pid"] == _traces.RUN_PID
+    ]
+    assert [name for name in tracks if not name.endswith(": runner")] == [
+        first,
+        second,
+        "gate",
+    ]
+    # Each shard's task sits inside its own job's span, in a group of its own.
+    by_job = {e["name"]: e for e in made.events if e.get("cat") == "job"}
+    tasks = sorted(
+        (e for e in made.events if e.get("cat") == "task"), key=lambda e: e["ts"]
+    )
+    assert len(tasks) == 2 and tasks[0]["pid"] != tasks[1]["pid"]
+    for job, task in zip((first, second), tasks, strict=True):
+        own = by_job[job]
+        assert own["ts"] <= task["ts"]
+        assert task["ts"] + task["dur"] <= own["ts"] + own["dur"]
+    groups = {
+        e["args"]["name"]
+        for e in made.events
+        if e["ph"] == "M" and e["name"] == "process_name"
+    }
+    assert groups == {"run 77", f"{first}: fm", f"{second}: fm"}
+    for name in (first, second):
+        assert any(
+            line.startswith(f"{name}: ") and "event(s) of its own" in line
+            for line in made.lines
+        )
