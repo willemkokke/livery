@@ -18,9 +18,10 @@ platform leg's series in the [livery.workshop.DURATIONS][] family,
 bounded by the checkout's committer time
 ([livery.workshop.checkout_time][]) so a row written while the run is
 in flight reaches no shard. A shard leaves what it partitioned in
-`SHARD_FILE` beside the gate's marker ([livery.workshop.leave_shard][]),
-and the gate job reads it back ([livery.workshop.read_shard][]) to
-prove the shards of a platform partitioned one set from one row.
+`SHARD_FILE`, under the checkout's ``.workshop/`` directory
+([livery.workshop.leave_shard][]), and the gate job reads it back
+([livery.workshop.read_shard][]) to prove the shards of a platform
+partitioned one set from one row.
 """
 
 from __future__ import annotations
@@ -51,11 +52,11 @@ WINDOW = 30
 #: median over.
 NEWEST = 5
 
-#: The file a shard leaves at the checkout root, beside the gate's
-#: marker, naming the shard it ran, the digest of the file set it
-#: partitioned, its own files, the rows it read and the bound it read
-#: them under.
-SHARD_FILE = "fm-shard.json"
+#: The file a shard leaves under the checkout's ``.workshop/``
+#: directory, which git ignores, naming the shard it ran, the digest of
+#: the file set it partitioned, its own files, the rows it read and the
+#: bound it read them under.
+SHARD_FILE = ".workshop/fm-shard.json"
 
 _SPELLING = re.compile(r"^(\d+)of(\d+)$")
 _TAIL = re.compile(r"^(?P<leg>.+)-(?P<shard>\d+of\d+)$")
@@ -324,6 +325,7 @@ def leave_shard(
         The path of the file left.
     """
     path = root / SHARD_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {

@@ -176,6 +176,7 @@ def test_a_missing_shard_file_is_none_and_a_corrupt_one_a_reason(
 ) -> None:
     assert _shard.read_shard(tmp_path) == (None, "")
     path = tmp_path / _shard.SHARD_FILE
+    path.parent.mkdir(parents=True)
     path.write_text("{not json", encoding="utf-8")
     left, why = _shard.read_shard(tmp_path)
     assert left is None and "does not parse" in why
@@ -372,8 +373,11 @@ def test_the_checkout_time_is_heads_committer_time(work: Path) -> None:
     assert when == datetime.fromisoformat(spelled)
 
 
-def test_the_shard_file_round_trips_beside_the_gates_marker(tmp_path: Path) -> None:
+def test_the_shard_file_round_trips_under_the_workshop_directory(
+    tmp_path: Path,
+) -> None:
     before = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+    # The directory is made on the way: a fresh checkout has none.
     path = _shard.leave_shard(
         tmp_path,
         shard=_shard.Shard(2, 4),
@@ -382,7 +386,7 @@ def test_the_shard_file_round_trips_beside_the_gates_marker(tmp_path: Path) -> N
         rows=["r2.json", "r1.json"],
         before=before,
     )
-    assert path == tmp_path / "fm-shard.json"
+    assert path == tmp_path / ".workshop" / "fm-shard.json"
     left, why = _shard.read_shard(tmp_path)
     assert why == "" and left is not None
     assert left.shard == _shard.Shard(2, 4)
