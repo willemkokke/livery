@@ -139,6 +139,12 @@ runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # over every platform's branches, and a row carried from main's record
 # cannot stand in for a file the change moved (ruled 2026-10-12, #1499).
 pull-request-runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+# Each runner's check leg runs as the shards named here, one for a
+# runner not named; the slowest legs split so every platform ends at
+# about the same time (`fm ci.balance` proposes the counts from the
+# timing record). Measured on 2026-10-17: 1, 3 and 4 shards predict
+# 276 s, 296 s and 325 s against 1082 s for Windows alone.
+shards = { "macos-latest" = 3, "windows-latest" = 4 }
 # A pull request's check legs run the scoped gate against its base:
 # the packages the change can influence run, the others' suites are
 # reused from the coverage store; a push run and a change outside
