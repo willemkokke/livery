@@ -1390,9 +1390,13 @@ absence.
   without a separate working drive; `"runner"` asks for the move on
   any forge.
 - A pull request's check legs run on the runners
-  `[ci] pull-request-runners` names, every runner when the key is
-  absent; a push to main, a dispatch and the nightly run every runner
-  `[ci] runners` names. The rendered gate workflow carries both lists
+  `[ci] pull-request-runners` names, the first runner `[ci] runners`
+  names when the key is absent; a push to main, a dispatch and the
+  nightly run every runner `[ci] runners` names. A one-runner pull
+  request carries the other legs' coverage rows from main's record, so
+  a package whose floor needs the platform legs' fresh rows on a pull
+  request lists every runner, as the workshop's own repository does.
+  The rendered gate workflow carries both lists
   as literals and a `legs` job picks one by the event, computing
   nothing. A pull request that changes a line only another platform
   reaches is red by name on a narrowed run: `fm submit --every-runner`
@@ -1718,8 +1722,8 @@ count up to `--max`, 4 by default. The slowest platform takes the
 largest count whose every added shard saved at least its own setup;
 every other platform takes the smallest count whose wall is within
 15% of the slowest platform's, or the cap, named. The pull request
-counts follow the same rule over `[ci] pull-request-runners` when that
-list is shorter than `[ci] runners`. The proposal prints as the TOML
+counts follow the same rule over the pull request's runners when they
+are fewer than `[ci] runners` names. The proposal prints as the TOML
 `[ci] shards` and `[ci] pull-request-shards` would hold, with the
 predicted wall of the slowest leg beside its wall at one shard. A
 platform with fewer than three such rows keeps its count and is

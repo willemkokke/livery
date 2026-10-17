@@ -97,15 +97,18 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
         "types": ["opened", "synchronize", "reopened", "labeled"]
     }
     jobs = doc["jobs"]
-    # The release dispatch and the site's publish are the gate job's
-    # entries on a push; GitHub's pages seam alone adds the forge's
-    # pages deploy after it, and Gitea's container seam publishes from
-    # the gate job itself.
+    # The legs job picks the check matrix by the event, since a pull
+    # request's legs run on the first runner alone while the contract
+    # names no pull-request-runners. The release dispatch and the
+    # site's publish are the gate job's entries on a push; GitHub's
+    # pages seam alone adds the forge's pages deploy after it, and
+    # Gitea's container seam publishes from the gate job itself.
     pages = ["pages"] if kind == "github" else []
-    assert list(jobs) == ["check", "docs", "gate", "govern", *pages]
+    assert list(jobs) == ["legs", "check", "docs", "gate", "govern", *pages]
     # The one call per job, its point and its job; the pages deploy
     # calls nothing.
     assert {name: _calls(job) for name, job in jobs.items()} == {
+        "legs": [],
         "check": [
             'ci.run --point=gate --job=check --os="${{ matrix.os }}"'
             ' --python="${{ matrix.python }}"'
@@ -118,30 +121,32 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     # The needs and the only conditions: event filters and the
     # verdict job's always().
     assert {name: job.get("needs", []) for name, job in jobs.items()} == {
-        "check": [],
+        "legs": [],
+        "check": ["legs"],
         "docs": [],
         "gate": ["check", "docs"],
         "govern": [],
         **{name: ["gate"] for name in pages},
     }
     assert {name: job.get("if", "") for name, job in jobs.items()} == {
+        "legs": "",
         "check": "",
         "docs": "",
         "gate": "always()",
         "govern": "github.event_name == 'push'",
         **dict.fromkeys(pages, "github.event_name == 'push'"),
     }
-    # The matrix: every runner by every gate Python, the docs and the
-    # verdict on one runner.
-    assert jobs["check"]["strategy"]["matrix"] == {
-        "os": ["ubuntu-latest", "macos-latest"],
-        "python": ["3.13", "3.14"],
-    }
+    # The matrix: the legs job's pick, read from its output; the legs
+    # job, the docs and the verdict on one runner.
+    assert jobs["check"]["strategy"]["matrix"] == (
+        "${{ fromJSON(needs.legs.outputs.matrix) }}"
+    )
     assert jobs["check"]["runs-on"] == "${{ matrix.os }}"
-    for name in ("docs", "gate", "govern", *pages):
+    for name in ("legs", "docs", "gate", "govern", *pages):
         assert jobs[name]["runs-on"] == "ubuntu-latest", name
     # The secrets each job names, and no other.
     assert {name: _secrets(job) for name, job in jobs.items()} == {
+        "legs": set(),
         "check": set(),
         "docs": set(),
         "gate": {"GITHUB_TOKEN"},
@@ -736,6 +741,30 @@ def test_pull_request_runners_equal_to_the_runners_render_the_plain_list(
     assert jobs["check"].get("needs", []) == []
 
 
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_pull_request_runs_the_first_runner_alone_while_the_key_is_absent(
+    tmp_path: Path, kind: str
+) -> None:
+    # No pull-request-runners key: the legs job's pull request literal
+    # names the first runner alone, and every other event's literal
+    # names every runner.
+    rendered = generate(_root(tmp_path, kind))[f".{kind}/workflows/ci.yml"]
+    jobs = _doc(rendered)["jobs"]
+    assert list(jobs)[:2] == ["legs", "check"]
+    (step,) = jobs["legs"]["steps"]
+    assert step["env"]["LEGS"] == (
+        "${{ github.event_name == 'pull_request'"
+        " && !contains(github.event.pull_request.labels.*.name, 'ci:every-runner')"
+        ' && \'{"os":["ubuntu-latest"],"python":["3.13","3.14"]}\''
+        ' || \'{"os":["ubuntu-latest","macos-latest"],"python":["3.13","3.14"]}\' }}'
+    )
+    assert jobs["check"]["needs"] == ["legs"]
+    assert (
+        jobs["check"]["strategy"]["matrix"]
+        == "${{ fromJSON(needs.legs.outputs.matrix) }}"
+    )
+
+
 def _root_sharded(tmp_path: Path, kind: str, ci: str) -> Path:
     root = _root(tmp_path, kind)
     contract = root / "workshop.toml"
@@ -755,8 +784,14 @@ def _root_sharded(tmp_path: Path, kind: str, ci: str) -> Path:
             r"\[ci\] shards names windows-latest, which \[ci\] runners does not list",
         ),
         (
-            'pull-request-shards = { "macos-latest" = 0 }\n',
-            r"\[ci\] pull-request-shards gives macos-latest 0; a count is at least 1",
+            'pull-request-shards = { "ubuntu-latest" = 0 }\n',
+            r"\[ci\] pull-request-shards gives ubuntu-latest 0; a count is at least 1",
+        ),
+        (
+            'pull-request-shards = { "macos-latest" = 2 }\n',
+            r"\[ci\] pull-request-shards names macos-latest, which \[ci\]"
+            r" pull-request-runners \(absent, so the first of \[ci\] runners\)"
+            r" does not list \(ubuntu-latest\)",
         ),
     ],
 )
@@ -774,20 +809,28 @@ def test_the_facts_carry_one_shard_per_runner_while_no_shard_is_declared(
 ) -> None:
     facts = _facts(_root(tmp_path, "github"))
     assert facts["shards"] == {"ubuntu-latest": 1, "macos-latest": 1}
-    assert facts["pull_request_shards"] == {"ubuntu-latest": 1, "macos-latest": 1}
+    # A pull request's facts cover its runners: the first alone without the key.
+    assert facts["pull_request_runners"] == ["ubuntu-latest"]
+    assert facts["pull_request_shards"] == {"ubuntu-latest": 1}
 
 
 @pytest.mark.parametrize("kind", KINDS)
 def test_a_shard_count_renders_the_check_matrix_as_include_entries_in_order(
     tmp_path: Path, kind: str
 ) -> None:
-    root = _root_sharded(tmp_path, kind, 'shards = { "macos-latest" = 2 }\n')
+    root = _root_sharded(
+        tmp_path,
+        kind,
+        'shards = { "macos-latest" = 2 }\n'
+        'pull-request-runners = ["ubuntu-latest", "macos-latest"]\n',
+    )
     text = generate(root)[f".{kind}/workflows/ci.yml"]
     jobs = _doc(text)["jobs"]
-    # A pull request's shards are the full set's, so no legs job: the
-    # matrix is literal on the check job, as include entries alone, one
-    # per os, python and shard in that order. A runner with one shard
-    # has its entry too, so every entry carries the key the call passes.
+    # A pull request over every runner has the full set's shards, so no
+    # legs job: the matrix is literal on the check job, as include
+    # entries alone, one per os, python and shard in that order. A
+    # runner with one shard has its entry too, so every entry carries
+    # the key the call passes.
     assert "legs" not in jobs
     assert jobs["check"].get("needs", []) == []
     assert jobs["check"]["strategy"] == {
@@ -822,6 +865,7 @@ def test_pull_request_shards_that_differ_render_the_legs_job_with_include_litera
         tmp_path,
         "github",
         'shards = { "macos-latest" = 2 }\n'
+        'pull-request-runners = ["ubuntu-latest", "macos-latest"]\n'
         'pull-request-shards = { "ubuntu-latest" = 2 }\n',
     )
     jobs = _doc(generate(root)[".github/workflows/ci.yml"])["jobs"]

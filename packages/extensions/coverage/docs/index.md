@@ -166,8 +166,9 @@ never a smaller union. So is a check leg the run runs that left no parts
 on its per-run ref: its write was refused or it died before it, its own
 log says which, and the legs that did write never stand in for the lines
 only its platform reaches. The legs a run owes are the event's: a pull
-request owes the legs `[ci] pull-request-runners` names, and a leg it
-does not run is carried whole from the records; a pull request labelled
+request owes the legs `[ci] pull-request-runners` names (the first runner
+`[ci] runners` names when the key is absent), and a leg it does not run
+is carried whole from the records; a pull request labelled
 `ci:every-runner` (`fm submit --every-runner`), a push and a dispatch
 owe every leg `[ci] runners` names.
 A platform leg that runs as several shards

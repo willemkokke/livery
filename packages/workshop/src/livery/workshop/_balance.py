@@ -29,8 +29,8 @@ proposed. Every other platform takes the smallest count whose wall is
 within [livery.workshop._balance.TOLERANCE][] of the slowest
 platform's at its count; one that cannot get there at the cap takes
 the cap and is named. The pull request counts apply the same rule
-over ``[ci] pull-request-runners`` when that list is shorter than
-``[ci] runners``. A platform with fewer than
+over a pull request's runners when they are fewer than ``[ci]
+runners`` names. A platform with fewer than
 [livery.workshop._balance.ROWS_NEEDED][] readable rows keeps its count
 and takes no part. The verb changes nothing: it prints the table and
 the TOML the contract would hold, and a count lands by pull request.

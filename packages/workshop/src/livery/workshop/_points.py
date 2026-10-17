@@ -1553,7 +1553,7 @@ def asked_tasks(root: Path, point: str, only: str) -> tuple[str, ...]:
 
 
 #: The label a pull request carries so the gate runs every runner for
-#: it, where ``[ci] pull-request-runners`` names fewer. `fm submit
+#: it, where its check legs run on fewer. `fm submit
 #: --every-runner` sets it through the forge, and a person sets it on
 #: the forge by hand; the gate workflow runs on ``labeled``, its legs
 #: job picks the full matrix while the label is there, and the coverage
@@ -1566,14 +1566,18 @@ def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     """The runners a pull request's check legs fan out to.
 
     ``[ci] pull-request-runners`` when the contract declares it, else
-    every runner ``[ci] runners`` names. A label the runners list does
-    not name refuses naming both lists, since a pull request's legs run
-    on runners every event runs on; an empty list refuses too.
+    the first runner ``[ci] runners`` names (``ubuntu-latest`` without
+    that key). A one-runner pull request carries the other legs'
+    coverage rows from main's record, so a package whose floor needs
+    the platform legs' fresh rows on a pull request lists every runner.
+    A label the runners list does not name refuses naming both lists,
+    since a pull request's legs run on runners every event runs on; an
+    empty list refuses too.
     """
     runners = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
     declared: Any = ci.get("pull-request-runners")
     if declared is None:
-        return runners
+        return runners[:1]
     chosen = [str(runner) for runner in declared]
     strangers = [runner for runner in chosen if runner not in runners]
     if strangers:
@@ -1585,16 +1589,28 @@ def pull_request_runners(ci: dict[str, Any]) -> list[str]:
     if not chosen:
         fail(
             "[ci] pull-request-runners is empty; name a runner [ci] runners"
-            " lists, or remove the key so every runner runs"
+            " lists, or remove the key so the first runner runs"
         )
     return chosen
+
+
+def pull_request_listed(ci: dict[str, Any]) -> str:
+    """Name the list a pull request's runners come from, for a shard refusal.
+
+    ``[ci] pull-request-runners`` when the contract declares it. When
+    the key is absent the refusal names it and the first runner
+    ``[ci] runners`` names, which stands in for it.
+    """
+    if ci.get("pull-request-runners") is not None:
+        return "[ci] pull-request-runners"
+    return "[ci] pull-request-runners (absent, so the first of [ci] runners)"
 
 
 def pull_request_legs(root: Path) -> list[str]:
     """Name the check legs a pull request's run produces, ``check-<os>-<python>`` each.
 
     One per runner the root contract's ``[ci] pull-request-runners``
-    names and Python the gate runs; every leg
+    names and Python the gate runs; the first runner's legs among those
     [livery.workshop.check_legs][] names when the key is absent. The
     task fails, naming both lists, when the key names a runner
     ``[ci] runners`` does not list, and when it is empty.
@@ -1749,13 +1765,11 @@ def pull_request_shards(root: Path) -> list[str]:
         every = [str(runner) for runner in ci.get("runners") or ["ubuntu-latest"]]
         counts = shard_counts(ci, key="shards", runners=every, listed="[ci] runners")
     else:
-        listed = (
-            "[ci] pull-request-runners"
-            if ci.get("pull-request-runners") is not None
-            else "[ci] runners"
-        )
         counts = shard_counts(
-            ci, key="pull-request-shards", runners=runners, listed=listed
+            ci,
+            key="pull-request-shards",
+            runners=runners,
+            listed=pull_request_listed(ci),
         )
     return _shard_legs(runners, gate_pythons(root), counts)
 

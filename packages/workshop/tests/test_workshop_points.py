@@ -293,14 +293,44 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
     assert [argv[-1] for argv in seen] == ["doctor", "check", "--submit"]
 
 
-def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
+def test_the_pull_request_runners_refuse_a_stranger_and_an_empty_list() -> None:
+    with pytest.raises(
+        Failed,
+        match=(
+            r"pull-request-runners names c, which \[ci\] runners does not list"
+            r" \(a, b\)"
+        ),
+    ):
+        _points.pull_request_runners(
+            {"runners": ["a", "b"], "pull-request-runners": ["c"]}
+        )
+    with pytest.raises(Failed, match=r"pull-request-runners is empty"):
+        _points.pull_request_runners(
+            {"runners": ["a", "b"], "pull-request-runners": []}
+        )
+
+
+def test_the_pull_request_runners_are_the_first_runner_while_the_key_is_absent() -> (
+    None
+):
+    # The first of [ci] runners, ubuntu-latest without that key; the
+    # declared list as declared.
+    assert _points.pull_request_runners({"runners": ["a", "b"]}) == ["a"]
+    assert _points.pull_request_runners({}) == ["ubuntu-latest"]
+    assert _points.pull_request_runners(
+        {"runners": ["a", "b"], "pull-request-runners": ["a", "b"]}
+    ) == ["a", "b"]
+
+
+def test_a_pull_requests_legs_follow_its_runners_and_the_first_runner_otherwise(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "scratch"\nrequires-python = ">=3.14"\n'
     )
     root = _root(tmp_path, '\n[ci]\nrunners = ["a", "b"]\n')
-    assert _points.pull_request_legs(root) == _points.check_legs(root)
+    assert _points.check_legs(root) == ["check-a-3.14", "check-b-3.14"]
+    assert _points.pull_request_legs(root) == ["check-a-3.14"]
     (tmp_path / "workshop.toml").write_text(
         (tmp_path / "workshop.toml").read_text() + 'pull-request-runners = ["b"]\n'
     )
@@ -1188,6 +1218,11 @@ def _sharded(tmp_path: Path, ci: str) -> Path:
             'pull-request-runners = ["b"]\npull-request-shards = { a = 2 }\n',
             r"\[ci\] pull-request-shards names a, which \[ci\] pull-request-runners",
         ),
+        (
+            "pull-request-shards = { b = 2 }\n",
+            r"\[ci\] pull-request-shards names b, which \[ci\] pull-request-runners"
+            r" \(absent, so the first of \[ci\] runners\) does not list \(a\)",
+        ),
     ],
 )
 def test_a_shard_count_outside_the_contract_refuses_naming_the_key_and_the_runner(
@@ -1233,8 +1268,14 @@ def test_the_shard_legs_are_the_check_legs_split_as_the_contract_says(
         "check-b-3.14-2of3",
         "check-b-3.14-3of3",
     ]
-    # A pull request's legs take [ci] shards while pull-request-shards is absent.
-    assert _points.pull_request_shards(root) == _points.check_shards(root)
+    # A pull request's legs take [ci] shards while pull-request-shards is
+    # absent, over its own runners: the first alone without the key.
+    assert _points.pull_request_shards(root) == ["check-a-3.14"]
+    root = _sharded(tmp_path, "shards = { a = 2 }\n")
+    assert _points.pull_request_shards(root) == [
+        "check-a-3.14-1of2",
+        "check-a-3.14-2of2",
+    ]
     root = _sharded(
         tmp_path,
         'shards = { b = 3 }\npull-request-runners = ["b"]\n'
