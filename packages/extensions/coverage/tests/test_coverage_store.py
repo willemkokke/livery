@@ -705,6 +705,64 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     )
 
 
+def test_the_record_prefixes_are_the_head_branch_s_and_main_s_and_no_other() -> None:
+    # A run reads two records, its head branch's and main's, so a check
+    # leg and the gate job bring those two and no other branch's.
+    assert coverage_record.record_prefixes("feat/x") == (
+        git.NAMESPACE + "coverage/feat-x/",
+        git.NAMESPACE + "coverage/main/",
+    )
+    for branch in ("", "main"):
+        assert coverage_record.record_prefixes(branch) == (
+            git.NAMESPACE + "coverage/main/",
+        )
+    # Each prefix is what every ref of that base's record starts with.
+    for base, prefix in zip(
+        coverage_record.record_bases("feat/x"),
+        coverage_record.record_prefixes("feat/x"),
+        strict=True,
+    ):
+        assert coverage_record.record_ref(LEG, base) == prefix + git.slug(LEG)
+
+
+def test_a_record_outside_the_prefixes_is_read_through_its_key_group(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.git import _store
+
+    # Main's run of a squashed tree brings main's record alone, and reads
+    # the record of the branch the verified row names all the same: its
+    # first read brings that record in one more fetch.
+    main = {"packages/base": _unit("packages/base", run="1")}
+    branch = {"packages/top": _unit("packages/top", run="2")}
+    assert coverage_record.put_record(work, RUN, leg=LEG, fresh=main) == ""
+    assert (
+        coverage_record.put_record(work, PULL, leg=LEG, fresh=branch, base="feat/x")
+        == ""
+    )
+    origin = _git(work, "remote", "get-url", "origin").strip()
+    other = tmp_path / "other"
+    _git(tmp_path, "clone", "-q", origin, str(other))
+    brought: list[list[str]] = []
+    bring = _store._bring
+
+    def _counted(
+        store: git.StateStore, snapshot: _store._Snapshot, wanted: dict[str, str]
+    ) -> dict[str, str]:
+        brought.append(sorted(wanted))
+        return bring(store, snapshot, wanted)
+
+    monkeypatch.setattr(_store, "_bring", _counted)
+    prefixes = coverage_record.record_prefixes("")
+    with git.remote_snapshot(state_store(other), fetch=("verified", *prefixes)):
+        assert coverage_record.recorded(other, leg=LEG).units == main
+        assert coverage_record.recorded(other, leg=LEG, base="feat/x").units == branch
+    assert brought == [
+        [coverage_record.record_ref(LEG)],
+        [coverage_record.record_ref(LEG, "feat/x")],
+    ]
+
+
 # --- a row a write moves on from stays a day, refusals first -----------------
 
 

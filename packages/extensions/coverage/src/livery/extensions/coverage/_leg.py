@@ -588,14 +588,21 @@ def top_up(root: Path, packages: tuple[Package, ...], marker: LegScope) -> LegSc
     scope = marker.scope
     if run is None or scope not in ("affected", "nothing", "verified"):
         return marker
-    from livery.extensions.coverage._record import record_bases
+    from livery.extensions.coverage._record import record_bases, record_prefixes
     from livery.git import remote_snapshot
     from livery.workshop import tested
 
     named = set(marker.packages)
-    # The verified row and every record a unit may come from: one
-    # listing and one fetch.
-    with remote_snapshot(state_store(root), fetch=("verified", "coverage/")):
+    # The verified row and the records this leg reads, the head
+    # branch's and main's: one listing and one fetch. A verified leg
+    # reads the record of the branch the verified row names, known
+    # only once that row is read; when that is another branch, its
+    # first read brings the record, every leg of it, in one more fetch
+    # (`remote_snapshot` brings a ref's whole key group), so it is not
+    # missing from the prefixes here.
+    with remote_snapshot(
+        state_store(root), fetch=("verified", *record_prefixes(run.head_ref))
+    ):
         if scope == "verified":
             units = unrecorded(
                 root,

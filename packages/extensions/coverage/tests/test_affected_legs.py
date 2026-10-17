@@ -7,6 +7,8 @@ current closure.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -419,3 +421,89 @@ def test_a_proved_tree_measures_the_units_the_record_cannot_supply(
     assert ran == [("packages/y", "tests")]
     assert "measuring: packages/y, tests run for their lines alone" in out
     assert measured == LegScope("measured", ("packages/y", "tests"), "check-a")
+
+
+# --- what a leg brings from the store ------------------------------------------
+
+
+def _snapshots(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Stand in for the store's snapshot: the prefixes each block brings."""
+    brought: list[tuple[str, ...]] = []
+
+    def _snapshot(
+        store: git.StateStore, *, fetch: Iterable[str] = (), publish: bool = False
+    ) -> contextlib.AbstractContextManager[None]:
+        brought.append(tuple(fetch))
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr("livery.git.remote_snapshot", _snapshot)
+    return brought
+
+
+def test_a_proved_leg_brings_main_s_record_and_still_reads_the_proving_branch_s(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, python_steps: object
+) -> None:
+    # Main's run names no head branch, so the leg brings main's record
+    # alone; the branch the verified row names is read all the same.
+    root, packages, ran = _proved(tmp_path, monkeypatch)
+    every = {
+        path: coverage_record.Unit(path, "k" * 64, "5", "a" * 40, ())
+        for path in ("packages/x", "packages/y", "tests")
+    }
+    reads: list[tuple[str, str]] = []
+
+    def _every(root: Path, *, leg: str, base: str = "main") -> coverage_record.Record:
+        reads.append((leg, base))
+        return coverage_record.Record(every)
+
+    monkeypatch.setattr(coverage_record, "recorded", _every)
+    _quality.check()
+    marker = leg_scope(root)
+    assert marker.scope == "verified"
+    # The gate's own read of the verified row is over; the leg's block
+    # is the one captured.
+    brought = _snapshots(monkeypatch)
+    assert coverage_leg.top_up(root, packages, marker) == marker
+    assert ran == []
+    assert brought == [("verified", git.NAMESPACE + "coverage/main/")]
+    assert reads == [("check-a", "feat/x"), ("check-a", "main")]
+
+
+def test_a_pull_request_leg_brings_its_branch_s_record_and_main_s_and_no_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    own = _run("pull_request", "main")
+    run = RunContext(
+        own.forge,
+        own.run_id,
+        own.event,
+        own.ref,
+        own.head_sha,
+        own.base_ref,
+        leg=own.leg,
+        head_ref="feat/x",
+    )
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: run
+    )
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    held = {
+        "packages/y": coverage_record.Unit("packages/y", "k" * 64, "5", "a" * 40, ())
+    }
+    monkeypatch.setattr(
+        coverage_record,
+        "recorded",
+        lambda root, *, leg, base="main": coverage_record.Record(held),
+    )
+    brought = _snapshots(monkeypatch)
+    marker = LegScope("affected", ("packages/x",), "check-a", "b" * 40)
+    assert coverage_leg.top_up(root, (x, y), marker) == marker
+    assert brought == [
+        (
+            "verified",
+            git.NAMESPACE + "coverage/feat-x/",
+            git.NAMESPACE + "coverage/main/",
+        )
+    ]
