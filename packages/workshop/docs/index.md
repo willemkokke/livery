@@ -521,7 +521,7 @@ or the rule's answer over nothing. The base declares:
 | `public-modules` | package | the modules that declare the public API | the union |
 | `module-roots` | package | the names other packages reference the code by | the union |
 | `references` | package | what each source references: its file, its module name, each name with how the source makes the reference, and the names its language's conventions account for | the union; a file outside the package, or one two extensions answer for, refuses |
-| `version-files` | package | the files `stamp`'s steps may write into: a version, or a floor | the union |
+| `version-files` | package | every file `stamp`'s steps write, versions and floors: the release keeps and restores them, and the local act refuses while one has changes of its own | the union |
 | `current-version` | package | the version the manifests declare | one value every answer agrees on |
 | `requirements` | package | each required distribution to its constraint | the union; a name valued twice refuses |
 | `requirement-writers` | package | the functions that write a requirement on a sibling into the manifests, each a `RequirementWriter` called with the package, the sibling and the floor, and each taking a sibling of its own ecosystem alone | the union, and every writer is called; a sibling no writer takes refuses, naming the sibling's set |

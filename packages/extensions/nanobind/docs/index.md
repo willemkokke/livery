@@ -51,7 +51,10 @@ each with its reason. The release's stamp is nanobind's own: it writes
 the version into `pyproject.toml` and every `__version__` and raises the
 pyproject's floors through python, and raises the recipe's floors
 through conan, since one step of a package reports the files the stamp
-changed:
+changed. nanobind answers the `version-files` query with the recipe,
+the one file the step writes beyond python's, so the release keeps and
+restores it, and the local act refuses while it has changes of its
+own:
 
 ```toml
 [phases.stamp.nanobind]

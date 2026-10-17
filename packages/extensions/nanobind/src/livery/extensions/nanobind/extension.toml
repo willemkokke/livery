@@ -33,6 +33,10 @@ requires = ["cmake", "ninja", "conan", "cmake_conan"]
 # entry installs the ones uv installs after the tools.
 [queries]
 job-built-members = "livery.extensions.nanobind._ci:job_built_members"
+# The recipe, which the stamp below raises floors in: python answers
+# with the pyproject and the modules, and conan answers no file for a
+# recipe that names no version.
+version-files = "livery.extensions.nanobind._stamp:version_files"
 
 # An editor's configure of the extension module asks the venv's
 # interpreter where nanobind's cmake directory is, so the venv carries

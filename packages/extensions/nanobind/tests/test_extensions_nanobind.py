@@ -351,6 +351,40 @@ def test_its_own_distribution_ships_nanobind_and_the_workshop_wheel_none() -> No
     }
 
 
+def test_the_local_act_refuses_an_edit_to_the_recipe_the_stamp_writes(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import _lifecycle
+    from livery.workshop._release_driver import local_release, resolve_set
+
+    skip_unless_installed("nanobind")
+    # The refusal first: the recipe names no version, and nanobind's
+    # stamp raises its floors, so an edit of its own there would be lost
+    # to the restore after the act.
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "workshop.toml").write_text("[workspace]\n")
+    _native(root, "ext")
+    recipe = root / "packages" / "ext" / "conanfile.py"
+    recipe.write_text('requires = ("fmt/[>=10.0]",)\n')
+    for args in (
+        ("init", "-q", "--initial-branch=main"),
+        ("add", "-A"),
+        ("-c", "commit.gpgsign=false", "commit", "-q", "-m", "chore: seed"),
+    ):
+        subprocess.run(["git", *args], cwd=root, capture_output=True, check=True)
+    (member,) = resolve_set(root, ("ext",))
+    # nanobind names the recipe among the files the stamp phase writes.
+    assert recipe in _lifecycle.version_files(member)
+    recipe.write_text(recipe.read_text() + "# by hand\n")
+    with pytest.raises(BaseException) as caught:
+        local_release(root, (member,))
+    said = str(caught.value)
+    assert "packages/ext/conanfile.py" in said
+    assert "Commit or stash them first" in said
+    assert recipe.read_text().endswith("# by hand\n")
+
+
 def test_nanobind_declares_its_key_its_job_and_its_verb() -> None:
     from livery.workshop._contract_keys import declarations
     from livery.workshop._declaration import DeclaredValue, Reference, defined_tasks
@@ -398,6 +432,11 @@ def test_nanobind_declares_its_key_its_job_and_its_verb() -> None:
     assert declared.queries == {
         "job-built-members": Reference(
             "livery.extensions.nanobind._ci", "job_built_members"
+        ),
+        # The recipe the stamp raises floors in, among the files the
+        # stamp phase writes.
+        "version-files": Reference(
+            "livery.extensions.nanobind._stamp", "version_files"
         ),
         "python.dev-group": DeclaredValue(["nanobind>=2.7"]),
     }
@@ -495,7 +534,12 @@ def test_a_package_listing_nanobind_releases_through_its_set(
     monkeypatch.setattr(_build, "build_dist", _build_dist)
     monkeypatch.setattr(python_backend, "publish_artifact", _publish)
     assert _lifecycle.current_version(package) == "0.1.0"
-    assert _lifecycle.version_files(package) == (directory / "pyproject.toml",)
+    # python's pyproject, and nanobind's answer: the recipe its stamp
+    # raises floors in.
+    assert _lifecycle.version_files(package) == (
+        directory / "pyproject.toml",
+        directory / "conanfile.py",
+    )
     assert _lifecycle.stamp(package, tmp_path, "0.2.0") == ["pyproject.toml"]
     assert _lifecycle.current_version(package) == "0.2.0"
     assert _lifecycle.build_release(package, tmp_path, epoch=7) == directory / "dist"

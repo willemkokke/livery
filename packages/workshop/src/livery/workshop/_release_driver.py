@@ -255,9 +255,7 @@ def _prepare_paths(
     paths = [Path(name).as_posix() for name in reported]
     for package in members:
         base = package.directory.relative_to(root)
-        paths.extend(
-            (base / name).as_posix() for name in ("CHANGELOG.md", CONTRACT)
-        )
+        paths.extend((base / name).as_posix() for name in ("CHANGELOG.md", CONTRACT))
         # Every file the set's stamp writes a version into. A set that
         # cannot name them restores the rest regardless.
         with contextlib.suppress(Exception):

@@ -1132,9 +1132,12 @@ combine = "union"
 [queries.current-version]
 combine = "agreed"
 
-# Every file the stamp phase's steps may write into: a version, or a
-# floor on a member released with the package. The release keeps these
-# files first and restores them after a build, a failure included.
+# Every file the stamp phase's steps write: the version, and each floor
+# on a member released with the package, a file holding only floors
+# among them. The release keeps these files first and restores them
+# after a build, a failure included, and the local act refuses while one
+# of them has changes of its own; the extension whose step writes a file
+# names it.
 [queries.version-files]
 combine = "union"
 

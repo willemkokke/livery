@@ -113,12 +113,13 @@ def current_version(package: Package) -> str:
 
 
 def version_files(package: Package) -> tuple[Path, ...]:
-    """Every file the stamp phase's steps may write into: a version, or a floor.
+    """Every file the stamp phase's steps write: the version, and the floors.
 
-    A caller that stamps for one build keeps these files first, then
-    restores them. Empty for a package whose set names none. The floors
-    the base raises are in the package's own contract, which is not
-    among them.
+    A file holding only floors is among them, as a recipe that names no
+    version is. A caller that stamps for one build keeps these files
+    first, then restores them. Empty for a package whose set names none.
+    The floors the base raises are in the package's own contract, which
+    is not among them.
     """
     from livery.workshop._queries import VERSION_FILES, answer
 
