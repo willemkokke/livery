@@ -20,6 +20,7 @@ from extensions_mkdocstrings_workspace import (
     composed_groups,
     fake_extensions,
     fake_steps,
+    skip_unless_installed,
 )
 from livery.extensions.docs._site import (
     DOCS_PHASE,
@@ -739,6 +740,11 @@ def test_this_workspaces_handler_reads_the_documented_members_and_toolrooms_stub
     no path: clang-format, mypy, pyrefly, ruff and ty. No extension here
     answers the members policy, so the options carry no filter.
     """
+    from livery.workshop._extensions import installed_set
+
+    # The site is read from this checkout's packages, whose contracts
+    # read right only beside every extension the workspace mounts.
+    skip_unless_installed(*installed_set(ROOT))
     assert _handlers(zensical_config(ROOT)) == {
         "python": {
             "paths": [
