@@ -1,0 +1,1 @@
+{"branches":[[45,46,0,"line 45 didn't jump to line 46 because the condition on line 45 was never true"],[45,49,1,"line 45 didn't jump to line 49 because the condition on line 45 was always true"]],"excluded":"21-23","regions":[["function","__getattr__",36,"37-49"]],"spans":[[1,12],[23,25],[30,33],[37,41],[46,48]],"statements":"14,20,27,30,36,42,44-46,49"}
