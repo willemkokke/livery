@@ -9,6 +9,20 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.3.0] - 2026-10-17
+
+### Added
+
+- The agent's guidance gives each installed extension a block read from its declaration, and the kit holds every declaration to its docs by @willemkokke
+
+### Changed
+
+- Every extension is one kind: an extension declares no levels, either list takes any extension, and the installed set is the root's set and every package's set by @willemkokke
+- Remove what the redesigns left behind: the register-and-withdraw functions, dead definitions, leftover sweeps, empty stylesheets and the text naming kinds and seeds by @willemkokke
+- The cmake extension leaves the workshop's wheel for livery-extensions-cmake, and a test edge renders into the package's test extra by @willemkokke
+- The conan extension leaves the workshop wheel for its own distribution, livery-extensions-conan by @willemkokke
+- Python leaves the workshop wheel, which now ships the base alone by @willemkokke
+
 ## [0.2.0] - 2026-10-14
 
 ### Added
