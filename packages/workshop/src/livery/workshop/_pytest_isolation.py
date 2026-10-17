@@ -52,6 +52,8 @@ from typing import Any
 
 import pytest
 
+from livery.workshop._ci_context import LEG_VARIABLE
+
 #: The directories the runner reads from the environment.
 DIRECTORIES = ("DATA_DIR", "CACHE_DIR", "CONFIG_DIR")
 
@@ -94,10 +96,15 @@ def pytest_configure(config: pytest.Config) -> None:
     Every test's git reads `GIT_CONFIG` as its global config too, unless
     the outer environment already points `GIT_CONFIG_GLOBAL` elsewhere,
     and none of the identity variables the outer environment carries.
+    Nor the check leg's label: the job runner names the leg, its shard
+    included, to every child it spawns, and a test that drives the gate
+    in-process would otherwise run as that shard and leave every step
+    without the flag to the first one. A test that wants a leg sets the
+    variable itself.
     """
     from livery.footman import scratch_dir
 
-    for name in IDENTITY_VARIABLES:
+    for name in (*IDENTITY_VARIABLES, LEG_VARIABLE):
         os.environ.pop(name, None)
     if "GIT_CONFIG_GLOBAL" not in os.environ:
         gitconfig = scratch_dir("tests") / "gitconfig"

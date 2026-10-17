@@ -94,6 +94,28 @@ def test_the_home_is_this_process_s_scratch_and_goes_at_unconfigure(
     assert not any(name in os.environ for name in names)
 
 
+def test_the_legs_label_is_scrubbed_so_a_test_runs_as_no_shard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The job runner names the leg, shard and all, to every child it
+    # spawns; a test that drives the gate in-process must not inherit
+    # it, or the walk leaves every step without the flag to the first
+    # shard. A test that wants a leg sets the variable itself.
+    from livery.workshop._ci_context import LEG_VARIABLE
+
+    monkeypatch.setenv(LEG_VARIABLE, "check-windows-latest-3.14-3of4")
+
+    class Config:
+        stash = pytest.Stash()
+
+    config = cast("pytest.Config", Config())
+    _pytest_isolation.pytest_configure(config)
+    try:
+        assert LEG_VARIABLE not in os.environ
+    finally:
+        _pytest_isolation.pytest_unconfigure(config)
+
+
 def test_an_outer_redirect_is_kept(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
