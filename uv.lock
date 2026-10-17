@@ -978,7 +978,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "livery-extensions-clang-tidy"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/extensions/clang-tidy" }
 dependencies = [
     { name = "livery-footman" },
