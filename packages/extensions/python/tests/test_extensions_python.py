@@ -315,6 +315,35 @@ def test_the_answer_marks_each_reference_lazy_guarded_or_made_at_import_time(
     assert record.accounted == ()
 
 
+def test_a_package_without_a_manifest_requires_nothing_and_its_sources_answer(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.python import _backend
+    from livery.workshop import ReferencedName
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    module = directory / "src" / "acme" / "core"
+    module.mkdir(parents=True)
+    (module / "__init__.py").write_text("import json\n")
+    (module / "broken.py").write_text("def broken(:\n")
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+    assert _backend.declared_requirements(package) == {}
+    assert _backend.declared_test_requirements(package) == {}
+    assert _backend.scripts(package) == ()
+    # A source that does not parse is left out: the syntax gate names it.
+    (record,) = _backend.references(package)
+    assert record.path == "packages/core/src/acme/core/__init__.py"
+    assert record.references == (ReferencedName("json"),)
+    assert record.accounted == ()
+
+
 def test_the_python_steps_stamp_and_publish_as_its_code_does(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -368,6 +397,47 @@ def test_the_python_steps_stamp_and_publish_as_its_code_does(
     )
     assert _lifecycle.publish(listing, tmp_path, version="2.0.0", target=target)
     assert uploads == [("acme-core", "https://idx.example/", "t")]
+
+
+def test_the_stamp_refuses_a_manifest_without_a_version_and_rewrites_no_current_file(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import _lifecycle
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    module = directory / "src" / "acme" / "core"
+    (module / "shapes").mkdir(parents=True)
+    (module / "__init__.py").write_text('__version__ = "1.0.0"\n')
+    (module / "shapes" / "__init__.py").write_text("SIDES = 4\n")
+    pyproject = directory / "pyproject.toml"
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+    # The refusal first: a manifest without a version line names itself,
+    # and nothing is written.
+    pyproject.write_text('[project]\nname = "acme-core"\ndynamic = ["version"]\n')
+    with pytest.raises(
+        Failed, match=re.escape("pyproject.toml has no version line to stamp")
+    ):
+        _lifecycle.stamp(package, tmp_path, "2.0.0")
+    assert (module / "__init__.py").read_text() == '__version__ = "1.0.0"\n'
+    # At the version already, no file is rewritten.
+    pyproject.write_text('[project]\nname = "acme-core"\nversion = "1.0.0"\n')
+    assert _lifecycle.stamp(package, tmp_path, "1.0.0") == []
+    # A new version rewrites the manifest and each __version__, and a
+    # module that carries none is left as it is.
+    changed = _lifecycle.stamp(package, tmp_path, "2.0.0")
+    assert [Path(name) for name in changed] == [
+        Path("pyproject.toml"),
+        Path("src/acme/core/__init__.py"),
+    ]
+    assert (module / "__init__.py").read_text() == '__version__ = "2.0.0"\n'
+    assert (module / "shapes" / "__init__.py").read_text() == "SIDES = 4\n"
 
 
 def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
@@ -687,6 +757,45 @@ def test_the_released_version_installs_alone_into_a_plain_environment(
     ]
 
 
+def test_a_red_plain_environment_installs_nothing_and_no_index_names_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _verify
+
+    commands: list[tuple[str, ...]] = []
+    codes = {"venv": 4}
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            return SimpleNamespace(code=codes.get(args[0], 0))
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    venv = tmp_path / ".verify"
+    # The refusal first: an environment uv cannot make installs nothing,
+    # and its code is the verification's.
+    assert _verify.install(venv, "3.14", "acme-core==1.2.0", "") == 4
+    assert commands == [("venv", str(venv), "--python", "3.14")]
+    # Without an index the install resolves from uv's own default.
+    codes.clear()
+    commands.clear()
+    assert _verify.install(venv, "3.14", "acme-core==1.2.0", "") == 0
+    assert commands[1] == (
+        "pip",
+        "install",
+        "--python",
+        str(venv / "bin" / "python"),
+        "acme-core==1.2.0",
+        "pytest",
+        "pytest-xdist",
+    )
+
+
 def test_each_python_package_here_is_categorised_by_python_s_table() -> None:
     """The extension's table answers for every package here that holds python."""
     from livery.workshop._categories import category_of
@@ -805,6 +914,64 @@ def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
     assert target is not None
     assert not (target / "stale.md").exists()
     assert (target / "guide.md").read_text() == "# edited\n"
+
+
+# The suites inside CI: one pytest call, its words printed on a red exit.
+
+
+def test_a_red_suite_inside_ci_prints_its_words_and_each_package_s_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    from types import SimpleNamespace
+    from typing import Any
+
+    import livery.workshop._ci_context as ci_context
+    from livery.extensions.python import _backend
+    from livery.workshop import SPEED_FILE_VARIABLE
+    from livery.workshop._packages import Package
+
+    directory = tmp_path / "packages" / "core"
+    (directory / "tests").mkdir(parents=True)
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+    sums = json.dumps({"packages/core": {"seconds": 1.5, "tests": 3}})
+    calls: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+
+    def _opts(**kwargs: Any) -> object:
+        def _run(*args: str) -> object:
+            calls.append((args, kwargs))
+            # What the workshop's speed plugin writes for the run.
+            Path(kwargs["env"][SPEED_FILE_VARIABLE]).write_text(sums)
+            return SimpleNamespace(
+                code=1, stdout="FAILED tests/test_core.py\n", stderr="crashed\n"
+            )
+
+        return _run
+
+    monkeypatch.setattr(_backend, "pytest", SimpleNamespace(opts=_opts))
+    monkeypatch.setattr(ci_context, "ci_run", lambda: SimpleNamespace(leg=""))
+    with pytest.raises(Failed, match="pytest exited 1"):
+        _backend.run_test(packages=(package,), root=tmp_path, measured=True)
+    out = capsys.readouterr().out
+    # The job's log is the run's evidence: the red test's words, then the
+    # time the speed plugin summed for each package.
+    assert "FAILED tests/test_core.py\n" in out
+    assert "crashed\n" in out
+    twin = tmp_path / "speed.json"
+    twin.write_text(sums)
+    expected = _backend.speed_lines(tmp_path, twin)
+    assert expected
+    assert all(line in out for line in expected)
+    ((args, kwargs),) = calls
+    assert args == ("packages/core/tests",)
+    # Measured inside CI, every python the tests start runs the meter.
+    assert kwargs["env"][_backend.METER] == str(tmp_path / _backend.COVERAGE_CONFIG)
 
 
 # The venv's meter: coverage.py's own startup hook, armed by the runner.

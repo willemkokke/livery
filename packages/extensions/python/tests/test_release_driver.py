@@ -260,6 +260,94 @@ def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
         "--default-index",
         "https://mirror.example/simple",
     )
+    # An entry without an address names nowhere to resolve from.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n'
+        '[[tool.uv.index]]\nname = "nameless"\n'
+        '[[tool.uv.index]]\nurl = "https://mirror.example/simple"\n'
+    )
+    assert _index_args(tmp_path) == ("--index", "https://mirror.example/simple")
+
+
+def test_the_leg_refuses_without_a_wheel_and_names_the_red_tests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A member without a manifest installs its wheel plain with no
+    # requirement beside it. uv answers every step but two: the listing,
+    # which it cannot read, and the export of a workspace with no lock.
+    # The tests the installed copy runs are red.
+    from types import SimpleNamespace
+    from typing import Any
+
+    import livery.footman as footman
+    import livery.toolroom.tools as toolroom
+    from livery.extensions.python import _backend as _python
+
+    directory = tmp_path / "packages" / "core"
+    (directory / "tests").mkdir(parents=True)
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+    # The refusal first: nothing built, nothing to install.
+    with pytest.raises(Failed, match=r"acme-core: no wheel in .* to validate"):
+        _python.run_isolated_test(package, tmp_path)
+    wheel = directory / "dist" / "acme_core-1.0.0-py3-none-any.whl"
+    wheel.parent.mkdir()
+    wheel.write_bytes(b"")
+    commands: list[tuple[str, ...]] = []
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            code = 1 if args[:2] in (("pip", "list"), ("export", "--format")) else 0
+            return SimpleNamespace(code=code, stdout="", stderr="")
+
+        return _run
+
+    tests: list[list[str]] = []
+    code = [1]
+
+    def _started(argv: list[str], **_options: Any) -> object:
+        tests.append(argv)
+        return SimpleNamespace(code=code[0], stdout="1 failed\n", stderr="trace\n")
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    monkeypatch.setattr(footman, "run", _started)
+    with pytest.raises(Failed, match=r"acme-core isolated tests \(latest\) failed"):
+        _python.run_isolated_test(package, tmp_path)
+    install = next(args for args in commands if args[:2] == ("pip", "install"))
+    assert install[-1] == str(wheel)
+    assert tests[-1][1:4] == ["-m", "pytest", str(directory / "tests")]
+    # Green tests, and a listing uv cannot read reports nothing resolved.
+    code[0] = 0
+    assert _python.run_isolated_test(package, tmp_path) == {}
+
+
+def test_the_movement_probe_reads_the_direct_requirements_by_name(
+    tmp_path: Path,
+) -> None:
+    from livery.extensions.python._backend import _direct_versions
+
+    directory = tmp_path / "packages" / "core"
+    directory.mkdir(parents=True)
+    (directory / "pyproject.toml").write_text(
+        '[project]\nname = "acme-core"\n'
+        'dependencies = ["Six_Compat>=1.10", "./vendored/lib"]\n'
+    )
+    package = Package(
+        directory=directory,
+        path="packages/core",
+        name="acme-core",
+        depends=(),
+        extensions=("python",),
+    )
+    # A requirement that names no distribution is no direct dependency.
+    resolved = {"six-compat": "1.16.0", "idna": "3.10"}
+    assert _direct_versions(package, resolved) == {"six-compat": "1.16.0"}
 
 
 def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(

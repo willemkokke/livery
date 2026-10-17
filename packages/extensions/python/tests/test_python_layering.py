@@ -278,6 +278,59 @@ def test_the_python_test_requirement_opens_the_extra_joins_it_and_writes_the_flo
     assert _python.declare_test_requirement(plain, low, "") == []
 
 
+def test_a_test_extra_naming_the_sibling_twice_keeps_one_line_at_the_floor(
+    tmp_path: Path,
+) -> None:
+    low = _python_member(tmp_path, "low", '[project]\nname = "livery-low"\n', "python")
+    table = '[project]\nname = "livery-{0}"\n\n[project.optional-dependencies]\n{1}'
+    # One requirement to a line: the first naming the sibling takes the
+    # floor, and the later ones go.
+    spread = _python_member(
+        tmp_path,
+        "spread",
+        table.format(
+            "spread",
+            'test = [\n    "livery-low>=1.0",\n    "pyyaml",\n'
+            '    "livery-low>=1.1",\n]\n',
+        ),
+        "python",
+    )
+    assert _python.declare_test_requirement(spread, low, "1.2.0") == ["pyproject.toml"]
+    assert (
+        (spread.directory / "pyproject.toml")
+        .read_text()
+        .endswith('test = [\n    "livery-low>=1.2.0",\n    "pyyaml",\n]\n')
+    )
+    # On one line, the same.
+    inline = _python_member(
+        tmp_path,
+        "inline",
+        table.format(
+            "inline", 'test = ["livery-low>=1.0", "livery-low>=1.1", "pyyaml"]\n'
+        ),
+        "python",
+    )
+    _python.declare_test_requirement(inline, low, "1.2.0")
+    assert (
+        (inline.directory / "pyproject.toml")
+        .read_text()
+        .endswith('test = ["livery-low>=1.2.0", "pyyaml"]\n')
+    )
+    # A spread extra that does not name the sibling gains it at its end.
+    other = _python_member(
+        tmp_path,
+        "other",
+        table.format("other", 'test = [\n    "pyyaml",\n]\n'),
+        "python",
+    )
+    _python.declare_test_requirement(other, low, "1.2.0")
+    assert (
+        (other.directory / "pyproject.toml")
+        .read_text()
+        .endswith('test = [\n    "pyyaml",\n    "livery-low>=1.2.0",\n]\n')
+    )
+
+
 def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_project(
     tmp_path: Path,
 ) -> None:
@@ -364,3 +417,26 @@ def test_the_layering_phase_parses_each_source_once(
     _module(tmp_path, "tool", "a.py", "import json\nimport re\n")
     gate()
     assert [p.name for p in counted[4:]] == ["a.py"]
+
+
+def test_a_source_that_does_not_parse_or_is_gone_is_left_out(tmp_path: Path) -> None:
+    # The syntax gate names a broken file; the rules read what parses.
+    from livery.extensions.python import _parse
+    from livery.workshop import discover_packages
+
+    _package(tmp_path, "tool")
+    _module(tmp_path, "tool", "ok.py", "import json\n")
+    broken = _module(tmp_path, "tool", "broken.py", "def broken(:\n")
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    modules = _parse.parsed_modules(tmp_path, discover_packages(tmp_path))
+    assert [module.relative for module in modules] == ["packages/tool/src/ok.py"]
+    assert _parse.parsed_source(broken) is None
+    # A file that is gone is no source to read.
+    assert (
+        _parse.parsed_source(tmp_path / "packages" / "tool" / "src" / "gone.py") is None
+    )
+    # A broken file is never kept as parsed: fixed, it is read.
+    broken.write_text("import os\n\n\ndef fixed() -> None:\n    pass\n")
+    parsed = _parse.parsed_source(broken)
+    assert parsed is not None
+    assert [reference.name for reference in parsed.references] == ["os"]

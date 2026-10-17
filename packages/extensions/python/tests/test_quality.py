@@ -48,6 +48,33 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
     assert _python.module_for(package) == "livery.loop_echo"
 
 
+def test_a_src_tree_with_no_single_chain_falls_back_to_the_dist_spelling(
+    tmp_path: Path,
+) -> None:
+    # An empty src, and one that opens on two directories, name no module
+    # of their own; a dist name without a hyphen is its own module.
+    member = tmp_path / "packages" / "plain"
+    (member / "src").mkdir(parents=True)
+    package = Package(
+        directory=member,
+        path="packages/plain",
+        name="plain",
+        depends=(),
+        extensions=("python",),
+    )
+    assert _python.module_for(package) == "plain"
+    (member / "src" / "alpha").mkdir()
+    (member / "src" / "beta").mkdir()
+    hyphenated = Package(
+        directory=member,
+        path="packages/plain",
+        name="acme-plain",
+        depends=(),
+        extensions=("python",),
+    )
+    assert _python.module_for(hyphenated) == "acme.plain"
+
+
 def _python_member(tmp_path: Path, name: str, manifest: str = "") -> Package:
     member = tmp_path / "packages" / name
     member.mkdir(parents=True)
@@ -145,6 +172,15 @@ def test_the_roots_are_what_the_build_ships(tmp_path: Path) -> None:
     )
     (single.directory / "src").mkdir()
     assert _python.module_roots(single) == ("acme.seven",)
+
+
+def test_an_init_at_the_src_root_marks_no_root(tmp_path: Path) -> None:
+    # The file names no importable package, so the roots are the ones
+    # beneath it.
+    package = _python_member(tmp_path, "eight")
+    _root(package.directory, "eight")
+    (package.directory / "src" / "__init__.py").write_text("")
+    assert _python.module_roots(package) == ("acme.eight",)
 
 
 def test_the_python_test_entry_maps_a_selection_to_its_files(
