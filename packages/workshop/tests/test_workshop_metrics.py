@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from livery import git
 from livery.footman import Failed
+from livery.footman.testing import Runner
 from livery.forge import Step
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_context, _metrics
@@ -57,6 +60,7 @@ def _trace(
     tasks: dict[str, float],
     tests: dict[str, float] | None = None,
     steps: list[dict[str, object]] | None = None,
+    pairs: list[dict[str, Any]] | None = None,
 ) -> Path:
     events: list[dict[str, object]] = [
         {"ph": "M", "name": "process_name", "pid": 1, "args": {"name": "fm"}}
@@ -87,6 +91,20 @@ def _trace(
     )
     for step in steps or []:
         events.append({"ph": "X", "cat": "step", "pid": 1, **step})
+    # A pair under one id, as footman draws a step that overlaps a
+    # sibling on its track; ``dur`` of None leaves the begin alone.
+    for n, pair in enumerate(pairs or []):
+        begin: dict[str, Any] = {
+            "ph": "b",
+            "cat": "step",
+            "pid": 1,
+            "id2": {"local": f"check#{n}"},
+            **pair,
+        }
+        dur = begin.pop("dur")
+        events.append(begin)
+        if dur is not None:
+            events.append({**begin, "ph": "e", "ts": begin["ts"] + dur})
     for nodeid, ms in (tests or {}).items():
         for phase in ("test.setup", "test.call", "test.teardown"):
             events.append(
@@ -267,6 +285,99 @@ def test_a_step_belongs_to_the_innermost_task_holding_it_on_its_own_track(
     }
     # The tasks themselves are untouched, so nothing counts twice.
     assert row["tasks"] == {"check": 4640.0, "check/typecheck/typecheck": 2030.0}
+
+
+def test_a_step_drawn_as_an_async_pair_is_read_as_its_span(tmp_path: Path) -> None:
+    """A step that overlaps a sibling on its track is a begin/end pair, not a slice.
+
+    footman draws a ``parallel()`` block's children so, since the
+    slices on one track must nest. The pair is the step's span: held
+    by the task on its track like a slice. A begin without its end is
+    no span, a pair on another track is nobody's, and a pair that is
+    not a step is not read.
+    """
+    trace = _trace(
+        tmp_path / "fm-profile.json",
+        tasks={"check": 4640.0},
+        steps=[{"name": "typecheck.mypy", "tid": 1, "ts": 1100.0, "dur": 900_000}],
+        pairs=[
+            # Begun and never ended: no span.
+            {"name": "lint.docrefs", "tid": 1, "ts": 1100.0, "dur": None},
+            # Another track, overlapping in time: no task holds it.
+            {"name": "somewhere else", "tid": 9, "ts": 1100.0, "dur": 900_000},
+            # Not a step: a stream's window is not the gate's.
+            {"name": "poll", "cat": "section", "tid": 1, "ts": 1100.0, "dur": 900_000},
+            # Outlives the sibling that started before it: its whole wall.
+            {"name": "test.pytest", "tid": 1, "ts": 1200.0, "dur": 4_000_000},
+        ],
+    )
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    assert row["task_steps"] == {
+        "check/test.pytest": 4000.0,
+        "check/typecheck.mypy": 900.0,
+    }
+
+
+PARALLEL_TASKS = textwrap.dedent(
+    """
+    import sys
+    import time
+
+    import livery.footman as footman
+    from livery.footman import task
+    from livery.footman._compose import plugin
+
+    plugin("footman.profile")
+
+    def _sleeps(seconds):
+        time.sleep(seconds)
+
+    def _spawns(seconds):
+        footman.run([sys.executable, "-c", f"import time; time.sleep({seconds})"])
+
+    @task
+    def check():
+        footman.parallel(
+            footman.step(_sleeps, title="lint.short")(0.05),
+            footman.step(_spawns, title="test.pytest")(0.2),
+            footman.step(_sleeps, title="typecheck.long")(0.2),
+        )
+    """
+)
+
+
+def test_every_step_of_a_profiled_parallel_block_has_its_wall_in_the_row(
+    tmp_path: Path,
+) -> None:
+    """The gate runs its judges as the steps of one ``parallel()`` block.
+
+    footman puts every child's steps on the task's own track, and a
+    step that outlives the sibling that started before it is drawn as
+    an async pair, since the slices on one track must nest. Two
+    workers for three steps start the third after the first ends, so
+    one of the two long steps straddles the other whichever of them
+    started first. The row reads each step's whole wall either way, an
+    in-process step and one that spawned a captured child alike.
+    """
+    src = tmp_path / "tasks.py"
+    src.write_text(PARALLEL_TASKS)
+    trace = tmp_path / "fm-profile.json"
+    result = Runner().invoke(
+        ["--jobs=2", f"--profile={trace}", "check"], tasks=src, cwd=tmp_path
+    )
+    assert result.ok, result.stderr
+    events = json.loads(trace.read_text("utf-8"))["traceEvents"]
+    # The shape under test: at least one step left the slice lane.
+    assert any(e.get("ph") == "b" and e.get("cat") == "step" for e in events)
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    steps = row["task_steps"]
+    assert steps["check/lint.short"] >= 50.0
+    assert steps["check/test.pytest"] >= 200.0
+    assert steps["check/typecheck.long"] >= 200.0
+    # The child the test step spawned is a step of the task as well.
+    assert any("time.sleep" in key for key in steps), steps
 
 
 def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(

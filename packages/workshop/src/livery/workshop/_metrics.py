@@ -211,6 +211,14 @@ def _end(event: dict[str, Any]) -> float:
     return _start(event) + float(event.get("dur", 0.0))
 
 
+def _pair_id(event: dict[str, Any]) -> Any:
+    """What pairs an async begin with its end: the event's id, scoped or not."""
+    scoped = event.get("id2")
+    if isinstance(scoped, dict):
+        return scoped.get("local", scoped.get("global"))
+    return event.get("id")
+
+
 def _steps_by_task(
     spans: list[tuple[str, int, float, float]],
     ran: list[tuple[str, int, float, float, float]],
@@ -256,10 +264,14 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
 
     The trace is the Chrome trace the profiled gate wrote: every
     task's slice (its request address and duration), the lane waits,
-    and each pytest phase of every test as a slice of its own. The
-    row's ``files`` is the seconds each test file took, every phase of
-    every test in it summed, to a tenth. A missing or unreadable trace
-    is a reason, never a row.
+    each step inside its task, and each pytest phase of every test as
+    a slice of its own. A step is a slice nested in its task, or an
+    async pair (a begin and an end under one id) where it overlaps a
+    sibling on the task's track, which is how footman draws the steps
+    of one ``parallel()`` block; both read as the step's whole wall.
+    The row's ``files`` is the seconds each test file took, every
+    phase of every test in it summed, to a tenth. A missing or
+    unreadable trace is a reason, never a row.
     """
     if not trace.is_file():
         return None, f"no trace at {trace}: the gate did not run under --profile"
@@ -283,10 +295,30 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     calls: list[tuple[float, str]] = []
     begins: list[float] = []
     ends: list[float] = []
+    # A step that overlaps a sibling on its track is an async pair
+    # rather than a slice, since the slices on one track must nest.
+    # Its begin waits here for its end; the two are one span. A begin
+    # the trace never ends is no span.
+    begun: dict[tuple[Any, int, Any], dict[str, Any]] = {}
     for event in events:
-        if not isinstance(event, dict) or event.get("ph") != "X":
+        if not isinstance(event, dict):
             continue
+        phase = event.get("ph")
         cat = str(event.get("cat", ""))
+        if phase in ("b", "e"):
+            if cat != "step":
+                continue
+            key = (event.get("pid"), _track(event), _pair_id(event))
+            if phase == "b":
+                begun[key] = event
+            elif (opened := begun.pop(key, None)) is not None:
+                start, end = _start(opened), _start(event)
+                ms = round((end - start) / 1000.0, 1)
+                name = str(opened.get("name", ""))
+                ran.append((name, _track(event), start, end, ms))
+            continue
+        if phase != "X":
+            continue
         name = str(event.get("name", ""))
         if event.get("pid") == 1:
             begins.append(float(event.get("ts", 0.0)))
