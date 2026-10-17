@@ -308,6 +308,42 @@ def test_a_pull_requests_legs_follow_its_runners_and_every_leg_otherwise(
     assert _points.pull_request_legs(root) == ["check-b-3.14"]
 
 
+def test_a_shard_outside_the_form_refuses_naming_the_text(tmp_path: Path) -> None:
+    root = _root(tmp_path)
+
+    def never(argv: list[str], env: dict[str, str]) -> int:
+        raise AssertionError(argv)
+
+    # Judged before anything runs: no entry is spawned on a shard that is
+    # not one.
+    with pytest.raises(Failed, match="'0of2' is not a shard: the index counts from 1"):
+        _points.run_point(
+            root,
+            "gate",
+            "check",
+            os_label="a",
+            python="3.14",
+            shard="0of2",
+            spawn=never,
+        )
+    with pytest.raises(Failed, match="'3of2' is not a shard: the index is at most"):
+        _points.run_point(
+            root,
+            "gate",
+            "check",
+            os_label="a",
+            python="3.14",
+            shard="3of2",
+            spawn=never,
+        )
+    with pytest.raises(
+        Failed, match="'two' is not a shard; a shard is spelled <i>of<n>"
+    ):
+        _points.run_point(
+            root, "gate", "check", os_label="a", python="3.14", shard="two", spawn=never
+        )
+
+
 def test_an_entry_that_runs_once_runs_on_the_first_leg_alone(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -349,6 +385,56 @@ def _points_pythons(root: Path) -> list[str]:
     versions = python_matrix(root)
     assert len(versions) > 1, versions
     return versions
+
+
+def test_an_entry_that_runs_once_runs_on_the_first_shard_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.11"\n'
+    )
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "ci.e2e"\n'
+        'args = ["--shard={shard}"]\nonce = true\n',
+    )
+    seen: list[list[str]] = []
+    legs: list[str] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        legs.append(env.get("WORKSHOP_LEG", "<unset>"))
+        return 0
+
+    first, *rest = _points_pythons(root)
+    # The first leg, but not its first shard: the line names the shard.
+    _points.run_point(
+        root, "nightly", "nightly", python=first, shard="2of2", spawn=green
+    )
+    out = capsys.readouterr().out
+    assert "ci.e2e (workshop.toml) runs once, on the first shard (1of2); skipped" in out
+    assert "on the first leg" not in out
+    assert [argv[-1] for argv in seen] == ["doctor", "check"]
+    assert legs == [f"nightly-{first}-2of2"] * len(seen)
+    # The first shard of the first leg runs it, and ``{shard}`` in its
+    # arguments is the shard's spelling.
+    seen.clear()
+    _points.run_point(
+        root, "nightly", "nightly", python=first, shard="1of2", spawn=green
+    )
+    assert seen[-1][-2:] == ["ci.e2e", "--shard=1of2"]
+    # A leg that is not the first is skipped for the leg, whatever its
+    # shard; one shard of one spells ``1of1``.
+    seen.clear()
+    _points.run_point(
+        root, "nightly", "nightly", python=rest[-1], shard="1of2", spawn=green
+    )
+    out = capsys.readouterr().out
+    assert f"runs once, on the first leg ({first}); skipped" in out
+    assert "first shard" not in out
+    seen.clear()
+    _points.run_point(root, "nightly", "nightly", python=first, spawn=green)
+    assert seen[-1][-2:] == ["ci.e2e", "--shard=1of1"]
 
 
 def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
@@ -747,6 +833,23 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         "--job=check",
     ]
     assert legs[-1] == "check-ubuntu-latest-3.14"
+    # A GitLab job run as ``parallel: matrix`` is listed as
+    # ``check: [2of4]``, so the display carries the shard that way and
+    # the collect's join finds the forge's job; the label is the same
+    # spelling as on every forge.
+    seen.clear()
+    legs.clear()
+    _points.run_point(
+        root,
+        "gate",
+        "check",
+        os_label="ubuntu-latest",
+        python="3.14",
+        shard="2of4",
+        spawn=green,
+    )
+    assert seen[-1][-1] == "--job=check: [2of4]"
+    assert legs[-1] == "check-ubuntu-latest-3.14-2of4"
     monkeypatch.delenv("GITLAB_CI")
     monkeypatch.delenv("CI_PIPELINE_SOURCE")
     seen.clear()
@@ -760,6 +863,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "--profile=fm-profile-workflow-release-check-title.json",
             "workflow.release.check-title",
         ],
+        ["hse", "--profile=fm-profile-ci-fold.json", "ci.fold"],
         ["hse", "--profile=fm-profile-coverage-union.json", "coverage.union"],
         ["hse", "--profile=fm-profile-ci-metrics-collect.json", "ci.metrics.collect"],
         ["hse", "--profile=fm-profile-speed-judge.json", "speed.judge"],
@@ -776,6 +880,64 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "workflow.release.check-fresh",
         ],
     ]
+
+
+@pytest.mark.usefixtures("coverage_jobs")
+def test_the_runner_names_the_shard_in_the_label_the_display_and_the_check_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import livery.footman as footman
+
+    skip_unless_installed("docs")
+
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
+    root = _root(tmp_path)
+    seen: list[list[str]] = []
+    legs: list[str] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        legs.append(env.get("WORKSHOP_LEG", "<unset>"))
+        return 0
+
+    _points.run_point(
+        root,
+        "gate",
+        "check",
+        os_label="windows-latest",
+        python="3.14",
+        shard="2of4",
+        spawn=green,
+    )
+    # The shard ends the label every child reads and the display name
+    # the forge lists the job by; the walk alone takes the flag.
+    assert legs == ["check-windows-latest-3.14-2of4"] * len(seen)
+    assert seen == [
+        ["hse", "--profile=fm-profile-check.json", "check", "--shard=2of4"],
+        ["hse", "--profile=fm-profile-coverage-leg.json", "coverage.leg"],
+        [
+            "hse",
+            "--profile=fm-profile-ci-leg.json",
+            "ci.leg",
+            "--job=check (windows-latest, 3.14, 2of4)",
+        ],
+    ]
+    # One shard of one is the unsplit leg: no shard in the label or the
+    # display name, and the walk is called without the flag.
+    seen.clear()
+    legs.clear()
+    _points.run_point(
+        root,
+        "gate",
+        "check",
+        os_label="windows-latest",
+        python="3.14",
+        shard="1of1",
+        spawn=green,
+    )
+    assert legs == ["check-windows-latest-3.14"] * len(seen)
+    assert seen[0] == ["hse", "--profile=fm-profile-check.json", "check"]
+    assert seen[-1][-1] == "--job=check (windows-latest, 3.14)"
 
 
 def test_the_runner_hands_its_children_one_listing_of_the_store(
@@ -1161,6 +1323,7 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
     drawn = json.loads(text)["traceEvents"]
     assert [e["name"] for e in drawn] == [
         "workflow.release.check-title",
+        "ci.fold",
         "ci.metrics.collect",
         "speed.judge",
         "--needs=check,docs",

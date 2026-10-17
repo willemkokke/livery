@@ -806,7 +806,8 @@ step of the test phase and `fm test.pytest` the one, over the named
 paths or the workspace. A verb offers exactly the flags its steps
 read: `--fix` and `--safe-fix` where a step can fix, `--point` where
 one selects tests by CI point, so `fm test --point=nightly` runs the
-nightly's tests and `fm test.ctest` offers no point at all. A phase
+nightly's tests and `fm test.ctest` offers no point at all, and
+`--shard` where one runs its share of a sharded check leg. A phase
 whose verb already exists is served by it: `fm provenance` is the
 provenance phase's verb.
 
@@ -1330,7 +1331,17 @@ absence.
   selects a CI point's tests. A named path that is no file or
   directory in the workspace refuses, since checking nothing there
   would pass; the steps pass nothing through to a tool, so a tool's
-  own arguments after `--` refuse the same way. On a machine the gate
+  own arguments after `--` refuse the same way. `--shard=<i>of<n>`
+  runs one shard of a sharded check leg: a step that declares `shard`
+  among its flags runs on every shard and runs its share, and every
+  other step runs whole on the first shard alone, so a shard other
+  than the first leaves those steps out and prints one line for each,
+  `<phase>.<step>: left to the first shard (this leg is <i>of<n>)`.
+  On the first shard every step runs and nothing is printed. Inside
+  CI the leg's label ends in the shard, `check-ubuntu-latest-3.14-2of3`,
+  so the legs pass no flag. A sharded run on a machine records no tree
+  as proved, since a share of the gate ran; a shard outside the form,
+  `0of2`, refuses naming it. On a machine the gate
   is the reflex:
   it runs what the working tree changed since the nearest tree this
   checkout's own green gates proved (the one with the fewest changed
@@ -1455,11 +1466,56 @@ absence.
   number, refuses naming the key and the runner. A shard's label is
   its platform leg, `check-<os>-<python>`, with `-<i>of<n>` at the
   end; the platform leg keys every record below the gate job's fold.
+  `fm ci.run --shard=<i>of<n>` runs one shard of a leg: the shard ends
+  the label every entry reads in `WORKSHOP_LEG` and the job's display
+  name, `check (<os>, <python>, <i>of<n>)`, which the forge lists the
+  job by, and the `check` entry runs `fm check --shard=<i>of<n>`. A
+  leg that runs as one shard of one carries no shard in its label or
+  its display name, and its `check` entry runs `fm check` bare.
   Each shard partitions the run's test files by the platform leg's
   `durations` rows: longest first, each file into the shard with the
   least summed seconds, ties by name, a file no row names at the
   row's median, so every shard of a run computes the same partition
-  and every file lands in exactly one shard.
+  and every file lands in exactly one shard. The rendered check job
+  carries the shards as literals. On GitHub and Gitea, while every
+  count is one, its matrix is the `os` and `python` lists; when any
+  count is above one it is `include` entries, one per runner, Python
+  and shard in that order, each `{os, python, shard}` with the shard
+  spelled `<i>of<n>`, and a runner with one shard has its entry with
+  `1of1`, so every entry carries the key and the one call passes
+  `--shard="${{ matrix.shard }}"`. The forge names each job by the
+  entry's values in order, `check (windows-latest, 3.14, 2of4)`. When
+  a pull request's runners or counts differ from every other event's,
+  a `legs` job holds both matrices as literals, the event picks one,
+  and the check job reads it with `fromJSON`; both literals take the
+  `include` shape when any count on either event is above one. On
+  GitLab the one check job runs on the first runner, as that runner's
+  count through `parallel: matrix`, `SHARD` taking `1of2` and `2of2`,
+  and its call passes `--shard="$SHARD"`; GitLab reads the first
+  runner's count alone, since its one document serves every event.
+  Each shard leaves what
+  it partitioned in `.workshop/fm-shard.json`, and its one write
+  carries that record in its timing row. The gate job's `ci.fold`
+  entry, before any judge reads the run's refs, folds each platform's
+  shards into one leg: it refuses, naming the platform, the shards and
+  what differs, unless every shard the matrix produces left a ref with
+  a row and its record, the shards name one scope, one test-file set,
+  one list of durations rows read under one bound, no test file ran in
+  two shards, and the files they ran are together the set they
+  partitioned. The folded ref is keyed by the platform leg: the timing
+  row with the first shard's tasks, every shard's package sums added
+  and seconds per test file merged, named by the platform's own display
+  name, and every other file the shards' entries left folded by the
+  extension that leaves it, through the `ci.fold` query (the coverage
+  extension concatenates its parts per suite). The shards' refs are
+  dropped once the folded ref is put, so a fold that dies midway is
+  re-run as its own recovery. Below the fold the coverage records, the
+  verified stamp, the speed marks and the janitor's key set see one
+  leg per platform; the forge's rows of the shards stay in the run's
+  `metrics` file, times alone, for `fm ci.timings`. A run with no
+  sharded platform says so and folds nothing. On GitLab a job run as
+  `parallel: matrix` is listed as `check: [<i>of<n>]`, and the job's
+  display name spells the shard that way.
 - A check leg pushes what it cost. The gate runs profiled, so the leg
   writes a Chrome trace of every task, step and test it ran and pushes
   it to a channel of its own: refs no sync mirrors and no gate reads,
@@ -1769,7 +1825,7 @@ package each, which `fm ci.timings` renders as a trend.
 | --- | --- | --- | --- |
 | `metrics` | one run: every job's times, the run's wall, and the sections its judges left, the coverage extension's percentages among them | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the files its entries left, the suites the coverage extension measured with the scope it ran among them, until the gate job collects it | none | the leg |
-| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job |
+| `durations/<leg>` | one run on one platform leg: the seconds each test file took, every phase of every test in it summed over the leg's shards | 30 | the gate job's collect, after the fold |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | the coverage extension's record on one leg, main's or a branch's: one row per suite, its parts in the line format as its last run judged them, at the closure each was measured at, replaced in place, a row it replaced or removed kept a day; each file's fixed facts once under `facts/`, beside the rows; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | the coverage extension's mark of a package, and who set it | 400 | the gate job, `fm coverage.accept` |
@@ -1780,8 +1836,10 @@ package each, which `fm ci.timings` renders as a trend.
 
 The `durations` family is one series per platform leg,
 `check-<os>-<python>`, one row per run, `{"run": "<id>", "files":
-{"<path>": <seconds>}}`, the newest thirty kept; a series of a leg the
-matrix no longer produces is the janitor's to drop. A shard of that
+{"<path>": <seconds>}}`, the newest thirty kept, written by the gate
+job's collect from each check leg's folded row once the run's `metrics`
+file has landed; a series of a leg the matrix no longer produces is the
+janitor's to drop. A shard of that
 leg reads the newest five rows stamped before the committer time of
 the commit it checked out and takes the median per file; a row the
 store stamped at or after that time reaches no shard, so every shard

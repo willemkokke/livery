@@ -931,6 +931,7 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "release-notes",
         "job-built-members",
         "checkout-inputs",
+        "ci.fold",
     ]
     assert all(spec.extension == "livery.workshop" for spec in found.values())
     assert [name for name, spec in found.items() if spec.level == "workspace"] == [
@@ -941,10 +942,12 @@ def test_the_base_s_queries_are_read_from_its_contract_file() -> None:
         "release-notes",
         "job-built-members",
         "checkout-inputs",
+        "ci.fold",
     ]
     assert str(found["requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["test-requirements"].combine) == "livery.workshop._queries:merged"
     assert str(found["job-built-members"].combine) == "livery.workshop._queries:merged"
+    assert str(found["ci.fold"].combine) == "livery.workshop._queries:merged"
     assert str(found["executables"].combine) == "livery.workshop._queries:owned"
     assert (
         str(found["checkout-inputs"].combine)

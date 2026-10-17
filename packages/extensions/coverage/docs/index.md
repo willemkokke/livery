@@ -152,7 +152,13 @@ why. The workspace's own `tests/` directory is a unit too, keyed by
 every package's tree, while the root's set holds python: every leg that
 runs a suite runs it then. A root whose set holds no python runs none of
 its own tests, so no leg leaves a part for them and the union expects
-none. The gate job unions the legs' parts with the parts of every
+none. A platform whose check leg runs as several shards leaves one
+per-run ref per shard, each with the parts of the suites its slice of
+the test files reached; the gate job folds them into one leg before the
+union reads, under the platform leg, the shards' parts concatenated per
+suite in shard order, so a suite one shard measured and another did not
+is measured, and the union sees one leg per platform. The gate job
+unions the legs' parts with the parts of every
 skipped suite, carried from the records, before it judges, so the union
 is the same global union a full run produces, and writes that union back
 onto the branch's record; a suite no record can supply is red by name,
@@ -164,6 +170,11 @@ request owes the legs `[ci] pull-request-runners` names, and a leg it
 does not run is carried whole from the records; a pull request labelled
 `ci:every-runner` (`fm submit --every-runner`), a push and a dispatch
 owe every leg `[ci] runners` names.
+A platform leg that runs as several shards
+leaves, on each shard, the parts of the suites with a test file in that
+shard's share, as the shard's record names them; a suite whose share is
+empty on a shard is another shard's to leave, and the gate job folds the
+shards of a platform into one leg before the union reads.
 
 A branch's record outlives the branch by a day, because main's run for
 the squash that merged it carries the suites its legs skipped from that

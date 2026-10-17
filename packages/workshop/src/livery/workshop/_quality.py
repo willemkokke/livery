@@ -27,6 +27,7 @@ from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._extensions import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._phases import PhaseContext, walk_steps
+from livery.workshop._shard import ONE, Shard, shard_of
 
 # Re-exported by name: the drift step's body looks it up on this
 # module at run time, which is where the gate's characterisation tests
@@ -49,6 +50,7 @@ def _context(
     files: tuple[str, ...] = (),
     safe: bool = False,
     point: str = "",
+    shard: Shard = ONE,
     tests: Mapping[str, tuple[str, ...]] | None = None,
     examples: tuple[str, ...] = (),
     changes: Changes | None = None,
@@ -68,6 +70,7 @@ def _context(
         files=files,
         safe=safe,
         point=point,
+        shard=shard,
         changes=changes,
         arguments=arguments,
     )
@@ -107,10 +110,12 @@ def walk(
     run measures the tree the judges read; then every judge runs in
     one parallel block, the steps a judge runs after among them, and
     one refusal is the verdict. A step whose claims reach no file in
-    scope is said and not started. Without *judge* the walk stops
-    after the fixers, the post-edit hook's run. *only* keeps the named
-    steps alone, a generated verb's run. *inputs* are the keys the
-    walk gives each phase, the gate's own
+    scope is said and not started. On a shard other than the first, a
+    step that does not read the shard is left to the first shard and
+    said ([livery.workshop._steps.on_this_shard][]). Without *judge*
+    the walk stops after the fixers, the post-edit hook's run. *only*
+    keeps the named steps alone, a generated verb's run. *inputs* are
+    the keys the walk gives each phase, the gate's own
     ([livery.workshop._quality.GATE_INPUTS][]) unless another engine
     names its.
     """
@@ -118,17 +123,18 @@ def walk(
         print(line)
     ctx = replace(ctx, catalogue=_steps.catalogue(ctx))
 
-    def chosen(names: tuple[str, ...]) -> tuple[str, ...]:
-        return names if only is None else tuple(n for n in names if n in only)
+    def kept(names: tuple[str, ...]) -> tuple[str, ...]:
+        if only is not None:
+            names = tuple(n for n in names if n in only)
+        return _steps.on_this_shard(_steps.with_files(names, ctx), ctx)
 
-    for name in _steps.with_files(chosen(_steps.rewriters(ctx)), ctx):
+    for name in kept(_steps.rewriters(ctx)):
         walk_steps(ctx, (_steps.step_for(name),), inputs=inputs, fixing=True)
     if ctx.fix and between is not None:
         between()
     if not judge:
         return
-    names = _steps.with_files(chosen(_steps.judges(ctx)), ctx)
-    walk_steps(ctx, _steps.with_earlier(names), inputs=inputs)
+    walk_steps(ctx, _steps.with_earlier(kept(_steps.judges(ctx))), inputs=inputs)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -318,6 +324,10 @@ def check(
     ] = False,
     base: Annotated[str, doc("the branch the chain's root is taken from")] = "main",
     point: Annotated[str, doc("run the tests of this CI point, nightly say")] = "",
+    shard: Annotated[
+        str,
+        doc("run this shard's share of a sharded check leg: <i>of<n>, such as 2of4"),
+    ] = "",
 ) -> None:
     """Run the gate: every registered step, the rewriters first under --fix.
 
@@ -328,6 +338,14 @@ def check(
     their in-flight mode, which removes no code, and refuses beside
     ``--fix``. ``--point`` hands a CI point to the test phase, which
     selects that point's tests instead of the gate's.
+
+    ``--shard`` names the shard of a sharded check leg this run is,
+    ``2of4``: a step that reads the shard runs its share, every other
+    step runs on the first shard alone, and the walk names each step
+    it leaves there. Inside CI the leg's label names the shard and the
+    flag is not needed. A sharded run records no tree as proved, since
+    a share of the gate ran. A shard outside the form, ``0of2``,
+    refuses naming it.
 
     On a machine the gate is the reflex: it runs what the working
     tree changed since the nearest tree this checkout's own green
@@ -373,12 +391,15 @@ def check(
     from livery.workshop._steps import arguments_refusal, split_arguments
 
     _refuse_both(fix, safe_fix)
+    chosen = _current_shard(shard)
     paths, arguments = split_arguments(paths)
     if arguments:
         verb = f"{footman.prog()} check"
         fail(arguments_refusal(verb, _steps.steps_by_name().values()))
     if paths:
-        _check_files(paths, fix=fix or safe_fix, safe=safe_fix, point=point)
+        _check_files(
+            paths, fix=fix or safe_fix, safe=safe_fix, point=point, shard=chosen
+        )
         return
     root = workspace_root()
     scope = (
@@ -388,7 +409,12 @@ def check(
     )
     with scope:
         _run_check(
-            full=full, fix=fix or safe_fix, base=base, point=point, safe=safe_fix
+            full=full,
+            fix=fix or safe_fix,
+            base=base,
+            point=point,
+            safe=safe_fix,
+            shard=chosen,
         )
 
 
@@ -432,6 +458,7 @@ def _check_files(
     fix: bool,
     safe: bool,
     point: str,
+    shard: Shard = ONE,
     judge: bool = True,
     only: frozenset[str] | None = None,
     arguments: tuple[str, ...] = (),
@@ -485,6 +512,7 @@ def _check_files(
         files=files,
         safe=safe,
         point=point,
+        shard=shard,
         arguments=arguments,
     )
     walk(ctx, judge=judge, only=only, inputs=inputs)
@@ -497,13 +525,15 @@ def run_steps(
     fix: bool = False,
     safe_fix: bool = False,
     point: str = "",
+    shard: str = "",
     arguments: tuple[str, ...] = (),
 ) -> None:
     """Run the steps *names* through the walk: a generated verb's body.
 
     Over the named paths, or the whole workspace; nothing is recorded
     as proved, since a part of the gate ran. *arguments*, the words
-    after ``--`` on a step's own verb, reach that step's tool. The
+    after ``--`` on a step's own verb, reach that step's tool. *shard*
+    is the ``--shard`` flag's text, read as `check` reads it. The
     phases take the verb's inputs
     ([livery.workshop._quality.VERB_INPUTS][]), not the gate's.
     """
@@ -515,6 +545,7 @@ def run_steps(
             "a fix inside CI: the runner's checkout is judged, never rewritten."
             f" Run `{footman.prog()} check --fix` locally and push the result."
         )
+    chosen = _current_shard(shard)
     only = frozenset(names)
     if paths:
         _check_files(
@@ -522,13 +553,18 @@ def run_steps(
             fix=fix or safe_fix,
             safe=safe_fix,
             point=point,
+            shard=chosen,
             only=only,
             arguments=arguments,
             inputs=VERB_INPUTS,
         )
         return
     context = _context(
-        fix=fix or safe_fix, safe=safe_fix, point=point, arguments=arguments
+        fix=fix or safe_fix,
+        safe=safe_fix,
+        point=point,
+        shard=chosen,
+        arguments=arguments,
     )
     walk(context, only=only, inputs=VERB_INPUTS)
 
@@ -541,7 +577,9 @@ def run_phase_over(phase: str, packages: tuple[Package, ...]) -> None:
     after, over the named packages alone, with the gate's inputs. A
     package no step of the phase judges is skipped by the walk, and a
     phase with no step runs nothing. An extension runs a phase this
-    way over packages the gate did not run it on.
+    way over packages the gate did not run it on. Inside CI the leg's
+    label names the shard the run is, as `check` reads it without the
+    flag.
     """
     names = tuple(
         record.name
@@ -550,7 +588,7 @@ def run_phase_over(phase: str, packages: tuple[Package, ...]) -> None:
     )
     if not names:
         return
-    walk(_context(subset=packages), only=frozenset(names))
+    walk(_context(subset=packages, shard=_current_shard()), only=frozenset(names))
 
 
 def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
@@ -565,7 +603,12 @@ def fix_files(paths: tuple[str, ...], *, safe: bool = True) -> None:
 
 
 def _run_check(
-    full: bool, fix: bool, base: str, point: str = "", safe: bool = False
+    full: bool,
+    fix: bool,
+    base: str,
+    point: str = "",
+    safe: bool = False,
+    shard: Shard = ONE,
 ) -> None:
     """The gate itself; `check` opens the state store's snapshot around it."""
     import os
@@ -628,7 +671,9 @@ def _run_check(
                 # inputs changed judge, and no package's steps run.
                 if _steps.workspace_selected(_context(subset=(), changes=changes)):
                     print("  no package affected: the workspace steps run")
-                    _scoped_check((), fix=fix, point=point, changes=changes)
+                    _scoped_check(
+                        (), fix=fix, point=point, shard=shard, changes=changes
+                    )
                 else:
                     say_skipped(f"nothing affected: {_nothing_reason(step.paths)}")
                 _verified.write_marker(
@@ -651,7 +696,9 @@ def _run_check(
                     leg=run.leg,
                     base_tree=step.base_tree,
                 )
-                _scoped_check(subset, fix=fix, point=point, changes=changes)
+                _scoped_check(
+                    subset, fix=fix, point=point, shard=shard, changes=changes
+                )
                 return
     proved_tree = ""
     if run is None and root_for_ci is not None:
@@ -703,13 +750,16 @@ def _run_check(
                             )
                         else:
                             print("  no package affected: the workspace steps run")
-                            _scoped_check((), fix=fix, safe=safe, changes=changes)
+                            _scoped_check(
+                                (), fix=fix, safe=safe, shard=shard, changes=changes
+                            )
                         _remember_local(
                             root_for_ci,
                             run,
                             tree=reflex.tree,
                             packages=(),
                             base_tree=reflex.base_tree,
+                            shard=shard,
                         )
                         return
                     if len(members) < len(packages) or scope.tests:
@@ -739,6 +789,7 @@ def _run_check(
                             between=measure_step,
                             point=point,
                             safe=safe,
+                            shard=shard,
                             changes=changes,
                         )
                         _remember_local(
@@ -747,6 +798,7 @@ def _run_check(
                             tree=tree,
                             packages=tuple(package.path for package in subset),
                             base_tree=reflex.base_tree,
+                            shard=shard,
                         )
                         return
                     print("  every package is affected: everything runs")
@@ -766,8 +818,8 @@ def _run_check(
         nonlocal proved_tree
         proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
 
-    walk(_context(fix=fix, safe=safe, point=point), between=measure_whole)
-    _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
+    walk(_context(fix=fix, safe=safe, point=point, shard=shard), between=measure_whole)
+    _remember_local(root_for_ci, run, tree=proved_tree, packages=None, shard=shard)
 
 
 def _rewritten_tree(root: Path | None, run: RunContext | None, tree: str) -> str:
@@ -792,9 +844,20 @@ def _remember_local(
     tree: str,
     packages: tuple[str, ...] | None,
     base_tree: str = "",
+    shard: Shard = ONE,
 ) -> None:
-    """Record a green local gate on this machine's gate record; CI never writes it."""
+    """Record a green local gate on this machine's gate record; CI never writes it.
+
+    A sharded run ran a share of the gate, so it records nothing and
+    says so.
+    """
     if root is None or run is not None or not tree:
+        return
+    if shard != ONE:
+        print(
+            f"  shard {shard}: a share of the gate ran; the tree is not recorded"
+            " as proved"
+        )
         return
     from livery.workshop import _gate_record
 
@@ -810,6 +873,34 @@ def _current_point() -> str:
     from livery.workshop._ci_context import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
+
+
+def _current_shard(given: str = "") -> Shard:
+    """The shard this run is: *given* when there is one, else the CI leg's.
+
+    *given* is the ``--shard`` flag's text, ``2of4``. Without it,
+    inside CI, the leg's label ends in the shard
+    ([livery.workshop.shard_of][]), and a label without one is one
+    shard of one; outside CI every run is one shard of one.
+
+    Raises:
+        Failed: When *given*, or the label's tail, spells no shard,
+            naming it.
+    """
+    from livery.workshop._ci_context import LEG_VARIABLE, run_context
+
+    if given:
+        try:
+            return Shard.parse(given)
+        except ValueError as error:
+            fail(str(error))
+    run = run_context()
+    if run is None:
+        return ONE
+    try:
+        return shard_of(run.leg)
+    except ValueError as error:
+        fail(f"{LEG_VARIABLE}={run.leg}: {error}")
 
 
 def say_skipped(text: str) -> None:
@@ -852,6 +943,7 @@ def _scoped_check(
     between: Callable[[], None] | None = None,
     point: str = "",
     safe: bool = False,
+    shard: Shard = ONE,
     changes: Changes | None = None,
 ) -> None:
     """The gate over *subset* only: the registry's walk, narrowed.
@@ -872,6 +964,7 @@ def _scoped_check(
             examples=examples,
             point=point,
             safe=safe,
+            shard=shard,
             changes=changes,
         ),
         between=between,

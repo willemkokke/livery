@@ -49,7 +49,7 @@ from typing import Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
-from livery.workshop._speed import leg_label, leg_of
+from livery.workshop._speed import forge_shard_row, leg_label, leg_of
 
 #: The series: one row per tree id, the newest kept.
 SERIES = git.Series("verified", window=200)
@@ -364,8 +364,12 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     step put before the verdict; each check leg's row carries the
     scope its marker named and the leg's label, which the stamp
     names ([livery.workshop._speed.leg_of][]), so GitLab's bare job
-    name records its platform too. Every leg full, or skipped on the
-    record: the tree is stamped naming every leg, so after a pull
+    name records its platform too. A platform that ran as shards has
+    one row, folded under its own name before the collect, and the
+    forge's rows of its shards beside it, which carry no scope and are
+    skipped ([livery.workshop._speed.forge_shard_row][]). Every leg
+    full, or skipped on the record: the tree is stamped naming every
+    leg, so after a pull
     request's run on one platform the merge's run leaves a row naming
     every platform. Legs narrowed (``affected``, or ``nothing`` for a prose-only
     diff): the tree is stamped when every narrowed leg measured from
@@ -385,7 +389,13 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     jobs = row.data.get("jobs", {})
     if not isinstance(jobs, dict):
         jobs = {}
-    names = sorted(name for name in jobs if name.startswith("check"))
+    # The forge's own rows of a platform's shards carry no scope; the
+    # folded row under the platform's name carries what the stamp reads.
+    names = sorted(
+        name
+        for name in jobs
+        if name.startswith("check") and not forge_shard_row(name, jobs[name])
+    )
     if not names:
         return "  verified: no stamp, the run had no check leg"
     scopes = {

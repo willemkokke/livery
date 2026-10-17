@@ -259,6 +259,97 @@ def test_collect_drops_the_legs_measured_lines_with_its_half(
     assert coverage_record.run_legs(work, RUN) == ([], "")
 
 
+def test_the_fold_of_the_legs_file_refuses_two_platforms_scopes_packages_or_closures(
+    work: Path,
+) -> None:
+    # Refusals first, each naming what differs.
+    base, top = _packages(work)
+    del base, top
+    with pytest.raises(ValueError, match="no shard left its coverage file"):
+        coverage_record.fold_leg([])
+    shard = {
+        "leg": f"{LEG}-1of2",
+        "scope": "full",
+        "packages": [],
+        "run": "1013",
+        "forge": "gitea",
+        "units": {"packages/base": coverage_record.unit_fields(_unit("packages/base"))},
+        "facts": {},
+    }
+    with pytest.raises(ValueError, match="belong to 2 platforms"):
+        coverage_record.fold_leg([shard, {**shard, "leg": "check-macos-3.14-2of2"}])
+    with pytest.raises(ValueError, match=r"different scopes \(affected, full\)"):
+        coverage_record.fold_leg([shard, {**shard, "scope": "affected"}])
+    with pytest.raises(ValueError, match=r"different packages \(none; packages/top\)"):
+        coverage_record.fold_leg([shard, {**shard, "packages": ["packages/top"]}])
+    moved = coverage_record.unit_fields(_unit("packages/base", closure="b" * 64))
+    with pytest.raises(
+        ValueError,
+        match=rf"packages/base is measured at closure {'a' * 12} by one shard and"
+        rf" {'b' * 12} by another",
+    ):
+        coverage_record.fold_leg([shard, {**shard, "units": {"packages/base": moved}}])
+
+
+def test_the_fold_concatenates_the_shards_parts_per_unit_under_the_platform_leg(
+    work: Path,
+) -> None:
+    first = _unit("packages/base", lines={"packages/base/src/base/mod.py": "1"})
+    second = _unit("packages/base", lines={"packages/base/src/base/mod.py": "2"})
+    top = _unit("packages/top", lines={"packages/top/src/top/mod.py": "1"})
+    one = {
+        "leg": f"{LEG}-1of2",
+        "scope": "affected",
+        "packages": ["packages/top", "packages/base"],
+        "run": "1013",
+        "forge": "gitea",
+        "units": {"packages/base": coverage_record.unit_fields(first)},
+        "facts": coverage_record.units_facts([first]),
+    }
+    two = {
+        **one,
+        "leg": f"{LEG}-2of2",
+        "packages": ["packages/base", "packages/top"],
+        "units": {
+            "packages/base": coverage_record.unit_fields(second),
+            "packages/top": coverage_record.unit_fields(top),
+        },
+        "facts": coverage_record.units_facts([second, top]),
+    }
+    folded = coverage_record.fold_leg([one, two])
+    # The platform leg, the one scope and packages, every unit any shard
+    # measured, its parts in shard order; a unit one shard measured is
+    # measured.
+    assert folded["leg"] == LEG and folded["scope"] == "affected"
+    assert folded["packages"] == ["packages/base", "packages/top"]
+    assert folded["run"] == "1013" and folded["forge"] == "gitea"
+    assert sorted(folded["units"]) == ["packages/base", "packages/top"]
+    assert folded["units"]["packages/base"]["parts"] == [*first.parts, *second.parts]
+    assert folded["units"]["packages/base"]["closure"] == "a" * 64
+    assert folded["units"]["packages/top"]["parts"] == list(top.parts)
+    assert set(folded["facts"]) == set(
+        coverage_record.units_facts([first, second, top])
+    )
+    # Read back as the union reads a leg's file: one leg, two units.
+    unit, why = coverage_record._parse_unit(
+        folded["units"]["packages/base"], facts=folded["facts"]
+    )
+    assert why == "" and unit is not None and len(unit.parts) == 2
+    # The answer to the fold query names the leg's file.
+    assert coverage_record.folders(work) == {
+        coverage_record.RUN_FILE: coverage_record.fold_leg
+    }
+
+
+def test_the_fold_query_is_answered_while_coverage_is_listed(tmp_path: Path) -> None:
+    from livery.workshop import Query, answer
+
+    (tmp_path / "workshop.toml").write_text('[workspace]\nextensions = ["coverage"]\n')
+    query: Query[dict[str, object]] = Query("ci.fold")
+    folders = answer(tmp_path, query)
+    assert folders == {coverage_record.RUN_FILE: coverage_record.fold_leg}
+
+
 def test_the_puts_refuse_outside_ci(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

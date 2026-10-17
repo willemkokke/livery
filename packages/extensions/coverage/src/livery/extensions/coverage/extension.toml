@@ -67,9 +67,12 @@ entries = ["coverage.leg"]
 judges = ["coverage.union"]
 
 # The record and the marks are series of the state store: the janitor
-# bounds them and fm store.ls lists them.
+# bounds them and fm store.ls lists them. A platform's shards each leave
+# the leg's coverage file; the gate job's fold asks how to make them
+# one, and the answer concatenates the shards' parts per suite.
 [queries]
 "store.series" = "livery.extensions.coverage._record:series"
+"ci.fold" = "livery.extensions.coverage._record:folders"
 
 # While python is listed, a machine's run of the python suites prints
 # this extension's preview: each package's figure beside its floor,

@@ -11,15 +11,20 @@ from the trace's pytest slices.
 Two writers, both inside CI. Each check leg ends with `put_leg`: it
 reads the trace the profiled gate wrote and puts the task half of
 its row on the leg's per-run ref, in one write with every file the
-leg's other entries left in its spool (`LEG_SPOOL`); a write that
-fails is a red leg. The run's gate job runs `collect`: it reads the
+leg's other entries left in its spool (`LEG_SPOOL`); a leg that ran
+as one shard of several carries the record it left of what it
+partitioned in the row, under ``shard``; a write that fails is a red
+leg. The run's gate job first folds each platform's shards into one
+ref ([livery.workshop._fold][]), then runs `collect`: it reads the
 per-run refs, asks the forge for the run's jobs, joins the two
 halves, folds in the sections the job's judges left (`RUN_ROW`),
-puts the run's file on the series under its window, and drops the
-per-run refs; it fails open loudly, a printed reason and never a
-red job. Local runs read: `render` is what `fm ci.timings` prints,
-the latest value, p50, and p90 per metric over the window, the
-movers against a base window, and each section's trend.
+puts the run's file on the series under its window, writes each
+check leg's seconds per test file onto its platform leg's series of
+the [livery.workshop.DURATIONS][] family, and drops the per-run
+refs; it fails open loudly, a printed reason and never a red job.
+Local runs read: `render` is what `fm ci.timings` prints, the latest
+value, p50, and p90 per metric over the window, the movers against a
+base window, and each section's trend.
 """
 
 from __future__ import annotations
@@ -34,6 +39,8 @@ from typing import TYPE_CHECKING, Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
+from livery.workshop._shard import DURATIONS, marker_fields, platform_leg, read_shard
+from livery.workshop._speed import leg_of
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -330,11 +337,16 @@ def put_leg(
     it landed or there was nothing to write. The row is read from
     *trace* ([livery.workshop._metrics.leg_row][]), with the scope the
     gate ran; a trace that cannot be read leaves the row out, says
-    why, and the spool's files go alone. Every file the leg's entries
-    left in `LEG_SPOOL` rides beside the row under its own name
-    ([livery.workshop._metrics.leg_files][]), so the leg writes its
-    ref once. A leg without a label, and a spool file no reader takes,
-    fail the write by name.
+    why, and the spool's files go alone. A leg that ran as one shard
+    of several left what it partitioned in `SHARD_FILE`
+    ([livery.workshop.read_shard][]), and the row carries that record
+    under ``shard`` for the gate job's fold; a leg that is one shard
+    of one leaves no such file and its row carries no ``shard``. Every
+    file the leg's entries left in `LEG_SPOOL` rides beside the row
+    under its own name ([livery.workshop._metrics.leg_files][]), so
+    the leg writes its ref once. A leg without a label, a shard file
+    that is not a record, and a spool file no reader takes, fail the
+    write by name.
     """
     lines: list[str] = []
     if not label:
@@ -352,6 +364,13 @@ def put_leg(
         # trace: the stamp after the verdict reads it back per leg.
         scope = leg_scope(trace.parent if trace.is_absolute() else root)
         row["scope"] = {**asdict(scope), "packages": list(scope.packages)}
+        # What the shard partitioned, for the gate job's proof that the
+        # platform's shards are one leg's work.
+        marker, why = read_shard(root)
+        if why:
+            return lines, why
+        if marker is not None:
+            row["shard"] = marker_fields(marker)
         files[ROW_FILE] = row
     spooled, why = leg_files(root)
     if why:
@@ -449,7 +468,17 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     a run under; *sha* is the checkout, the fallback and the row's
     own record. Every job the forge lists is recorded, the legs with
     their traces, the others with their forge times alone, and the
-    run's own wall from its start to this collection.
+    run's own wall from its start to this collection. A platform that
+    ran as shards has one row, folded under the platform's display
+    name before the collect ([livery.workshop._fold][]), a name the
+    forge never ran: the row takes the forge times of the first
+    shard's job and concludes as the shards' jobs did, and the forge's
+    rows of the shards stand beside it with their times alone, for
+    ``fm ci.timings``. After the run's file lands, each check leg's
+    seconds per test file go onto its platform leg's series of the
+    [livery.workshop.DURATIONS][] family, one row per run, which the
+    next run's shards partition by; a leg without them writes none,
+    and a refused write is a line.
     """
     lines: list[str] = []
     keys = RUNS.listed(state_store(root), run.run_id)
@@ -519,10 +548,18 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             "slowest": half.get("slowest", []),
             "scope": half.get("scope", {"scope": "unknown", "packages": []}),
         }
+        shard = half.get("shard")
+        if isinstance(shard, dict):
+            row["shard"] = shard
+        conclusion: str = job.conclusion if job is not None else ""
+        if job is None and isinstance(shard, dict):
+            job, conclusion, line = _folded_job(name, shard, jobs)
+            if line:
+                lines.append(line)
         if job is None:
             lines.append(f"  {name}: unknown to the forge; its trace half rides alone")
         else:
-            row["conclusion"] = job.conclusion
+            row["conclusion"] = conclusion
             row.update(
                 _times(job, created=entry["created_at"], now=entry["collected_at"])
             )
@@ -555,6 +592,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     lines.append(
         f"  {SERIES.ref}: run {run.run_id} recorded, {len(entry['jobs'])} job(s)"
     )
+    lines.extend(_put_durations(root, run, halves))
     red = sorted(
         f"{name}: {job.conclusion}"
         for name, job in jobs.items()
@@ -568,6 +606,83 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     for ref in sorted(refs):
         gone = git.drop(state_store(root), ref)
         lines.append(f"  {ref}: {gone or 'dropped'}")
+    return lines
+
+
+def _folded_job(
+    name: str, shard: Mapping[str, Any], jobs: Mapping[str, Job]
+) -> tuple[Job | None, str, str]:
+    """The forge job a folded row takes its times from, its conclusion, and the line.
+
+    The folded row of a platform's shards is named by the platform's
+    display name (``check (windows-latest, 3.14)``), which the forge
+    never ran; its ``shard`` lists the shards' jobs. The row takes the
+    first listed job the forge knows, and concludes as the shards'
+    jobs did: ``success`` when every known one did, else the first
+    other conclusion. ``(None, "", "")`` when the forge knows none of
+    them.
+    """
+    listed: Any = shard.get("shards")
+    names = (
+        [str(item.get("job", "")) for item in listed if isinstance(item, dict)]
+        if isinstance(listed, list)
+        else []
+    )
+    known = [jobs[job] for job in names if job in jobs]
+    if not known:
+        return None, "", ""
+    first = known[0]
+    conclusion = next(
+        (job.conclusion for job in known if job.conclusion != "success"),
+        first.conclusion,
+    )
+    return (
+        first,
+        conclusion,
+        f"  {name}: the forge times of {first.name}, the first of {len(names)}"
+        " shard(s)",
+    )
+
+
+def _put_durations(
+    root: Path, run: RunContext, halves: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
+    """Write each leg's seconds per test file onto its platform leg's series; the lines.
+
+    One row per leg whose half carries ``files``, named as the run's
+    file ([livery.workshop._metrics.run_file][]), on the series of
+    [livery.workshop.DURATIONS][] keyed by the platform leg the leg's
+    label names ([livery.workshop.platform_leg][]). A half without
+    ``files`` writes nothing. The row of one shard of several writes
+    nothing either, since the fold's row carries the platform's
+    files; a shard's row reaches the collect only when the fold did
+    not run. A refused write is a line, never a red job.
+    """
+    lines: list[str] = []
+    for name, half in sorted(halves.items()):
+        files = half.get("files")
+        if not isinstance(files, dict) or not files:
+            continue
+        shard = half.get("shard")
+        if isinstance(shard, dict) and "shards" not in shard:
+            lines.append(
+                f"  {name}: one shard's row; the platform's folded row carries"
+                " the durations"
+            )
+            continue
+        leg = platform_leg(leg_of(name, half))
+        series = DURATIONS.series(leg)
+        why = series.put(
+            state_store(root),
+            {run_file(run.run_id): {"run": run.run_id, "files": files}},
+            message=f"durations: {leg} from run {run.run_id}",
+        )
+        if why:
+            lines.append(f"  {series.ref}: not written ({why})")
+        else:
+            lines.append(
+                f"  {series.ref}: {len(files)} file(s) recorded for run {run.run_id}"
+            )
     return lines
 
 

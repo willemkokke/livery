@@ -81,7 +81,7 @@ def _flags(group: Group, key: str) -> set[str]:
 
     flags = {p.name for p in parameters if p.kind is inspect.Parameter.KEYWORD_ONLY}
     for flag in flags:
-        assert hints[flag] is (str if flag == "point" else bool), flag
+        assert hints[flag] is (str if flag in ("point", "shard") else bool), flag
     return flags
 
 
@@ -92,7 +92,8 @@ def test_a_flag_no_verb_offers_refuses(registry: None) -> None:
     with pytest.raises(
         _FAILURES,
         match=re.escape(
-            "step 'lint.odd' reads verbose, which no verb offers; the flags are point"
+            "step 'lint.odd' reads verbose, which no verb offers; the flags are"
+            " point, shard"
         ),
     ):
         register_step(StepRecord("odd", "lint", _idle, flags=("verbose",)))
@@ -331,12 +332,24 @@ def test_a_verb_runs_its_steps_through_the_walk(
         (
             ("probe.alpha", "probe.beta"),
             ("a.py",),
-            {"fix": True, "safe_fix": False, "point": "", "arguments": ()},
+            {
+                "fix": True,
+                "safe_fix": False,
+                "point": "",
+                "shard": "",
+                "arguments": (),
+            },
         ),
         (
             ("probe.beta",),
             (),
-            {"fix": False, "safe_fix": False, "point": "nightly", "arguments": ()},
+            {
+                "fix": False,
+                "safe_fix": False,
+                "point": "nightly",
+                "shard": "",
+                "arguments": (),
+            },
         ),
     ]
 
@@ -346,6 +359,55 @@ def test_a_verb_runs_its_steps_through_the_walk(
     calls.clear()
     body("default")()
     assert calls[0][0] == ("probe.alpha", "probe.beta", "probe.delta")
+
+
+def test_a_verb_offers_the_shard_where_a_step_reads_it(
+    empty: None, fake_phases: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def run_steps(
+        names: tuple[str, ...], paths: tuple[str, ...] = (), **flags: object
+    ) -> None:
+        del names, paths
+        calls.append(flags)
+
+    monkeypatch.setattr(_quality, "run_steps", run_steps)
+    register_step(StepRecord("alone", "probe", _idle, flags=("shard",)))
+    register_step(StepRecord("pointed", "probe", _idle, flags=("point", "shard")))
+    register_step(StepRecord("fixed", "probe", _idle, fix=_idle, flags=("shard",)))
+    register_step(
+        StepRecord("whole", "probe", _idle, fix=_idle, flags=("point", "shard"))
+    )
+    register_step(StepRecord("plain", "probe", _idle, fix=_idle))
+    root = Group("root")
+    generate_verbs(root)
+    probe = root.groups["probe"]
+    # --shard where a step reads it, beside whatever else it reads, and
+    # nowhere else: a step without the flag refuses --shard as it
+    # refuses --point, since its verb does not offer it.
+    assert _flags(probe, "alone") == {"shard"}
+    assert _flags(probe, "pointed") == {"point", "shard"}
+    assert _flags(probe, "fixed") == {"fix", "safe_fix", "shard"}
+    assert _flags(probe, "whole") == {"fix", "safe_fix", "point", "shard"}
+    assert _flags(probe, "plain") == {"fix", "safe_fix"}
+    assert _flags(probe, "default") == {"fix", "safe_fix", "point", "shard"}
+    # Every body hands the shard on as it was given.
+    for key in ("alone", "pointed", "fixed", "whole", "default"):
+        inspect.unwrap(probe.tasks[key])(shard="2of4")
+    assert (
+        calls
+        == [
+            {
+                "fix": False,
+                "safe_fix": False,
+                "point": "",
+                "shard": "2of4",
+                "arguments": (),
+            }
+        ]
+        * 5
+    )
 
 
 def test_an_address_an_existing_verb_holds_is_served_by_it(
@@ -424,9 +486,9 @@ def test_the_builtin_steps_generate_the_phase_verbs(python_steps: object) -> Non
     root = Group("root")
     generate_verbs(root)
     test = root.groups["test"]
-    # --point where a step reads it, and nowhere else.
-    assert _flags(test, "default") == {"point"}
-    assert _flags(test, "fake") == {"point"}
+    # --point and --shard where a step reads them, and nowhere else.
+    assert _flags(test, "default") == {"point", "shard"}
+    assert _flags(test, "fake") == {"point", "shard"}
     assert _flags(root.groups["layering"], "sibling-references") == {
         "fix",
         "safe_fix",

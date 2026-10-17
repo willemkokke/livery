@@ -12,12 +12,14 @@ import workshop_python_steps as fake_steps
 from livery.workshop import _steps
 from livery.workshop._packages import discover_packages
 from livery.workshop._phases import PhaseContext
+from livery.workshop._shard import ONE, Shard
 from livery.workshop._steps import (
     PACKAGE,
     ROOT_UNIT,
     Claim,
     StepRecord,
     catalogue,
+    on_this_shard,
     reads_files,
     register_step,
     run_step,
@@ -77,6 +79,28 @@ def test_a_scope_holding_no_package_runs_no_step_that_narrows_by_packages(
     assert "lint.whole" not in names
     assert "lint.pages" in names
     assert "lint.pages" in with_files(names, ctx)
+
+
+def test_a_later_shard_leaves_a_step_without_the_flag_to_the_first(
+    tmp_path: Path, registry: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A step that reads the shard runs its share on every shard; one
+    # that does not runs whole, so the first shard runs it alone and
+    # every other shard says it left it there.
+    register_step(StepRecord("whole", "lint", _idle))
+    register_step(StepRecord("share", "lint", _idle, flags=("shard",)))
+    names = ("lint.whole", "lint.share")
+    assert on_this_shard(names, PhaseContext(root=tmp_path, shard=Shard(2, 3))) == (
+        "lint.share",
+    )
+    assert capsys.readouterr().out == (
+        "  lint.whole: left to the first shard (this leg is 2of3)\n"
+    )
+    # The first shard, and a run that is one shard of one, keep every
+    # step and say nothing.
+    for shard in (Shard(1, 3), ONE):
+        assert on_this_shard(names, PhaseContext(root=tmp_path, shard=shard)) == names
+    assert capsys.readouterr().out == ""
 
 
 # The fallback first: without a listing, every step that applies runs.

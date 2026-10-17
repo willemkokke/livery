@@ -8,8 +8,9 @@ merge point). A point is a declaration, [livery.workshop._points.Point][]:
 its workflow file, its events, and its jobs, each job stating what it
 needs in the workshop's words ([livery.workshop._points.Job][]); each
 forge's renderer says those in its own. The emitted workflow is a
-static shell, one ``fm ci.run --point=<p> --job=<j>`` per job, and
-what a job does is data: the builtin schedule below, plus the
+static shell, one ``fm ci.run --point=<p> --job=<j>`` per job, with
+``--shard=<i>of<n>`` on a check leg the contract splits, and what a
+job does is data: the builtin schedule below, plus the
 ``[[ci.schedule]]`` entries a workspace declares in ``workshop.toml``.
 The matrix shape belongs to a point's job, never to a task.
 
@@ -52,7 +53,7 @@ from livery.workshop._ci_context import (
     state_store,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._shard import Shard
+from livery.workshop._shard import ONE, Shard
 
 if TYPE_CHECKING:
     from livery.workshop._influence import Inputs
@@ -1181,16 +1182,22 @@ class Entry:
         args: The arguments, each formatted with the run's facts:
             ``{display}`` the job's display name, ``{label}`` the
             leg's label, ``{os}`` and ``{python}`` the matrix values,
-            and each of the point's dispatch inputs by name
-            (``{ref}`` on the release), empty when the run was not
-            dispatched with it.
+            ``{shard}`` the leg's shard spelled ``<i>of<n>`` (``1of1``
+            on a leg that is not split), and each of the point's
+            dispatch inputs by name (``{ref}`` on the release), empty
+            when the run was not dispatched with it.
         source: Where the entry was declared.
         every: The cadence, ``""`` for every run of the point, ``1w``
             for one run a week, ``2w`` for one run every two weeks;
             a run on any other day skips the entry and names the day
             it runs next.
         once: Whether the entry runs on a matrix job's first leg alone,
-            the first runner and the first Python; every leg otherwise.
+            the first runner and the first Python, and on that leg's
+            first shard alone; every leg and shard otherwise.
+        sharded: Whether the entry takes the leg's shard,
+            ``--shard=<i>of<n>`` after its arguments, when the leg
+            runs as one of several shards; on a leg that runs as one
+            shard of one the entry takes nothing more.
         last: Whether the entry runs after every entry an extension
             adds to the job, the janitor's shape; the added entries go
             before the first such entry.
@@ -1209,6 +1216,7 @@ class Entry:
     once: bool = False
     last: bool = False
     judges: bool = False
+    sharded: bool = False
 
 
 #: The cadences an entry may declare, in days.
@@ -1256,7 +1264,9 @@ COLLECT = "ci.metrics.collect"
 #: its own commit and exits fast when no contract path changed, and
 #: the release dispatch, green unless a merged release is unpublished.
 BUILTIN: tuple[Entry, ...] = (
-    Entry("gate", "check", "check"),
+    # The walk takes the leg's shard when the leg is one of several, so
+    # the steps that split run their share; an unsplit leg calls it bare.
+    Entry("gate", "check", "check", sharded=True),
     # The leg's one write, after whatever the extensions add to the
     # job: its timing row and every file their entries left go on its
     # per-run ref together.
@@ -1268,6 +1278,10 @@ BUILTIN: tuple[Entry, ...] = (
     # its own. The judges the extensions add run after it, before the
     # collect, so what they leave rides the run's row.
     Entry("gate", "gate", "workflow.release.check-title"),
+    # The fold next, before any judge reads the run's refs: a platform
+    # that ran as shards has one ref per shard, and the judges, the
+    # collect and the stamp read one leg per platform.
+    Entry("gate", "gate", "ci.fold"),
     Entry("gate", "gate", COLLECT),
     # The speed judge reads the run's row the collect just put: a
     # suite over its mark for the second run in a row is red here,
@@ -1778,6 +1792,7 @@ def run_point(
     *,
     os_label: str = "",
     python: str = "",
+    shard: str = "",
     spawn: Callable[[list[str], dict[str, str]], int] = _spawn,
 ) -> None:
     """Run every entry of *job* at *point*, in order; a red entry fails the job.
@@ -1792,7 +1807,18 @@ def run_point(
 
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
-    leg. An entry with a cadence runs only on its day, judged by
+    leg. *shard* is the leg's shard, ``2of4``, on a check leg the
+    contract splits; empty runs as one shard of one. A count above
+    one ends the label and the display name
+    (``check-windows-latest-3.14-2of4``, ``check (windows-latest,
+    3.14, 2of4)``, and on GitLab ``check: [2of4]``, as it lists a job
+    run as ``parallel: matrix``), and an entry declared ``sharded``
+    takes ``--shard=2of4``; one shard of one leaves the label, the
+    display name and every call as the unsplit leg's. A spelling outside
+    ``<i>of<n>`` fails naming it, before any entry runs. An entry
+    with ``once`` runs on the first leg's first shard alone, and the
+    skip line names the shard when the leg is the first. An entry
+    with a cadence runs only on its day, judged by
     `today`, and says when it runs next otherwise. Every entry runs
     under ``--profile``, writing its own trace beside the others, and
     the job's box collects them into one timeline the runner pushes;
@@ -1809,6 +1835,10 @@ def run_point(
     from livery.git import remote_snapshot
     from livery.workshop._ci_context import SNAPSHOT_VARIABLE
 
+    try:
+        split = Shard.parse(shard) if shard else ONE
+    except ValueError as error:
+        fail(str(error))
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
     if resolved != point:
@@ -1821,17 +1851,32 @@ def run_point(
     # the collect step joins the leg's row with the forge's job by it:
     # GitHub and Gitea show a matrix job as ``check (ubuntu-latest,
     # 3.14)``; GitLab names the job by its key alone, the matrix
-    # riding its variables and never its name.
+    # riding its variables and never its name, except that a job run
+    # as ``parallel: matrix`` is listed as ``check: [2of4]``.
     run = run_context()
     # Only the dimensions the matrix actually has: the nightly point runs a
     # matrix of pythons and no runners, and the forge lists that job as
     # ``nightly (3.14)``. Spelling an absent dimension as an empty one gave
     # ``nightly (, 3.14)``, which matched no job the forge had.
     parts = [part for part in (os_label, python) if part]
-    matrix = bool(parts) and (run is None or run.forge != "gitlab")
-    display = f"{job} ({', '.join(parts)})" if matrix else job
+    # The shard ends the label and the display name only where the leg
+    # is one of several: one shard of one is the unsplit leg, spelled
+    # as the platform leg every record is keyed by.
+    if split.count > 1:
+        parts.append(str(split))
+    gitlab = run is not None and run.forge == "gitlab"
+    if gitlab:
+        display = f"{job}: [{split}]" if split.count > 1 else job
+    else:
+        display = f"{job} ({', '.join(parts)})" if parts else job
     label = "-".join([job, *parts])
-    facts = {"display": display, "label": label, "os": os_label, "python": python}
+    facts = {
+        "display": display,
+        "label": label,
+        "os": os_label,
+        "python": python,
+        "shard": str(split),
+    }
     # A dispatched point's inputs, as the run received them, by name:
     # the release's ``{ref}`` names the squash the wave publishes.
     from livery.workshop._ci_context import dispatch_inputs
@@ -1887,6 +1932,13 @@ def run_point(
                             f" once, on the first leg ({first}); skipped"
                         )
                         continue
+                    if not split.first:
+                        print(
+                            f"  {resolved}/{job}: {entry.task} ({entry.source}) runs"
+                            f" once, on the first shard ({Shard(1, split.count)});"
+                            " skipped"
+                        )
+                        continue
                 if entry.every:
                     is_due, when = due(entry.every, today())
                     if not is_due:
@@ -1900,6 +1952,8 @@ def run_point(
                     argv.append(f"--profile={trace_file(entry.task)}")
                 argv.append(entry.task)
                 argv.extend(arg.format(**facts) for arg in entry.args)
+                if entry.sharded and split.count > 1:
+                    argv.append(f"--shard={split}")
                 print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
                 code = spawn(argv, env)
                 if code != 0:
