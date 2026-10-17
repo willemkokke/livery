@@ -10,18 +10,33 @@ listing nothing measures for is dormant and named.
 from __future__ import annotations
 
 import configparser
+import json
 import subprocess
 import sys
 import tomllib
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
 
+from livery.extensions.pytest import _slice as pytest_slice
 from livery.extensions.python import _backend as _python
-from livery.workshop import Package, PhaseContext, Query, answer
+from livery.workshop import (
+    Package,
+    PhaseContext,
+    Query,
+    RunContext,
+    Shard,
+    ShardMarker,
+    answer,
+    files_digest,
+    partition,
+    read_shard,
+)
 from livery.workshop import _steps as registry
+from livery.workshop._shard import ONE
 
 if TYPE_CHECKING:
     from livery.workshop._composition import Lookup
@@ -761,3 +776,490 @@ def test_the_examples_run_by_python_s_runner(
     # The words after -- on the step's own verb reach the runner.
     record.run(PhaseContext(root=tmp_path, packages=(one,), arguments=("-x",)))
     assert ran[-1][3] == ("-x",)
+
+
+# The sharded check leg: the test step runs its shard's share of the
+# test files. The fallbacks first: a store that cannot be read and a
+# leg with no durations row leave every file to the first shard; a
+# suite with no file in the share is left out of the call. Then the
+# partition, the serial suite, one shard of one, and the top-up.
+
+#: The bound every shard of a run reads the durations under: the
+#: checkout's committer time, which the stand-in answers.
+BOUND = datetime(2026, 10, 17, 9, 30, tzinfo=UTC)
+
+#: The platform leg whose durations a shard reads.
+LEG = "check-ubuntu-latest-3.14"
+
+
+def _sharded(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    durations: dict[str, float] | None = None,
+    rows: tuple[str, ...] = (),
+    reason: str = "",
+    leg: str = f"{LEG}-1of2",
+    ci: bool = True,
+) -> list[tuple[str, datetime]]:
+    """Stand in for the store and the checkout; each read the step makes of the store.
+
+    The durations series answers *durations* for the rows *rows*, or
+    *reason* when it cannot be read, and the checkout's committer
+    time is `BOUND`. The run is a CI run on *leg*, or none outside CI.
+    """
+    asked: list[tuple[str, datetime]] = []
+
+    def read_durations(
+        root: Path, leg: str, *, before: datetime
+    ) -> tuple[dict[str, float], tuple[str, ...], str]:
+        asked.append((leg, before))
+        return dict(durations or {}), tuple(rows), reason
+
+    monkeypatch.setattr(pytest_slice, "read_durations", read_durations)
+    monkeypatch.setattr(pytest_slice, "checkout_time", lambda root: BOUND)
+    run = RunContext("gitea", "7", "push", "refs/heads/main", leg=leg) if ci else None
+    monkeypatch.setattr(pytest_slice, "ci_run", lambda: run)
+    return asked
+
+
+def _tests_of(package: Package, *names: str) -> tuple[str, ...]:
+    """Write empty test files *names* under *package*'s tests, named from the root."""
+    written: list[str] = []
+    for name in names:
+        path = package.directory / "tests" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+        written.append(f"{package.path}/tests/{name}")
+    return tuple(written)
+
+
+def _selection(call: Call) -> dict[str, tuple[str, ...]]:
+    selection = call[1]["selection"]
+    assert isinstance(selection, dict)
+    return cast("dict[str, tuple[str, ...]]", selection)
+
+
+def test_the_test_step_reads_the_shard_flag(registered: None) -> None:
+    assert registry.step_for("test.pytest").flags == ("point", "shard")
+
+
+def test_an_unreadable_durations_store_leaves_every_test_file_to_the_first_shard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    files = _tests_of(one, "test_a.py", "test_b.py") + _tests_of(two, "test_c.py")
+    # The files beside the tests are support, never a test file.
+    (two.directory / "tests" / "conftest.py").write_text("")
+    (two.directory / "tests" / "helper.py").write_text("")
+    down = f"the durations/{LEG} series could not be read: down"
+    asked = _sharded(monkeypatch, reason=down, leg=f"{LEG}-2of2")
+    step = registry.step_for("test.pytest")
+    step.run(PhaseContext(root=tmp_path, packages=(one, two), shard=Shard(2, 2)))
+    out = capsys.readouterr().out
+    # The second shard runs nothing and says why; its record names no
+    # row, so the gate job's proof sees the leg ran unsharded.
+    assert calls == []
+    assert (
+        f"  test.pytest: the durations of {LEG} could not be read ({down}); the"
+        " first shard runs every test file\n"
+    ) in out
+    assert "  test.pytest: shard 2of2 runs none of 3 test file(s)\n" in out
+    assert asked == [(f"{LEG}-2of2", BOUND)]
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.shard == Shard(2, 2) and left.files == () and left.rows == ()
+    assert left.digest == files_digest(files) and left.before == BOUND
+    # The first shard runs every file in one call, and records them.
+    _sharded(monkeypatch, reason=down, leg=f"{LEG}-1of2")
+    step.run(PhaseContext(root=tmp_path, packages=(one, two), shard=Shard(1, 2)))
+    assert "  test.pytest: shard 1of2 runs 3 of 3 test file(s)\n" in (
+        capsys.readouterr().out
+    )
+    assert len(calls) == 1
+    assert _paths(calls[0]) == ("packages/one", "packages/two")
+    assert _selection(calls[0]) == {
+        "packages/one": files[:2],
+        "packages/two": files[2:],
+    }
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.shard == Shard(1, 2) and left.files == files and left.rows == ()
+    assert left.digest == files_digest(files)
+
+
+def test_with_no_durations_row_before_the_bound_the_first_shard_runs_every_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    files = _tests_of(one, "test_a.py", "test_b.py")
+    step = registry.step_for("test.pytest")
+    # A readable series with no row before the bound is the first run
+    # of a sharded leg: the first shard runs the whole suite.
+    _sharded(monkeypatch, durations={}, rows=(), leg=f"{LEG}-2of2")
+    step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(2, 2)))
+    out = capsys.readouterr().out
+    assert calls == []
+    assert (
+        f"  test.pytest: no durations row of {LEG} before"
+        " 2026-10-17T09:30:00+00:00; the first shard runs every test file\n"
+    ) in out
+    _sharded(monkeypatch, durations={}, rows=(), leg=f"{LEG}-1of2")
+    step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(1, 2)))
+    assert [_selection(call) for call in calls] == [{"packages/one": files}]
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.files == files and left.rows == ()
+
+
+def test_a_suite_with_no_file_in_the_share_is_left_out_of_the_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    (a,) = _tests_of(one, "test_a.py")
+    c, d = _tests_of(two, "test_c.py", "test_d.py")
+    # A member without a test directory has no file to share out.
+    three = _member(tmp_path, "three")
+    (three.directory / "tests").rmdir()
+    packages = (one, two, three)
+    # one's file outweighs two's together, so the first shard is one's
+    # alone and the second two's alone.
+    rows = ("r2.json", "r1.json")
+    weights = {a: 100.0, c: 1.0, d: 1.0}
+    _sharded(monkeypatch, durations=weights, rows=rows, leg=f"{LEG}-2of2")
+    step = registry.step_for("test.pytest")
+    step.run(PhaseContext(root=tmp_path, packages=packages, shard=Shard(2, 2)))
+    assert [(_paths(call), _selection(call)) for call in calls] == [
+        (("packages/two",), {"packages/two": (c, d)})
+    ]
+    assert "  test.pytest: shard 2of2 runs 2 of 3 test file(s)\n" in (
+        capsys.readouterr().out
+    )
+    calls.clear()
+    _sharded(monkeypatch, durations=weights, rows=rows, leg=f"{LEG}-1of2")
+    step.run(PhaseContext(root=tmp_path, packages=packages, shard=Shard(1, 2)))
+    assert [(_paths(call), _selection(call)) for call in calls] == [
+        (("packages/one",), {"packages/one": (a,)})
+    ]
+    # More shards than files: the surplus shard runs nothing and says so.
+    calls.clear()
+    _sharded(monkeypatch, durations=weights, rows=rows, leg=f"{LEG}-4of4")
+    step.run(PhaseContext(root=tmp_path, packages=packages, shard=Shard(4, 4)))
+    assert calls == []
+    assert "  test.pytest: shard 4of4 runs none of 3 test file(s)\n" in (
+        capsys.readouterr().out
+    )
+
+
+def test_two_shards_hand_the_runner_complementary_shares_of_every_test_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path, '["pytest", "python"]')
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    # Nested files and the *_test.py spelling are test files too; the
+    # workspace's own tests are a suite of their own.
+    a, b, n, x = _tests_of(one, "test_a.py", "test_b.py", "sub/test_n.py", "x_test.py")
+    (c,) = _tests_of(two, "test_c.py")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_w.py").write_text("")
+    w = "tests/test_w.py"
+    every = (a, b, n, x, c, w)
+    durations = {a: 5.0, b: 3.0, x: 2.0, c: 4.0, w: 1.0}  # n is unseen
+    rows = ("r2.json", "r1.json")
+    step = registry.step_for("test.pytest")
+    records: list[ShardMarker] = []
+    for index in (1, 2):
+        _sharded(monkeypatch, durations=durations, rows=rows, leg=f"{LEG}-{index}of2")
+        step.run(
+            PhaseContext(root=tmp_path, packages=(one, two), shard=Shard(index, 2))
+        )
+        left, why = read_shard(tmp_path)
+        assert why == "" and left is not None
+        records.append(left)
+    assert len(calls) == 2
+    shares = [
+        tuple(name for names in _selection(call).values() for name in names)
+        for call in calls
+    ]
+    # Together the shares are every test file, and nothing is in both.
+    assert sorted(shares[0] + shares[1]) == sorted(every)
+    assert not set(shares[0]) & set(shares[1])
+    # Each share is the partition's slice: a has the first shard to
+    # itself until the rest outweigh it.
+    expected = partition(every, durations, 2)
+    assert [sorted(share) for share in shares] == [sorted(s) for s in expected]
+    for index, (call, left) in enumerate(zip(calls, records, strict=True)):
+        # Each suite's files are sorted, and a suite with no file in
+        # the share is not in the call.
+        selection = _selection(call)
+        assert all(
+            files == tuple(sorted(files)) and files for files in selection.values()
+        )
+        assert _paths(call) == tuple(selection)
+        # The record: the slice in packing order, the digest of the
+        # whole set, the rows read and the bound.
+        assert left.shard == Shard(index + 1, 2)
+        assert left.files == expected[index]
+        assert left.digest == files_digest(every)
+        assert left.rows == rows and left.before == BOUND
+    assert records[0].digest == records[1].digest
+
+
+def test_a_serial_suite_is_sliced_and_still_runs_under_one_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two", serial=True)
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    c, d = _tests_of(two, "test_c.py", "test_d.py")
+    # Equal weights: a and c land on the first shard, b and d on the second.
+    _sharded(monkeypatch, durations=dict.fromkeys((a, b, c, d), 4.0), rows=("r1.json",))
+    words = ("-k", "name")
+    ctx = PhaseContext(
+        root=tmp_path, packages=(one, two), shard=Shard(1, 2), arguments=words
+    )
+    registry.step_for("test.pytest").run(ctx)
+    assert [(_paths(call), call[0], _selection(call)) for call in calls] == [
+        (("packages/one",), words, {"packages/one": (a,)}),
+        (("packages/two",), (*words, "-n", "0"), {"packages/two": (c,)}),
+    ]
+
+
+def test_one_shard_of_one_hands_the_runner_the_suites_whole_and_reads_no_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    asked = _sharded(monkeypatch, durations={a: 1.0, b: 9.0}, rows=("r1.json",))
+    tests = {"packages/one": (a,)}
+    contexts = (
+        PhaseContext(root=tmp_path, packages=(one,), subset=(one,), tests=tests),
+        PhaseContext(
+            root=tmp_path, packages=(one,), subset=(one,), tests=tests, shard=ONE
+        ),
+    )
+    for ctx in contexts:
+        registry.step_for("test.pytest").run(ctx)
+        # The run's own selection, the same object, and no record left.
+        assert calls[-1][1]["selection"] is tests
+        assert _paths(calls[-1]) == ("packages/one",)
+    assert asked == []
+    assert read_shard(tmp_path) == (None, "")
+    assert not (tmp_path / pytest_slice.SETS_FILE).exists()
+
+
+def test_without_a_leg_the_share_is_by_name_alone_and_no_store_is_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    a, b, c = _tests_of(one, "test_a.py", "test_b.py", "test_c.py")
+    step = registry.step_for("test.pytest")
+    # Outside CI, and in a CI process with no leg label: every file
+    # weighs the same, so the files alternate by name.
+    for ci, leg in ((False, ""), (True, "")):
+        calls.clear()
+        asked = _sharded(
+            monkeypatch, durations={a: 100.0}, rows=("r1.json",), ci=ci, leg=leg
+        )
+        step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(2, 2)))
+        out = capsys.readouterr().out
+        assert asked == []
+        assert [_selection(call) for call in calls] == [{"packages/one": (b,)}]
+        assert (
+            "  test.pytest: no leg names a durations series here; every test file"
+            " weighs the same\n"
+        ) in out
+        assert "  test.pytest: shard 2of2 runs 1 of 3 test file(s)\n" in out
+        left, why = read_shard(tmp_path)
+        assert why == "" and left is not None
+        assert left.files == (b,) and left.rows == () and left.before == BOUND
+        assert left.digest == files_digest((a, b, c))
+
+
+def test_the_share_takes_the_run_s_selection_when_it_names_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    tests = {"packages/one": (a,)}
+    step = registry.step_for("test.pytest")
+    # The changed test file alone stands for the suite: b is not
+    # partitioned, so the second shard has nothing of the suite.
+    _sharded(
+        monkeypatch, durations={a: 1.0, b: 1.0}, rows=("r1.json",), leg=f"{LEG}-2of2"
+    )
+    step.run(
+        PhaseContext(
+            root=tmp_path,
+            packages=(one,),
+            subset=(one,),
+            tests=tests,
+            shard=Shard(2, 2),
+        )
+    )
+    assert calls == []
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.files == () and left.digest == files_digest((a,))
+    _sharded(
+        monkeypatch, durations={a: 1.0, b: 1.0}, rows=("r1.json",), leg=f"{LEG}-1of2"
+    )
+    step.run(
+        PhaseContext(
+            root=tmp_path,
+            packages=(one,),
+            subset=(one,),
+            tests=tests,
+            shard=Shard(1, 2),
+        )
+    )
+    assert [_selection(call) for call in calls] == [{"packages/one": (a,)}]
+
+
+def test_a_second_run_of_the_step_on_the_shard_adds_to_its_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: None
+) -> None:
+    _watch(monkeypatch)
+    _workspace(tmp_path)
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    c, d = _tests_of(two, "test_c.py", "test_d.py")
+    durations = dict.fromkeys((a, b, c, d), 4.0)
+    rows = ("r1.json",)
+    step = registry.step_for("test.pytest")
+    sets = tmp_path / pytest_slice.SETS_FILE
+
+    def run(subset: tuple[Package, ...]) -> None:
+        step.run(
+            PhaseContext(
+                root=tmp_path, packages=(one, two), subset=subset, shard=Shard(2, 2)
+            )
+        )
+
+    def left() -> tuple[tuple[str, ...], str]:
+        record, why = read_shard(tmp_path)
+        assert why == "" and record is not None
+        return record.files, record.digest
+
+    # A record of another shard, another bound or other rows, or one
+    # that does not read, is replaced, never added to.
+    _sharded(monkeypatch, durations=durations, rows=rows, leg=f"{LEG}-2of2")
+    sets.parent.mkdir(parents=True)
+    key = {"shard": "2of2", "before": BOUND.isoformat(), "rows": list(rows)}
+    for stale in (
+        "{not json",
+        json.dumps([1, 2]),
+        json.dumps({**key, "shard": "1of2", "set": [a], "files": [a]}),
+        json.dumps({**key, "rows": ["r9.json"], "set": [a], "files": [a]}),
+        json.dumps({**key, "set": "a", "files": [a]}),
+        json.dumps({**key, "set": [a], "files": [1]}),
+    ):
+        sets.write_text(stale)
+        run((one,))
+        assert left() == ((b,), files_digest((a, b)))
+    # The gate's run over one, then the top-up's run over two on the
+    # same shard: the record holds both slices and the digest of both
+    # sets, as one partition of one set.
+    run((one,))
+    assert left() == ((b,), files_digest((a, b)))
+    run((two,))
+    assert left() == ((b, d), files_digest((a, b, c, d)))
+    # Running it again adds nothing.
+    run((two,))
+    assert left() == ((b, d), files_digest((a, b, c, d)))
+    # The first shard's record is its own.
+    _sharded(monkeypatch, durations=durations, rows=rows, leg=f"{LEG}-1of2")
+    step.run(
+        PhaseContext(
+            root=tmp_path, packages=(one, two), subset=(one,), shard=Shard(1, 2)
+        )
+    )
+    assert left() == ((a,), files_digest((a, b)))
+
+
+def test_the_top_up_runs_through_the_step_and_is_sliced_by_the_same_partition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    from livery.extensions.coverage import _leg as coverage_leg
+    from livery.extensions.coverage import _record as coverage_record
+    from livery.workshop import LegScope
+
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one, two = _member(tmp_path, "one"), _member(tmp_path, "two")
+    a, b = _tests_of(one, "test_a.py", "test_b.py")
+    c, d = _tests_of(two, "test_c.py", "test_d.py")
+    durations = dict.fromkeys((a, b, c, d), 4.0)
+    leg = f"{LEG}-2of2"
+    run = RunContext("gitea", "7", "push", "refs/heads/main", leg=leg)
+    _sharded(monkeypatch, durations=durations, rows=("r1.json",), leg=leg)
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: (one, two))
+    monkeypatch.setattr(
+        "livery.workshop._ci_context.run_context", lambda environ=None: run
+    )
+    monkeypatch.setattr(coverage_record, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(
+        coverage_record,
+        "recorded",
+        lambda root, *, leg, base="main": coverage_record.Record({}),
+    )
+    # The gate's narrowed run over one, on the second shard.
+    step = registry.step_for("test.pytest")
+    step.run(
+        PhaseContext(
+            root=tmp_path, packages=(one, two), subset=(one,), shard=Shard(2, 2)
+        )
+    )
+    assert [_selection(call) for call in calls] == [{"packages/one": (b,)}]
+    # The coverage leg's top-up runs two, which no record supplies,
+    # through the test phase: the step reads the leg's shard, hands the
+    # runner two's share alone, and adds it to the shard's record.
+    marker = LegScope("affected", ("packages/one",), leg, "b" * 40)
+    measured = coverage_leg.top_up(tmp_path, (one, two), marker)
+    out = capsys.readouterr().out
+    assert "  measuring: packages/two run for their lines alone\n" in out
+    assert [_selection(call) for call in calls] == [
+        {"packages/one": (b,)},
+        {"packages/two": (d,)},
+    ]
+    assert measured.packages == ("packages/one", "packages/two")
+    left, why = read_shard(tmp_path)
+    assert why == "" and left is not None
+    assert left.files == (b, d) and left.digest == files_digest((a, b, c, d))
+    # The leg then leaves parts for both suites, each with a file in the share.
+    assert [
+        unit.path
+        for unit in coverage_leg.suites_that_ran(measured, tmp_path, (one, two))
+    ] == [
+        "packages/one",
+        "packages/two",
+    ]
