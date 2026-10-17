@@ -32,6 +32,8 @@ while it is pre-1.0 a minor version may include breaking changes.
 - The rendered pytest.toml keeps only a failed test's tmp_path, so a session ends at its last test instead of deleting an older session's whole temp tree by @willemkokke
 - A catalogue, a contract and the task tree are read once per process, a locked sync judges the tool lock once, and coverage omits pytest's temp trees by @willemkokke
 - Coverage writes each set of test indexes as digits and commas, in version 3 of the line format, so no store push holds a token shape GitHub's push protection refuses by @willemkokke
+- The shard record names its suites by @willemkokke
+- A file has one shard whatever run of the test step reaches it by @willemkokke
 
 ### Changed
 
