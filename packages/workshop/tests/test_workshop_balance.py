@@ -49,13 +49,14 @@ def _job(
     packages: dict[str, float] | None = None,
     leg: str = "",
     test_step: bool = True,
+    task_steps: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """One check job's row: the forge's steps, the gate's tasks, the package sums."""
     tasks = {"check": call}
     if test_step:
         tasks["check/test.pytest"] = test_ms
     tasks.update({"check/typecheck.mypy": 84_000.0} if other is None else other)
-    return {
+    job: dict[str, Any] = {
         "conclusion": conclusion,
         "scope": {"scope": scope, "leg": leg},
         "steps": [
@@ -72,6 +73,9 @@ def _job(
             ).items()
         },
     }
+    if task_steps is not None:
+        job["task_steps"] = task_steps
+    return job
 
 
 def _row(run: int, jobs: dict[str, dict[str, Any]], *, day: int = 17) -> dict[str, Any]:
@@ -140,6 +144,19 @@ def test_a_row_without_the_test_steps_wall_is_seen_and_not_read() -> None:
         "  ubuntu-latest, 3.14: keeps its count: 5 full green row(s), 2 with the"
         " test steps' wall (check/test.*), 3 needed"
     ) in lines
+
+
+def test_the_test_steps_wall_is_read_from_the_rows_task_steps() -> None:
+    # A leg's row carries the gate's steps under task_steps, each by
+    # its title inside the check task; the test wall is read there.
+    rows = _ubuntu_rows(
+        3,
+        test_step=False,
+        task_steps={"check/test.pytest": 100_000.0},
+        packages={"workshop": 500_000.0},
+    )
+    (reading,) = _balance.readings(rows)
+    assert (reading.seen, reading.rows, reading.speed) == (3, 3, 5.0)
 
 
 def test_a_runner_the_contract_names_without_a_row_keeps_its_count() -> None:

@@ -80,7 +80,10 @@ base's run and the wave.
   known.
 - The job's steps, inside the job.
 - Each leg's own timeline, in process groups of its own: its tasks, every
-  command inside them, and every test's setup, call and teardown.
+  command inside them, and every test's setup, call and teardown. The gate's
+  steps run at once, so a step that overlaps another on the task's track is
+  an async span rather than a slice nested in the task; the leg's timing row
+  reads both as the step's wall.
 - The runner's own work, on a track under the job: the part of the job's span
   the leg's timeline does not cover, as `setup` before the first entry and
   `teardown` after the last.
