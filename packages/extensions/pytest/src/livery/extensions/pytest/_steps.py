@@ -19,12 +19,20 @@ worker-safe sets the step's ``parallel`` option to false and runs in a
 call of its own, under ``-n 0``. ``examples.pytest`` runs each member's
 documentation examples. Each step hands pytest the words after ``--``
 on its own verb (``fm test.pytest -- -k name``).
+
+On a sharded check leg ``test.pytest`` runs on every shard, each over
+its share of the test files ([livery.extensions.pytest._slice][]): the
+files of every suite the run reaches, packed into the shard's slices
+by the platform leg's durations, handed to the runner as the selection
+it already takes, and recorded for the gate job's proof. A run that is
+one shard of one hands the runner the suites whole.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from livery.extensions.pytest._slice import share
 from livery.workshop import (
     PhaseContext,
     Query,
@@ -77,7 +85,10 @@ def judge_test(ctx: PhaseContext) -> None:
     while coverage is listed and this extension's listing contributes
     its ``[for.coverage]`` table, and with no meter otherwise. While
     nothing answers ``python.test.runner``, nothing runs, and the step
-    says why.
+    says why. On a shard of a sharded check leg each suite runs its
+    share of its test files ([livery.extensions.pytest._slice.share][]);
+    a suite with no file in the share is left out of the call, and a
+    call with no suite does not start.
     """
     # A package whose examples alone changed runs them, not its suite.
     members = tuple(
@@ -106,14 +117,23 @@ def judge_test(ctx: PhaseContext) -> None:
     serial = tuple(p for p in members if not step_option(TEST, p, "parallel"))
     parallel = tuple(p for p in suites if p not in serial)
     measured = NAME in contributions_for(MEASURED_FOR, ctx.root)
+    # One shard of one runs the suites whole, as the run selects them;
+    # a shard of several runs its share, and a suite whose share is
+    # empty is left out of the call, since a package handed over with
+    # no selection collects its whole directory.
+    chosen = share(ctx, suites, step=TEST) if ctx.shard.count > 1 else None
     for group, extra in ((parallel, ()), (serial, ("-n", "0"))):
-        if group:
+        packages, selection = group, ctx.tests
+        if chosen is not None:
+            packages = tuple(p for p in group if chosen[p.path])
+            selection = {p.path: chosen[p.path] for p in packages}
+        if packages:
             run(
                 *ctx.arguments,
                 *extra,
-                packages=group,
+                packages=packages,
                 root=ctx.root,
-                selection=ctx.tests,
+                selection=selection,
                 point=ctx.point,
                 measured=measured,
             )

@@ -1,0 +1,198 @@
+"""One shard's share of the test files: listed, partitioned, recorded.
+
+A sharded check leg runs the test step on every shard, each over a
+share of the test files. `share` lists the test files of every suite
+the run reaches (`test_files`), reads the durations of the leg's
+platform ([livery.workshop.read_durations][]), packs the files into
+the shard's slices with [livery.workshop.partition][], takes this
+shard's slice, and leaves what it partitioned in the shard's record
+([livery.workshop.leave_shard][]) for the gate job's proof. The test
+step runs twice on a leg whose coverage entry tops up the suites no
+record can supply, so a second run on the same shard adds to the
+record instead of replacing it (`SETS_FILE`).
+"""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING, Any
+
+from livery.workshop import (
+    WORKSPACE_TESTS,
+    checkout_time,
+    ci_run,
+    files_digest,
+    leave_shard,
+    partition,
+    platform_leg,
+    read_durations,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+    from datetime import datetime
+    from pathlib import Path
+
+    from livery.workshop import Package, PhaseContext, Shard
+
+#: The step's own record of what this shard partitioned on this leg,
+#: under the checkout's ``.workshop/`` directory, which git ignores:
+#: the shard, the bound and the rows it read, every file of every set
+#: it partitioned, and the files of its own slices. The shard's record
+#: for the gate job is written from it, so a second run of the step on
+#: the leg adds its set and its slice to the first run's.
+SETS_FILE = ".workshop/pytest-shard.json"
+
+
+def test_files(ctx: PhaseContext, suite: Package) -> tuple[str, ...]:
+    """The test files of *suite* this run runs, root-relative with forward slashes.
+
+    The files the run selects for the suite (``ctx.tests``) when it
+    names any; else every file pytest collects from the suite's test
+    directory, ``test_*.py`` and ``*_test.py`` under it, the workspace's
+    own ``tests`` directory included. Sorted. A suite without a test
+    directory has none.
+    """
+    named = ctx.tests.get(suite.path)
+    if named:
+        return tuple(sorted(named))
+    unit = suite.path == WORKSPACE_TESTS
+    base = suite.directory if unit else suite.directory / "tests"
+    prefix = suite.path if unit else f"{suite.path}/tests"
+    if not base.is_dir():
+        return ()
+    return tuple(
+        sorted(
+            f"{prefix}/{path.relative_to(base).as_posix()}"
+            for path in base.rglob("*.py")
+            if path.is_file()
+            and (path.name.startswith("test_") or path.name.endswith("_test.py"))
+        )
+    )
+
+
+def share(
+    ctx: PhaseContext, suites: tuple[Package, ...], *, step: str
+) -> dict[str, tuple[str, ...]]:
+    """This shard's share of *suites*' test files, per suite path, and its record.
+
+    Every suite's test files (`test_files`) are packed into the shard's
+    count of slices by the durations of the leg's platform, read from
+    the rows stamped before the checkout's committer time
+    ([livery.workshop.checkout_time][]), and this shard's slice is
+    returned, a suite's files sorted; a suite with no file in the
+    slice maps to an empty tuple. The slice, the digest of the set and
+    the rows read are left in the shard's record. Each line printed
+    names *step*.
+
+    With no durations row before the bound, or a store that cannot be
+    read, the reason prints, the first shard runs every file and every
+    other shard runs none, and the record names no row, so the gate
+    job's proof sees the leg ran unsharded. Outside CI no leg names a
+    durations series, so every file weighs the same and the files are
+    shared out by name.
+    """
+    listed = {suite.path: test_files(ctx, suite) for suite in suites}
+    every = tuple(name for names in listed.values() for name in names)
+    before = checkout_time(ctx.root)
+    run = ci_run()
+    leg = run.leg if run is not None else ""
+    durations: dict[str, float] = {}
+    rows: tuple[str, ...] = ()
+    if not leg:
+        print(
+            f"  {step}: no leg names a durations series here; every test file"
+            " weighs the same"
+        )
+    else:
+        durations, rows, why = read_durations(ctx.root, leg, before=before)
+        if why:
+            print(
+                f"  {step}: the durations of {platform_leg(leg)} could not be read"
+                f" ({why}); the first shard runs every test file"
+            )
+        elif not rows:
+            print(
+                f"  {step}: no durations row of {platform_leg(leg)} before"
+                f" {before.isoformat(timespec='seconds')}; the first shard runs"
+                " every test file"
+            )
+    if leg and not rows:
+        slices: tuple[tuple[str, ...], ...] = (every, *([()] * (ctx.shard.count - 1)))
+    else:
+        slices = partition(every, durations, ctx.shard.count)
+    mine = slices[ctx.shard.index - 1]
+    _record(ctx.root, shard=ctx.shard, every=every, mine=mine, rows=rows, before=before)
+    print(
+        f"  {step}: shard {ctx.shard} runs {len(mine) or 'none'} of {len(every)}"
+        " test file(s)"
+    )
+    held = set(mine)
+    return {
+        path: tuple(name for name in names if name in held)
+        for path, names in listed.items()
+    }
+
+
+def _record(
+    root: Path,
+    *,
+    shard: Shard,
+    every: Iterable[str],
+    mine: Iterable[str],
+    rows: tuple[str, ...],
+    before: datetime,
+) -> None:
+    """Leave the shard's record, added to the one an earlier run of the step left.
+
+    The gate job proves the shards of a platform from one record each,
+    so when `SETS_FILE` holds a run of this shard under the same bound
+    and the same rows, this run adds to it: the set partitioned is both
+    runs' sets together, the files are both slices, and the record's
+    digest is of the set together. A file of another shard, another
+    bound or other rows, or one that does not read, is replaced.
+    """
+    path = root / SETS_FILE
+    key = {"shard": str(shard), "before": before.isoformat(), "rows": list(rows)}
+    held = _held(path, key)
+    names = sorted(set(held[0]) | set(every))
+    files = tuple(dict.fromkeys((*held[1], *mine)))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({**key, "set": names, "files": list(files)}, sort_keys=True),
+        encoding="utf-8",
+    )
+    leave_shard(
+        root,
+        shard=shard,
+        digest=files_digest(names),
+        files=files,
+        rows=rows,
+        before=before,
+    )
+
+
+def _held(
+    path: Path, key: Mapping[str, object]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The set and the files `SETS_FILE` holds under *key*; empty under any other."""
+    if not path.is_file():
+        return (), ()
+    try:
+        loaded: Any = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return (), ()
+    if not isinstance(loaded, dict) or any(loaded.get(k) != v for k, v in key.items()):
+        return (), ()
+    names, files = _strings(loaded.get("set")), _strings(loaded.get("files"))
+    return (names, files) if names is not None and files is not None else ((), ())
+
+
+def _strings(value: object) -> tuple[str, ...] | None:
+    """*value* as a tuple of strings; None when it is not a list of them."""
+    if not isinstance(value, list):
+        return None
+    items: list[object] = value
+    if not all(isinstance(item, str) for item in items):
+        return None
+    return tuple(str(item) for item in items)
