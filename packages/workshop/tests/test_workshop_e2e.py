@@ -1840,7 +1840,7 @@ def test_a_pass_after_another_never_reaches_the_earlier_forge_through_conan(
     # Both homes are the environment's own, placed there by conan's
     # declaration, and the job's home never held the loop's remote.
     assert first_home == pass_home == second.directory / "conan"
-    assert pass_environment["CONAN_HOME"] == str(second.directory / "conan")
+    assert Path(pass_environment["CONAN_HOME"]) == second.directory / "conan"
     assert "CONAN_HOME" not in (second.runner_dir(1) / "config.yaml").read_text()
     assert "workshop" not in _remotes(job_home, tmp_path)
     # A pass that is not fresh keeps the environment, its forge, and the
@@ -1908,8 +1908,10 @@ def test_a_docker_pass_runs_conan_with_the_docker_environment_s_own_home(
     entered = _e2e.enter_environment("dev", ("conan",), fresh=True)
     assert entered.directory == docker.directory and docker.env_file.is_file()
     assert (_e2e.CURRENT.name, _e2e.CURRENT.mode) == ("dev", "docker")
-    assert os.environ["CONAN_HOME"] == str(docker.directory / "conan")
-    assert pass_environment["CONAN_HOME"] == str(docker.directory / "conan")
+    # The declared value joins its placeholder with a slash, which Windows
+    # takes as a separator too, so the homes compare as paths.
+    assert Path(os.environ["CONAN_HOME"]) == docker.directory / "conan"
+    assert Path(pass_environment["CONAN_HOME"]) == docker.directory / "conan"
 
 
 def test_the_loop_refuses_a_branch_whose_release_verb_is_the_train(
