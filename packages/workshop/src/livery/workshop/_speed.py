@@ -18,7 +18,9 @@ could set them; a reading of a month of rows may move them.
 
 Reach for `judge_run` to judge the run the gate job is in, `accept` for
 the person's raise, `render_marks` for what ``fm ci.timings`` adds, and
-[livery.workshop.speed_marks][] for the current marks.
+[livery.workshop.speed_marks][] for the current marks. A test's
+package, which the speed plugin sums by and the timing rows key by, is
+what [livery.workshop.package_of][] names.
 """
 
 from __future__ import annotations
@@ -42,6 +44,44 @@ from livery.workshop._shard import ONE, Shard
 #: unset the plugin sums nothing and writes nothing. It lives here, in
 #: a module that imports no pytest, so a runner reads it without pytest.
 SPEED_FILE_VARIABLE = "WORKSHOP_SPEED_FILE"
+
+#: The directories a package's tests live under: the path before the
+#: first of them names the package, one level deeper in a group
+#: directory (``packages/extensions/widgets/tests/...``).
+PACKAGE_TREES = frozenset({"tests", "src", "docs"})
+
+
+def package_of(nodeid: str) -> str:
+    """Name the workspace package a test belongs to, from its pytest node id.
+
+    The package is the path before the first directory a package keeps
+    its tests or sources in, ``tests``, ``src`` or ``docs``:
+    ``packages/forge/tests/test_x.py::test_y`` belongs to
+    ``packages/forge``. A package in a group directory is one level
+    deeper, and its own name may be one of those three: in
+    ``packages/extensions/docs/tests/test_x.py::test_y`` the ``tests``
+    beneath ``docs`` says ``docs`` is the package, so the answer is
+    ``packages/extensions/docs``. Nothing is read from the disk.
+
+    Args:
+        nodeid: A test's node id, relative to the workspace root.
+
+    Returns:
+        The package's path relative to the workspace root, or ``""`` for
+        a node outside ``packages/``, such as a workspace test under
+        ``tests/``.
+    """
+    parts = nodeid.split("::", 1)[0].split("/")
+    if len(parts) < 3 or parts[0] != "packages":
+        return ""
+    for index in range(2, len(parts) - 1):
+        if parts[index] not in PACKAGE_TREES:
+            continue
+        if index == 2 and parts[3] in PACKAGE_TREES and len(parts) > 4:
+            continue
+        return "/".join(parts[:index])
+    return "/".join(parts[:2])
+
 
 #: The marks: one row per write, the newest per package and leg the
 #: mark; anyone may write, since an accept is a person's act, and the
@@ -424,12 +464,6 @@ def _slowest(row: dict[str, Any]) -> dict[str, float]:
     return out
 
 
-def _package_of(nodeid: str) -> str:
-    from livery.workshop._pytest_speed import package_of
-
-    return package_of(nodeid)
-
-
 def _grown(
     now: dict[str, float], earlier: list[dict[str, float]], package: str
 ) -> tuple[tuple[str, float, float], ...]:
@@ -440,7 +474,7 @@ def _grown(
             history[test].append(seconds)
     grown: list[tuple[float, str, float, float]] = []
     for test, seconds in now.items():
-        if _package_of(test) != package or test not in history:
+        if package_of(test) != package or test not in history:
             continue
         before = statistics.median(history[test])
         if seconds > before * (1 + MARGIN) and seconds > before + 1.0:
@@ -493,7 +527,7 @@ def samples(entries: list[dict[str, Any]], run_id: str) -> list[Sample]:
                     (
                         (t, s)
                         for t, s in now_slowest.items()
-                        if _package_of(t) == package
+                        if package_of(t) == package
                     ),
                     key=lambda item: -item[1],
                 )[:SLOWEST]

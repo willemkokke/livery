@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
 from livery.workshop._shard import DURATIONS, marker_fields, platform_leg, read_shard
-from livery.workshop._speed import forge_shard_row, leg_of
+from livery.workshop._speed import forge_shard_row, leg_of, package_of
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository, Run
@@ -257,8 +257,6 @@ def _steps_by_task(
 
 def _package_of(nodeid: str) -> str:
     """The member a test node is of: ``forge``, ``extensions/widgets``, or empty."""
-    from livery.workshop._pytest_speed import package_of
-
     return package_of(nodeid).removeprefix("packages/")
 
 

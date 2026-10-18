@@ -780,6 +780,17 @@ step 8's P8a). Each name loads where pytest is not installed.
 | `is_example` | whether a path is a documentation example | python | `livery.workshop` |
 | `SPEED_FILE_VARIABLE`, `speed_marks`, `SpeedMark` | the file the speed plugin sums test times into, and each package's test-time marks per leg | python | `livery.workshop` |
 
+**The pytest plugins** (examples, speed, points, console, layout), the
+pytest extension's from #1736's P2b. Besides `is_example` and
+`SPEED_FILE_VARIABLE` above, they read these; each loads where pytest
+is not installed, since the base reads it outside a test run too.
+
+| Name | Purpose | Users | Lives in |
+| --- | --- | --- | --- |
+| `POINT_VARIABLE` | the variable naming the CI point a process runs at | the points plugin; the base's verbs | `livery.workshop` |
+| `package_of` | the workspace package a test's node id belongs to | the speed plugin; the gate job's timing rows and the speed marks | `livery.workshop` |
+| `package_directories` | every directory under `packages/` that should hold a package, a group's members included | the layout plugin | `livery.workshop` |
+
 **The docs extension's own public API**, `livery.extensions.docs`,
 for generator extensions alone, since nobody imports an extension but
 the workshop that mounts it and an extension that requires it. A
@@ -3962,6 +3973,19 @@ neither needs nor rules out).
   package provides `changed`, and answers `version-files` with its
   consumer recipe, so the local act's refusal covers the floors it
   raises there.
+- 2026-10-18, #1736's P2a, built: the five pytest plugins of the
+  workshop that move to the pytest extension (examples, speed, points,
+  console, layout) import only public names of the base, so P2b moves
+  them without an edit to what they import. `POINT_VARIABLE`,
+  `package_directories` and `package_of` join the public surface (110
+  names to 113). `package_of` and `PACKAGE_TREES` live in `_speed`, a
+  module that imports no pytest, so the gate job's timing rows and the
+  speed marks name a test's package where pytest is not installed; a
+  test pins both with pytest blocked, and another that the five
+  plugins import no private name of the workshop. Decided without
+  Willem, cheap to reverse: `PACKAGE_TREES` stays private, since no
+  plugin reads it; the points plugin keeps its `POINT_VARIABLE`
+  re-export until P2b moves the tests that read it.
 
 ## Open
 

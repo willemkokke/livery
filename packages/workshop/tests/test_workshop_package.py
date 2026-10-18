@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -91,6 +92,7 @@ def test_the_surface_is_declared() -> None:
         "PACKAGE",
         "PACKAGES",
         "PATHS",
+        "POINT_VARIABLE",
         "PUBLIC_MODULES",
         "REQUIREMENTS",
         "RUNS",
@@ -148,6 +150,8 @@ def test_the_surface_is_declared() -> None:
         "nearest_extensions",
         "neighbours",
         "order_topologically",
+        "package_directories",
+        "package_of",
         "partition",
         "platform_leg",
         "pull_request_legs",
@@ -255,6 +259,59 @@ def test_the_names_python_reads_need_no_pytest() -> None:
     assert found.returncode == 0, found.stderr
     assert found.stdout == "[]\n"
     assert set(PYTHON_READS) <= set(workshop_module.__all__)
+
+
+#: The workshop's pytest plugins that read only its public names, so
+#: they import the same names from another distribution.
+PLUGINS = (
+    "_pytest_console",
+    "_pytest_examples",
+    "_pytest_layout",
+    "_pytest_points",
+    "_pytest_speed",
+)
+
+#: What those plugins read of the workshop.
+PLUGINS_READ = (
+    "POINT_VARIABLE",
+    "SPEED_FILE_VARIABLE",
+    "is_example",
+    "package_directories",
+    "package_of",
+)
+
+
+def test_the_pytest_plugins_read_only_public_names_of_the_workshop() -> None:
+    # Every import counts, the ones inside a function as well: the
+    # layout plugin reads its name only when a session starts.
+    source = Path(workshop_module.__file__).parent
+    read: set[str] = set()
+    for plugin in PLUGINS:
+        tree = ast.parse((source / f"{plugin}.py").read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+                assert not [name for name in imported if "workshop" in name], plugin
+            elif isinstance(node, ast.ImportFrom) and "workshop" in (node.module or ""):
+                assert node.module == "livery.workshop", (plugin, node.module)
+                read.update(alias.name for alias in node.names)
+    assert read == set(PLUGINS_READ)
+    assert read <= set(workshop_module.__all__)
+
+
+def test_the_names_the_pytest_plugins_read_need_no_pytest() -> None:
+    # The workshop reads them outside a test run too: the gate job keys
+    # its timing rows by a test's package, and a verb reads its point.
+    found = _without_pytest(
+        "import livery.workshop as workshop\n"
+        f"for name in {PLUGINS_READ!r}:\n"
+        "    getattr(workshop, name)\n"
+        "from livery.workshop import _metrics\n"
+        "print(_metrics._package_of('packages/extensions/ruff/tests/test_x.py::t'))\n"
+        "print(sorted(m for m in sys.modules if m.partition('.')[0] in BLOCKED))\n"
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout == "extensions/ruff\n[]\n"
 
 
 def test_the_workshop_serves_no_nav_block_helper() -> None:
