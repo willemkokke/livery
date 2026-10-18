@@ -11,7 +11,10 @@ unchanged, because skills, hooks, and humans branch on them.
 ``fm abandon`` is the exit: disarm, close the pull request, delete
 both branches, return to the base. ``fm submit.merge`` merges a
 green pull request that was deliberately left unarmed, and refuses
-anything less than green.
+anything less than green. ``fm submit.arm`` and ``fm submit.disarm``
+set and take off a pull request's auto-merge and leave it open. The
+three act on this branch's pull request, or on the one a number
+names, from any checkout.
 
 The arming ladder, highest wins: ``--armed``/``--no-armed`` for one
 invocation; ``WORKSHOP_AUTOMERGE`` as the per-user standing preference;
@@ -304,6 +307,18 @@ def branch_issue(branch: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def parse_number(token: str) -> int | None:
+    """Read the issue or pull request number *token* spells; None when it spells none.
+
+    The one rule every verb that takes a number from a person reads it
+    by. A leading ``#`` is accepted, as the forges print a number, so
+    ``#123`` and ``123`` are the same number. Anything else that is
+    not all decimal digits spells no number.
+    """
+    bare = token.lstrip("#")
+    return int(bare) if bare.isdecimal() else None
+
+
 def with_closes(body: str, number: int) -> str:
     """*body* with its ``Closes #number`` trailer, present exactly once."""
     trailer = f"Closes #{number}"
@@ -568,6 +583,26 @@ def _arm_verified(
         f"PR #{number}: the forge lost the auto-merge schedule"
         f" {_ARM_RETRIES} times; arm it by hand or re-run"
     )
+
+
+def _arm_and_say(
+    repo: Repository, number: int, *, title: str, message: str, kind: str
+) -> None:
+    """Arm *number* through the verified arm, and print how it ended."""
+    merged = _arm_verified(repo, number, title=title, message=message, kind=kind)
+    print(
+        f"  merged: PR #{number}"
+        if merged
+        else f"  armed: PR #{number} merges when green"
+    )
+
+
+def _disarm_and_say(repo: Repository, number: int) -> bool:
+    """Take auto-merge off *number*, printing that it did; whether one was set."""
+    if not repo.pr.disarm(number):
+        return False
+    print(f"  disarmed PR #{number}")
+    return True
 
 
 def _merge_title(repo: Repository, plan: Plan) -> str:
@@ -837,17 +872,12 @@ def push_and_pr(
     if every_runner:
         label_every_runner(repo, pr.number)
     if armed:
-        merged = _arm_verified(
+        _arm_and_say(
             repo,
             pr.number,
             title=_merge_title(repo, plan),
             message=body,
             kind=_contract_forge_kind(root),
-        )
-        print(
-            f"  merged: PR #{pr.number}"
-            if merged
-            else f"  armed: PR #{pr.number} merges when green"
         )
     return pr.number
 
@@ -1386,9 +1416,7 @@ def teardown_branch(
     """
     pr = repo.pr.find_by_head(branch)
     if pr is not None and not pr.merged:
-        if repo.pr.is_armed(pr.number):
-            repo.pr.disarm(pr.number)
-            print(f"  disarmed PR #{pr.number}")
+        _disarm_and_say(repo, pr.number)
         repo.pr.close(pr.number)
         print(f"  closed PR #{pr.number}")
     if keep_branches:
@@ -1480,8 +1508,107 @@ def abandon(
     )
 
 
-def merge_flow(repo: Repository, root: Path, branch: str, *, title: str = "") -> None:
-    """Merge the branch's pull request as soon as possible.
+def pull_request_named(repo: Repository, root: Path, ref: str) -> PullRequest:
+    """Find the pull request *ref* numbers; this branch's when *ref* is empty.
+
+    *ref* is read by [livery.workshop._submit.parse_number][], the
+    rule the issue verbs read an issue number by, so ``#123`` and
+    ``123`` name the same pull request. On the current branch the open
+    pull request is looked up by the branch's name, and when there is
+    none, a merged one by the branch's head commit, which outlives a
+    head branch the merge deleted: after a merge, the answer is that
+    it merged. Every other answer fails and names the next action: a
+    *ref* that is no number, a number no pull request has, a branch
+    without an open or merged pull request, and a pull request closed
+    without merging.
+
+    Args:
+        repo: The workspace's repository on its forge.
+        root: The checkout whose current branch an empty *ref* means.
+        ref: A pull request number, with or without ``#``; empty for
+            the current branch's.
+
+    Returns:
+        The pull request, open or merged. What a merged one means is
+        the verb's to decide.
+    """
+    prog = footman.prog()
+    if ref:
+        number = parse_number(ref)
+        if number is None:
+            fail(
+                f"{ref!r} is not a pull request number: name one, 123 or"
+                " #123, or none for this branch's"
+            )
+        pr = repo.pr.get(number)
+        if pr is None:
+            fail(f"no pull request #{number} on the forge: check the number")
+    else:
+        branch = git.current_branch(root)
+        if not branch:
+            fail("HEAD is detached, so no branch names a pull request: name its number")
+        pr = repo.pr.find_by_head(branch)
+        if pr is None:
+            done = repo.pr.find_by_head_sha(git.head_sha(root))
+            pr = done if done is not None and done.merged else None
+        if pr is None:
+            fail(
+                f"no open pull request for {branch}: `{prog} submit` opens"
+                " one, or name a pull request's number"
+            )
+    if pr.state != "open" and not pr.merged:
+        fail(
+            f"PR #{pr.number} is closed: `{prog} submit` on {pr.head_branch}"
+            " opens a new one"
+        )
+    return pr
+
+
+def _merged_already(pr: PullRequest) -> bool:
+    """Whether *pr* has merged, printing that nothing is left to do when it has."""
+    if pr.merged:
+        print(f"  PR #{pr.number} has already merged; nothing to do")
+    return pr.merged
+
+
+def arm_flow(repo: Repository, root: Path, pr: PullRequest) -> None:
+    """Arm *pr* to merge when green, as ``fm submit --armed`` arms; idempotent.
+
+    The squash takes the pull request's own title and body. An armed
+    pull request is left as it is, and a merged one is the end the arm
+    aims at: each line says so, and neither is an error.
+    """
+    if _merged_already(pr):
+        return
+    if repo.pr.is_armed(pr.number):
+        print(f"  PR #{pr.number} is armed already; nothing changed")
+        return
+    _arm_and_say(
+        repo,
+        pr.number,
+        title=pr.title.strip(),
+        message=pr.body,
+        kind=_contract_forge_kind(root),
+    )
+
+
+def disarm_flow(repo: Repository, pr: PullRequest) -> None:
+    """Take auto-merge off *pr* and leave it open; idempotent.
+
+    An unarmed pull request is left as it is, and the line says so. A
+    merged one refuses: the merge the disarm was to prevent has
+    happened.
+    """
+    if pr.merged:
+        fail(f"PR #{pr.number} has already merged: too late to disarm")
+    if not _disarm_and_say(repo, pr.number):
+        print(f"  PR #{pr.number} is not armed; nothing changed")
+
+
+def merge_flow(
+    repo: Repository, root: Path, pr: PullRequest, *, title: str = ""
+) -> None:
+    """Merge the pull request *pr* as soon as possible; a merged one is done.
 
     Merge means merge asap, never merge-if-instant-else-fail: checks
     still running are followed to their verdict, the forge's own
@@ -1490,11 +1617,20 @@ def merge_flow(repo: Repository, root: Path, branch: str, *, title: str = "") ->
     backstop. Red refuses at once naming the state, behind base
     teaches integrate, and merging red stays a person's act in the
     forge's own interface.
+
+    Whether *pr* is behind its base is judged at HEAD when *pr* is
+    this branch's pull request, since HEAD is what the next submit
+    pushes, and at the head the forge holds for any other, which the
+    fetch brings here. A head this clone cannot see is left to the
+    forge's own refusal.
     """
-    pr = repo.pr.find_by_head(branch)
-    if pr is None:
-        fail(f"no open pull request for {branch}")
-    _wait_for_verdict(repo, pr.number, local_head=git.head_sha(root))
+    if _merged_already(pr):
+        return
+    own = pr.head_branch == git.current_branch(root)
+    _wait_for_verdict(repo, pr.number, local_head=git.head_sha(root) if own else "")
+    # The wait follows a head that moves, so the verdict is read for
+    # the head it settled on, not the one *pr* was read with.
+    pr = repo.pr.get(pr.number) or pr
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         fail(
@@ -1502,9 +1638,11 @@ def merge_flow(repo: Repository, root: Path, branch: str, *, title: str = "") ->
             " This verb never merges red."
         )
     git.fetch(root)
-    if git.behind_base(root, pr.base_branch):
+    head = "HEAD" if own else git.sha_of(root, pr.head_sha)
+    if head and not git.is_ancestor(root, f"origin/{pr.base_branch}", head):
+        where = "" if own else f" on {pr.head_branch},"
         fail(
-            f"PR #{pr.number} is behind {pr.base_branch}:"
+            f"PR #{pr.number} is behind {pr.base_branch}:{where}"
             f" `{footman.prog()} integrate`, then `{footman.prog()} submit`,"
             " and merge again"
         )
@@ -1520,17 +1658,63 @@ def merge_flow(repo: Repository, root: Path, branch: str, *, title: str = "") ->
     print(f"  merged PR #{pr.number}")
 
 
-@submit.task(name="merge")
-def submit_merge(
-    title: Annotated[str, doc("squash subject; defaults to the PR title")] = "",
-) -> None:
-    """Merge this branch's PR as soon as possible.
-
-    Waits for a running CI's verdict and follows the forge's own
-    holds to completion; refuses red or behind-base at once, saying
-    why. Idempotent through livery.forge.PullRequests.merge_now.
-    """
+def _named(ref: str) -> tuple[Repository, Path, PullRequest]:
+    """The workspace's repository, its root, and the pull request *ref* names."""
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
-    merge_flow(this_repository(root), root, git.current_branch(root), title=title)
+    repo = this_repository(root)
+    return repo, root, pull_request_named(repo, root, ref)
+
+
+#: The help text of the pull request argument the three verbs share.
+_PR_DOC = "a pull request number; this branch's when absent"
+
+
+@submit.task(name="merge")
+def submit_merge(
+    pr: Annotated[Arg[str], doc(_PR_DOC)] = "",
+    title: Annotated[str, doc("squash subject; defaults to the PR title")] = "",
+) -> None:
+    """Merge a PR as soon as possible: this branch's, or the one numbered.
+
+    Waits for a running CI's verdict and follows the forge's own
+    holds to completion; refuses red or behind-base at once, saying
+    why, and refuses a pull request closed without merging. A pull
+    request that has merged already is done: the verb says so and
+    succeeds, so a re-run is the recovery. A merge that lands while it
+    runs is success too, as livery.forge.PullRequests.merge_now reads
+    one.
+    """
+    repo, root, found = _named(pr)
+    merge_flow(repo, root, found, title=title)
+
+
+@submit.task(name="arm")
+def submit_arm(pr: Annotated[Arg[str], doc(_PR_DOC)] = "") -> None:
+    """Arm a PR to merge when green: this branch's, or the one numbered.
+
+    Arms as ``fm submit --armed`` arms, with the pull request's own
+    title as the squash subject, and reads the schedule back. A pull
+    request already green is merged at once, since a forge that arms
+    only a blocked pull request refuses. An armed one is left as it
+    is, and a merged one is done: the verb says so and succeeds, also
+    on the branch once its head branch is gone. One closed without
+    merging refuses.
+    """
+    repo, root, found = _named(pr)
+    arm_flow(repo, root, found)
+
+
+@submit.task(name="disarm")
+def submit_disarm(pr: Annotated[Arg[str], doc(_PR_DOC)] = "") -> None:
+    """Take auto-merge off a PR and leave it open: this branch's, or the one numbered.
+
+    The pull request and its branch stay as they are, so it waits
+    unmerged until ``fm submit.arm`` arms it again. An unarmed one is
+    left as it is. A merged one refuses, since the merge the disarm
+    was to prevent has happened, and so does one closed without
+    merging.
+    """
+    repo, _root_dir, found = _named(pr)
+    disarm_flow(repo, found)

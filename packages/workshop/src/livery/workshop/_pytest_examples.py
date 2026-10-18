@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from livery.workshop._examples import is_example
+from livery.workshop import is_example
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

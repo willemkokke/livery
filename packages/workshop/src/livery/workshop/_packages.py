@@ -241,13 +241,22 @@ def is_group(directory: Path) -> bool:
 
 
 def package_directories(root: Path) -> tuple[Path, ...]:
-    """Every directory under ``packages/`` that should hold a package, sorted by path.
+    """List every directory under ``packages/`` that should hold a package.
 
     A package lives at ``packages/<name>/`` or, inside a group
-    directory, at ``packages/<group>/<name>/``. The directories are
-    returned whether or not they carry a contract;
-    [livery.workshop.discover_packages][] judges them. Reach for
-    this where a glob would assume one level.
+    directory, at ``packages/<group>/<name>/``. A group is a directory
+    with no ``workshop.toml`` of its own and at least one subdirectory
+    that has one. The directories are listed whether or not they carry
+    a contract, and nothing in them is judged;
+    [livery.workshop.discover_packages][] reads and judges the
+    contracts. Reach for this where a glob would assume one level.
+
+    Args:
+        root: The workspace root.
+
+    Returns:
+        The directories, sorted by path; empty when *root* has no
+        ``packages/`` directory.
     """
     packages_dir = root / PACKAGES_DIR
     if not packages_dir.is_dir():

@@ -34,6 +34,7 @@ from livery.workshop._contract import load_contract
 from livery.workshop._submit import (
     merged_pull_request,
     only_local_work,
+    parse_number,
     worktree_for,
 )
 
@@ -77,14 +78,15 @@ def assignee_limit(root: Path) -> int:
 def parse_ref(token: str) -> tuple[int, str]:
     """*token* as ``(number, "")`` or ``(0, title)``.
 
-    A ``#``-stripped all-digits token is a number; anything else is a
-    title to file first. The strip has a reason: read as a title it
-    would file a junk issue named with the hash.
+    A token [livery.workshop._submit.parse_number][] reads as a
+    number, ``#`` or not, is one; anything else is a title to file
+    first. The ``#`` matters here: read as a title, ``#123`` would
+    file a junk issue named with the hash.
     """
-    bare = token.lstrip("#")
-    if bare.isdigit():
-        return int(bare), ""
-    return 0, token
+    number = parse_number(token)
+    if number is None:
+        return 0, token
+    return number, ""
 
 
 def _slug(title: str) -> str:

@@ -28,10 +28,12 @@ if TYPE_CHECKING:
 #: rows and stamps.
 LEG_VARIABLE = "WORKSHOP_LEG"
 
-#: The variable the job runner sets for every entry it spawns, naming
-#: the point the job runs at. Its home is here rather than beside the
-#: pytest plugin that selects on it, because the verbs read it too and
-#: a CLI that never tests must not import pytest to learn its name.
+#: The environment variable naming the CI point a process runs at:
+#: ``gate``, ``merge``, ``nightly`` or ``release``. The job runner sets
+#: it for every entry it spawns. The points plugin selects the tests of
+#: that point by it, and a verb reads it to learn where it runs; a
+#: process without it runs at the gate. It lives in a module that
+#: imports no pytest, so a verb reads it without pytest.
 POINT_VARIABLE = "WORKSHOP_POINT"
 
 #: The variable a published snapshot's file is named in: the job

@@ -161,8 +161,14 @@ names with the workshop's pytest plugins: [livery.workshop.is_example][]
 says which files the examples plugin collects as documentation
 examples, and the speed plugin sums each package's test time into the
 file the runner names in the variable
-[livery.workshop.SPEED_FILE_VARIABLE][]. Each package's mark on each
-check leg, a [livery.workshop.SpeedMark][], is what
+[livery.workshop.SPEED_FILE_VARIABLE][]. The plugins read three more
+names of the workshop: the speed plugin sums by the package
+[livery.workshop.package_of][] names for a test's node id, the points
+plugin selects the tests of the CI point named in
+[livery.workshop.POINT_VARIABLE][], and the layout plugin checks the
+tests directory of each directory
+[livery.workshop.package_directories][] lists. Each package's mark on
+each check leg, a [livery.workshop.SpeedMark][], is what
 [livery.workshop.speed_marks][] reads.
 
 An extension adds steps to a package's lifecycle phases under
@@ -190,6 +196,7 @@ if TYPE_CHECKING:
     from livery.workshop import testing as testing
     from livery.workshop._categories import Category as Category
     from livery.workshop._categories import category_of as category_of
+    from livery.workshop._ci_context import POINT_VARIABLE as POINT_VARIABLE
     from livery.workshop._ci_context import RunContext as RunContext
     from livery.workshop._ci_context import ci_run as ci_run
     from livery.workshop._ci_context import state_store as state_store
@@ -224,6 +231,9 @@ if TYPE_CHECKING:
         holds_runtime_language as holds_runtime_language,
     )
     from livery.workshop._packages import neighbours as neighbours
+    from livery.workshop._packages import (
+        package_directories as package_directories,
+    )
     from livery.workshop._packages import release_tag as release_tag
     from livery.workshop._packages import verify_workspace as verify_workspace
     from livery.workshop._packages import workspace_suite as workspace_suite
@@ -275,6 +285,7 @@ if TYPE_CHECKING:
     from livery.workshop._shard import shard_of as shard_of
     from livery.workshop._speed import SPEED_FILE_VARIABLE as SPEED_FILE_VARIABLE
     from livery.workshop._speed import SpeedMark as SpeedMark
+    from livery.workshop._speed import package_of as package_of
     from livery.workshop._speed import speed_marks as speed_marks
     from livery.workshop._steps import NONE as NONE
     from livery.workshop._steps import PACKAGE as PACKAGE
@@ -318,6 +329,7 @@ __all__ = [
     "PACKAGE",
     "PACKAGES",
     "PATHS",
+    "POINT_VARIABLE",
     "PUBLIC_MODULES",
     "REQUIREMENTS",
     "RUNS",
@@ -375,6 +387,8 @@ __all__ = [
     "nearest_extensions",
     "neighbours",
     "order_topologically",
+    "package_directories",
+    "package_of",
     "partition",
     "platform_leg",
     "pull_request_legs",
@@ -442,6 +456,9 @@ _EXPORTS: dict[str, str] = {
     "venv_python": "livery.workshop._pythons",
     "is_example": "livery.workshop._examples",
     "SPEED_FILE_VARIABLE": "livery.workshop._speed",
+    "package_of": "livery.workshop._speed",
+    "POINT_VARIABLE": "livery.workshop._ci_context",
+    "package_directories": "livery.workshop._packages",
     "SpeedMark": "livery.workshop._speed",
     "speed_marks": "livery.workshop._speed",
     "RUNS": "livery.workshop._metrics",

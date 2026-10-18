@@ -1947,8 +1947,8 @@ def run_point(
     environment names the leg in
     `livery.workshop._ci_context.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
-    `livery.workshop._ci_context.POINT_VARIABLE`, which selects the
-    tests a point runs. A job that declares ``inputs`` runs no entry on
+    [livery.workshop.POINT_VARIABLE][], which selects the tests a point
+    runs. A job that declares ``inputs`` runs no entry on
     a pull request that changed nothing it reads (`unread_by_the_job`).
     *spawn* runs one entry's command in that environment and returns
     its exit code; the default is the runner's own child.

@@ -20,7 +20,15 @@ import pytest
 
 from livery import git
 from livery.footman import Failed
-from livery.forge import ForgeError, Label, RepoConfig, Repository, Run, StateFilter
+from livery.forge import (
+    ForgeError,
+    Label,
+    PullRequest,
+    RepoConfig,
+    Repository,
+    Run,
+    StateFilter,
+)
 from livery.forge.testing import FakeForge
 from livery.workshop import _stack
 from livery.workshop._ci_tasks import cancel_flow, rerun_flow, status_flow
@@ -31,7 +39,10 @@ from livery.workshop._submit import (
     merge_flow,
     prepare,
     resolve_closes,
+    submit_arm,
+    submit_disarm,
     submit_flow,
+    submit_merge,
     with_closes,
 )
 from livery.workshop._verdict import (
@@ -117,6 +128,13 @@ def rig(
 
 def _repo(fake: FakeForge):
     return fake.repository(OWNER, NAME)
+
+
+def _pr(fake: FakeForge, number: int = 1) -> PullRequest:
+    repo: Repository = _repo(fake)
+    pr = repo.pr.get(number)
+    assert pr is not None
+    return pr
 
 
 def _submit(fake: FakeForge, root: Path, **kwargs: object):
@@ -388,7 +406,7 @@ def test_submit_merge_refuses_red_and_waits_out_pending(
     pushes.outcome = "failure"
     _submit(fake, root, armed=False, follow_to_verdict=False)
     with pytest.raises(_FAILURES) as caught:
-        merge_flow(_repo(fake), root, "feat/1-first")
+        merge_flow(_repo(fake), root, _pr(fake))
     assert "red" in str(caught.value)
     pr = _repo(fake).pr.get(1)
     assert pr is not None and not pr.merged
@@ -399,7 +417,7 @@ def test_submit_merge_refuses_red_and_waits_out_pending(
     # The slow-status window stands in for a running CI: the merge
     # waits it out instead of refusing, then lands.
     fake.faults.slow_status_reads = 2
-    merge_flow(_repo(fake), root, "feat/1-first")
+    merge_flow(_repo(fake), root, _pr(fake))
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
 
@@ -414,7 +432,7 @@ def test_submit_merge_refuses_a_behind_head(rig: tuple[FakeForge, Path]) -> None
     _git(root, "push", "origin", "main")
     _git(root, "checkout", "feat/1-first")
     with pytest.raises(_FAILURES) as caught:
-        merge_flow(_repo(fake), root, "feat/1-first")
+        merge_flow(_repo(fake), root, _pr(fake))
     assert "behind" in str(caught.value)
 
 
@@ -425,9 +443,249 @@ def test_submit_merge_rides_out_the_405_window(
     monkeypatch.setattr("time.sleep", lambda _s: None)
     _submit(fake, root, armed=False, follow_to_verdict=False)
     fake.faults.merge_405_window = 2
-    merge_flow(_repo(fake), root, "feat/1-first")
+    merge_flow(_repo(fake), root, _pr(fake))
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
+
+
+@pytest.fixture
+def verbs(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> tuple[FakeForge, Path]:
+    """The rig, with the pull request verbs reaching its checkout and the fake."""
+    fake, root = rig
+    monkeypatch.setattr(
+        "livery.workshop._submit.workspace_root", lambda start=None: root
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: _repo(fake)
+    )
+    return fake, root
+
+
+_PR_VERBS = (submit_arm, submit_disarm, submit_merge)
+
+
+def test_the_pull_request_verbs_refuse_a_token_that_is_no_number(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    fake, root = verbs
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    for verb in _PR_VERBS:
+        with pytest.raises(_FAILURES) as caught:
+            verb("feat/1-first")
+        assert "'feat/1-first' is not a pull request number" in str(caught.value)
+    assert not _pr(fake).merged and not _repo(fake).pr.is_armed(1)
+
+
+def test_the_pull_request_verbs_refuse_a_number_no_pull_request_has(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    for verb in _PR_VERBS:
+        with pytest.raises(_FAILURES, match="no pull request #41 on the forge"):
+            verb("#41")
+
+
+def test_the_pull_request_verbs_refuse_a_branch_without_one_naming_submit(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    # The person's next action is to open one, or to name another.
+    _fake, root = verbs
+    for verb in _PR_VERBS:
+        with pytest.raises(_FAILURES) as caught:
+            verb()
+        assert "no open pull request for feat/1-first: `fm submit` opens one" in (
+            str(caught.value)
+        )
+    _git(root, "checkout", "--detach")
+    with pytest.raises(_FAILURES, match="HEAD is detached"):
+        submit_arm()
+
+
+def test_the_pull_request_verbs_refuse_a_pull_request_closed_unmerged(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    fake, root = verbs
+    closed = _submit(fake, root, armed=False, follow_to_verdict=False)
+    _repo(fake).pr.close(closed)
+    for verb in _PR_VERBS:
+        with pytest.raises(_FAILURES) as caught:
+            verb(str(closed))
+        assert f"PR #{closed} is closed: `fm submit` on feat/1-first" in str(
+            caught.value
+        )
+        # On the branch, the head commit finds the closed one, which is
+        # no merge: the branch has no pull request until a submit.
+        with pytest.raises(_FAILURES) as caught:
+            verb()
+        assert "no open pull request for feat/1-first: `fm submit` opens one" in (
+            str(caught.value)
+        )
+    pr = _pr(fake, closed)
+    assert pr.state == "closed" and not pr.merged
+
+
+def test_disarm_refuses_a_merged_pull_request_by_number_and_on_its_branch(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    # The merge the disarm was to prevent has happened: too late.
+    fake, root = verbs
+    merged = _submit(fake, root, armed=True)
+    assert _pr(fake, merged).merged
+    assert _repo(fake).pr.find_by_head("feat/1-first") is None
+    with pytest.raises(_FAILURES, match=f"PR #{merged} has already merged: too late"):
+        submit_disarm(str(merged))
+    with pytest.raises(_FAILURES, match=f"PR #{merged} has already merged: too late"):
+        submit_disarm()
+
+
+def test_arm_and_merge_on_a_merged_pull_request_say_so_and_succeed(
+    verbs: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A merged pull request is the end both aim at, so a re-run is the
+    # recovery: by number, and on its own branch once the branch has no
+    # open pull request, found by the branch's head commit.
+    fake, root = verbs
+    merged = _submit(fake, root, armed=True)
+    repo = _repo(fake)
+    assert _pr(fake, merged).merged
+    assert repo.pr.find_by_head("feat/1-first") is None
+    done = f"  PR #{merged} has already merged; nothing to do\n"
+    for ref in (str(merged), f"#{merged}", ""):
+        capsys.readouterr()
+        submit_arm(ref)
+        assert capsys.readouterr().out == done
+        submit_merge(ref)
+        assert capsys.readouterr().out == done
+    assert repo.pr.get(merged + 1) is None  # nothing opened, nothing merged twice
+
+
+def test_arming_an_armed_and_disarming_an_unarmed_pull_request_change_nothing(
+    verbs: tuple[FakeForge, Path],
+    pushes: ForgePushes,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, root = verbs
+    pushes.auto_settle = False  # CI runs on, so an arm stays armed
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    capsys.readouterr()
+    submit_disarm(str(number))
+    assert capsys.readouterr().out == f"  PR #{number} is not armed; nothing changed\n"
+    assert not repo.pr.is_armed(number)
+    repo.pr.arm(number, title="feat: armed elsewhere")
+    events = len(fake._repos[(OWNER, NAME)].prs[number].events)
+    submit_arm(str(number))
+    assert (
+        capsys.readouterr().out == f"  PR #{number} is armed already; nothing changed\n"
+    )
+    state = fake._repos[(OWNER, NAME)]
+    assert state.armed[number][0] == "feat: armed elsewhere"  # not re-armed
+    assert len(state.prs[number].events) == events
+
+
+def test_arm_and_disarm_a_pull_request_by_number_from_another_branch(
+    verbs: tuple[FakeForge, Path],
+    pushes: ForgePushes,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # During a hold on main, the pull requests to disarm belong to
+    # other worktrees: the number reaches them from any checkout.
+    fake, root = verbs
+    pushes.auto_settle = False
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    repo.pr.update_title(number, "feat: the titled change")
+    _git(root, "checkout", "main")
+    capsys.readouterr()
+    submit_arm(str(number))
+    assert capsys.readouterr().out == f"  armed: PR #{number} merges when green\n"
+    # The squash takes the pull request's own title, not HEAD's subject.
+    assert fake._repos[(OWNER, NAME)].armed[number][0] == "feat: the titled change"
+    submit_disarm(f"#{number}")
+    assert capsys.readouterr().out == f"  disarmed PR #{number}\n"
+    pr = _pr(fake, number)
+    assert pr.state == "open" and not repo.pr.is_armed(number)
+
+
+def test_arm_and_disarm_the_current_branchs_pull_request(
+    verbs: tuple[FakeForge, Path],
+    pushes: ForgePushes,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, root = verbs
+    pushes.auto_settle = False
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    capsys.readouterr()
+    submit_arm()
+    assert capsys.readouterr().out == f"  armed: PR #{number} merges when green\n"
+    assert repo.pr.is_armed(number)
+    submit_disarm()
+    assert capsys.readouterr().out == f"  disarmed PR #{number}\n"
+    assert not repo.pr.is_armed(number)
+    # Armed again, the schedule merges the pull request when CI settles.
+    submit_arm()
+    fake.settle(OWNER, NAME, _pr(fake, number).head_sha)
+    assert _pr(fake, number).merged
+
+
+def test_arming_a_green_pull_request_merges_it_at_once(
+    verbs: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, root = verbs
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    capsys.readouterr()
+    submit_arm(str(number))
+    assert capsys.readouterr().out == f"  merged: PR #{number}\n"
+    assert _pr(fake, number).merged
+
+
+def test_a_hash_and_a_bare_number_name_the_same_pull_request(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    from livery.workshop._submit import pull_request_named
+
+    fake, root = verbs
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    bare = pull_request_named(repo, root, str(number))
+    hashed = pull_request_named(repo, root, f"#{number}")
+    branch = pull_request_named(repo, root, "")
+    assert bare == hashed == branch
+    assert bare.number == number
+
+
+def test_merge_by_number_judges_that_pull_requests_head_not_this_checkouts(
+    verbs: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The refusal first: standing on an up-to-date main, a pull request
+    # behind main refuses, naming the branch the integrate belongs on.
+    fake, root = verbs
+    seed = _git(root, "rev-parse", "origin/main").strip()
+    number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    _git(root, "checkout", "main")
+    (root / "other.txt").write_text("moved\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "feat: main moved")
+    _git(root, "push", "origin", "main")
+    with pytest.raises(_FAILURES) as caught:
+        submit_merge(str(number))
+    assert f"PR #{number} is behind main: on feat/1-first, `fm integrate`" in str(
+        caught.value
+    )
+    assert not _pr(fake, number).merged
+    # Integrated and pushed, the pull request merges by number from a
+    # checkout whose own HEAD is behind main.
+    _git(root, "checkout", "feat/1-first")
+    git.integrate(root, "main")
+    _submit(fake, root, armed=False, follow_to_verdict=False)
+    _git(root, "checkout", "-b", "feat/2-old", seed)
+    assert git.behind_base(root, "main") > 0
+    capsys.readouterr()
+    submit_merge(f"#{number}")
+    assert capsys.readouterr().out.endswith(f"  merged PR #{number}\n")
+    assert _pr(fake, number).merged
 
 
 def test_disarm_before_push_and_the_merged_refusal(rig: tuple[FakeForge, Path]) -> None:
