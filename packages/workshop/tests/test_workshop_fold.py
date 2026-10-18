@@ -22,7 +22,13 @@ from livery.forge import Conclusion
 from livery.workshop import _ci_context, _fold, _metrics, _shard, _speed, _verified
 from livery.workshop._ci_context import state_store
 from livery.workshop._queries import Folder
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    read_files,
+    seed_copier,
+)
 
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 WINDOWS = "check-windows-latest-3.14"
@@ -513,13 +519,13 @@ def test_nothing_sharded_folds_nothing_and_says_so(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     ref = _put(work, UBUNTU, _row(UBUNTU, sums={"a": (10.0, 1)}))
-    before = git.read(state_store(work), ref).files
+    before = read_files(state_store(work), ref)
     _fold.fold_run(work, RUN, folders={})
     assert (
         capsys.readouterr().out
         == "  fold: no check leg ran as shards; nothing to fold\n"
     )
-    assert git.read(state_store(work), ref).files == before
+    assert read_files(state_store(work), ref) == before
     # An empty run says the same.
     assert git.drop(state_store(work), ref) == ""
     _fold.fold_run(work, RUN, folders={})
