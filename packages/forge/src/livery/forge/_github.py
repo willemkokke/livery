@@ -756,6 +756,41 @@ mutation($id: ID!, $title: String!, $body: String!) {
 }
 """
 
+#: The most UTF-8 bytes of commit headline the auto-merge mutation
+#: takes. A longer one is refused with "Commit title is too long
+#: (maximum is 80 characters)": the message names the byte limit
+#: divided by four, so 320 bytes of any text arm and 321 refuse.
+_HEADLINE_BYTES = 320
+
+#: The most UTF-8 bytes of commit body the auto-merge mutation takes;
+#: its refusal names 16383 characters, the byte limit divided by four.
+_BODY_BYTES = 65535
+
+
+def _squash_headline(title: str) -> str:
+    """*title* as a commit headline the auto-merge mutation takes.
+
+    A title within ``_HEADLINE_BYTES`` comes back unchanged (the same
+    object). A longer one is cut to its longest start that ends
+    between two words and fits; when no word ends within the limit,
+    the cut falls after the last whole character that fits, so a
+    multi-byte character is never split. The cut carries no ellipsis
+    and no pull request number: the squash subject is the title's
+    start, as the title is the subject whole when it fits.
+    """
+    encoded = title.encode()
+    if len(encoded) <= _HEADLINE_BYTES:
+        return title
+    kept = encoded[:_HEADLINE_BYTES].decode("utf-8", errors="ignore")
+    if not title[len(kept)].isspace():
+        boundary = max(
+            (index for index, char in enumerate(kept) if char.isspace()), default=0
+        )
+        if kept[:boundary].strip():
+            kept = kept[:boundary]
+    return kept.rstrip()
+
+
 _DISABLE_AUTO_MERGE = """\
 mutation($id: ID!) {
   disablePullRequestAutoMerge(input: {pullRequestId: $id}) {
@@ -904,12 +939,29 @@ class _GithubPullRequests:
         only arms a pull request that something blocks (branch
         protection with required checks); arming an unblocked one is
         refused with GitHub's own words.
+
+        GitHub limits the squash message the mutation takes: a title
+        over 320 UTF-8 bytes is cut at the last word boundary that
+        fits, and a *message* over 65535 bytes is refused before any
+        call, because a cut body would lose its closing footers.
+
+        Raises:
+            ForgeError: *message* is over 65535 UTF-8 bytes, or GitHub
+                refused the arm; its words are in the message.
         """
+        body_bytes = len(message.encode())
+        if body_bytes > _BODY_BYTES:
+            raise ForgeError(
+                f"GitHub arms a squash with at most {_BODY_BYTES} bytes of"
+                f" commit body, and pull request {number}'s has {body_bytes}:"
+                " shorten the message to arm, or merge once the checks are green"
+            )
+        headline = _squash_headline(title)
         node = self._node_id(number)
         if self.is_armed(number):
             self._forge.graphql(_DISABLE_AUTO_MERGE, {"id": node})
         self._forge.graphql(
-            _ENABLE_AUTO_MERGE, {"id": node, "title": title, "body": message}
+            _ENABLE_AUTO_MERGE, {"id": node, "title": headline, "body": message}
         )
 
     def disarm(self, number: int) -> bool:
