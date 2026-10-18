@@ -1988,7 +1988,9 @@ dev containers' credentials through
 `livery.forge.testing.shared_env_path`, which skips without the file.
 footman's plugin also guards the process-global task registry: a test
 that leaves tasks there fails at its teardown naming them, and the
-next test never inherits them. livery-git's pytest plugin gives every
+next test never inherits them, and a module first imported under a
+test's patch gets the original back when the test ends. livery-git's
+pytest plugin gives every
 test's git a global config of the session's own, with one identity.
 The workshop adds one guard to footman's `footman.test_guards` group,
 which puts back what an extension mount writes after every test: the

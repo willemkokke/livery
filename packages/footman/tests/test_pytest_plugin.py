@@ -751,3 +751,147 @@ def test_members_run_in_name_order_and_their_guards_wrap_every_test(
         *wrapped,
         *wrapped,
     ]
+
+
+# --- the patch guard ----------------------------------------------------------
+
+#: An owner of a function, and a module that copies it at its first import.
+_PATCHED_MODULES = {
+    "acme_owner": "FLAG = False\n\ndef root():\n    return 'real'\n",
+    "acme_copier": (
+        "from acme_owner import extra, root\n"
+        "from acme_owner import root as renamed\n"
+        "\n"
+        "FLAG = True\n"
+    ),
+}
+
+
+def test_a_pytest_without_the_record_s_marker_turns_the_patch_guard_off(
+    pytester: pytest.Pytester,
+) -> None:
+    # The fallback first, in a process of its own: a pytest whose
+    # monkeypatch keeps no NOTSET marker records patches in a shape the
+    # guard cannot read, so the session runs and the guard does nothing:
+    # the copy keeps the patched function after the test.
+    pytester.syspathinsert()
+    pytester.makepyfile(**_PATCHED_MODULES)
+    pytester.makeconftest("import _pytest.compat\n\ndel _pytest.compat.NOTSET\n")
+    pytester.makepyfile(
+        """
+        import acme_owner
+
+        def test_patches(monkeypatch):
+            monkeypatch.setattr(acme_owner, "extra", [], raising=False)
+            monkeypatch.setattr(acme_owner, "root", lambda: "patched")
+            import acme_copier
+
+        def test_after():
+            import acme_copier
+
+            assert acme_owner.root() == "real"
+            assert acme_copier.root() == "patched"
+        """
+    )
+    base = pytester.path / "basetemp"
+    result = pytester.runpytest_subprocess(
+        "-p", "no:cacheprovider", f"--basetemp={base}"
+    )
+    result.assert_outcomes(passed=2)
+
+
+def test_monkeypatch_keeps_the_record_the_patch_guard_reads() -> None:
+    # The canary: the guard reads pytest's private record of a patch, as
+    # (owner, name, value before), with NOTSET for an attribute the owner
+    # did not have. A pytest that changes either fails here, in the
+    # workspace and in footman's own legs, before the guard reads it
+    # wrongly.
+    from _pytest.compat import NOTSET
+
+    class Owner:
+        present = "before"
+
+    patch = pytest.MonkeyPatch()
+    try:
+        patch.setattr(Owner, "present", "after")
+        patch.setattr(Owner, "added", "new", raising=False)
+        assert list(patch._setattr) == [  # pyright: ignore[reportPrivateUsage]
+            (Owner, "present", "before"),
+            (Owner, "added", NOTSET),
+        ]
+    finally:
+        patch.undo()
+
+
+def test_a_module_first_imported_under_a_patch_keeps_the_original_after_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # A module that copies a function from another (`from owner import
+    # name`) and is first imported while a test has the function
+    # patched takes the patch; monkeypatch puts the owner back, and the
+    # copy kept the patched function for every later test in the
+    # worker. The next test finds the original in both places, under
+    # whatever name the copy took, and a patch made twice goes back to
+    # the first original. The cases left alone come first: a constant
+    # of the module's own that is the very object a patch set, and an
+    # attribute the patch added, which has no original to go back to.
+    pytester.syspathinsert()
+    pytester.makepyfile(**_PATCHED_MODULES)
+    pytester.makepyfile(
+        """
+        import acme_owner
+
+        def test_patches(monkeypatch):
+            monkeypatch.setattr(acme_owner, "FLAG", True)
+            monkeypatch.setattr(acme_owner, "extra", [], raising=False)
+            monkeypatch.setattr(acme_owner, "root", lambda: "first")
+            monkeypatch.setattr("acme_owner.root", lambda: "patched")
+            import acme_copier
+
+            assert acme_copier.root() == "patched"
+            assert acme_copier.renamed() == "patched"
+
+        def test_after():
+            import acme_copier
+
+            assert acme_copier.FLAG is True
+            assert acme_copier.extra == []
+            assert not hasattr(acme_owner, "extra")
+            assert acme_owner.root() == "real"
+            assert acme_copier.root() == "real"
+            assert acme_copier.renamed() == "real"
+        """
+    )
+    _run(pytester).assert_outcomes(passed=2)
+
+
+def test_fixtures_asking_for_monkeypatch_sort_after_the_environment_restore() -> None:
+    # pytest sets a plugin's autouse fixtures up in name order, and an
+    # autouse fixture that asks for `monkeypatch` sets it up with it.
+    # Set up before `_environment_stays`, monkeypatch would be torn down
+    # after it and write back a value the test had changed. So every
+    # fixture here that asks for it sorts after `_environment_stays`, and
+    # the patch guard reads a test's `monkeypatch` from its resolved
+    # fixtures, as hooks that request none.
+    import inspect
+
+    from livery.footman import _pytest_plugin as pytest_plugin
+
+    asking: list[str] = []
+    fixtures: list[str] = []
+    for name, value in vars(pytest_plugin).items():
+        marker = getattr(value, "_fixture_function_marker", None) or getattr(
+            value, "_pytestfixturefunction", None
+        )
+        if marker is None:
+            continue
+        fixtures.append(name)
+        unwrap = getattr(value, "_get_wrapped_function", None)
+        wrapped = getattr(value, "__wrapped__", None) or (
+            unwrap() if unwrap is not None else value
+        )
+        if "monkeypatch" in inspect.signature(wrapped).parameters:
+            asking.append(name)
+    assert "_environment_stays" in fixtures
+    assert "pytest_runtest_teardown" not in fixtures
+    assert [name for name in asking if name < "_environment_stays"] == []

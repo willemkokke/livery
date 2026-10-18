@@ -1870,7 +1870,7 @@ neither needs nor rules out).
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
-| the workshop's floor `livery-footman>=0.61.0`, below the first footman whose pytest plugin points the runner's directories away, guards the task registry and runs the `footman.test_guards` group, so the workshop's floor leg would run its suite without them | the release wave raising the floor within its set (step 8's R1) |
+| the workshop's floor `livery-footman>=0.61.0`, below the first footman whose pytest plugin points the runner's directories away, guards the task registry, runs the `footman.test_guards` group and undoes a test's patches everywhere, so the workshop's floor leg would run its suite without them | the release wave raising the floor within its set (step 8's R1) |
 | the workshop's floor `livery-git>=0.3.0`, below the first livery-git with its pytest plugin, so the workshop's floor leg would run every test's git with the machine's global config | the release wave raising the floor within its set (step 8's R1) |
 | `livery-toolroom-bench`'s floor `livery-footman>=0.61.0`, below the first footman whose pytest plugin points the runner's directories away, which the bench's own plugin did | the release wave raising the floor within its set (step 8's R1) |
 
@@ -3990,31 +3990,40 @@ neither needs nor rules out).
   plugin reads it; the points plugin keeps its `POINT_VARIABLE`
   re-export until P2b moves the tests that read it.
 - 2026-10-18, #1736's P3, built: the workshop's isolation plugin
-  splits by owner. footman's pytest plugin points the runner's
-  directories at a scratch home and guards the task registry in every
-  session with footman installed, so the release legs of footman,
-  forge, git, toolroom, toolroom-store and toolroom-bench are guarded
-  too. livery-git's own `pytest11` plugin, `livery-git-isolation`,
-  gives every test's git a scratch global config with the tester
-  identity and drops the four identity variables; it imports no
-  footman. The workshop's mount guard and its removal of
-  `WORKSHOP_LEG` ride footman's new `footman.test_guards` entry-point
-  group (`livery.workshop._test_guard:guard`), which imports no
-  pytest. The group's name has an underscore where #1736 wrote a
-  hyphen: uv_build refuses an entry-point group name with a hyphen. A
-  root test proves that every release leg which installs the workshop
-  installs footman and livery-git as well, and another that a session
-  without livery-git's plugin keeps footman's guards and no git config
-  of its own. toolroom-bench's own directories plugin goes: a test in
-  its suite proves footman's redirect covers the three variables it
-  redirected. For every footman user, a production module a test
-  imports at collection (a `tasks.py`) leaves `root_group`, and its
-  functions stay callable. Decided without Willem, cheap to reverse: a
-  test-guard member that cannot load or raises stops the session with
-  `pytest.UsageError` naming it; a session whose outer environment set
-  every directory makes no scratch home; livery-git's scratch
-  directory comes from `tempfile`, so a killed session's directory
-  stays in the system's temporary folder.
+  splits by owner, and its `livery-workshop-isolation` entry goes.
+  footman's pytest plugin points the runner's directories at a scratch
+  home, guards the task registry and gives a module first imported
+  under a test's patch the original back, in every session with
+  footman installed, so the release legs of footman, forge, git,
+  toolroom, toolroom-store and toolroom-bench are guarded too. The
+  patch guard imports `_pytest.compat.NOTSET` inside it and turns
+  itself off without it; a canary in footman's suite pins the record
+  it reads against the locked pytest. livery-git's own `pytest11`
+  plugin, `livery-git-isolation`, gives every test's git a scratch
+  global config with the tester identity and drops the four identity
+  variables; it imports no footman. The workshop's mount guard and its
+  removal of `WORKSHOP_LEG` ride footman's new `footman.test_guards`
+  entry-point group (`livery.workshop._test_guard:guard`), which
+  imports no pytest, so the workshop's source imports pytest only in
+  the five plugins P2b moves. The group's name has an underscore where
+  #1736 wrote a hyphen: uv_build refuses an entry-point group name
+  with a hyphen. A root test proves that every release leg which
+  installs the workshop installs footman and livery-git as well, and
+  another that a session without livery-git's plugin keeps footman's
+  guards and no git config of its own. toolroom-bench's own
+  directories plugin goes: a test in its suite proves footman's
+  redirect covers the three variables it redirected. For every footman
+  user, a production module a test imports at collection (a
+  `tasks.py`) leaves `root_group`, and its functions stay callable.
+  #1842's pin that no fixture of the workshop's plugin asks for
+  `monkeypatch` becomes, in footman's plugin, that every fixture
+  asking for it sorts after `_environment_stays`, since
+  `_no_inherited_drop_box` already asks for it there. Decided without
+  Willem, cheap to reverse: a test-guard member that cannot load or
+  raises stops the session with `pytest.UsageError` naming it; a
+  session whose outer environment set every directory makes no scratch
+  home; livery-git's scratch directory comes from `tempfile`, so a
+  killed session's directory stays in the system's temporary folder.
 
 ## Open
 

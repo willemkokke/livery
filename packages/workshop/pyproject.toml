@@ -89,8 +89,6 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 # A package's documentation examples, the files under docs/examples/,
 # collected as tests when pytest is pointed at them.
 livery-workshop-examples = "livery.workshop._pytest_examples"
-# A patch a test made is undone in every module that copied it.
-livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # A test declares the CI points it runs at; the point in the job
 # runner's environment selects.
 livery-workshop-points = "livery.workshop._pytest_points"

@@ -227,6 +227,12 @@ naming them; register them under `livery.footman.capture()` instead.
 Either way the next test finds the registry as the test before it found
 it.
 
+A patch a test made with `monkeypatch.setattr` is undone everywhere, not
+only on the object it was set on. A module first imported while the
+patch was active copied the patched value (`from owner import name`);
+the plugin gives it the original back when the test ends, so a later
+test never calls the stand-in.
+
 ### Adding a guard of your own
 
 A package adds a guard to every session under the `footman.test_guards`
