@@ -76,6 +76,12 @@ answers for the running install.
   `ref` and `head_sha`.
 - `mergeable` is computed asynchronously after a pull request opens;
   merging inside that window is refused and callers retry.
+- `merge_commit_sha` names a test merge commit while a pull request
+  is open, once GitHub has computed its mergeability. The backend
+  reports it as `merged_sha` only once the pull request has merged.
+- `pr.list` builds each pull request from its listing row. A row says
+  `merged_at` where the single read says `merged`, and the backend
+  reads either.
 - Branch protection is one whole-rule PUT: the pieces the caller did
   not state (contexts, approvals, the codeowner ask, the up-to-date
   requirement) are read back and re-sent, so an approvals-only write

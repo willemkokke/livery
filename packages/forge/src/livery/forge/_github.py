@@ -724,7 +724,14 @@ def _label_names(client: JsonClient, base: str) -> set[str]:
 
 
 def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
-    """GitHub's pull request JSON, normalised."""
+    """GitHub's pull request JSON, normalised.
+
+    The single read says ``merged`` and a listing row says only
+    ``merged_at``; either marks a merged pull request. GitHub fills
+    ``merge_commit_sha`` with a test merge commit once it has computed
+    an open pull request's mergeability, so the field names the merge
+    only after there is one.
+    """
     state: ItemState = "open" if data.get("state") == "open" else "closed"
     head = data.get("head") or {}
     base = data.get("base") or {}
@@ -740,7 +747,7 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         base_branch=str(base.get("ref") or ""),
         url=str(data.get("html_url", "")),
         author=str((data.get("user") or {}).get("login") or ""),
-        merged_sha=str(data.get("merge_commit_sha") or ""),
+        merged_sha=str(data.get("merge_commit_sha") or "") if merged else "",
         labels=tuple(
             str(label.get("name", "")) for label in (data.get("labels") or [])
         ),
@@ -887,6 +894,17 @@ class _GithubPullRequests:
         """
         data = self._client.request(f"{self._base}/pulls/{number}", none_on=(404,))
         return None if data is None else _as_pull_request(data)
+
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The pull requests in *state*, newest first, each built from its row.
+
+        GitHub's ``closed`` holds the merged pull requests too. A row
+        says ``merged_at`` where the single read says ``merged``, and
+        the conversion reads either, so no row is read again.
+        """
+        found = [_as_pull_request(raw) for raw in self._scan(state)]
+        found.sort(key=lambda pr: pr.number, reverse=True)
+        return tuple(found)
 
     def update_title(self, number: int, title: str) -> None:
         """Retitle pull request *number*."""

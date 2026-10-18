@@ -32,6 +32,8 @@ cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
   has no head filter, so an unknown `head=` is ignored and every pull
   request comes back. `GET /repos/:owner/:repo/commits/:sha/pull`
   finds a pull request by its merge commit only, never by its head.
+- `pr.list` reads the same listing to its end, with the state as
+  Gitea's own filter: Gitea's `closed` holds the merged pull requests.
 - `tags(prefix)` reads `GET /repos/:owner/:repo/git/refs/tags/:prefix`,
   one unpaged answer; no tag under the prefix answers 404. `runs`
   with a workflow reads that workflow's own listing, and a run's

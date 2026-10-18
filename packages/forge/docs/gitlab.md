@@ -108,6 +108,7 @@ and on a licensed instance `configure` turns enforcement on through
 | `find_by_head` | `GET /projects/:path/merge_requests?source_branch=` | GitLab states are `opened` / `closed` / `merged` / `locked`; the protocol's `closed` filter takes both `closed` and `merged`, so the backend queries `state=all` and filters. GitLab keeps `source_branch` on merged MRs, which exceeds the contract; nothing may rely on that |
 | `find_by_head_sha` | `GET /projects/:path/repository/commits/:sha/merge_requests` | the merge requests that carry the commit; the backend keeps the one whose `sha` field, its head, is the commit |
 | `get` | `GET /projects/:path/merge_requests/:iid` | the protocol number is the iid |
+| `list` | `GET /projects/:path/merge_requests?state=` | each GitLab state the filter takes is asked by name: `opened` and `locked` for open, `closed` and `merged` for closed, `all` for all, so listing the open ones never reads the merged history; newest first by iid |
 | `update_title` | `PUT /projects/:path/merge_requests/:iid` | `title` |
 | `update_body` | `PUT /projects/:path/merge_requests/:iid` | `description` |
 | `close` / `reopen` | `PUT /projects/:path/merge_requests/:iid` | `state_event: "close"` / `"reopen"`; reopening a merged MR fails and maps to `ForgeError` |
