@@ -1870,6 +1870,8 @@ neither needs nor rules out).
 | the toolchain environment and the coverage measurement by compiler family in the cmake extension | `cpp`'s compiler families (phase 14) |
 | `fm build` without `--configuration`, the configuration an input no step reads yet | cmake's build step building the preset the configuration names, and `fm build --configuration=<preset>` (the native extensions) |
 | the cmake extension's command line and `build/gate` | the `instrumented` preset, run by cmake's build step (#1377) |
+| the workshop's floor `livery-footman>=0.61.0`, below the first footman whose pytest plugin points the runner's directories away and guards the task registry, so the workshop's floor leg would run its suite without either | the release wave raising the floor within its set (step 8's R1) |
+| `livery-toolroom-bench`'s floor `livery-footman>=0.61.0`, below the first footman whose pytest plugin points the runner's directories away, which the bench's own plugin did | the release wave raising the floor within its set (step 8's R1) |
 
 ## Decision record
 
@@ -3986,6 +3988,18 @@ neither needs nor rules out).
   Willem, cheap to reverse: `PACKAGE_TREES` stays private, since no
   plugin reads it; the points plugin keeps its `POINT_VARIABLE`
   re-export until P2b moves the tests that read it.
+- 2026-10-18, #1736's P3, built: the workshop's isolation plugin
+  splits by owner. footman's pytest plugin points the runner's
+  directories at a scratch home and guards the task registry in every
+  session with footman installed, so the release legs of footman,
+  forge, git, toolroom, toolroom-store and toolroom-bench are guarded
+  too. toolroom-bench's own directories plugin goes: a test in its
+  suite proves footman's redirect covers the three variables it
+  redirected. For every footman user, a production module a test
+  imports at collection (a `tasks.py`) leaves `root_group`, and its
+  functions stay callable. Decided without Willem, cheap to reverse:
+  a session whose outer environment set every directory makes no
+  scratch home.
 
 ## Open
 
