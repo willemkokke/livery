@@ -27,7 +27,7 @@ from livery.toolroom.tools import pytest
 from livery.workshop import Neighbours, Package, Query, SourceReferences
 
 if TYPE_CHECKING:
-    from livery.workshop import RegistryTarget, SpeedMark
+    from livery.workshop import Changes, RegistryTarget, SpeedMark
 
 #: The name a package lists this extension by.
 EXTENSION = "python"
@@ -571,14 +571,135 @@ def plugin_hosts(package: Package) -> dict[str, frozenset[str]]:
     pyproject = package.directory / "pyproject.toml"
     if not pyproject.is_file():
         return {}
-    data = tomllib.loads(pyproject.read_text("utf-8"))
-    groups = data.get("project", {}).get("entry-points", {})
+    return _hosts_in(pyproject.read_text("utf-8"))
+
+
+def _hosts_in(text: str) -> dict[str, frozenset[str]]:
+    """Each module the manifest *text* names in a plugin group, to its programs.
+
+    Empty for an empty text.
+
+    Raises:
+        tomllib.TOMLDecodeError: When *text* is not TOML.
+    """
+    groups = tomllib.loads(text).get("project", {}).get("entry-points", {})
     hosts: dict[str, set[str]] = {}
     for group, program in PLUGIN_GROUPS.items():
         for target in (groups.get(group) or {}).values():
             module = str(target).partition(":")[0].strip()
             hosts.setdefault(module, set()).add(program)
     return {module: frozenset(programs) for module, programs in hosts.items()}
+
+
+#: The program whose plugins `plugin_reaches` follows, by its
+#: distribution in `PLUGIN_GROUPS`.
+PYTEST = "pytest"
+
+#: The steps of the pytest extension that run pytest over a member: its
+#: suite and its documentation examples.
+PYTEST_STEPS = ("test.pytest", "examples.pytest")
+
+
+def plugin_reaches(changes: Changes) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """Each changed path pytest loads as a plugin, to why, and every member pytest runs.
+
+    pytest loads every module a member's ``pyproject.toml`` names in a
+    group `PLUGIN_GROUPS` gives it into every session it starts, so a
+    change to one reaches every member a step of `PYTEST_STEPS` runs
+    pytest over. A changed path widens when it is such a module, or a
+    file under such a package, as the working tree names them; when
+    the change removed it and *changes*' earlier tree named it; and
+    when it is a member's ``pyproject.toml`` whose plugins for pytest
+    differ from the earlier tree's. Empty when no changed path widens.
+    """
+    from livery.extensions.python._parse import dotted_name
+    from livery.workshop import discover_packages
+
+    packages = discover_packages(changes.root)
+    removed = frozenset(changes.removed())
+    # Each manifest is read once, however many of its package's paths changed.
+    named: dict[tuple[str, bool], frozenset[str]] = {}
+
+    def plugins(package: Package, *, earlier: bool) -> frozenset[str]:
+        key = (package.path, earlier)
+        if key not in named:
+            if earlier:
+                text = changes.text_before(f"{package.path}/pyproject.toml")
+            else:
+                manifest = package.directory / "pyproject.toml"
+                text = manifest.read_text("utf-8") if manifest.is_file() else ""
+            named[key] = _pytest_plugins(text)
+        return named[key]
+
+    widened: dict[str, str] = {}
+    for path in changes.paths:
+        package = next((p for p in packages if path.startswith(f"{p.path}/")), None)
+        if package is None:
+            continue
+        relative = path[len(package.path) + 1 :]
+        if relative == "pyproject.toml":
+            if plugins(package, earlier=True) != plugins(package, earlier=False):
+                widened[path] = "the plugins it names for pytest changed"
+            continue
+        if not relative.startswith("src/"):
+            continue
+        module = dotted_name(Path(relative), Path("src"))
+        held = _plugin_of(module, plugins(package, earlier=False))
+        if held:
+            widened[path] = _loaded(module, held, now=True)
+            continue
+        if path in removed:
+            held = _plugin_of(module, plugins(package, earlier=True))
+            if held:
+                widened[path] = _loaded(module, held, now=False)
+    if not widened:
+        return {}
+    suites = _pytest_members(packages)
+    return {path: (why, suites) for path, why in widened.items()}
+
+
+def _pytest_plugins(text: str) -> frozenset[str]:
+    """The modules the ``pyproject.toml`` *text* names in a group pytest loads."""
+    return frozenset(
+        module for module, programs in _hosts_in(text).items() if PYTEST in programs
+    )
+
+
+def _plugin_of(module: str, plugins: frozenset[str]) -> str:
+    """The plugin of *plugins* that is *module* or holds it; empty when none does."""
+    for plugin in sorted(plugins):
+        if module == plugin or module.startswith(f"{plugin}."):
+            return plugin
+    return ""
+
+
+def _loaded(module: str, plugin: str, *, now: bool) -> str:
+    """Why a change to *module*, *plugin* or a file under it, reaches pytest's runs."""
+    if module == plugin:
+        return "pytest loads it as a plugin" if now else "pytest loaded it as a plugin"
+    verb = "loads" if now else "loaded"
+    return f"pytest {verb} it with the plugin {plugin}"
+
+
+def _pytest_members(packages: tuple[Package, ...]) -> tuple[str, ...]:
+    """The paths of the *packages* a step of `PYTEST_STEPS` runs pytest over.
+
+    A step runs over a member whose set holds an extension it names,
+    or every member when it names none, unless the member turned it
+    off.
+    """
+    from livery.workshop import extension_set, step_extensions, step_option
+
+    named = {step: frozenset(step_extensions(step)) for step in PYTEST_STEPS}
+    return tuple(
+        package.path
+        for package in packages
+        if any(
+            (not wanted or wanted & frozenset(extension_set(package)))
+            and step_option(step, package, "enabled")
+            for step, wanted in named.items()
+        )
+    )
 
 
 def plugin_modules(package: Package) -> tuple[str, ...]:

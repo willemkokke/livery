@@ -6,7 +6,10 @@ and the affected set is that package plus everything that depends on
 it, transitively (the dependents' closure): a change can break its
 consumers, never its dependencies. A change outside every package,
 the root configuration, the templates, the workspace tests, affects
-everything, because the root files configure every gate.
+everything, because the root files configure every gate. A change
+can reach further than its package's dependents: a listed extension
+says how far through the ``reaches`` query, as python does for a
+module pytest loads as a plugin into every suite it runs.
 
 ``fm graph.affected`` prints the verdict; the quality family's
 the reflex and the CI legs scope work to it.
@@ -14,6 +17,7 @@ the reflex and the CI legs scope work to it.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -147,7 +151,8 @@ def affected_packages(root: Path, *, base: str = "main") -> tuple[Package, ...] 
     scope = affected_by(
         root,
         git.changed_paths(root, base),
-        # Asked only for a change outside every package.
+        # Asked only for a change outside every package, or one inside a
+        # package the listed extensions are asked about.
         before=lambda: git.merge_base(root, base),
     )
     return None if scope is None else scope.packages
@@ -220,13 +225,21 @@ def affected_from_paths(
     about the packages added or removed, or, for ``uv.lock``, about
     the members whose resolution it moves
     ([livery.workshop._root_attribution][]): then it reaches those.
-    *before* may be a function answering it, asked only when a path
-    outside every package needs it.
+    A change inside a package reaches further when a listed extension
+    says so: each answer to the ``reaches`` query is called with the
+    change, and every member it names for a changed path runs with
+    its dependents (`_reached`).
+    *before* may be a function answering it, asked once, and only
+    when a path outside every package or an answer to ``reaches``
+    needs it.
     ``None`` means everything, an empty scope nothing a gate reads.
     """
     from livery.workshop._categories import EXAMPLE, TEST, category_of
     from livery.workshop._packages import WORKSPACE_TESTS, workspace_suite
 
+    paths = tuple(paths)
+    if not isinstance(before, str):
+        before = functools.cache(before)
     seeds: set[str] = set()
     # A package whose test files changed runs its whole suite; nothing
     # imports a test, so its dependents' suites do not run. The suite
@@ -235,6 +248,7 @@ def affected_from_paths(
     suites: set[str] = set()
     examples: set[str] = set()
     tests_changed = False
+    inside = False
     outside: list[str] = []
     for path in paths:
         if docs_page(packages, path) is not None:
@@ -246,6 +260,7 @@ def affected_from_paths(
             continue
         for package in packages:
             if path.startswith(package.path + "/"):
+                inside = True
                 relative = path[len(package.path) + 1 :]
                 category = category_of(package, relative).name
                 if category == EXAMPLE:
@@ -262,6 +277,11 @@ def affected_from_paths(
         if attributed is None:
             return None
         seeds |= attributed
+    if inside:
+        widened = _reached(root, packages, paths, before=before)
+        if widened is None:
+            return None
+        seeds |= widened
     reached = {package.path for package in dependents_closure(packages, seeds)}
     alone = tuple(
         sorted(path for path in examples if path not in reached and path not in suites)
@@ -325,6 +345,62 @@ def _attribute(
             print(f"  {path}: outside the packages; everything runs")
             return None
         print(f"  {path}: names only the packages added or removed")
+    return seeds
+
+
+def _reached(
+    root: Path,
+    packages: tuple[Package, ...],
+    paths: tuple[str, ...],
+    *,
+    before: str | Callable[[], str],
+) -> set[str] | None:
+    """The members the listed extensions say the change to *paths* reaches.
+
+    Each function the extensions answer the ``reaches`` query with
+    ([livery.workshop._queries.REACHES][]) is called with the change,
+    *before* resolved only when one answers. Each changed path an
+    answer widens is printed with why, and with how many members it
+    reaches. None means everything, and the line names the extension:
+    an answer raised, or named a path outside the members.
+    """
+    from livery.workshop._influence import Changes
+    from livery.workshop._queries import REACHES, answers
+
+    try:
+        answered = answers(root, REACHES)
+    except Exception as error:
+        print(f"  reaches: {error}; everything runs")
+        return None
+    if not answered:
+        return set()
+    point = before if isinstance(before, str) else before()
+    changes = Changes(root, paths, point)
+    members = {package.path for package in packages}
+    seeds: set[str] = set()
+    for name, functions in answered.items():
+        try:
+            widened = [
+                (path, why, tuple(found))
+                for function in functions
+                for path, (why, found) in function(changes).items()
+            ]
+        except Exception as error:
+            print(
+                f"  {name} could not say what the change reaches ({error});"
+                " everything runs"
+            )
+            return None
+        for path, why, found in widened:
+            unknown = sorted(set(found) - members)
+            if unknown:
+                print(
+                    f"  {path}: {name} says it reaches {', '.join(unknown)},"
+                    " outside the members; everything runs"
+                )
+                return None
+            print(f"  {path}: {why}; it reaches {len(found)} package(s)")
+            seeds.update(found)
     return seeds
 
 

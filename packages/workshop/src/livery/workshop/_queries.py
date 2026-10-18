@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from livery.git import Keyed, Series
     from livery.workshop._composition import Lookup
     from livery.workshop._declaration import Declaration, DeclaredValue, Reference
+    from livery.workshop._influence import Changes
     from livery.workshop._packages import Package, SourceReferences
 
 T = TypeVar("T")
@@ -344,6 +345,17 @@ CHECKOUT_INPUTS: Query[Mapping[str, str]] = Query("checkout-inputs")
 #: listed extensions' leg entries leave. A file two extensions fold
 #: refuses; a file nobody folds is red by name in the fold.
 FOLDERS: Query[Mapping[str, Folder]] = Query("ci.fold")
+
+#: What one answer to `REACHES` says of a change: each changed path it
+#: widens, to why it widens and the paths of the members it reaches.
+Reached = Mapping[str, tuple[str, tuple[str, ...]]]
+
+#: What a change reaches beyond its own packages and their dependents:
+#: the functions the listed extensions answer with, each called with the
+#: run's [livery.workshop.Changes][]. The affected engine
+#: ([livery.workshop._graph.affected_from_paths][]) runs every member
+#: they name, with its dependents.
+REACHES: Query[tuple[Callable[[Changes], Reached], ...]] = Query("reaches")
 
 
 @functools.cache

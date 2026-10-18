@@ -4,7 +4,9 @@ About a package, from its manifest and sources: its version, the files
 a version is written into, its requirements, the names its code is
 referenced by, its public modules and what each source references.
 About the workspace, while pytest is listed: the functions that run
-the python packages' suites and a package's documentation examples.
+the python packages' suites and a package's documentation examples,
+and the function that widens a change to a module pytest loads as a
+plugin to every member pytest runs.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.forge import Registry
-    from livery.workshop import Package, RequirementWriter, SourceReferences
+    from livery.workshop import Changes, Package, RequirementWriter, SourceReferences
 
 
 def current_version(package: Package) -> str:
@@ -125,3 +127,18 @@ def examples_runner(
     """
     del root
     return _backend.run_examples
+
+
+def plugin_reaches(
+    root: Path,
+) -> tuple[Callable[[Changes], Mapping[str, tuple[str, tuple[str, ...]]]], ...]:
+    """Answer ``reaches`` with the function that follows pytest's plugins.
+
+    The affected engine asks with the workspace root, which the answer
+    does not depend on, and calls the function with the run's change.
+    pytest loads a module a member names under ``pytest11`` into every
+    session, so a change to one reaches every member pytest runs over
+    ([livery.extensions.python._backend.plugin_reaches][]).
+    """
+    del root
+    return (_backend.plugin_reaches,)
