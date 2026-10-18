@@ -330,3 +330,223 @@ def test_no_fixture_of_the_plugin_asks_for_monkeypatch() -> None:
             unwrap() if unwrap is not None else value
         )
         assert "monkeypatch" not in inspect.signature(wrapped).parameters, name
+
+
+# The pins: one property of the session's guards each, written as an
+# inner session that reads only behaviour, so each moves with the guard
+# it pins and asserts the same after the move.
+
+#: The identity variables git reads ahead of every config.
+IDENTITY_VARIABLES = (
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+)
+
+#: The inner sessions' way to run git and read its answer.
+GIT_HELPER = """
+import subprocess
+
+
+def git(*args, cwd=None):
+    done = subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
+    )
+    return done.stdout.strip()
+"""
+
+
+def test_a_child_git_reads_the_tester_identity_from_the_global_config(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No outer redirect: the session writes a global config of its own,
+    # and a git the test starts reads the tester identity from it.
+    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+    pytester.makepyfile(
+        GIT_HELPER
+        + """
+
+def test_identity():
+    assert git("config", "--global", "user.name") == "tester"
+    assert git("config", "--global", "user.email") == "tester@example.invalid"
+"""
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_an_outer_global_git_config_is_kept(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    outer = tmp_path / "outer.gitconfig"
+    outer.write_text(
+        "[user]\n\tname = outer\n\temail = outer@example.invalid\n", "utf-8"
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(outer))
+    pytester.makepyfile(
+        GIT_HELPER
+        + f"""
+import os
+
+
+def test_kept():
+    assert os.environ["GIT_CONFIG_GLOBAL"] == {str(outer)!r}
+    assert git("config", "--global", "user.email") == "outer@example.invalid"
+"""
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_the_identity_variables_are_gone_in_the_session(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in IDENTITY_VARIABLES:
+        monkeypatch.setenv(name, "runner")
+    pytester.makepyfile(
+        f"""
+        import os
+
+        def test_gone():
+            assert [n for n in {IDENTITY_VARIABLES!r} if n in os.environ] == []
+        """
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_a_clone_s_own_config_beats_the_tester_identity(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A test that needs a second author, a colleague's clone, configures
+    # that clone, and its config wins over the session's global one, as
+    # it would over a person's. An identity variable the outer
+    # environment carries would beat both, so the session drops them.
+    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+    for name in IDENTITY_VARIABLES:
+        monkeypatch.setenv(name, "runner")
+    pytester.makepyfile(
+        GIT_HELPER
+        + """
+
+def test_colleague(tmp_path):
+    git("init", "-q", cwd=tmp_path)
+    git("config", "user.name", "colleague", cwd=tmp_path)
+    git("config", "user.email", "colleague@example.invalid", cwd=tmp_path)
+    git("commit", "-q", "--allow-empty", "-m", "first", cwd=tmp_path)
+    who = git("log", "-1", "--format=%an <%ae>|%cn <%ce>", cwd=tmp_path)
+    assert who.split("|") == ["colleague <colleague@example.invalid>"] * 2
+"""
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_collection_drops_a_production_module_s_tasks_and_keeps_a_test_file_s(
+    pytester: pytest.Pytester,
+) -> None:
+    # A test file may register tasks at import, its own subject; the
+    # production module it imports registers its whole surface, which
+    # no test asked for, and that goes before the first test. The inner
+    # session registers into a captured tree, so nothing reaches this
+    # session's registry.
+    from livery.footman import _registry as registry
+
+    pytester.syspathinsert()
+    pytester.makepyfile(
+        acme_surface=(
+            "from livery.footman import task\n\n\n"
+            "@task\ndef produce():\n"
+            '    """Registered by a production module."""\n'
+        ),
+        test_registers="""
+        import acme_surface
+        from livery.footman import root_group, task
+
+        @task
+        def examine():
+            '''Registered by the test file.'''
+
+        def test_collected():
+            assert "examine" in root_group.tasks
+            assert "produce" not in root_group.tasks
+        """,
+    )
+    with registry.capture():
+        result = _run(pytester)
+    result.assert_outcomes(passed=1)
+
+
+def test_a_production_module_a_test_imports_is_dropped_without_failing_it(
+    pytester: pytest.Pytester,
+) -> None:
+    from livery.footman import _registry as registry
+
+    pytester.syspathinsert()
+    pytester.makepyfile(
+        acme_lazy=(
+            "from livery.footman import task\n\n\n"
+            "@task\ndef produce():\n"
+            '    """Registered by a production module."""\n'
+        ),
+        test_imports="""
+        from livery.footman import root_group
+
+        def test_imports_it_lazily():
+            import acme_lazy
+
+            assert "produce" in root_group.tasks
+
+        def test_after():
+            assert "produce" not in root_group.tasks
+        """,
+    )
+    with registry.capture():
+        result = _run(pytester)
+    result.assert_outcomes(passed=2)
+
+
+def test_a_group_a_test_leaks_fails_it_by_the_group_s_name(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        """
+        from livery.footman import Group, root_group
+
+        def test_leaks_a_group():
+            root_group.groups["leaked"] = Group("leaked")
+
+        def test_after():
+            assert "leaked" not in root_group.groups
+        """
+    )
+    result = _run(pytester)
+    result.assert_outcomes(passed=2, errors=1)
+    result.stdout.fnmatch_lines(["*leaked.[*]*"])
+
+
+def test_the_brand_s_spelling_of_the_directories_points_away_too(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A branded CLI reads its directories from its own prefix, and the
+    # session points those away as well. The brand places its cache in
+    # this test's directory, so the session's home lands there.
+    from livery.footman import _paths
+
+    for suffix in ("DATA_DIR", "CACHE_DIR", "CONFIG_DIR"):
+        monkeypatch.delenv(f"ACME_{suffix}", raising=False)
+    pytester.makepyfile(
+        """
+        import os
+        from pathlib import Path
+
+        def test_redirected():
+            for name in ("ACME_DATA_DIR", "ACME_CACHE_DIR", "ACME_CONFIG_DIR"):
+                assert Path(os.environ[name]).is_dir(), name
+        """
+    )
+    before = _paths.child_args()
+    _paths.configure(prefix="ACME", cache_dir=tmp_path / "cache")
+    try:
+        result = _run(pytester)
+    finally:
+        _paths.configure_child(*before)
+    result.assert_outcomes(passed=1)
+    assert not [name for name in os.environ if name.startswith("ACME_")]
