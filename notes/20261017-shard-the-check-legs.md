@@ -554,6 +554,21 @@ Acceptance:
   check jobs per run against GitHub's twenty and five macOS. The
   macOS count of 2 would keep two concurrent runs within five;
   Willem is looking at where macOS's test time goes before ruling.
+- 2026-10-18, Willem: no decision yet on switching pull requests to
+  linux alone or on the macOS count; both wait on the tests still
+  running, since sharding was done so all three platforms can run on
+  every pull request and still save a good share of the time. Until
+  then pull requests run every runner. Willem, the same day: running
+  the right CI must never depend on the author knowing what their
+  change touches. The linux-only mode as built leans on the author's
+  `fm submit --every-runner` for a change only another platform
+  reaches, so it stays off; an acceptable form decides the runners per
+  change from the coverage records and fails safe. The balancer's
+  test time comes from the
+  durations family, the per-file medians summed over the current test
+  files (#1852, option a). The public `files_digest` is renamed to say
+  items (#1857). The test-patch guard moves into footman's pytest
+  plugin in #1736's split, where every test session loads it.
 
 ## Open
 
