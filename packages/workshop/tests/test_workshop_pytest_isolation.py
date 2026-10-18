@@ -308,3 +308,25 @@ def test_a_module_first_imported_under_a_patch_keeps_the_original_after_it(
     )
     result = _run(pytester)
     result.assert_outcomes(passed=2)
+
+
+def test_no_fixture_of_the_plugin_asks_for_monkeypatch() -> None:
+    # An autouse fixture that asks for `monkeypatch` sets it up before
+    # the fixtures of plugins registered later, which reorders their
+    # teardown: footman's environment restore then runs before
+    # `monkeypatch` writes back a value the test had changed. The
+    # plugin's guards read a test's `monkeypatch` from its resolved
+    # fixtures instead.
+    import inspect
+
+    for name, value in vars(_pytest_isolation).items():
+        marker = getattr(value, "_fixture_function_marker", None) or getattr(
+            value, "_pytestfixturefunction", None
+        )
+        if marker is None:
+            continue
+        unwrap = getattr(value, "_get_wrapped_function", None)
+        wrapped = getattr(value, "__wrapped__", None) or (
+            unwrap() if unwrap is not None else value
+        )
+        assert "monkeypatch" not in inspect.signature(wrapped).parameters, name
