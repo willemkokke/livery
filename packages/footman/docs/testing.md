@@ -227,6 +227,25 @@ naming them; register them under `livery.footman.capture()` instead.
 Either way the next test finds the registry as the test before it found
 it.
 
+### Adding a guard of your own
+
+A package adds a guard to every session under the `footman.test_guards`
+entry-point group. The plugin calls each member once per test process,
+in name order, after it has pointed the directories away, with the
+keyword arguments `data_dir`, `cache_dir` and `config_dir`: the runner's
+directories as the session sees them. Accept `**facts` as well, so a
+fact added later does not break your member. A member returns None, or a
+callable taking no arguments that returns a context manager, which the
+plugin enters around every test, the first member's outermost. A member
+that cannot load or raises stops the session before its first test,
+naming the member. A guard that raises as it is left is an error at that
+test's teardown.
+
+```toml
+[project.entry-points."footman.test_guards"]
+"acme" = "acme._test_guard:guard"
+```
+
 ## Golden tests: the `--json` surface
 
 `--json` is the blessed machine surface: `{"schema": 1, "items": [...]}`,

@@ -26,6 +26,11 @@ teardown naming them; a production module a test imported lazily is
 dropped the same way as at collection. The registry is restored either
 way, so the next test in the same worker never inherits anything.
 
+A package adds guards of its own under the ``footman.test_guards``
+entry-point group: each member is called once per test process, after
+the directories point away, and the context manager it returns is
+entered around every test.
+
 Two deliberate laziness rules: this module is only ever imported by pytest
 itself (footman's runtime stays zero-dependency), and it imports nothing from
 footman at module level — pytest loads entry-point plugins before coverage
@@ -36,12 +41,14 @@ project's coverage of footman-adjacent code look worse than it is.
 from __future__ import annotations
 
 import textwrap
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterator
+    from collections.abc import Generator, Iterator
     from pathlib import Path
     from typing import Any
 
@@ -123,10 +130,20 @@ _HOME = pytest.StashKey[tuple[str, tuple[str, ...]]]()
 #: The registry's names when the session started, for collection's end.
 _BASELINE = pytest.StashKey[tuple[frozenset[str], frozenset[str]]]()
 
+#: The entry-point group a package registers a test guard under.
+TEST_GUARDS = "footman.test_guards"
+
+#: What a test guard returns: a context manager to enter around each test.
+_Guard = Callable[[], AbstractContextManager[object]]
+
+#: The guards the session's members returned, in the members' name order.
+_GUARDS = pytest.StashKey[tuple[_Guard, ...]]()
+
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Point the runner's directories away, and join a profiled run if there is one."""
+    """Point the runner's directories away, load the test guards, join a profile."""
     _point_directories_away(config)
+    _load_test_guards(config)
     _join_profile(config)
 
 
@@ -173,6 +190,49 @@ def pytest_unconfigure(config: pytest.Config) -> None:
         os.environ.pop(name, None)
     if home:
         shutil.rmtree(home, ignore_errors=True)
+
+
+def _load_test_guards(config: pytest.Config) -> None:
+    """Call every member of the test-guard group, and keep what each returns.
+
+    The members are called in name order, once per test process, after
+    the directories point away, with the runner's directories as
+    keyword facts. A member returns None, or a callable taking no
+    arguments that returns a context manager, which
+    `_test_guards_stay` enters around every test.
+
+    Raises:
+        pytest.UsageError: when a member cannot load or raises, naming
+            it, so the session stops before its first test.
+    """
+    from livery.footman import _entries, _paths
+
+    facts = {
+        "data_dir": _paths.footman_data_dir(),
+        "cache_dir": _paths.footman_cache_dir(),
+        "config_dir": _paths.footman_config_dir(),
+    }
+    points = sorted(_entries.installed_entry_points(TEST_GUARDS), key=lambda p: p.name)
+    guards: list[_Guard] = []
+    for point in points:
+        named = f"the test guard {point.name} ({point.value})"
+        try:
+            member = point.load()
+        except Exception as error:
+            raise pytest.UsageError(
+                f"{named} could not load: {type(error).__name__}: {error};"
+                " fix or uninstall the distribution that registers it"
+            ) from error
+        try:
+            guard = member(**facts)
+        except Exception as error:
+            raise pytest.UsageError(
+                f"{named} raised: {type(error).__name__}: {error};"
+                " fix or uninstall the distribution that registers it"
+            ) from error
+        if guard is not None:
+            guards.append(guard)
+    config.stash[_GUARDS] = tuple(guards)
 
 
 def _join_profile(config: pytest.Config) -> None:
@@ -424,6 +484,22 @@ def _global_registry_stays() -> Iterator[None]:
             f"the test left tasks in the global registry: {', '.join(left)};"
             " register them under livery.footman.capture() instead"
         )
+
+
+@pytest.fixture(autouse=True)
+def _test_guards_stay(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Enter every guard the test-guard members returned, around the test.
+
+    The guards are entered in their members' name order and left in the
+    reverse. A guard that raises as it is left is an error at the test's
+    teardown; the guards entered before it are still left.
+    """
+    import contextlib
+
+    with contextlib.ExitStack() as stack:
+        for guard in request.config.stash.get(_GUARDS, ()):
+            stack.enter_context(guard())
+        yield
 
 
 @pytest.hookimpl(wrapper=True)

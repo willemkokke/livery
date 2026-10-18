@@ -2,7 +2,7 @@
 
 footman's pytest plugin points the runner's directories away and guards
 the task registry, livery-git's gives git a config of the session's own,
-and the workshop's guards ride footman's ``footman.test-guards`` group.
+and the workshop's guards ride footman's ``footman.test_guards`` group.
 A release leg installs one member's wheel with its ``test`` extra and
 what those require, so a member that tests against the workshop must
 reach footman and livery-git through its requirements; and a project

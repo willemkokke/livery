@@ -621,3 +621,133 @@ def test_the_brand_s_spelling_of_the_directories_points_away_too(
         _paths.configure_child(*before)
     result.assert_outcomes(passed=1)
     assert not [name for name in os.environ if name.startswith("ACME_")]
+
+
+# --- the test-guard group -----------------------------------------------------
+
+
+def _members(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, **members: str
+) -> None:
+    """Register each module source as a member of the test-guard group.
+
+    Each member is the module's ``guard``, named for its keyword: the
+    group answers them alone, and every other group what is installed.
+    """
+    from importlib.metadata import EntryPoint
+
+    from livery.footman import _entries
+
+    pytester.syspathinsert()
+    points = []
+    for name, source in members.items():
+        pytester.makepyfile(**{f"acme_{name}": source})
+        points.append(EntryPoint(name, f"acme_{name}:guard", "footman.test_guards"))
+    installed = _entries.installed_entry_points
+
+    def answer(group: str | None = None) -> tuple[EntryPoint, ...]:
+        if group == "footman.test_guards":
+            return tuple(points)
+        return installed(group)
+
+    monkeypatch.setattr(_entries, "installed_entry_points", answer)
+
+
+#: A guard that writes when it enters and leaves, and the facts it was given.
+_RECORDING = """
+import contextlib
+import os
+from pathlib import Path
+
+EVENTS = Path(__file__).with_name("events.txt")
+
+
+def _note(line):
+    with EVENTS.open("a", encoding="utf-8") as events:
+        events.write(line + "\\n")
+
+
+def guard(**facts):
+    _note("{name} called with " + ",".join(sorted(facts)))
+    data_dir = Path(os.environ["FOOTMAN_DATA_DIR"])
+    _note("{name} data_dir " + str(facts["data_dir"] == data_dir))
+
+    @contextlib.contextmanager
+    def around():
+        _note("{name} enter")
+        yield
+        _note("{name} leave")
+
+    return around
+"""
+
+
+def test_a_member_that_cannot_load_stops_the_session_naming_it(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(pytester, monkeypatch, broken="import acme_missing_module\n")
+    pytester.makepyfile("def test_never_runs():\n    pass\n")
+    result = _run(pytester)
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*broken*could not load*"])
+
+
+def test_a_member_that_raises_stops_the_session_naming_it(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(
+        pytester,
+        monkeypatch,
+        raising="def guard(**facts):\n    raise RuntimeError('no guard here')\n",
+    )
+    pytester.makepyfile("def test_never_runs():\n    pass\n")
+    result = _run(pytester)
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*raising*no guard here*"])
+
+
+def test_a_guard_that_raises_as_it_is_left_is_an_error_at_teardown(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(
+        pytester,
+        monkeypatch,
+        leaving=(
+            "import contextlib\n\n\n"
+            "@contextlib.contextmanager\ndef around():\n"
+            "    yield\n    raise RuntimeError('left badly')\n\n\n"
+            "def guard(**facts):\n    return around\n"
+        ),
+    )
+    pytester.makepyfile("def test_runs():\n    pass\n")
+    result = _run(pytester)
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*left badly*"])
+
+
+def test_members_run_in_name_order_and_their_guards_wrap_every_test(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A member that returns None adds nothing; the others are called
+    # once for the session, with the runner's directories as they are
+    # after the redirect, and their guards wrap each test, the first
+    # name outermost.
+    _members(
+        pytester,
+        monkeypatch,
+        second=_RECORDING.replace("{name}", "second"),
+        first=_RECORDING.replace("{name}", "first"),
+        none="def guard(**facts):\n    return None\n",
+    )
+    pytester.makepyfile("def test_one():\n    pass\n\ndef test_two():\n    pass\n")
+    _run(pytester).assert_outcomes(passed=2)
+    events = (pytester.path / "events.txt").read_text(encoding="utf-8").splitlines()
+    wrapped = ["first enter", "second enter", "second leave", "first leave"]
+    assert events == [
+        "first called with cache_dir,config_dir,data_dir",
+        "first data_dir True",
+        "second called with cache_dir,config_dir,data_dir",
+        "second data_dir True",
+        *wrapped,
+        *wrapped,
+    ]

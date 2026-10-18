@@ -78,15 +78,18 @@ dev = ["pyyaml>=6.0.3", "types-pyyaml"]
 "livery.workshop.uv-cache" = "livery.workshop._doctor:uv_cache"
 "livery.workshop.ssh" = "livery.workshop._doctor:ssh"
 
+# The workshop's test guard: footman's pytest plugin enters it around
+# every test, so what an extension mount writes goes back after each.
+[project.entry-points."footman.test_guards"]
+"livery.workshop" = "livery.workshop._test_guard:guard"
+
 # The workshop's pytest plugins: every pytest this venv starts carries
 # them.
 [project.entry-points.pytest11]
 # A package's documentation examples, the files under docs/examples/,
 # collected as tests when pytest is pointed at them.
 livery-workshop-examples = "livery.workshop._pytest_examples"
-# Every test runs apart from the machine's live runner state, and
-# the global task registry and what an extension mount writes are
-# guarded per test.
+# A patch a test made is undone in every module that copied it.
 livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # A test declares the CI points it runs at; the point in the job
 # runner's environment selects.

@@ -114,7 +114,7 @@ def _mounted(root: Path) -> Group:
 
     The points' jobs start as a new process has them, and the verbs the
     mount makes, the templates' among them, land in the tree returned.
-    The isolation plugin puts the steps, the jobs and the mount's
+    The workshop's test guard puts the steps, the jobs and the mount's
     records back after the test.
     """
     from livery.footman import _registry as registry
