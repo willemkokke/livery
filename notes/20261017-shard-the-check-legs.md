@@ -558,7 +558,13 @@ Acceptance:
   linux alone or on the macOS count; both wait on the tests still
   running, since sharding was done so all three platforms can run on
   every pull request and still save a good share of the time. Until
-  then pull requests run every runner. The balancer's test time comes from the
+  then pull requests run every runner. Willem, the same day: running
+  the right CI must never depend on the author knowing what their
+  change touches. The linux-only mode as built leans on the author's
+  `fm submit --every-runner` for a change only another platform
+  reaches, so it stays off; an acceptable form decides the runners per
+  change from the coverage records and fails safe. The balancer's
+  test time comes from the
   durations family, the per-file medians summed over the current test
   files (#1852, option a). The public `files_digest` is renamed to say
   items (#1857). The test-patch guard moves into footman's pytest
