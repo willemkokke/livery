@@ -554,11 +554,11 @@ Acceptance:
   check jobs per run against GitHub's twenty and five macOS. The
   macOS count of 2 would keep two concurrent runs within five;
   Willem is looking at where macOS's test time goes before ruling.
-- 2026-10-18, Willem: pull requests keep running all three platforms.
-  Sharding was done so every platform can run on every pull request and
-  still save a good share of the time, so `[ci] pull-request-runners`
-  stays every runner and the macOS count stays as it is; the linux-only
-  mode stays available and off. The balancer's test time comes from the
+- 2026-10-18, Willem: no decision yet on switching pull requests to
+  linux alone or on the macOS count; both wait on the tests still
+  running, since sharding was done so all three platforms can run on
+  every pull request and still save a good share of the time. Until
+  then pull requests run every runner. The balancer's test time comes from the
   durations family, the per-file medians summed over the current test
   files (#1852, option a). The public `files_digest` is renamed to say
   items (#1857). The test-patch guard moves into footman's pytest
