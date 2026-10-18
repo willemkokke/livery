@@ -131,9 +131,9 @@ def _root_restored():
 
     Registration into the root is this suite's subject: tests import
     modules that register, mount providers, and run inner sessions
-    whose files register at collection. The workshop's isolation
-    plugin fails a test that leaves tasks behind, so the leftovers
-    are handed back here, before that guard looks.
+    whose files register at collection. The plugin's registry guard
+    fails a test that leaves tasks behind, so the leftovers are
+    handed back here, before that guard looks.
     """
     from livery.footman import _registry as registry
 

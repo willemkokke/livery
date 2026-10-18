@@ -405,9 +405,9 @@ def _chain(
     # (the footman#536 gap), so the chain bridges through a scratch
     # config dir: the documented user-rung tasks file, scoped to
     # these invocations, never the machine's real config. The
-    # config-dir variable names it, not XDG_CONFIG_HOME: the suite's
-    # isolation plugin already points that variable at a scratch home
-    # of its own, and the variable beats XDG.
+    # config-dir variable names it, not XDG_CONFIG_HOME: footman's
+    # pytest plugin already points that variable at a scratch home of
+    # its own, and the variable beats XDG.
     bridge = tmp_path / "bridge-config"
     (bridge / "footman").mkdir(parents=True, exist_ok=True)
     (bridge / "footman" / "tasks.py").write_text(

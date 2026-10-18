@@ -70,8 +70,8 @@ def shared_env_path() -> Path:
 
     The dev containers' credentials live there. A test that needs them
     names this file by design and skips without it; every other read of
-    the runner's directories goes through footman, which the workshop's
-    test isolation points at a temporary directory for the session.
+    the runner's directories goes through footman, whose pytest plugin
+    points them at a temporary directory for the session.
     """
     import os
     from pathlib import Path

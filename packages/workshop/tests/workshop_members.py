@@ -23,8 +23,8 @@ def mounted_now(root: Path) -> tuple[str, ...]:
 
     The points' jobs start as a new process has them, with nothing
     added or joined, and the verbs the mount makes land in a throwaway
-    tree. The isolation plugin puts the steps, the jobs and the mount's
-    records back after the test.
+    tree. The workshop's test guard puts the steps, the jobs and the
+    mount's records back after the test.
     """
     from livery.footman import _registry as registry
     from livery.workshop import _points

@@ -1,13 +1,19 @@
-"""The pytest fixtures footman ships: `fm`, `fm_project`, `fm_record`.
+"""The pytest plugin footman ships: its fixtures and the guards of every session.
 
-These are published API — a user's `def test_x(fm_project)` is the whole
-point of the `pytest11` entry point — so they are driven the way a user
-gets them: pytest loading the installed plugin in a subprocess project,
-not by calling the fixture functions directly. `pytester` runs a real
-pytest inside the test, which also proves the entry point itself works.
+The fixtures `fm`, `fm_project` and `fm_record` are published API — a
+user's `def test_x(fm_project)` is the whole point of the `pytest11` entry
+point — so they are driven the way a user gets them: pytest loading the
+installed plugin in a subprocess project, not by calling the fixture
+functions directly. `pytester` runs a real pytest inside the test, which
+also proves the entry point itself works. The session's guards, the
+scratch directories and the registry guard, are driven the same way.
 """
 
 from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -143,7 +149,6 @@ def _report(
     worker: str | None = None,
 ) -> pytest.TestReport:
     from types import SimpleNamespace
-    from typing import cast
 
     stub = SimpleNamespace(when=when, nodeid=nodeid, start=start, stop=stop)
     if worker is not None:
@@ -177,7 +182,6 @@ def test_an_xdist_worker_is_never_armed(tmp_path, monkeypatch):
     # inherited environment: a pytest spawned *by a test* inherits the outer
     # suite's PYTEST_XDIST_WORKER and must still record its own tests.
     from types import SimpleNamespace
-    from typing import cast
 
     from livery.footman import _pytest_plugin as pytest_plugin
 
@@ -193,7 +197,7 @@ def test_an_xdist_worker_is_never_armed(tmp_path, monkeypatch):
             ),
         ),
     )
-    pytest_plugin.pytest_configure(worker)
+    pytest_plugin._join_profile(worker)
     assert registered == []  # a real worker stays silent
     fresh = cast(
         pytest.Config,
@@ -203,13 +207,12 @@ def test_an_xdist_worker_is_never_armed(tmp_path, monkeypatch):
             )
         ),
     )
-    pytest_plugin.pytest_configure(fresh)
+    pytest_plugin._join_profile(fresh)
     assert registered == ["footman-profile-trace"]  # a nested controller records
 
 
 def test_recorder_skips_reports_without_timing_and_writes_nothing_empty(tmp_path):
     from types import SimpleNamespace
-    from typing import cast
 
     from livery.footman._pytest_plugin import _TraceRecorder
 
@@ -232,7 +235,6 @@ def test_a_broken_sink_is_a_note_never_a_failure(tmp_path, capsys, monkeypatch):
 
 def test_configure_arms_only_under_a_profiled_run(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from typing import cast
 
     from livery.footman import _pytest_plugin as pytest_plugin
 
@@ -246,10 +248,10 @@ def test_configure_arms_only_under_a_profiled_run(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
-    pytest_plugin.pytest_configure(config)
+    pytest_plugin._join_profile(config)
     assert registered == []
     monkeypatch.setenv("FM_PROFILE_DIR", str(tmp_path))
-    pytest_plugin.pytest_configure(config)
+    pytest_plugin._join_profile(config)
     assert registered == ["footman-profile-trace"]
 
 
@@ -361,3 +363,535 @@ def test_a_name_a_test_binds_on_the_package_leaves_it_when_the_test_ends(
         """
     )
     pytester.runpytest_inprocess("-p", "no:cacheprovider").assert_outcomes(passed=2)
+
+
+# --- the session's directories and the registry guard -------------------------
+
+
+def _run(pytester: pytest.Pytester, *args: str) -> pytest.RunResult:
+    """Run the inner session in this process, with a base temp of its own.
+
+    Without one the inner session numbers a directory under the
+    shared ``pytest-of-<user>`` base and prunes the oldest, which is
+    the outer session's: a source a test wrote there is gone when the
+    gate's coverage report reads it.
+    """
+    base = pytester.path / "basetemp"
+    return pytester.runpytest("-p", "no:cacheprovider", f"--basetemp={base}", *args)
+
+
+def _unredirected(monkeypatch: pytest.MonkeyPatch, cache_home: Path) -> None:
+    """Clear the runner's directories, as a session outside any redirect starts.
+
+    The cache home moves to *cache_home*, so the session's home, which
+    lands in the cache it starts with, never lands in the machine's.
+    """
+    for suffix in ("DATA_DIR", "CACHE_DIR", "CONFIG_DIR"):
+        monkeypatch.delenv(f"FOOTMAN_{suffix}", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_home))
+
+
+def test_every_test_and_its_children_run_away_from_the_real_home(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Refusals first: the real home is never the target, whatever the
+    # outer environment did; a child process sees the same redirect.
+    _unredirected(monkeypatch, tmp_path / "cache-home")
+    real = str(Path.home() / ".local" / "share" / "footman")
+    pytester.makepyfile(
+        f"""
+        import os, subprocess, sys
+        from pathlib import Path
+
+        REAL = {real!r}
+
+        def test_redirected():
+            for name in ("FOOTMAN_DATA_DIR", "FOOTMAN_CACHE_DIR", "FOOTMAN_CONFIG_DIR"):
+                value = os.environ[name]
+                assert value and value != REAL and Path(value).is_dir(), name
+            code = "import os; print(os.environ['FOOTMAN_DATA_DIR'])"
+            child = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True, text=True, check=True,
+            )
+            assert child.stdout.strip() == os.environ["FOOTMAN_DATA_DIR"]
+        """
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_an_outer_redirect_is_kept(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    monkeypatch.setenv("FOOTMAN_DATA_DIR", str(outer))
+    pytester.makepyfile(
+        f"""
+        import os
+
+        def test_kept():
+            assert os.environ["FOOTMAN_DATA_DIR"] == {str(outer)!r}
+        """
+    )
+    _run(pytester).assert_outcomes(passed=1)
+    assert os.environ["FOOTMAN_DATA_DIR"] == str(outer)  # the inner session set nothing
+
+
+def test_a_session_whose_directories_are_all_set_makes_no_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # An xdist worker inherits its controller's redirect: nothing is
+    # left to point away, so no home is made and the end removes nothing.
+    from livery.footman import _pytest_plugin as pytest_plugin
+
+    for suffix in ("DATA_DIR", "CACHE_DIR", "CONFIG_DIR"):
+        monkeypatch.setenv(f"FOOTMAN_{suffix}", str(tmp_path / suffix.lower()))
+    before = dict(os.environ)
+
+    class Config:
+        stash = pytest.Stash()
+
+    config = cast("pytest.Config", Config())
+    pytest_plugin.pytest_configure(config)
+    assert dict(os.environ) == before
+    assert not (tmp_path / "cache_dir" / "scratch").exists()
+    pytest_plugin.pytest_unconfigure(config)
+    assert dict(os.environ) == before
+
+
+def test_the_home_is_this_process_s_scratch_and_goes_at_unconfigure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The cache is redirected to this test's directory, so the home lands
+    # there and never in the machine's; the other variables, cleared, are
+    # the plugin's to set. A session that ends takes the home with it;
+    # one that is killed leaves it to the collector, which reads the
+    # owner's pid off the directory's name.
+    import livery.footman as footman
+    from livery.footman import _pytest_plugin as pytest_plugin
+
+    monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
+    names = ["FOOTMAN_DATA_DIR", "FOOTMAN_CONFIG_DIR"]
+    for name in names:
+        monkeypatch.delenv(name, raising=False)
+
+    class Config:
+        stash = pytest.Stash()
+
+    config = cast("pytest.Config", Config())
+    pytest_plugin.pytest_configure(config)
+    home = Path(os.environ["FOOTMAN_DATA_DIR"]).parent
+    assert home.parent == footman.cache_dir() / "scratch"
+    assert home.name.startswith(f"test-session-{os.getpid()}-")
+    assert all(Path(os.environ[name]).parent == home for name in names)
+    pytest_plugin.pytest_unconfigure(config)
+    assert not home.exists()
+    assert not any(name in os.environ for name in names)
+    assert os.environ["FOOTMAN_CACHE_DIR"] == str(tmp_path / "cache")
+
+
+def test_a_test_that_leaks_into_the_global_registry_fails_by_name(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        """
+        from livery.footman import _registry as registry
+
+        def test_leaks():
+            registry.root.tasks["leaked"] = object()
+
+        def test_after():
+            assert "leaked" not in registry.root.tasks
+        """
+    )
+    result = _run(pytester)
+    result.assert_outcomes(passed=2, errors=1)
+    result.stdout.fnmatch_lines(["*left tasks in the global registry: leaked*"])
+
+
+def test_collection_drops_a_production_module_s_tasks_and_keeps_a_test_file_s(
+    pytester: pytest.Pytester,
+) -> None:
+    # A test file may register tasks at import, its own subject; the
+    # production module it imports registers its whole surface, which
+    # no test asked for, and that goes before the first test. The inner
+    # session registers into a captured tree, so nothing reaches this
+    # session's registry.
+    from livery.footman import _registry as registry
+
+    pytester.syspathinsert()
+    pytester.makepyfile(
+        acme_surface=(
+            "from livery.footman import task\n\n\n"
+            "@task\ndef produce():\n"
+            '    """Registered by a production module."""\n'
+        ),
+        test_registers="""
+        import acme_surface
+        from livery.footman import root_group, task
+
+        @task
+        def examine():
+            '''Registered by the test file.'''
+
+        def test_collected():
+            assert "examine" in root_group.tasks
+            assert "produce" not in root_group.tasks
+        """,
+    )
+    with registry.capture():
+        result = _run(pytester)
+    result.assert_outcomes(passed=1)
+
+
+def test_a_production_module_a_test_imports_is_dropped_without_failing_it(
+    pytester: pytest.Pytester,
+) -> None:
+    from livery.footman import _registry as registry
+
+    pytester.syspathinsert()
+    pytester.makepyfile(
+        acme_lazy=(
+            "from livery.footman import task\n\n\n"
+            "@task\ndef produce():\n"
+            '    """Registered by a production module."""\n'
+        ),
+        test_imports="""
+        from livery.footman import root_group
+
+        def test_imports_it_lazily():
+            import acme_lazy
+
+            assert "produce" in root_group.tasks
+
+        def test_after():
+            assert "produce" not in root_group.tasks
+        """,
+    )
+    with registry.capture():
+        result = _run(pytester)
+    result.assert_outcomes(passed=2)
+
+
+def test_a_group_a_test_leaks_fails_it_by_the_group_s_name(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        """
+        from livery.footman import Group, root_group
+
+        def test_leaks_a_group():
+            root_group.groups["leaked"] = Group("leaked")
+
+        def test_after():
+            assert "leaked" not in root_group.groups
+        """
+    )
+    result = _run(pytester)
+    result.assert_outcomes(passed=2, errors=1)
+    result.stdout.fnmatch_lines(["*leaked.[*]*"])
+
+
+def test_the_brand_s_spelling_of_the_directories_points_away_too(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A branded CLI reads its directories from its own prefix, and the
+    # session points those away as well. The brand places its cache in
+    # this test's directory, so the session's home lands there.
+    from livery.footman import _paths
+
+    for suffix in ("DATA_DIR", "CACHE_DIR", "CONFIG_DIR"):
+        monkeypatch.delenv(f"ACME_{suffix}", raising=False)
+    pytester.makepyfile(
+        """
+        import os
+        from pathlib import Path
+
+        def test_redirected():
+            for name in ("ACME_DATA_DIR", "ACME_CACHE_DIR", "ACME_CONFIG_DIR"):
+                assert Path(os.environ[name]).is_dir(), name
+        """
+    )
+    before = _paths.child_args()
+    _paths.configure(prefix="ACME", cache_dir=tmp_path / "cache")
+    try:
+        result = _run(pytester)
+    finally:
+        _paths.configure_child(*before)
+    result.assert_outcomes(passed=1)
+    assert not [name for name in os.environ if name.startswith("ACME_")]
+
+
+# --- the test-guard group -----------------------------------------------------
+
+
+def _members(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, **members: str
+) -> None:
+    """Register each module source as a member of the test-guard group.
+
+    Each member is the module's ``guard``, named for its keyword: the
+    group answers them alone, and every other group what is installed.
+    """
+    from importlib.metadata import EntryPoint
+
+    from livery.footman import _entries
+
+    pytester.syspathinsert()
+    points = []
+    for name, source in members.items():
+        pytester.makepyfile(**{f"acme_{name}": source})
+        points.append(EntryPoint(name, f"acme_{name}:guard", "footman.test_guards"))
+    installed = _entries.installed_entry_points
+
+    def answer(group: str | None = None) -> tuple[EntryPoint, ...]:
+        if group == "footman.test_guards":
+            return tuple(points)
+        return installed(group)
+
+    monkeypatch.setattr(_entries, "installed_entry_points", answer)
+
+
+#: A guard that writes when it enters and leaves, and the facts it was given.
+_RECORDING = """
+import contextlib
+import os
+from pathlib import Path
+
+EVENTS = Path(__file__).with_name("events.txt")
+
+
+def _note(line):
+    with EVENTS.open("a", encoding="utf-8") as events:
+        events.write(line + "\\n")
+
+
+def guard(**facts):
+    _note("{name} called with " + ",".join(sorted(facts)))
+    data_dir = Path(os.environ["FOOTMAN_DATA_DIR"])
+    _note("{name} data_dir " + str(facts["data_dir"] == data_dir))
+
+    @contextlib.contextmanager
+    def around():
+        _note("{name} enter")
+        yield
+        _note("{name} leave")
+
+    return around
+"""
+
+
+def test_a_member_that_cannot_load_stops_the_session_naming_it(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(pytester, monkeypatch, broken="import acme_missing_module\n")
+    pytester.makepyfile("def test_never_runs():\n    pass\n")
+    result = _run(pytester)
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*broken*could not load*"])
+
+
+def test_a_member_that_raises_stops_the_session_naming_it(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(
+        pytester,
+        monkeypatch,
+        raising="def guard(**facts):\n    raise RuntimeError('no guard here')\n",
+    )
+    pytester.makepyfile("def test_never_runs():\n    pass\n")
+    result = _run(pytester)
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*raising*no guard here*"])
+
+
+def test_a_guard_that_raises_as_it_is_left_is_an_error_at_teardown(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _members(
+        pytester,
+        monkeypatch,
+        leaving=(
+            "import contextlib\n\n\n"
+            "@contextlib.contextmanager\ndef around():\n"
+            "    yield\n    raise RuntimeError('left badly')\n\n\n"
+            "def guard(**facts):\n    return around\n"
+        ),
+    )
+    pytester.makepyfile("def test_runs():\n    pass\n")
+    result = _run(pytester)
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*left badly*"])
+
+
+def test_members_run_in_name_order_and_their_guards_wrap_every_test(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A member that returns None adds nothing; the others are called
+    # once for the session, with the runner's directories as they are
+    # after the redirect, and their guards wrap each test, the first
+    # name outermost.
+    _members(
+        pytester,
+        monkeypatch,
+        second=_RECORDING.replace("{name}", "second"),
+        first=_RECORDING.replace("{name}", "first"),
+        none="def guard(**facts):\n    return None\n",
+    )
+    pytester.makepyfile("def test_one():\n    pass\n\ndef test_two():\n    pass\n")
+    _run(pytester).assert_outcomes(passed=2)
+    events = (pytester.path / "events.txt").read_text(encoding="utf-8").splitlines()
+    wrapped = ["first enter", "second enter", "second leave", "first leave"]
+    assert events == [
+        "first called with cache_dir,config_dir,data_dir",
+        "first data_dir True",
+        "second called with cache_dir,config_dir,data_dir",
+        "second data_dir True",
+        *wrapped,
+        *wrapped,
+    ]
+
+
+# --- the patch guard ----------------------------------------------------------
+
+#: An owner of a function, and a module that copies it at its first import.
+_PATCHED_MODULES = {
+    "acme_owner": "FLAG = False\n\ndef root():\n    return 'real'\n",
+    "acme_copier": (
+        "from acme_owner import extra, root\n"
+        "from acme_owner import root as renamed\n"
+        "\n"
+        "FLAG = True\n"
+    ),
+}
+
+
+def test_a_pytest_without_the_record_s_marker_turns_the_patch_guard_off(
+    pytester: pytest.Pytester,
+) -> None:
+    # The fallback first, in a process of its own: a pytest whose
+    # monkeypatch keeps no NOTSET marker records patches in a shape the
+    # guard cannot read, so the session runs and the guard does nothing:
+    # the copy keeps the patched function after the test.
+    pytester.syspathinsert()
+    pytester.makepyfile(**_PATCHED_MODULES)
+    pytester.makeconftest("import _pytest.compat\n\ndel _pytest.compat.NOTSET\n")
+    pytester.makepyfile(
+        """
+        import acme_owner
+
+        def test_patches(monkeypatch):
+            monkeypatch.setattr(acme_owner, "extra", [], raising=False)
+            monkeypatch.setattr(acme_owner, "root", lambda: "patched")
+            import acme_copier
+
+        def test_after():
+            import acme_copier
+
+            assert acme_owner.root() == "real"
+            assert acme_copier.root() == "patched"
+        """
+    )
+    base = pytester.path / "basetemp"
+    result = pytester.runpytest_subprocess(
+        "-p", "no:cacheprovider", f"--basetemp={base}"
+    )
+    result.assert_outcomes(passed=2)
+
+
+def test_monkeypatch_keeps_the_record_the_patch_guard_reads() -> None:
+    # The canary: the guard reads pytest's private record of a patch, as
+    # (owner, name, value before), with NOTSET for an attribute the owner
+    # did not have. A pytest that changes either fails here, in the
+    # workspace and in footman's own legs, before the guard reads it
+    # wrongly.
+    from _pytest.compat import NOTSET
+
+    class Owner:
+        present = "before"
+
+    patch = pytest.MonkeyPatch()
+    try:
+        patch.setattr(Owner, "present", "after")
+        patch.setattr(Owner, "added", "new", raising=False)
+        assert list(patch._setattr) == [  # pyright: ignore[reportPrivateUsage]
+            (Owner, "present", "before"),
+            (Owner, "added", NOTSET),
+        ]
+    finally:
+        patch.undo()
+
+
+def test_a_module_first_imported_under_a_patch_keeps_the_original_after_it(
+    pytester: pytest.Pytester,
+) -> None:
+    # A module that copies a function from another (`from owner import
+    # name`) and is first imported while a test has the function
+    # patched takes the patch; monkeypatch puts the owner back, and the
+    # copy kept the patched function for every later test in the
+    # worker. The next test finds the original in both places, under
+    # whatever name the copy took, and a patch made twice goes back to
+    # the first original. The cases left alone come first: a constant
+    # of the module's own that is the very object a patch set, and an
+    # attribute the patch added, which has no original to go back to.
+    pytester.syspathinsert()
+    pytester.makepyfile(**_PATCHED_MODULES)
+    pytester.makepyfile(
+        """
+        import acme_owner
+
+        def test_patches(monkeypatch):
+            monkeypatch.setattr(acme_owner, "FLAG", True)
+            monkeypatch.setattr(acme_owner, "extra", [], raising=False)
+            monkeypatch.setattr(acme_owner, "root", lambda: "first")
+            monkeypatch.setattr("acme_owner.root", lambda: "patched")
+            import acme_copier
+
+            assert acme_copier.root() == "patched"
+            assert acme_copier.renamed() == "patched"
+
+        def test_after():
+            import acme_copier
+
+            assert acme_copier.FLAG is True
+            assert acme_copier.extra == []
+            assert not hasattr(acme_owner, "extra")
+            assert acme_owner.root() == "real"
+            assert acme_copier.root() == "real"
+            assert acme_copier.renamed() == "real"
+        """
+    )
+    _run(pytester).assert_outcomes(passed=2)
+
+
+def test_fixtures_asking_for_monkeypatch_sort_after_the_environment_restore() -> None:
+    # pytest sets a plugin's autouse fixtures up in name order, and an
+    # autouse fixture that asks for `monkeypatch` sets it up with it.
+    # Set up before `_environment_stays`, monkeypatch would be torn down
+    # after it and write back a value the test had changed. So every
+    # fixture here that asks for it sorts after `_environment_stays`, and
+    # the patch guard reads a test's `monkeypatch` from its resolved
+    # fixtures, as hooks that request none.
+    import inspect
+
+    from livery.footman import _pytest_plugin as pytest_plugin
+
+    asking: list[str] = []
+    fixtures: list[str] = []
+    for name, value in vars(pytest_plugin).items():
+        marker = getattr(value, "_fixture_function_marker", None) or getattr(
+            value, "_pytestfixturefunction", None
+        )
+        if marker is None:
+            continue
+        fixtures.append(name)
+        unwrap = getattr(value, "_get_wrapped_function", None)
+        wrapped = getattr(value, "__wrapped__", None) or (
+            unwrap() if unwrap is not None else value
+        )
+        if "monkeypatch" in inspect.signature(wrapped).parameters:
+            asking.append(name)
+    assert "_environment_stays" in fixtures
+    assert "pytest_runtest_teardown" not in fixtures
+    assert [name for name in asking if name < "_environment_stays"] == []

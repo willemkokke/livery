@@ -112,7 +112,7 @@ required-context = "gate"
 def _as_a_fresh_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """Start with the registries a process starts with, under the runner ``fm``.
 
-    The isolation plugin puts back after the test what it found before.
+    The workshop's test guard puts back after the test what it found before.
     """
     from livery.workshop import _extensions, _points, _steps
 
@@ -165,9 +165,9 @@ def _mounted(root: Path) -> tuple[str, ...]:
     """Mount *root*'s extensions as a process started there now would; the names.
 
     The steps and the points' jobs start as a new process has them, and
-    the verbs the mount makes land in a throwaway tree. The isolation
-    plugin puts the steps, the jobs and the mount's records back after
-    the test.
+    the verbs the mount makes land in a throwaway tree. The workshop's
+    test guard puts the steps, the jobs and the mount's records back
+    after the test.
     """
     from livery.footman import _registry as registry
     from livery.workshop import _points, _steps

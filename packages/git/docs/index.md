@@ -60,6 +60,22 @@ Any process of the same user may reuse the open connection for its
 window, without the agent's consent: the same trust boundary as
 `SSH_AUTH_SOCK`.
 
+## The pytest plugin
+
+Installing livery-git next to pytest loads its pytest plugin,
+`livery-git-isolation`, in every session. Before the first test, every
+test's git reads a global config of the session's own, from a fresh
+directory in the system's temporary folder: one identity, `tester` at
+`tester@example.invalid`, so a repository a test creates commits
+without a config of its own, and none of your settings, a signer among
+them. A `GIT_CONFIG_GLOBAL` the environment already set is kept. The
+identity variables git reads ahead of every config, `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`,
+leave the session's environment, so a clone a test configures with an
+identity of its own commits as that identity. The session's end removes
+the directory; a killed session leaves it in the temporary folder.
+`-p no:livery-git-isolation` turns the plugin off for one session.
+
 ## The state store
 
 JSON rows on git refs, in a namespace a default clone or fetch never

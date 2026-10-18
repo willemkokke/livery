@@ -205,6 +205,53 @@ Footman's own suite uses these fixtures and `Runner`. The harness tests the
 framework that ships it, which is the strongest claim a testing story can
 make about itself.
 
+### What every session guards
+
+Every pytest session with footman installed runs apart from the
+machine's runner state. Before the first test, the plugin points each of
+the runner's directories at a fresh directory in the process's scratch:
+`FOOTMAN_DATA_DIR`, `FOOTMAN_CACHE_DIR` and `FOOTMAN_CONFIG_DIR`, and a
+brand's own spelling of each. Every child process a test starts inherits
+them, so a test neither reads your config, tokens and caches nor writes
+into them. A variable the environment already set is kept, so a
+redirect of your own wins. The session's end removes the directories,
+and the collector removes what a killed session left.
+
+The plugin guards the task registry, `livery.footman.root_group`, too. A
+test file may register tasks at import, since they are its subject. A
+production module it imports, a `tasks.py` among them, registers its
+whole surface, which no test asked for: those registrations go before
+the first test, and the module's functions stay callable. A test that
+leaves tasks or groups of its own in the registry fails at its teardown,
+naming them; register them under `livery.footman.capture()` instead.
+Either way the next test finds the registry as the test before it found
+it.
+
+A patch a test made with `monkeypatch.setattr` is undone everywhere, not
+only on the object it was set on. A module first imported while the
+patch was active copied the patched value (`from owner import name`);
+the plugin gives it the original back when the test ends, so a later
+test never calls the stand-in.
+
+### Adding a guard of your own
+
+A package adds a guard to every session under the `footman.test_guards`
+entry-point group. The plugin calls each member once per test process,
+in name order, after it has pointed the directories away, with the
+keyword arguments `data_dir`, `cache_dir` and `config_dir`: the runner's
+directories as the session sees them. Accept `**facts` as well, so a
+fact added later does not break your member. A member returns None, or a
+callable taking no arguments that returns a context manager, which the
+plugin enters around every test, the first member's outermost. A member
+that cannot load or raises stops the session before its first test,
+naming the member. A guard that raises as it is left is an error at that
+test's teardown.
+
+```toml
+[project.entry-points."footman.test_guards"]
+"acme" = "acme._test_guard:guard"
+```
+
 ## Golden tests: the `--json` surface
 
 `--json` is the blessed machine surface: `{"schema": 1, "items": [...]}`,

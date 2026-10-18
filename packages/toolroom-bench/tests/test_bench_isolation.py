@@ -1,37 +1,45 @@
-"""The bench's isolation plugin: a session's home is this process's scratch."""
+"""Every session with the bench installed runs apart from the machine's runner state.
+
+The bench's tasks read the machine's provisioned prefix and its store
+through the runner's data, cache and config directories. footman's
+pytest plugin, which the bench installs with footman, points each of
+them away for every session: in the workspace, and in a release leg
+that installs the bench alone.
+"""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import cast
 
 import pytest
 
-import livery.footman as footman
-from livery.toolroom.bench import _pytest_isolation
+pytest_plugins = ("pytester",)
+
+#: The runner's directories the bench's tasks read the machine through.
+DIRECTORIES = ("FOOTMAN_DATA_DIR", "FOOTMAN_CACHE_DIR", "FOOTMAN_CONFIG_DIR")
 
 
-def test_the_home_is_this_process_s_scratch_and_goes_at_unconfigure(
-    monkeypatch: pytest.MonkeyPatch,
+def test_every_directory_the_bench_reads_points_away_in_a_session(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # The cache stays redirected, so the home lands in the session's own
-    # cache and never in the machine's. Cleared, the other two variables
-    # are the plugin's to set; a session that ends takes the home with
-    # it, and one that is killed leaves it to footman's collector, which
-    # reads the owner's pid off the name.
-    monkeypatch.delenv("FOOTMAN_DATA_DIR", raising=False)
-    monkeypatch.delenv("FOOTMAN_CONFIG_DIR", raising=False)
+    # Cleared, the three are the session's to set; the cache home moves
+    # into this test's directory, so the session's home, which lands in
+    # the cache the session starts with, lands there and nowhere else.
+    for name in DIRECTORIES:
+        monkeypatch.delenv(name, raising=False)
+    cache_home = tmp_path / "cache-home"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_home))
+    pytester.makepyfile(
+        f"""
+        import os
+        from pathlib import Path
 
-    class Config:
-        stash = pytest.Stash()
-
-    config = cast("pytest.Config", Config())
-    _pytest_isolation.pytest_configure(config)
-    home = Path(os.environ["FOOTMAN_DATA_DIR"]).parent
-    assert home.parent == footman.cache_dir() / "scratch"
-    assert home.name.startswith(f"toolroom-bench-isolation-{os.getpid()}-")
-    assert Path(os.environ["FOOTMAN_CONFIG_DIR"]).parent == home
-    _pytest_isolation.pytest_unconfigure(config)
-    assert not home.exists()
-    assert "FOOTMAN_DATA_DIR" not in os.environ
+        def test_away():
+            for name in {DIRECTORIES!r}:
+                value = Path(os.environ[name])
+                assert value.is_dir() and value.is_relative_to({str(cache_home)!r}), name
+        """
+    )
+    base = pytester.path / "basetemp"
+    result = pytester.runpytest("-p", "no:cacheprovider", f"--basetemp={base}")
+    result.assert_outcomes(passed=1)

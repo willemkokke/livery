@@ -1995,21 +1995,28 @@ main's gate judged whatever its legs ran.
 ## Where a test lives
 
 Every pytest under a workshop venv runs apart from the machine's live
-runner state. The workshop's isolation plugin points footman's data,
-cache, and config directories at a fresh temporary home for the
-session, before the first test and for every child process a test
-starts, so a test neither reads the developer's config, tokens,
-worktrees, and caches nor writes into them; a variable the outer
-environment already set is kept. The one deliberate exception is a
-live test reading the dev containers' credentials through
+runner state. footman's pytest plugin points footman's data, cache,
+and config directories at a fresh temporary home for the session,
+before the first test and for every child process a test starts, so a
+test neither reads the developer's config, tokens, worktrees, and
+caches nor writes into them; a variable the outer environment already
+set is kept. The one deliberate exception is a live test reading the
+dev containers' credentials through
 `livery.forge.testing.shared_env_path`, which skips without the file.
-The plugin also guards the process-global task registry: a test that
-leaves tasks there fails at its teardown naming them, and the next
-test never inherits them. What an extension mount writes goes back
-after every test as well: the listed extensions' steps, the jobs they
-add to the CI points and join, the task tree a run keeps, and the
-mount's record. A step one test mounted therefore never judges the
-changes of a later test on the same worker.
+footman's plugin also guards the process-global task registry: a test
+that leaves tasks there fails at its teardown naming them, and the
+next test never inherits them. A module first imported under a
+test's patch gets the original back when the test ends. livery-git's
+pytest plugin gives every test's git a global config of the
+session's own, with one identity.
+The workshop adds one guard to footman's `footman.test_guards` group,
+which puts back what an extension mount writes after every test: the
+listed extensions' steps, the jobs they add to the CI points and join,
+the task tree a run keeps, and the mount's record. A step one test
+mounted therefore never judges the changes of a later test on the same
+worker. The guard also drops the check leg's label from the session's
+environment, so a test that drives the gate in-process runs as no
+shard.
 
 The forge lane belongs to `livery.forge`; the workshop orchestrates
 local, git, and forge steps and never hands a raw forge verb to a
