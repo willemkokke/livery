@@ -17,6 +17,7 @@ from extensions_coverage_seeds import (  # noqa: F401
     Seeds,
     _seed_home,
     pushed,
+    read_files,
     seed_copier,
 )
 from livery import git
@@ -178,6 +179,16 @@ def _set_of(unit: coverage_record.Unit, line: int) -> str:
 # --- the refusals and misses first --------------------------------------------
 
 
+def test_a_read_that_cannot_answer_fails_the_test_with_its_reason(
+    work: Path, tmp_path: Path
+) -> None:
+    # A failed read and an absent ref both carry no files; the helper
+    # the store assertions read through tells them apart.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(pytest.fail.Exception, match=r"the read of .+ failed: \S"):
+        read_files(state_store(work), coverage_record.record_ref(LEG))
+
+
 def test_a_fresh_row_whose_context_index_names_no_context_refuses_the_write(
     work: Path,
 ) -> None:
@@ -262,14 +273,14 @@ def test_the_drop_takes_the_legs_measured_lines_with_its_half(
     _lines, why = put_leg(work, RUN, job="check (a, b)", label=LEG, trace=trace)
     assert why == ""
     ref = run_ref(RUN, LEG)
-    held = git.read(state_store(work), ref).files
+    held = read_files(state_store(work), ref)
     assert held is not None
     assert set(held) == {ROW_FILE, coverage_record.RUN_FILE}
     collect(work, repo, RUN, sha="b" * 40)
-    assert git.read(state_store(work), ref).files == held
+    assert read_files(state_store(work), ref) == held
     lines = drop_halves(work, repo, RUN, sha="b" * 40, job="gate", writers=())
     assert f"  {ref}: dropped" in lines
-    assert git.read(state_store(work), ref).files is None
+    assert read_files(state_store(work), ref) is None
     assert coverage_record.run_legs(work, RUN) == ([], "")
 
 
@@ -1374,7 +1385,7 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
         line.startswith(f"  {old}: no current base and leg produces it; kept ")
         for line in lines
     )
-    assert git.read(state_store(work), old).files == {"x": "{}"}
+    assert read_files(state_store(work), old) == {"x": "{}"}
     later = datetime.now(UTC) + timedelta(days=2)
     lines = git.sweep(
         state_store(work), (coverage_record.RECORD,), remote=True, now=later
@@ -1382,8 +1393,8 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     assert f"  {old}: no current base and leg produces it; dropped" in lines
     assert f"  {coverage_record.record_ref(LEG)}: 1 row(s), within its bounds" in lines
     assert f"  {branch_ref}: 1 row(s), within its bounds" in lines
-    assert git.read(state_store(work), old).files is None
-    assert git.read(state_store(work), marks).files == {"m": "{}"}
+    assert read_files(state_store(work), old) is None
+    assert read_files(state_store(work), marks) == {"m": "{}"}
     assert coverage_record.recorded(work, leg=LEG).units == fresh
     _git(work, "push", "-q", "origin", ":refs/heads/feat/x")
     lines = git.sweep(state_store(work), (coverage_record.RECORD,), remote=True)
@@ -1391,12 +1402,12 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
         line.startswith(f"  {branch_ref}: no current base and leg produces it; kept ")
         for line in lines
     )
-    assert git.read(state_store(work), branch_ref).files is not None
+    assert read_files(state_store(work), branch_ref) is not None
     lines = git.sweep(
         state_store(work), (coverage_record.RECORD,), remote=True, now=later
     )
     assert f"  {branch_ref}: no current base and leg produces it; dropped" in lines
-    assert git.read(state_store(work), branch_ref).files is None
+    assert read_files(state_store(work), branch_ref) is None
     assert coverage_record.recorded(work, leg=LEG).units == fresh
 
 

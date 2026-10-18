@@ -103,6 +103,17 @@ class PullRequests(Protocol):
         """The pull request *number*, or None when it does not exist."""
         ...
 
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The repository's pull requests in *state*, newest first.
+
+        ``closed`` holds the merged pull requests and the ones closed
+        without merging, as [livery.forge.PullRequests.find_by_head][]
+        reads the filter; ``merged`` tells the two apart. Each row
+        carries the fields [livery.forge.PullRequests.get][] answers
+        for its number. Complete or raising, like every listing.
+        """
+        ...
+
     def update_title(self, number: int, title: str) -> None:
         """Retitle pull request *number*.
 
@@ -153,8 +164,11 @@ class PullRequests(Protocol):
         """Schedule pull request *number* to merge when its checks go green.
 
         *title* is the squash commit subject the merge will carry,
-        *message* its body. Arming an already armed pull request
-        replaces the schedule, title included. The merge itself
+        *message* its body. A forge that limits the subject's length
+        carries a longer one cut at a word boundary, so a long title
+        never stops the arm: [livery.forge.GithubForge][] cuts at 320
+        UTF-8 bytes. Arming an already armed pull request replaces
+        the schedule, title included. The merge itself
         happens server-side: the caller observes it through
         livery.forge.Checks.status and livery.forge.PullRequests.get,
         never performs it. Push to an armed pull request only after

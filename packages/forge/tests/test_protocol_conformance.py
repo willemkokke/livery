@@ -81,3 +81,23 @@ def test_unassign_removes_only_the_caller() -> None:
     fetched = repo.issue.get(issue.number)
     assert fetched is not None
     assert fetched.assignees == ("colleague",)
+
+
+def test_the_fake_lists_pull_requests_by_state_newest_first() -> None:
+    # closed holds a merged pull request and one closed without merging
+    # alike; merged tells them apart.
+    fake = FakeForge()
+    repo = fake.create_repo("acme", "example", private=True, description="t")
+    numbers: list[int] = []
+    for branch in ("merged", "closed", "open"):
+        fake.push("acme", "example", branch)
+        numbers.append(repo.pr.open(branch, "main", f"feat: {branch}", "").number)
+    merged, closed, opened = numbers
+    repo.pr.merge_now(merged, title="feat: merged")
+    repo.pr.close(closed)
+    assert [pr.number for pr in repo.pr.list()] == [opened]
+    assert [pr.number for pr in repo.pr.list(state="open")] == [opened]
+    shut = repo.pr.list(state="closed")
+    assert [(pr.number, pr.merged) for pr in shut] == [(closed, False), (merged, True)]
+    assert [pr.number for pr in repo.pr.list(state="all")] == [opened, closed, merged]
+    assert all(row == repo.pr.get(row.number) for row in repo.pr.list(state="all"))

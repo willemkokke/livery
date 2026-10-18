@@ -75,7 +75,9 @@ each package's `tests` directory and the workspace's own `tests`
 directory, into the shard's count of slices by the platform leg's
 `durations` rows: longest first, each file into the slice with the
 least summed seconds, ties by name, a file no row names at the rows'
-median. Of the files of the suites the run reaches, the ones the run
+median. The first slice's sum starts at the rows' head, the test
+seconds the steps only the first shard runs hold back, so its slice
+is lighter by them. Of the files of the suites the run reaches, the ones the run
 selects for a suite or all of a suite's, the shard runs those in its
 own slice. The packing is over the whole workspace and never over one
 run's suites, so a file has one shard however many runs of the step

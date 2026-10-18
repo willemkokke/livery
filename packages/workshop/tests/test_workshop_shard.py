@@ -54,11 +54,21 @@ def _moment(stamp: str) -> datetime:
     return datetime.fromisoformat(stamp)
 
 
-def _rows(work: Path, leg: str, rows: dict[str, tuple[str, dict[str, float]]]) -> None:
-    """Write *rows* onto *leg*'s durations series: ``name -> (when, items)``."""
+def _rows(
+    work: Path,
+    leg: str,
+    rows: dict[str, tuple[str, dict[str, float]]],
+    *,
+    heads: dict[str, object] | None = None,
+) -> None:
+    """Write *rows* onto *leg*'s durations series: ``name -> (when, items)``.
+
+    A row *heads* names carries its value under ``head``.
+    """
     files = {
         name: json.dumps(
             {"schema": _shard.SCHEMA, "when": when, "run": name, "items": per_file}
+            | ({"head": (heads or {})[name]} if name in (heads or {}) else {})
         )
         for name, (when, per_file) in rows.items()
     }
@@ -110,19 +120,29 @@ def test_a_partition_into_no_shards_refuses() -> None:
         _shard.partition(["a.py"], {}, 0)
 
 
+def test_a_partition_with_a_head_below_zero_refuses() -> None:
+    with pytest.raises(ValueError, match=r"head is -1\.0; a head is at least 0"):
+        _shard.partition(["a.py"], {}, 2, head=-1.0)
+
+
 def test_durations_of_an_unreadable_store_are_a_reason_not_a_raise(
     work: Path, tmp_path: Path
 ) -> None:
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    per_file, rows, why = _shard.read_durations(
+    per_file, head, rows, why = _shard.read_durations(
         work, LEG, before=datetime.now(UTC) + timedelta(days=1)
     )
-    assert (per_file, rows) == ({}, ())
+    assert (per_file, head, rows) == ({}, 0.0, ())
     assert why.startswith(f"the durations/{git.slug(LEG)} series could not be read: ")
 
 
 def test_durations_of_an_absent_series_are_empty_and_no_reason(work: Path) -> None:
-    assert _shard.read_durations(work, LEG, before=datetime.now(UTC)) == ({}, (), "")
+    assert _shard.read_durations(work, LEG, before=datetime.now(UTC)) == (
+        {},
+        0.0,
+        (),
+        "",
+    )
 
 
 def test_a_row_stamped_at_or_after_the_bound_is_left_out(work: Path) -> None:
@@ -139,12 +159,17 @@ def test_a_row_stamped_at_or_after_the_bound_is_left_out(work: Path) -> None:
     assert [row.name for row in listed] == ["r3.json", "r2.json", "r1.json"]
     # The bound is the newest row's own stamp: at the bound is out.
     at_newest = datetime.fromisoformat(listed[0].when)
-    per_file, rows, why = _shard.read_durations(work, LEG, before=at_newest)
+    per_file, _head, rows, why = _shard.read_durations(work, LEG, before=at_newest)
     assert why == ""
     assert rows == ("r2.json", "r1.json")
     assert per_file == {"a.py": 3.0}
     # A bound before every row reads none, and that is no failure.
-    assert _shard.read_durations(work, LEG, before=_moment(_stamp(4))) == ({}, (), "")
+    assert _shard.read_durations(work, LEG, before=_moment(_stamp(4))) == (
+        {},
+        0.0,
+        (),
+        "",
+    )
 
 
 def test_a_row_without_a_stamp_or_without_items_is_passed_over(work: Path) -> None:
@@ -161,7 +186,7 @@ def test_a_row_without_a_stamp_or_without_items_is_passed_over(work: Path) -> No
         ),
     }
     assert git.put(store, ref, files, message="rows") == ""
-    per_item, rows, why = _shard.read_durations(
+    per_item, _head, rows, why = _shard.read_durations(
         work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
     )
     assert why == ""
@@ -182,10 +207,9 @@ def test_a_durations_row_keyed_files_names_no_item(work: Path) -> None:
         ),
     }
     assert git.put(store, ref, files, message="rows") == ""
-    per_item, rows, why = _shard.read_durations(
+    assert _shard.read_durations(
         work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
-    )
-    assert (per_item, rows, why) == ({}, ("keyed.json",), "")
+    ) == ({}, 0.0, ("keyed.json",), "")
 
 
 def test_a_missing_shard_file_is_none_and_a_corrupt_one_a_reason(
@@ -306,6 +330,49 @@ def test_the_shards_balance_within_the_largest_file() -> None:
     assert shards == (("a.py",), ("b.py",), (), ())
 
 
+def test_a_head_of_zero_is_the_partition_without_one() -> None:
+    files = [f"test_{index:03d}.py" for index in range(60)]
+    seconds = {
+        name: float((index * 7919) % 97) / 3.0 for index, name in enumerate(files)
+    }
+    for count in (1, 2, 4):
+        assert _shard.partition(files, seconds, count, head=0.0) == (
+            _shard.partition(files, seconds, count)
+        )
+
+
+def test_a_head_lightens_the_first_shard_by_about_the_head() -> None:
+    files = [f"test_{index:03d}.py" for index in range(200)]
+    seconds = {
+        name: float((index * 7919) % 173) / 2.0 for index, name in enumerate(files)
+    }
+    head = 400.0
+    for count in (2, 3, 4):
+        shards = _shard.partition(files, seconds, count, head=head)
+        # Every file still lands in exactly one shard.
+        placed = [name for shard in shards for name in shard]
+        assert sorted(placed) == sorted(files) and len(placed) == len(files)
+        sums = [sum(seconds[name] for name in shard) for shard in shards]
+        # The first shard's sum and its head balance against the others
+        # within the largest file, as an even partition balances.
+        loads = [sums[0] + head, *sums[1:]]
+        assert max(loads) - min(loads) <= max(seconds.values())
+        # So it holds about the head less than the others' mean.
+        others = statistics.mean(sums[1:])
+        assert abs((others - sums[0]) - head) <= max(seconds.values())
+
+
+def test_a_head_larger_than_the_whole_set_leaves_the_first_shard_no_item() -> None:
+    whole = sum(_DURATIONS.values())
+    shards = _shard.partition(list(_DURATIONS), _DURATIONS, 3, head=whole + 1)
+    assert shards[0] == ()
+    assert sorted(name for shard in shards for name in shard) == sorted(_DURATIONS)
+    # One shard of one holds every item whatever the head.
+    assert _shard.partition(list(_DURATIONS), _DURATIONS, 1, head=whole * 10) == (
+        tuple(sorted(_DURATIONS, key=lambda name: (-_DURATIONS[name], name))),
+    )
+
+
 def test_the_digest_of_a_file_set_ignores_order_and_repeats() -> None:
     one = _shard.files_digest(["b.py", "a.py"])
     assert one == _shard.files_digest(["a.py", "b.py", "a.py"])
@@ -362,10 +429,10 @@ def test_the_median_per_file_is_over_the_newest_five_rows(work: Path) -> None:
         for index in range(1, 8)
     }
     _rows(work, LEG, rows)
-    per_file, read, why = _shard.read_durations(
+    per_file, head, read, why = _shard.read_durations(
         work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
     )
-    assert why == ""
+    assert why == "" and head == 0.0
     # The newest five are r7 down to r3; r1 and r2 are older than the five.
     assert read == ("r7.json", "r6.json", "r5.json", "r4.json", "r3.json")
     assert per_file == {
@@ -381,6 +448,46 @@ def test_the_median_per_file_is_over_the_newest_five_rows(work: Path) -> None:
         )[0]
         == per_file
     )
+
+
+def test_the_head_is_the_median_over_the_rows_read_and_absent_reads_as_zero(
+    work: Path,
+) -> None:
+    # Five rows read of six: the oldest is past the newest five. Of the
+    # five, one carries no head, one a head that is no number and one a
+    # negative head; each of those counts as 0.
+    rows = {f"r{index}.json": (_stamp(10 - index), {"a.py": 1.0}) for index in range(6)}
+    heads: dict[str, object] = {
+        "r0.json": 900.0,
+        "r1.json": 40.0,
+        "r2.json": "slow",
+        "r3.json": 80.0,
+        "r4.json": -5.0,
+        "r5.json": 60.0,
+    }
+    _rows(work, LEG, rows, heads=heads)
+    _per_file, head, read, why = _shard.read_durations(
+        work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert why == ""
+    assert read == ("r5.json", "r4.json", "r3.json", "r2.json", "r1.json")
+    assert head == statistics.median([60.0, 0.0, 80.0, 0.0, 40.0]) == 40.0
+
+
+def test_rows_without_a_number_under_head_read_a_head_of_zero(work: Path) -> None:
+    _rows(
+        work,
+        LEG,
+        {
+            "r1.json": (_stamp(2), {"a.py": 1.0}),
+            "r2.json": (_stamp(1), {"a.py": 1.0}),
+        },
+        heads={"r2.json": True},
+    )
+    found = _shard.read_durations(
+        work, LEG, before=datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert found == ({"a.py": 1.0}, 0.0, ("r2.json", "r1.json"), "")
 
 
 def test_the_checkout_time_is_heads_committer_time(work: Path) -> None:

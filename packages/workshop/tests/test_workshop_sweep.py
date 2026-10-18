@@ -51,13 +51,15 @@ def _forge(
     merged: frozenset[str] = frozenset(),
     heads: dict[str, str] | None = None,
     cleared: frozenset[str] = frozenset(),
+    opened: frozenset[str] = frozenset(),
     broken: bool = False,
 ) -> Any:
     """A forge knowing closed issues and merged branches, and the merged heads.
 
     A merged branch in *cleared* is one whose pull request the forge
     no longer files under its head branch: only its head sha finds it,
-    and its head branch reads empty.
+    and its head branch reads empty. A branch in *opened* heads the
+    open PR #11.
     """
     merged_heads: dict[str, str] = heads or {}
 
@@ -76,6 +78,14 @@ def _forge(
                     number=9,
                     merged=True,
                     head_sha=merged_heads.get(branch, ""),
+                    head_branch=branch,
+                )
+            if branch in opened:
+                return SimpleNamespace(
+                    number=11,
+                    merged=False,
+                    state="open",
+                    head_sha="",
                     head_branch=branch,
                 )
             return None
@@ -126,6 +136,26 @@ def test_a_tree_holding_work_or_an_open_issue_stays_and_is_named(
         "the forge could not be asked" in line and line.endswith("kept")
         for line in lines
     )
+
+
+def test_a_closed_issues_tree_stays_while_its_branch_heads_an_open_pr(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # fm issue.close keeps such a tree for its pull request; the sweep
+    # that follows any fm command must not take it after all.
+    home = tmp_path / "home" / "worktrees"
+    tree = _worktree(checkout, home, 8)
+    monkeypatch.setattr(
+        _sweep,
+        "_repository",
+        lambda t: _forge(closed=frozenset({8}), opened=frozenset({"feat/8-thing"})),
+    )
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
+    assert lines == [
+        "worktree livery/8-thing: issue #8 is closed, but PR #11 is open from"
+        " its branch; kept"
+    ]
+    assert tree.is_dir()
 
 
 def test_a_forge_that_cannot_be_asked_keeps_the_tree_and_says_why(

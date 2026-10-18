@@ -23,7 +23,13 @@ from livery.forge import Step
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_context, _metrics
 from livery.workshop._ci_context import state_store
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    read_files,
+    seed_copier,
+)
 
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 JOB = "check (ubuntu-latest, 3.14)"
@@ -252,6 +258,16 @@ def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
 # --- the collect: refusals first ----------------------------------------------
 
 
+def test_a_read_that_cannot_answer_fails_the_test_with_its_reason(
+    work: Path, tmp_path: Path
+) -> None:
+    # A failed read and an absent ref both carry no files; the helper
+    # the store assertions read through tells them apart.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(pytest.fail.Exception, match=r"the read of .+ failed: \S"):
+        read_files(state_store(work), _metrics.SERIES.ref)
+
+
 def test_a_step_belongs_to_the_innermost_task_holding_it_on_its_own_track(
     tmp_path: Path,
 ) -> None:
@@ -472,7 +488,7 @@ def test_collect_says_so_when_no_leg_left_a_row(work: Path) -> None:
     repo = fake.repository("owner", "repo")
     lines = _metrics.collect(work, repo, RUN, sha="a" * 40)
     assert lines == [f"  run {RUN.run_id}: no leg left a row; nothing collected"]
-    assert git.read(state_store(work), _metrics.SERIES.ref).files is None
+    assert read_files(state_store(work), _metrics.SERIES.ref) is None
 
 
 def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
@@ -496,7 +512,7 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
     ) in lines
     assert lines[-1] == f"  run {RUN.run_id}: no leg left a row; nothing collected"
     # The skipped half is kept: nothing landed, so nothing is dropped.
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
 
 
 def test_collect_names_a_job_the_forge_does_not_know(
@@ -586,12 +602,12 @@ def test_the_drop_keeps_the_halves_while_a_completed_job_is_red(
     repo = cast(Repository, cast(Any, _Repo()))
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run 78 recorded, 5 job(s)" in lines
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
     lines = _metrics.drop_halves(
         work, repo, run, sha=sha, job="gate", writers=("check",)
     )
     assert lines == ["  the per-run refs stay: docs: failure"]
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
 
 
 def test_the_drop_waits_for_a_sibling_writer_and_takes_the_halves_when_last(
@@ -673,11 +689,11 @@ def test_a_gate_re_run_after_a_red_first_attempt_still_finds_the_legs_parts(
     ref = _metrics.run_ref(RUN, "check-a")
     first = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in first
-    kept = git.read(state_store(work), ref).files
+    kept = read_files(state_store(work), ref)
     assert kept is not None and set(kept) == {_metrics.ROW_FILE, "coverage.json"}
     second = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in second
-    assert git.read(state_store(work), ref).files == kept
+    assert read_files(state_store(work), ref) == kept
 
 
 def test_collect_joins_the_forge_times_and_keeps_the_halves_for_the_drop(
@@ -862,6 +878,98 @@ def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
         "packages/forge/tests/test_b.py": 1.5,
     }
     assert _shard.DURATIONS.series("gate").rows(state_store(work)).rows == ()
+
+
+def test_a_row_without_an_unsplit_step_has_no_head() -> None:
+    assert _metrics.first_shard_head({}) is None
+    assert (
+        _metrics.first_shard_head(
+            {
+                "tasks": {"check": 9_000.0},
+                "task_steps": {
+                    "check/test.pytest": 5_000.0,
+                    "check/pytest packages/a/tests": 5_000.0,
+                },
+            }
+        )
+        is None
+    )
+
+
+def test_a_row_whose_parallelism_cannot_be_read_takes_its_longest_unsplit_step() -> (
+    None
+):
+    # No test step's wall and no other shard: p is unknown, so the head
+    # is the longest unsplit step, the least the tests wait.
+    row = {
+        "task_steps": {"check/typecheck.mypy": 30_000.0, "check/lint.ruff": 10_000.0},
+        "packages": {"a": {"tests_ms": 9_000.0, "tests": 1}},
+    }
+    assert _metrics.first_shard_head(row) == 30.0
+    # Other shards that ran no test read no parallelism either; the
+    # first shard's own tests stand, not the folded sum of every
+    # shard's.
+    folded = {
+        "task_steps": {
+            "check/test.pytest": 10_000.0,
+            "check/typecheck.mypy": 30_000.0,
+        },
+        "packages": {"a": {"tests_ms": 900_000.0, "tests": 9}},
+        "shard": {
+            "shards": [
+                {
+                    "shard": "1of3",
+                    "total_ms": 40_000.0,
+                    "packages": {"a": {"tests_ms": 20_000.0, "tests": 2}},
+                },
+                {"shard": "2of3", "total_ms": 5_000.0, "packages": {}},
+                {"shard": "junk", "total_ms": 5_000.0, "packages": {}},
+                "junk",
+            ]
+        },
+    }
+    assert _metrics.first_shard_head(folded) == 60.0
+    folded["task_steps"] = {"check/typecheck.mypy": 30_000.0}
+    assert _metrics.first_shard_head(folded) == 30.0
+
+
+def test_the_head_is_the_unsplit_steps_wall_times_the_other_shards_parallelism() -> (
+    None
+):
+    folded = {
+        "tasks": {"check": 500_000.0, "check/typecheck.ty": 4_000.0},
+        "task_steps": {
+            "check/test.pytest": 400_000.0,
+            "check/typecheck.mypy": 50_000.0,
+            "check/typecheck.ty": 9_999.0,
+            "check/lint.docrefs": 16_000.0,
+        },
+        "shard": {
+            "shards": [
+                {
+                    "shard": "1of4",
+                    "total_ms": 433_000.0,
+                    "packages": {"a": {"tests_ms": 335_000.0, "tests": 1}},
+                },
+                *(
+                    {
+                        "shard": f"{index}of4",
+                        "total_ms": wall,
+                        "packages": {"a": {"tests_ms": tests, "tests": 1}},
+                    }
+                    for index, wall, tests in (
+                        (2, 100_000.0, 300_000.0),
+                        (3, 200_000.0, 400_000.0),
+                        (4, 100_000.0, 350_000.0),
+                    )
+                ),
+            ]
+        },
+    }
+    # The unsplit steps: mypy 50 s, ty 4 s (the task's own wall before
+    # its step's), docrefs 16 s, 70 s in all. The other shards reached
+    # 3.0, 2.0 and 3.5: the median is 3.0, so the head is 210 s.
+    assert _metrics.first_shard_head(folded) == 210.0
 
 
 def test_collect_leaves_the_durations_to_the_fold_for_one_shards_row(

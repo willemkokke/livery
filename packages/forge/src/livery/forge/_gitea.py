@@ -754,6 +754,12 @@ class _GiteaPullRequests:
         data = self._client.request(f"{self._base}/pulls/{number}", none_on=(404,))
         return None if data is None else _as_pull_request(data)
 
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The pull requests in *state*, newest first; ``closed`` holds the merged."""
+        found = [_as_pull_request(raw) for raw in self._scan(state)]
+        found.sort(key=lambda pr: pr.number, reverse=True)
+        return tuple(found)
+
     def update_title(self, number: int, title: str) -> None:
         """Retitle pull request *number*."""
         self._client.request(

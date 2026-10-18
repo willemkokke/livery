@@ -8,8 +8,9 @@ base, open the work in a linked worktree by default), files one from
 a quoted title, or starts a plain branch that belongs to no issue.
 ``issue.stop`` is start's inverse for an issue: unassign, clean up
 the local state, and leave the remote branch as the pool's copy.
-``issue.close`` closes the issue itself, tearing the submission down
-through the shared mechanism and recording where the work got to.
+``issue.close`` closes the issue itself, removes the branch it was
+worked on unless an open pull request comes from that branch, and
+records where the work got to.
 
 One destruction rule holds everywhere: work that exists nowhere else
 is never destroyed without ``--discard``, and the refusal's prose
@@ -786,6 +787,41 @@ def _remove_local(root: Path, branch: str) -> list[str]:
     return removed
 
 
+def _held_by_pull_request(repo: Repository, root: Path, branch: str) -> str:
+    """Why a close keeps *branch* and its worktree; ``""`` when nothing keeps them.
+
+    An open pull request from *branch* holds them: the forge closes a
+    pull request unmerged once its head branch is deleted. A forge that
+    cannot answer holds them as well, since an unanswered question is
+    never read as "no pull request".
+    """
+    what = f"{branch} and its worktree" if worktree_for(root, branch) else branch
+    try:
+        pull = repo.pr.find_by_head(branch)
+    except ForgeError as error:
+        return (
+            f"kept {what}: the forge could not say whether a PR is open"
+            f" from it ({error}); ask again when it answers"
+        )
+    if pull is None or pull.state != "open":
+        return ""
+    return f"kept {what}: PR #{pull.number} is open from it; merge or close it first"
+
+
+def _close_with_record(
+    repo: Repository, number: int, reason: str, message: str, where: str
+) -> None:
+    """Comment why the issue ended and where its branch went, then close it."""
+    note = f"closed: {reason}"
+    if message:
+        note += f"\n\n{message}"
+    if where:
+        note += f"\n\n{where}"
+    repo.issue.comment(number, note)
+    repo.issue.close(number)
+    print(f"  closed #{number}: {reason}")
+
+
 @issue.task(name="close", interactive=True)
 def issue_close(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
@@ -794,15 +830,20 @@ def issue_close(
     keep_branch: Annotated[bool, doc("retain the local and remote branch")] = False,
     discard: Annotated[bool, doc("destroy work that exists nowhere else")] = False,
 ) -> None:
-    """Close the issue itself, and tear its submission down.
+    """Close the issue itself, and remove the branch it was worked on.
 
-    The first act is the shared teardown's disarm, so a green CI
-    cannot race the close into a merge; a PR that already merged
-    means the work landed, the supplied reason no longer applies,
-    and the close degrades to cleanup: "issue already resolved". The
-    local and remote branch are removed by default with the removed
-    head sha recorded in the close comment; ``--keep-branch``
-    retains them.
+    An open pull request from the issue's branch keeps the branch and
+    its worktree: deleting the head branch makes the forge close the
+    pull request unmerged, and the branch may carry work for another
+    issue. The close then ends the issue alone and names the pull
+    request, to be merged or closed first. A forge that cannot say
+    whether such a pull request is open keeps them too, and the line
+    names the forge's error. A pull request that already merged means
+    the work landed, the supplied reason no longer applies, and the
+    close becomes cleanup: "issue already resolved". Otherwise the
+    worktree, the local branch, and the remote branch are removed by
+    default, with the removed head sha recorded in the close comment;
+    ``--keep-branch`` retains them.
     """
     if not ref:
         fail(
@@ -827,22 +868,25 @@ def issue_close(
     branch = _find_branch(root, number)
     tip = git.any_head(root, branch) if branch else ""
 
-    # The destruction rule runs before anything is torn down: the
-    # teardown deletes branches, and a refusal that checks afterwards
-    # would be checking a branch that is already gone. The merged pull
-    # request is read first: its head decides what the merge took.
-    merged = False
-    live = None
-    landed = None
-    if branch:
-        try:
-            live = repo.pr.find_by_head(branch, state="all")
-            landed = merged_pull_request(repo, root, branch)
-        except ForgeError:
-            live = None
-            landed = None
-        if landed is not None:
-            merged = True
+    held = _held_by_pull_request(repo, root, branch) if branch else ""
+    if held:
+        print(f"  {held}")
+        _close_with_record(repo, number, reason, message, held)
+        return
+
+    # The destruction rule runs before anything is removed: a refusal
+    # that checks afterwards would be checking a branch that is
+    # already gone. The merged pull request is read first: its head
+    # decides what the merge took.
+    try:
+        landed = merged_pull_request(repo, root, branch) if branch else None
+    except ForgeError as error:
+        fail(
+            f"the forge could not say whether {branch}'s pull request merged"
+            f" ({error}); nothing was removed and #{number} stays open."
+            " Run the close again when the forge answers."
+        )
+    merged = landed is not None
     only_local = (
         only_local_work(root, branch, merged_head=landed.head_sha if landed else "")
         if branch and git.local_branch_exists(root, branch)
@@ -874,30 +918,18 @@ def issue_close(
             " work with the issue."
         )
 
-    if live is not None and live.state == "open":
-        from livery.workshop._submit import teardown_branch
-
-        print(f"  ending PR #{live.number} through the shared teardown")
-        teardown_branch(repo, root, branch, "main", keep_branches=keep_branch)
-
     removed_sha = ""
     if branch and not keep_branch:
-        # The tip was read before the teardown deleted the branch:
-        # the close comment records where the work got to.
+        # The tip was read before the branch is deleted: the close
+        # comment records where the work got to.
         removed_sha = tip
         _remove_local(root, branch)
         if branch in git.remote_branches(root, ""):
             git.run(root, "push", "origin", "--delete", branch)
             print(f"  removed the remote branch {branch}")
 
-    note = f"closed: {reason}"
-    if message:
-        note += f"\n\n{message}"
-    if removed_sha:
-        note += f"\n\nremoved branch {branch} at {removed_sha}"
-    repo.issue.comment(number, note)
-    repo.issue.close(number)
-    print(f"  closed #{number}: {reason}")
+    where = f"removed branch {branch} at {removed_sha}" if removed_sha else ""
+    _close_with_record(repo, number, reason, message, where)
 
 
 @issue.task(name="reopen")

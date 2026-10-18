@@ -2,9 +2,10 @@
 
 A sharded check leg runs the test step on every shard, each over a
 share of the test files. `share` lists the test files of every suite
-the run reaches (`test_files`), reads the durations of the leg's
-platform ([livery.workshop.read_durations][]), packs the files into
-the shard's slices with [livery.workshop.partition][], takes this
+the run reaches (`test_files`), reads the durations and the head of
+the leg's platform ([livery.workshop.read_durations][]), packs the
+files into the shard's slices with [livery.workshop.partition][], the
+first slice starting at the head, takes this
 shard's slice, and leaves what it partitioned in the shard's record
 ([livery.workshop.leave_shard][]) for the gate job's proof. The test
 step runs twice on a leg whose coverage entry tops up the suites no
@@ -87,7 +88,9 @@ def share(
     workspace's own, is packed into the shard's count of slices by the
     durations of the leg's platform, read from the rows stamped before
     the checkout's committer time ([livery.workshop.checkout_time][]),
-    and of *suites*' test files (`test_files`) the ones in this shard's
+    the first slice starting at the rows' head, the test seconds the
+    steps only the first shard runs hold back, and of *suites*' test
+    files (`test_files`) the ones in this shard's
     slice are returned, a suite's files sorted; a suite with no file in
     the slice maps to an empty tuple. The packing is over the whole
     workspace, never over the suites of one run, so a file has one
@@ -114,6 +117,7 @@ def share(
     run = ci_run()
     leg = run.leg if run is not None else ""
     durations: dict[str, float] = {}
+    head = 0.0
     rows: tuple[str, ...] = ()
     if not leg:
         print(
@@ -121,7 +125,7 @@ def share(
             " weighs the same"
         )
     else:
-        durations, rows, why = read_durations(ctx.root, leg, before=before)
+        durations, head, rows, why = read_durations(ctx.root, leg, before=before)
         if why:
             print(
                 f"  {step}: the durations of {platform_leg(leg)} could not be read"
@@ -136,7 +140,9 @@ def share(
     if leg and not rows:
         mine = every if ctx.shard.first else ()
     else:
-        slices = partition(_workspace_files(ctx, every), durations, ctx.shard.count)
+        slices = partition(
+            _workspace_files(ctx, every), durations, ctx.shard.count, head=head
+        )
         ours = set(every)
         mine = tuple(name for name in slices[ctx.shard.index - 1] if name in ours)
     _record(

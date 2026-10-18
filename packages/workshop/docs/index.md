@@ -539,6 +539,8 @@ or the rule's answer over nothing. The base declares:
 | `store.series` | workspace | the state store's series an extension keeps, which the janitor bounds and `fm store.ls` lists | the union |
 | `job-built-members` | workspace | each member a job of the release point builds before the wave, its path to the job's name | the union; a member two answers give different jobs refuses |
 | `checkout-inputs` | workspace | the inputs the checkout step of the rendered GitHub and Gitea workflows passes to the checkout action, each name to its value as the workflow writes it; GitLab's runner checks out by itself and reads none | the union; an input two answers give different values refuses, and so does one the step sets from the job's declaration (`ref`, `fetch-depth`, `fetch-tags`, `token`) or a value that is not a string |
+| `ci.fold` | workspace | how the gate job folds a file a check leg's shards each left into the platform leg's one file, by the file's name: a function called with the shards' files in shard order | the union; a file two answers fold refuses, and a file nobody folds is red by name in the fold |
+| `reaches` | workspace | what a change reaches beyond its own packages and their dependents: functions, each called with the run's `Changes`, that map each changed path they widen to why and to the paths of the members it reaches; asked while a changed path lies inside a package | the union; every member an answer names runs with its dependents, and an answer that raises, or names a path outside the members, runs everything |
 
 A name no extension declares refuses with the nearest one; an answer
 refuses when it is off the query's `values`. A package-level query is
@@ -1356,6 +1358,11 @@ absence.
   changed conftest or helper, and a source change, run the suite and
   its dependents'. A suite is never narrowed to the changed test
   files: the tests a change reaches are more than the ones it edits.
+  A change inside a package reaches further when a listed extension
+  says so through the `reaches` query: while pytest is listed, python
+  widens a change to a module pytest loads as a plugin to every member
+  pytest runs over. The gate prints one line for each path an answer
+  widens, with why, and runs everything when an answer raises.
   A machine's
   test run sets the runner's variables, so a test that reads them is
   judged here as on the legs. The chain of
@@ -1479,9 +1486,10 @@ absence.
   Each shard partitions the run's items, the test files of its test
   step, by the platform leg's `durations` rows: longest first, each
   item into the shard with the least summed seconds, ties by name, an
-  item no row names at the row's median, so every shard of a run
-  computes the same partition and every item lands in exactly one
-  shard. The rendered check job
+  item no row names at the row's median, the first shard's sum
+  starting at the rows' head, the time of the steps only it runs, so
+  every shard of a run computes the same partition and every item
+  lands in exactly one shard. The rendered check job
   carries the shards as literals. On GitHub and Gitea, while every
   count is one, its matrix is the `os` and `python` lists; when any
   count is above one it is `include` entries, one per runner, Python
@@ -1788,12 +1796,16 @@ platform's check leg ends at about the same time. Per platform, a
 runner and a Python, it takes the newest ten rows whose check jobs
 ran the full gate and succeeded, folds the shards of one platform
 into one reading, and takes the medians of four measures: the fixed
-setup F, every step the forge timed except the call; the longest gate
-step that is not the test step, O; the summed test time S over every
-package; and the parallelism p the test step reached, S over its
-wall. It predicts the leg's wall at n shards as F + max(O, S / (p n)),
-since the first shard runs the unsplit steps beside its slice, and
-the runner seconds as about n F + S / p + O, and prints both for every
+setup F, every step the forge timed except the call; the summed wall
+O of the gate steps that are not test steps, which the first shard
+alone runs; the summed test time S over every package; and the
+parallelism p the test step reached, S over its wall. The first
+shard's tests wait about O while those steps run, so its slice is
+lighter by the O p seconds of tests they hold back, and the shards
+split S + O p evenly. It predicts the leg's wall at n shards as
+F + max(O, (S / p + O) / n), the first shard with no tests left at
+the floor, and the runner seconds as about n F + S / p + O, and prints
+both for every
 count up to the cap, `[ci] shards-max` (4 when absent) or a `--max`
 under it. The slowest platform takes the
 largest count whose every added shard saved at least its own setup;
@@ -1944,12 +1956,17 @@ present, and the refs dropped by the last job to finish.
 
 The `durations` family is one series per platform leg,
 `check-<os>-<python>`, one row per run, `{"run": "<id>", "items":
-{"<item>": <seconds>}}`, the newest thirty kept, written by the gate
-job's collect from each check leg's folded row once the run's `metrics`
-file has landed; a series of a leg the matrix no longer produces is the
-janitor's to drop. A shard of that
+{"<item>": <seconds>}, "head": <seconds>}`, the newest thirty kept,
+written by the gate job's collect from each check leg's folded row
+once the run's `metrics` file has landed; a series of a leg the matrix
+no longer produces is the janitor's to drop. The `head` is the test
+seconds the first shard's unsplit steps hold back: the summed wall of
+the gate steps outside the test phase, times the parallelism the
+other shards' tests reached (the leg's own test step's, unsharded),
+or the longest such step when no parallelism reads. A shard of that
 leg reads the newest five rows stamped before the committer time of
-the commit it checked out and takes the median per item; a row the
+the commit it checked out and takes the median per item, and the
+median head, a row without one counting as 0; a row the
 store stamped at or after that time reaches no shard, so every shard
 of a run reads the same rows whatever lands while the run is in
 flight. A series that cannot be read is printed as the reason and the

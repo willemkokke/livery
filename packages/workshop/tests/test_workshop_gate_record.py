@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from livery import git
-from livery.workshop import _ci_context, _gate_record
+from livery.git import _objects
+from livery.workshop import _ci_context, _gate_record, _quality
 from livery.workshop._ci_context import state_store
 from livery.workshop._verified import tree_id
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
@@ -148,6 +149,45 @@ def test_junk_rows_and_a_rootless_chain_prove_nothing(
         git.put(state_store(work), _gate_record.SERIES.ref, loop, message="loop") == ""
     )
     assert _gate_record.covering(work)[0] is None
+
+
+NOT_RECORDED = "; the next gate measures from the last recorded tree"
+
+
+def test_a_record_write_that_raises_prints_why_and_the_gate_stays_green(
+    work: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def broken(root: Path) -> git.StateStore:
+        raise RuntimeError("the store broke")
+
+    monkeypatch.setattr(_gate_record, "state_store", broken)
+    tree = tree_id(work)
+    assert _gate_record.remember(work, tree=tree, packages=None) == (
+        f"  gate record: not recorded (the store broke){NOT_RECORDED}"
+    )
+    # The gate's own call returns, so the verdict the steps reached stands.
+    _quality._remember_local(work, None, tree=tree, packages=None)
+    assert capsys.readouterr().out == (
+        f"  gate record: not recorded (the store broke){NOT_RECORDED}\n"
+    )
+    monkeypatch.undo()
+    assert _gate_record.rows(work) == ((), "")
+
+
+def test_a_record_write_that_finds_the_ref_locked_past_the_wait_says_so(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_objects, "LOCK_WAIT", 0.1)
+    lock = work / ".git" / f"{_gate_record.SERIES.ref}.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_bytes(b"")
+    line = _gate_record.remember(work, tree=tree_id(work), packages=None)
+    assert line.startswith(
+        f"  gate record: not recorded (update refused: {lock} stayed locked for "
+    )
+    assert line.endswith(NOT_RECORDED)
+    lock.unlink()
+    assert _gate_record.rows(work) == ((), "")
 
 
 def test_the_record_never_reaches_the_remote(work: Path) -> None:

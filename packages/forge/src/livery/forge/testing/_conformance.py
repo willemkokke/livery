@@ -418,6 +418,55 @@ def _pr_open_find_get(driver: ForgeDriver) -> None:
         raise AssertionError("a second open PR for one head must be refused")
 
 
+def _pr_list(driver: ForgeDriver) -> None:
+    """List filters by state, newest first, and each row is what get answers.
+
+    ``closed`` holds a merged pull request and one closed without
+    merging alike, and an open pull request names no merge commit even
+    after the forge has computed its mergeability.
+    """
+    repo = driver.fresh_repo()
+    base = _default_branch(driver, repo)
+    driver.push(repo.owner, repo.name, "merged")
+    merged = repo.pr.open("merged", base, "feat: merged", "the merged one")
+    driver.await_mergeable(repo.owner, repo.name, merged.number)
+    repo.pr.merge_now(merged.number, title="feat: merged")
+    driver.await_merged(repo.owner, repo.name, merged.number)
+    driver.push(repo.owner, repo.name, "closed")
+    closed = repo.pr.open("closed", base, "feat: closed", "the closed one")
+    repo.pr.close(closed.number)
+    driver.push(repo.owner, repo.name, "open")
+    opened = repo.pr.open("open", base, "feat: open", "the open one")
+    # GitHub names a test merge commit once mergeability is computed;
+    # the rows must still name no merge for a pull request with none.
+    driver.await_mergeable(repo.owner, repo.name, opened.number)
+    everything = repo.pr.list(state="all")
+    assert [row.number for row in everything] == [
+        opened.number,
+        closed.number,
+        merged.number,
+    ]
+    assert [row.number for row in repo.pr.list()] == [opened.number]
+    assert [row.number for row in repo.pr.list(state="open")] == [opened.number]
+    assert [row.number for row in repo.pr.list(state="closed")] == [
+        closed.number,
+        merged.number,
+    ]
+    for row in everything:
+        assert row == repo.pr.get(row.number)
+    rows = {row.number: row for row in everything}
+    listed_open, listed_closed = rows[opened.number], rows[closed.number]
+    listed_merged = rows[merged.number]
+    assert (listed_open.state, listed_open.merged) == ("open", False)
+    assert (listed_open.head_branch, listed_open.title) == ("open", "feat: open")
+    assert listed_open.merged_sha == ""
+    assert (listed_closed.state, listed_closed.merged) == ("closed", False)
+    assert listed_closed.merged_sha == ""
+    assert (listed_merged.state, listed_merged.merged) == ("closed", True)
+    assert listed_merged.head_branch == "merged"
+    assert len(listed_merged.merged_sha) == 40
+
+
 def _pr_title_close_reopen(driver: ForgeDriver) -> None:
     """update_title sticks; close and reopen reuse the pull request."""
     repo = driver.fresh_repo()
@@ -565,6 +614,28 @@ def _arm_disarm(driver: ForgeDriver) -> None:
     assert repo.pr.disarm(pr.number)
     assert not repo.pr.is_armed(pr.number)
     assert not repo.pr.disarm(pr.number)  # idempotent, and says so
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
+    repo.checks.cancel_run(run)  # leave nothing hanging
+
+
+#: A squash subject of 480 characters, longer than GitHub's auto-merge
+#: carries (320 bytes of headline): long conventional subjects are
+#: ordinary, so arming must take one on every forge.
+_LONG_SUBJECT = (
+    "feat(forge): "
+    + " ".join(f"the arm takes a long subject {n:02d}" for n in range(15))[:467]
+)
+
+
+def _arm_long_title(driver: ForgeDriver) -> None:
+    """Arming takes a squash subject of any length, and disarm still answers."""
+    repo = _armable(driver)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: long", "")
+    driver.await_mergeable(repo.owner, repo.name, pr.number)
+    repo.pr.arm(pr.number, title=_LONG_SUBJECT)
+    assert repo.pr.is_armed(pr.number)
+    assert repo.pr.disarm(pr.number)
     run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
     repo.checks.cancel_run(run)  # leave nothing hanging
 
@@ -1072,11 +1143,13 @@ SCENARIOS: tuple[Scenario, ...] = (
         forbids=("ci_secrets",),
     ),
     Scenario("pr-open-find-get", _pr_open_find_get),
+    Scenario("pr-list", _pr_list),
     Scenario("pr-title-close-reopen", _pr_title_close_reopen),
     Scenario("pr-merge-now", _pr_merge_now),
     Scenario("pr-comment", _pr_comment),
     Scenario("pr-labels", _pr_labels),
     Scenario("arm-disarm", _arm_disarm, requires=("auto_merge",)),
+    Scenario("arm-long-title", _arm_long_title, requires=("auto_merge",)),
     Scenario(
         "armed-pr-merges-on-green",
         _armed_pr_merges_on_green,

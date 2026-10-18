@@ -719,49 +719,6 @@ def test_stop_discard_destroys_deliberately(rig: tuple[Path, FakeForge]) -> None
     assert not git.local_branch_exists(root, branch)
 
 
-def test_close_tears_down_the_open_pr_and_records_the_sha(
-    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, fake, number, branch = _started(rig)
-    repo = fake.repository("willemkokke", "livery")
-    (root / "work.txt").write_text("w\n")
-    git.commit_all(root, "feat: submitted work")
-    _git(root, "push", "origin", branch)
-    tip = git.head_sha(root)
-    fake.push("willemkokke", "livery", branch, sha=tip)
-    repo.pr.open(branch, "main", "feat: submitted work")
-    torn: list[str] = []
-
-    def _teardown(
-        _repo: object,
-        _root: Path,
-        target: str,
-        _base: str,
-        *,
-        keep_branches: bool = False,
-    ) -> None:
-        _ = keep_branches
-        torn.append(target)
-        repo.pr.close(1)
-        git.run(_root, "push", "origin", "--delete", target)
-        if git.local_branch_exists(_root, target):
-            if git.current_branch(_root) == target:
-                git.switch(_root, "main")
-            git.delete_branch(_root, target)
-
-    monkeypatch.setattr("livery.workshop._submit.teardown_branch", _teardown)
-    issue_close(str(number), reason="wontfix", message="superseded by 12")
-    assert torn == [branch]
-    live = repo.issue.get(number)
-    assert live is not None and live.state == "closed"
-    # The close comment carries the reason, the message, and the sha
-    # read before the teardown could delete the branch.
-    comments = fake.comment_bodies("willemkokke", "livery", number, kind="issue")
-    record = comments[-1]
-    assert "closed: wontfix" in record and "superseded by 12" in record
-    assert tip in record
-
-
 def test_close_on_a_merged_pr_degrades_to_already_resolved(
     rig: tuple[Path, FakeForge], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1003,51 +960,155 @@ def _started_in_worktree(
     return root, fake, created.number, branch, path
 
 
-def test_close_refuses_before_any_teardown_when_work_is_only_local(
-    rig: tuple[Path, FakeForge],
-) -> None:
-    # The ordering hole the audit found: the refusal must fire while
-    # the PR is still open and the branch still exists, never after a
-    # teardown already destroyed both.
-    root, fake, number, branch = _started(rig)
-    repo = fake.repository("willemkokke", "livery")
-    (root / "pushed.txt").write_text("p\n")
-    git.commit_all(root, "feat: pushed part")
-    _git(root, "push", "origin", branch)
-    fake.push("willemkokke", "livery", branch, sha=git.head_sha(root))
-    repo.pr.open(branch, "main", "feat: pushed part")
-    (root / "unpushed.txt").write_text("u\n")
-    git.commit_all(root, "feat: the unpushed delta")
-    with pytest.raises(_FAILURES) as caught:
-        issue_close(str(number), reason="wontfix")
-    assert "--discard" in str(caught.value)
-    live = repo.pr.get(1)
-    assert live is not None and live.state == "open"  # nothing torn down
-    assert git.local_branch_exists(root, branch)
-
-
-def test_close_keep_branch_ends_the_pr_and_keeps_both_branches(
-    rig: tuple[Path, FakeForge],
-) -> None:
-    root, fake, number, branch = _started(rig)
-    repo = fake.repository("willemkokke", "livery")
-    (root / "work.txt").write_text("w\n")
-    git.commit_all(root, "feat: kept work")
-    _git(root, "push", "origin", branch)
-    fake.push("willemkokke", "livery", branch, sha=git.head_sha(root))
-    repo.pr.open(branch, "main", "feat: kept work")
-    issue_close(str(number), reason="stale", keep_branch=True)
-    live = repo.pr.get(1)
-    assert live is not None and live.state == "closed" and not live.merged
-    assert git.local_branch_exists(root, branch)
-    remote = subprocess.run(
+def _remote_has(root: Path, branch: str) -> bool:
+    heads = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", branch],
         cwd=root,
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    assert branch in remote
+    return branch in heads
+
+
+def _submitted_in_worktree(
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch, *, pull: bool
+) -> tuple[Path, FakeForge, int, str, Path]:
+    """An issue worked in its worktree and pushed; *pull* opens PR #1 from it."""
+    root, fake, number, branch, path = _started_in_worktree(rig, monkeypatch)
+    (path / "work.txt").write_text("w\n")
+    git.commit_all(path, "feat: submitted work")
+    _git(path, "push", "origin", branch)
+    if pull:
+        fake.push("willemkokke", "livery", branch, sha=git.head_sha(path))
+        fake.repository("willemkokke", "livery").pr.open(
+            branch, "main", "feat: submitted work"
+        )
+    return root, fake, number, branch, path
+
+
+def test_close_keeps_the_branch_when_the_forge_cannot_say_whether_a_pr_is_open(
+    rig: tuple[Path, FakeForge],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.forge import ForgeError
+    from livery.forge.testing import _fake as fake_module
+
+    root, fake, number, branch, path = _submitted_in_worktree(
+        rig, monkeypatch, pull=False
+    )
+
+    def _down(self: object, head: str, *, state: str = "open") -> object:
+        raise ForgeError("HTTP 502 on GET pulls", status=502)
+
+    monkeypatch.setattr(fake_module._FakePullRequests, "find_by_head", _down)
+    issue_close(str(number), reason="duplicate")
+    out = capsys.readouterr().out
+    assert (
+        f"  kept {branch} and its worktree: the forge could not say whether a PR"
+        " is open from it (HTTP 502 on GET pulls); ask again when it answers"
+    ) in out
+    assert path.is_dir() and git.local_branch_exists(root, branch)
+    assert _remote_has(root, branch)
+    live = fake.repository("willemkokke", "livery").issue.get(number)
+    assert live is not None and live.state == "closed"
+
+
+def test_close_refuses_when_the_forge_cannot_say_whether_the_pr_merged(
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No open pull request, then no answer about a merged one: nothing
+    # is removed, since a merge decides what the branch still holds.
+    from livery.forge import ForgeError
+    from livery.forge.testing import _fake as fake_module
+
+    root, fake, number, branch, path = _submitted_in_worktree(
+        rig, monkeypatch, pull=False
+    )
+
+    def _half(self: object, head: str, *, state: str = "open") -> object:
+        if state == "open":
+            return None
+        raise ForgeError("HTTP 502 on GET pulls", status=502)
+
+    monkeypatch.setattr(fake_module._FakePullRequests, "find_by_head", _half)
+    with pytest.raises(_FAILURES) as caught:
+        issue_close(str(number), reason="stale")
+    assert "HTTP 502 on GET pulls" in str(caught.value)
+    assert "nothing was removed" in str(caught.value)
+    assert path.is_dir() and git.local_branch_exists(root, branch)
+    assert _remote_has(root, branch)
+    live = fake.repository("willemkokke", "livery").issue.get(number)
+    assert live is not None and live.state == "open"
+
+
+@pytest.mark.parametrize("keep_branch", [False, True])
+def test_close_with_an_open_pr_closes_the_issue_alone(
+    rig: tuple[Path, FakeForge],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    keep_branch: bool,
+) -> None:
+    # Deleting the head branch closes the pull request unmerged, and
+    # the branch may carry another issue's fix: the close ends the
+    # issue and leaves the pull request, its branch, and its tree.
+    root, fake, number, branch, path = _submitted_in_worktree(
+        rig, monkeypatch, pull=True
+    )
+    (path / "unpushed.txt").write_text("u\n")
+    git.commit_all(path, "feat: a delta not pushed yet")
+    issue_close(str(number), reason="duplicate", keep_branch=keep_branch)
+    out = capsys.readouterr().out
+    line = (
+        f"  kept {branch} and its worktree: PR #1 is open from it;"
+        " merge or close it first"
+    )
+    assert line in out
+    repo = fake.repository("willemkokke", "livery")
+    pull = repo.pr.get(1)
+    assert pull is not None and pull.state == "open" and not pull.merged
+    assert path.is_dir() and git.local_branch_exists(root, branch)
+    assert _remote_has(root, branch)
+    live = repo.issue.get(number)
+    assert live is not None and live.state == "closed"
+    record = fake.comment_bodies("willemkokke", "livery", number, kind="issue")[-1]
+    assert "closed: duplicate" in record and line.strip() in record
+
+
+def test_close_without_a_pr_removes_the_tree_and_both_branches_and_records_the_sha(
+    rig: tuple[Path, FakeForge],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root, fake, number, branch, path = _submitted_in_worktree(
+        rig, monkeypatch, pull=False
+    )
+    tip = git.head_sha(path)
+    issue_close(str(number), reason="wontfix", message="superseded by 12")
+    out = capsys.readouterr().out
+    assert "kept" not in out
+    assert not path.exists() and not git.local_branch_exists(root, branch)
+    assert not _remote_has(root, branch)
+    live = fake.repository("willemkokke", "livery").issue.get(number)
+    assert live is not None and live.state == "closed"
+    # The close comment carries the reason, the message, and the sha
+    # read before the branch was deleted.
+    record = fake.comment_bodies("willemkokke", "livery", number, kind="issue")[-1]
+    assert "closed: wontfix" in record and "superseded by 12" in record
+    assert tip in record
+
+
+def test_close_after_the_pr_was_closed_unmerged_removes_the_branches(
+    rig: tuple[Path, FakeForge], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, fake, number, branch, path = _submitted_in_worktree(
+        rig, monkeypatch, pull=True
+    )
+    fake.repository("willemkokke", "livery").pr.close(1)
+    issue_close(str(number), reason="wontfix")
+    assert not path.exists() and not git.local_branch_exists(root, branch)
+    assert not _remote_has(root, branch)
 
 
 def test_close_on_merged_keeps_an_only_local_delta_without_discard(

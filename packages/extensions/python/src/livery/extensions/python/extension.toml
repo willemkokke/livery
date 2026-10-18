@@ -148,10 +148,13 @@ reason = { types = ["str"], doc = "why the reach stays, and the public seam that
 # through this extension's functions, which call pytest from the
 # workspace's environment. The answers sit in this table, not under
 # [queries]: there each name already holds its declaration's table, and
-# one key cannot hold both.
+# one key cannot hold both. pytest loads every module a member names
+# under pytest11 into every session, so a change to one, or to the
+# table, reaches every member pytest runs over.
 [for.pytest.queries]
 "python.test.runner" = "livery.extensions.python._answers:suite_runner"
 "python.examples.runner" = "livery.extensions.python._answers:examples_runner"
+reaches = "livery.extensions.python._answers:plugin_reaches"
 
 # The template fm new.package.python-library creates a python package from; its
 # files live under content/templates/<name>/ beside this file.

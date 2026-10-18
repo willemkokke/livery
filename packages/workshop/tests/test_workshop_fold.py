@@ -22,7 +22,13 @@ from livery.forge import Conclusion
 from livery.workshop import _ci_context, _fold, _metrics, _shard, _speed, _verified
 from livery.workshop._ci_context import state_store
 from livery.workshop._queries import Folder
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    read_files,
+    seed_copier,
+)
 
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 WINDOWS = "check-windows-latest-3.14"
@@ -95,12 +101,13 @@ def _row(
     items: Mapping[str, float] | None = None,
     slowest: Sequence[tuple[str, float]] = (),
     total: float = 100.0,
+    steps: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "job": DISPLAY[label],
         "total_ms": total,
         "tasks": {"check": total},
-        "task_steps": {},
+        "task_steps": dict(steps or {}),
         "waits_ms": {},
         "packages": {
             name: {"tests_ms": ms, "tests": tests}
@@ -513,13 +520,13 @@ def test_nothing_sharded_folds_nothing_and_says_so(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     ref = _put(work, UBUNTU, _row(UBUNTU, sums={"a": (10.0, 1)}))
-    before = git.read(state_store(work), ref).files
+    before = read_files(state_store(work), ref)
     _fold.fold_run(work, RUN, folders={})
     assert (
         capsys.readouterr().out
         == "  fold: no check leg ran as shards; nothing to fold\n"
     )
-    assert git.read(state_store(work), ref).files == before
+    assert read_files(state_store(work), ref) == before
     # An empty run says the same.
     assert git.drop(state_store(work), ref) == ""
     _fold.fold_run(work, RUN, folders={})
@@ -772,6 +779,82 @@ def test_the_collect_joins_the_folded_row_with_the_first_shard_and_writes_the_du
         _metrics.run_ref(RUN, WINDOWS),
         _metrics.run_ref(RUN, UBUNTU),
     }
+
+
+def test_the_collect_writes_the_first_shard_s_head_from_the_folded_row(
+    work: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The first shard ran the unsplit steps, 30 s and 10 s; a step's own
+    # command rides under check/ too and is no gate step.
+    first = {
+        "check/test.pytest": 60_000.0,
+        "check/typecheck.mypy": 30_000.0,
+        "check/lint.ruff": 10_000.0,
+        "check/mypy --platform=linux": 30_000.0,
+    }
+    _put(
+        work,
+        WIN1,
+        _row(
+            WIN1,
+            marker=_marker("1of2", FILES[:1]),
+            sums={"a": (60_000.0, 3)},
+            items={FILES[0]: 60.0},
+            steps=first,
+            total=100_000.0,
+        ),
+        **{"coverage.json": _coverage(WIN1, {"packages/a": ["a1"]})},
+    )
+    _put(
+        work,
+        WIN2,
+        _row(
+            WIN2,
+            marker=_marker("2of2", FILES[1:]),
+            sums={"a": (200_000.0, 2)},
+            items={FILES[1]: 150.0, FILES[2]: 50.0},
+            steps={"check/test.pytest": 78_000.0},
+            total=80_000.0,
+        ),
+        **{"coverage.json": _coverage(WIN2, {"packages/a": ["a2"], "tests": ["c2"]})},
+    )
+    _put(
+        work,
+        UBUNTU,
+        _row(
+            UBUNTU,
+            sums={"a": (90_000.0, 1)},
+            items={FILES[0]: 90.0},
+            steps={"check/test.pytest": 45_000.0, "check/lint.ruff": 20_000.0},
+        ),
+    )
+    _fold.fold_run(work, RUN, folders=FOLDERS)
+    capsys.readouterr()
+    repo = _forge(
+        [
+            (DISPLAY[WIN1], "success", "2026-10-17T10:00:10Z"),
+            (DISPLAY[WIN2], "success", "2026-10-17T10:00:20Z"),
+            (DISPLAY[UBUNTU], "success", "2026-10-17T10:00:30Z"),
+        ]
+    )
+    lines = _metrics.collect(work, repo, RUN, sha="d" * 40)
+    windows = _shard.DURATIONS.series(WINDOWS)
+    ubuntu = _shard.DURATIONS.series(UBUNTU)
+    # Windows: 40 s of unsplit steps, and the second shard's tests
+    # reached 200 s over its 80 s, a parallelism of 2.5: a head of 100 s.
+    # The first shard's own 60 s over 60 s is not read.
+    assert f"  {windows.ref}: 3 item(s) recorded for run 1013, a head of 100.0 s" in (
+        lines
+    )
+    (row,) = windows.rows(state_store(work)).rows
+    assert row.data["head"] == 100.0
+    # Ubuntu, one shard: 20 s of unsplit steps, its tests 90 s over its
+    # test step's 45 s: a head of 40 s.
+    (row,) = ubuntu.rows(state_store(work)).rows
+    assert row.data["head"] == 40.0
+    assert f"  {ubuntu.ref}: 1 item(s) recorded for run 1013, a head of 40.0 s" in (
+        lines
+    )
 
 
 def test_the_stamp_and_the_speed_judge_read_the_platform_leg_past_the_shards_rows(

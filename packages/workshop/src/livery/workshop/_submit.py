@@ -36,7 +36,7 @@ from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery import git
-from livery.footman import Arg, doc, fail, group
+from livery.footman import Arg, doc, fail, group, suggest
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop import _stack
 from livery.workshop._contract import load_contract
@@ -1394,19 +1394,16 @@ def teardown_branch(
     root: Path,
     branch: str,
     base: str,
-    *,
-    keep_branches: bool = False,
 ) -> None:
     """The one branch teardown every stop verb wears; idempotent.
 
     Disarm, close the PR (a merged one is left alone), delete the
     remote and local branch, and step back onto an up-to-date *base*
-    when standing on *branch*. *keep_branches* stops after the PR:
-    the submission ends, both branches stay. Mechanism only: state
-    gates, forces, and refusals are the calling policy's job
+    when standing on *branch*. Mechanism only: state gates, forces,
+    and refusals are the calling policy's job
     (livery.workshop._submit.abandon_flow for a feature,
-    ``workflow.abort`` for a reserved workflow, ``issue.close`` for
-    an issue), so the policies can never drift apart. Removing a
+    ``workflow.abort`` for a reserved workflow), so the policies can
+    never drift apart. Removing a
     linked worktree moves the process into the main checkout first:
     Windows refuses to remove a directory a process stands in, and
     the shell that ran the verb is told where to go. A real move of
@@ -1419,8 +1416,6 @@ def teardown_branch(
         _disarm_and_say(repo, pr.number)
         repo.pr.close(pr.number)
         print(f"  closed PR #{pr.number}")
-    if keep_branches:
-        return
     if repo.branch_exists(branch):
         repo.delete_branch(branch)
         print(f"  deleted origin/{branch}")
@@ -1667,13 +1662,34 @@ def _named(ref: str) -> tuple[Repository, Path, PullRequest]:
     return repo, root, pull_request_named(repo, root, ref)
 
 
-#: The help text of the pull request argument the three verbs share.
-_PR_DOC = "a pull request number; this branch's when absent"
+def _open_pull_numbers() -> list[str]:
+    """Completion: the open pull request numbers, newest first; never raises.
+
+    Offline, token-less, or outside a repository costs the
+    suggestions, never the command.
+    """
+    try:
+        from livery.workshop._forge_lane import this_repository
+
+        repo = this_repository(_root())
+        return [str(row.number) for row in repo.pr.list(state="open")]
+    except Exception:
+        return []
+
+
+#: The pull request argument the three verbs share: its help text, and
+#: the open pull requests' numbers as its completion. Module level,
+#: because footman reads a task's annotations in its module's namespace.
+_PullRef = Annotated[
+    Arg[str],
+    doc("a pull request number; this branch's when absent"),
+    suggest(_open_pull_numbers, strict=False),
+]
 
 
 @submit.task(name="merge")
 def submit_merge(
-    pr: Annotated[Arg[str], doc(_PR_DOC)] = "",
+    pr: _PullRef = "",
     title: Annotated[str, doc("squash subject; defaults to the PR title")] = "",
 ) -> None:
     """Merge a PR as soon as possible: this branch's, or the one numbered.
@@ -1691,7 +1707,7 @@ def submit_merge(
 
 
 @submit.task(name="arm")
-def submit_arm(pr: Annotated[Arg[str], doc(_PR_DOC)] = "") -> None:
+def submit_arm(pr: _PullRef = "") -> None:
     """Arm a PR to merge when green: this branch's, or the one numbered.
 
     Arms as ``fm submit --armed`` arms, with the pull request's own
@@ -1707,7 +1723,7 @@ def submit_arm(pr: Annotated[Arg[str], doc(_PR_DOC)] = "") -> None:
 
 
 @submit.task(name="disarm")
-def submit_disarm(pr: Annotated[Arg[str], doc(_PR_DOC)] = "") -> None:
+def submit_disarm(pr: _PullRef = "") -> None:
     """Take auto-merge off a PR and leave it open: this branch's, or the one numbered.
 
     The pull request and its branch stay as they are, so it waits
