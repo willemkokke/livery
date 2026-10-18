@@ -22,9 +22,12 @@ The rules, each saying what went or why it stayed:
   merge took holds nothing only there, whatever a squash did to the
   ancestry. A tree with uncommitted changes or commits past the merge
   stays and is named, and so is a tree whose issue is open or whose
-  forge cannot be asked. A tree whose name carries no issue number is
-  judged by its branch's pull request alone. This rule asks the forge,
-  since asking is what proves the removal safe.
+  forge cannot be asked. A closed issue's tree also stays while its
+  branch heads an open pull request, as ``fm issue.close`` leaves it,
+  since that pull request still needs the branch. A tree whose name
+  carries no issue number is judged by its branch's pull request
+  alone. This rule asks the forge, since asking is what proves the
+  removal safe.
 - A local branch of the checkout whose pull request merged and took
   its tip goes by the same rule; the branch a linked worktree holds
   belongs to the worktree rule, and the branch the checkout stands on
@@ -126,7 +129,10 @@ def _done(
 
     Landed is the issue closed or the branch's pull request merged; a
     tree named after no issue has only the pull request to answer.
-    The merged head is ``""`` when no pull request merged.
+    A closed issue whose branch still heads an open pull request has
+    not landed: the tree stays for that pull request, as
+    ``fm issue.close`` leaves it. The merged head is ``""`` when no
+    pull request merged.
     """
     from livery.workshop._submit import merged_pull_request
 
@@ -137,6 +143,14 @@ def _done(
         if number is not None:
             work = repo.issue.get(number)
             if work is not None and work.state == "closed":
+                live = repo.pr.find_by_head(branch) if pull is None else None
+                if live is not None and live.state == "open":
+                    return (
+                        False,
+                        f"issue #{number} is closed, but PR #{live.number}"
+                        " is open from its branch",
+                        "",
+                    )
                 return True, f"issue #{number} is closed", head
         if pull is not None:
             return True, f"PR #{pull.number} merged", head

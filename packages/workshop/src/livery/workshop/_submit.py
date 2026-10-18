@@ -1394,19 +1394,16 @@ def teardown_branch(
     root: Path,
     branch: str,
     base: str,
-    *,
-    keep_branches: bool = False,
 ) -> None:
     """The one branch teardown every stop verb wears; idempotent.
 
     Disarm, close the PR (a merged one is left alone), delete the
     remote and local branch, and step back onto an up-to-date *base*
-    when standing on *branch*. *keep_branches* stops after the PR:
-    the submission ends, both branches stay. Mechanism only: state
-    gates, forces, and refusals are the calling policy's job
+    when standing on *branch*. Mechanism only: state gates, forces,
+    and refusals are the calling policy's job
     (livery.workshop._submit.abandon_flow for a feature,
-    ``workflow.abort`` for a reserved workflow, ``issue.close`` for
-    an issue), so the policies can never drift apart. Removing a
+    ``workflow.abort`` for a reserved workflow), so the policies can
+    never drift apart. Removing a
     linked worktree moves the process into the main checkout first:
     Windows refuses to remove a directory a process stands in, and
     the shell that ran the verb is told where to go. A real move of
@@ -1419,8 +1416,6 @@ def teardown_branch(
         _disarm_and_say(repo, pr.number)
         repo.pr.close(pr.number)
         print(f"  closed PR #{pr.number}")
-    if keep_branches:
-        return
     if repo.branch_exists(branch):
         repo.delete_branch(branch)
         print(f"  deleted origin/{branch}")
