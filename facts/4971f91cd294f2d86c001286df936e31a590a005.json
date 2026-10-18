@@ -1,0 +1,1 @@
+{"branches":[[5,-1,0,"line 5 didn't exit the module because the condition on line 5 was always true"],[5,6,1,"line 5 didn't jump to line 6 because the condition on line 5 was never true"]],"statements":"3,5-6"}
