@@ -286,20 +286,43 @@ def _mount_state_stays() -> Iterator[None]:
 SHARED = (type(None), bool, int, float, complex, str, bytes, tuple, frozenset)
 
 
-@pytest.fixture(autouse=True)
-def _patches_stay_undone(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+#: The modules loaded before a test's setup began, for its teardown.
+_LOADED = pytest.StashKey[frozenset[str]]()
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_setup(item: pytest.Item) -> Iterator[None]:
+    """Note the modules loaded before the test's fixtures and body run."""
+    item.stash[_LOADED] = frozenset(sys.modules)
+    return (yield)
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_teardown(item: pytest.Item) -> Iterator[None]:
     """Give the modules the test imported the originals its patches replaced.
 
-    The fixture depends on `monkeypatch`, so its teardown runs while
-    the patches are still in place: a global of a newly imported module
-    that is a patched value gets the first original back, under
-    whatever name the module bound it. monkeypatch then restores the
-    owners themselves. An attribute the patch added, which had no
+    Runs before any fixture's teardown, so the test's patches are still
+    in place: a global of a module first imported during the test that
+    is a patched value gets the first original back, under whatever
+    name the module bound it, and `monkeypatch` then restores the
+    owners themselves. The test's own `monkeypatch` is read from the
+    fixtures it already resolved; this hook requests none, since a
+    fixture asking for `monkeypatch` changes the order other plugins'
+    fixtures are set up and torn down in, which footman's environment
+    restore depends on. An attribute the patch added, which had no
     original, is left as it is, and so is a patched value of a type in
     `SHARED`, whose identity a module's own constant can share.
     """
-    before = set(sys.modules)
-    yield
+    funcargs: Any = getattr(item, "funcargs", {})
+    patched = funcargs.get("monkeypatch") if isinstance(funcargs, dict) else None
+    before = item.stash.get(_LOADED, None)
+    if isinstance(patched, pytest.MonkeyPatch) and before is not None:
+        _restore_copies(patched, before)
+    return (yield)
+
+
+def _restore_copies(monkeypatch: pytest.MonkeyPatch, before: frozenset[str]) -> None:
+    """Put the originals back in the modules loaded since *before*."""
     # monkeypatch keeps its record as (owner, name, value before) and
     # exposes no public view of it.
     patches: list[tuple[object, str, object]] = list(
