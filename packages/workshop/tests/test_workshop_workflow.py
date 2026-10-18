@@ -448,7 +448,11 @@ def test_a_one_poll_blocker_blip_does_not_end_the_watch(
         "livery.workshop._verdict.classify",
         lambda *a, **k: next(verdicts),
     )
-    result = follow_pull_request(repo, "feat/1-x", root, interval=0, timeout=5)
+    # A clock that stands still: the second read decides, however long
+    # the first took on a loaded machine.
+    result = follow_pull_request(
+        repo, "feat/1-x", root, interval=0, timeout=5, clock=lambda: 0.0
+    )
     assert result.state == "merged"
 
 
