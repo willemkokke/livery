@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 from pathlib import Path
 
@@ -12,7 +13,9 @@ from livery.workshop._graph import (
     affected_packages,
     dependents_closure,
 )
+from livery.workshop._influence import Changes
 from livery.workshop._packages import Package, discover_packages
+from workshop_extension_fakes import fake_extensions, fake_steps
 from workshop_installed import skip_unless_installed
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
@@ -364,3 +367,177 @@ def test_a_docs_page_reaches_nothing_and_an_example_its_packages_examples(
     assert scope is not None
     assert scope.examples == ()
     assert "packages/mid" in [p.path for p in scope.packages]
+
+
+# --- what a listed extension says a change reaches -------------------------------
+
+#: A fake's declaration answering ``reaches`` with its ``_steps.reaches``.
+REACHES = '[extension]\n\n[queries]\nreaches = "{package}._steps:reaches"\n'
+
+
+def _reaching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str
+) -> tuple[Path, tuple[Package, ...]]:
+    """The four packages, under a root listing a fake whose ``_steps`` is *source*."""
+    fake_extensions(tmp_path, monkeypatch, reach=REACHES)
+    fake_steps(tmp_path, "reach", source)
+    root = tmp_path / "ws"
+    root.mkdir()
+    _packages(root)
+    (root / "workshop.toml").write_text('[workspace]\nextensions = ["acme.reach"]\n')
+    return root, discover_packages(root)
+
+
+def test_an_answer_to_reaches_that_raises_runs_everything_and_says_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        def reaches(root):
+            return (widen,)
+
+        def widen(changes):
+            raise ValueError("the manifest is unreadable")
+        """,
+    )
+    assert affected_from_paths(root, packages, ["packages/core/thing.py"]) is None
+    out = capsys.readouterr().out
+    assert "acme.reach" in out and "the manifest is unreadable" in out
+
+
+def test_an_extension_that_cannot_answer_reaches_runs_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        def reaches(root):
+            raise RuntimeError("no listing to read")
+        """,
+    )
+    assert affected_from_paths(root, packages, ["packages/core/thing.py"]) is None
+    assert "no listing to read" in capsys.readouterr().out
+
+
+def test_an_answer_naming_no_member_runs_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        def reaches(root):
+            return (widen,)
+
+        def widen(changes):
+            return {"packages/core/thing.py": ("why", ("packages/nowhere",))}
+        """,
+    )
+    assert affected_from_paths(root, packages, ["packages/core/thing.py"]) is None
+    out = capsys.readouterr().out
+    assert "packages/core/thing.py" in out and "packages/nowhere" in out
+
+
+def test_reaches_is_asked_only_while_a_changed_path_lies_inside_a_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An answer that raises would run everything, so a change it is not
+    # asked about keeps its narrow scope.
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        def reaches(root):
+            raise RuntimeError("asked")
+        """,
+    )
+    paths = ["notes/plan.md", "docs/index.md", "zensical.toml", "LICENSE"]
+    scope = affected_from_paths(root, packages, paths)
+    assert scope is not None and scope.packages == ()
+    _paths(root, "tests/test_all.py")
+    scope = affected_from_paths(root, packages, ["tests/test_all.py"])
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["tests"]
+
+
+def test_the_earlier_tree_is_asked_once_and_only_while_an_extension_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+
+    def before() -> str:
+        asked.append("asked")
+        return "abc123"
+
+    # Nobody answers: the change reaches its package's dependents and
+    # the earlier tree is never resolved.
+    root = tmp_path / "plain"
+    root.mkdir()
+    _packages(root)
+    scope = affected_from_paths(
+        root, discover_packages(root), ["packages/mid/thing.py"], before=before
+    )
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    assert asked == []
+    # An answer receives the change with the tree resolved, once.
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        seen = []
+
+        def reaches(root):
+            return (widen,)
+
+        def widen(changes):
+            seen.append(changes)
+            return {}
+        """,
+    )
+    steps = importlib.import_module("acme.reach._steps")
+    paths = ["packages/mid/thing.py", "notes/plan.md"]
+    scope = affected_from_paths(root, packages, paths, before=before)
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    assert asked == ["asked"]
+    assert steps.seen == [Changes(root, tuple(paths), "abc123")]
+
+
+def test_a_path_an_answer_widens_runs_the_members_it_names_and_their_dependents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, packages = _reaching(
+        tmp_path,
+        monkeypatch,
+        """
+        def reaches(root):
+            return (widen,)
+
+        def widen(changes):
+            return {
+                path: ("it is loaded everywhere", ("packages/core",))
+                for path in changes.paths
+                if path == "packages/aside/thing.py"
+            }
+        """,
+    )
+    # A path the answer does not widen reaches its package's dependents.
+    scope = affected_from_paths(root, packages, ["packages/mid/thing.py"])
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    assert capsys.readouterr().out == ""
+    # One it widens reaches the members it names, and their dependents.
+    scope = affected_from_paths(root, packages, ["packages/aside/thing.py"])
+    assert scope is not None
+    assert [p.path for p in scope.packages] == [
+        "packages/aside",
+        "packages/core",
+        "packages/mid",
+        "packages/top",
+    ]
+    out = capsys.readouterr().out
+    assert "packages/aside/thing.py: it is loaded everywhere" in out

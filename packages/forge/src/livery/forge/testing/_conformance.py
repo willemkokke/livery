@@ -618,6 +618,28 @@ def _arm_disarm(driver: ForgeDriver) -> None:
     repo.checks.cancel_run(run)  # leave nothing hanging
 
 
+#: A squash subject of 480 characters, longer than GitHub's auto-merge
+#: carries (320 bytes of headline): long conventional subjects are
+#: ordinary, so arming must take one on every forge.
+_LONG_SUBJECT = (
+    "feat(forge): "
+    + " ".join(f"the arm takes a long subject {n:02d}" for n in range(15))[:467]
+)
+
+
+def _arm_long_title(driver: ForgeDriver) -> None:
+    """Arming takes a squash subject of any length, and disarm still answers."""
+    repo = _armable(driver)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: long", "")
+    driver.await_mergeable(repo.owner, repo.name, pr.number)
+    repo.pr.arm(pr.number, title=_LONG_SUBJECT)
+    assert repo.pr.is_armed(pr.number)
+    assert repo.pr.disarm(pr.number)
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
+    repo.checks.cancel_run(run)  # leave nothing hanging
+
+
 def _armed_pr_merges_on_green(driver: ForgeDriver) -> None:
     """An armed pull request merges when its checks go green, server-side."""
     repo = _armable(driver)
@@ -1127,6 +1149,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("pr-comment", _pr_comment),
     Scenario("pr-labels", _pr_labels),
     Scenario("arm-disarm", _arm_disarm, requires=("auto_merge",)),
+    Scenario("arm-long-title", _arm_long_title, requires=("auto_merge",)),
     Scenario(
         "armed-pr-merges-on-green",
         _armed_pr_merges_on_green,

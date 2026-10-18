@@ -57,6 +57,14 @@ the environment's forge, and the scale fixture keeps it in the
 fixture's directory. On a desk nothing names a directory, and conan's
 own default stands.
 
+A separate home does not separate conan's temp files, and conan writes
+some of them at a fixed name: `conan cache save` writes `pkglist.json`
+straight into the system temp directory and removes it after. Two
+saves on one machine at once, from two gates say, share that file, and
+the second to read it fails. So every conan command the extension runs
+gets a fresh temp directory of its own, named in `TMPDIR`, `TEMP` and
+`TMP`, and removed after the command, whether it succeeds or fails.
+
 ## The sync
 
 Before `uv sync` installs a member whose build goes through the

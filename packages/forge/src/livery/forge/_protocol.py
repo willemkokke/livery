@@ -164,8 +164,11 @@ class PullRequests(Protocol):
         """Schedule pull request *number* to merge when its checks go green.
 
         *title* is the squash commit subject the merge will carry,
-        *message* its body. Arming an already armed pull request
-        replaces the schedule, title included. The merge itself
+        *message* its body. A forge that limits the subject's length
+        carries a longer one cut at a word boundary, so a long title
+        never stops the arm: [livery.forge.GithubForge][] cuts at 320
+        UTF-8 bytes. Arming an already armed pull request replaces
+        the schedule, title included. The merge itself
         happens server-side: the caller observes it through
         livery.forge.Checks.status and livery.forge.PullRequests.get,
         never performs it. Push to an armed pull request only after

@@ -38,6 +38,13 @@ answers for the running install.
   required contexts (the check context is the job name). Re-arming
   replaces the schedule by disarm-then-enable, because GitHub cannot
   update an armed schedule's commit headline.
+- The auto-merge mutation takes at most 320 UTF-8 bytes of commit
+  headline and 65535 of commit body. `pr.arm` cuts a longer title at
+  the last word boundary within 320 bytes (inside a word only when
+  no word ends within them), so the squash subject is the title's
+  start; it refuses a longer body before any call, since a
+  cut body would lose its closing footers. GitHub's own refusals name
+  a quarter of each limit as characters.
 - `checks.status` folds GitHub's two reporting systems, commit
   statuses and check runs, into the one combined verdict.
 - `checks.job_log` answers with a redirect to a signed, short-lived

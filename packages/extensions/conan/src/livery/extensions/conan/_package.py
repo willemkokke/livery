@@ -290,28 +290,46 @@ class _Stamper:
         return ["conanfile.py"]
 
 
+#: The variables a process reads its temp directory from: ``TMPDIR`` on
+#: POSIX, ``TEMP`` and ``TMP`` on Windows. Python's
+#: ``tempfile.gettempdir()`` reads all three, in that order.
+TEMP_VARIABLES = ("TMPDIR", "TEMP", "TMP")
+
+
 def _conan(package_dir: Path, *args: str, env: dict[str, str] | None = None) -> Result:
-    """One conan invocation through the store's handle.
+    """One conan invocation through the store's handle, in a temp directory of its own.
 
     *env* adds to this process's environment rather than replacing
     it: a handle passes what it is given as the child's whole
     environment, never a merge over the parent's.
 
+    Each call gets a fresh temp directory, named to conan in every
+    variable of `TEMP_VARIABLES` and removed after the call, whether
+    conan succeeds, fails, or cannot start. conan writes some temp
+    files at a fixed name: ``conan cache save`` writes
+    ``pkglist.json`` straight into ``tempfile.gettempdir()``, adds it
+    to the archive and removes it. Two conan processes sharing a temp
+    directory, two gates on one machine say, write and remove that one
+    file, and the second to read it raises ``FileNotFoundError``. A
+    separate conan home does not separate the temp directory.
+
     Raises:
         Failed: when conan is not deployed on this machine, naming
             the sync that supplies it.
     """
-    try:
-        return tools.conan.opts(
-            cwd=package_dir,
-            env={**os.environ, **(env or {})},
-            nofail=True,
-            recorded=False,
-        )(*args)
-    except OSError:
-        from livery.workshop import undeployed
+    with tempfile.TemporaryDirectory(prefix="conan-") as temp:
+        own = dict.fromkeys(TEMP_VARIABLES, temp)
+        try:
+            return tools.conan.opts(
+                cwd=package_dir,
+                env={**os.environ, **(env or {}), **own},
+                nofail=True,
+                recorded=False,
+            )(*args)
+        except OSError:
+            from livery.workshop import undeployed
 
-        undeployed("conan")
+            undeployed("conan")
 
 
 #: The remote name the workshop configures on the conan client. One

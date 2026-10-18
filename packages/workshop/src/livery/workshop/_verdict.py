@@ -109,10 +109,23 @@ class Pace:
     waited out until it returns, said with the forge's own refusal.
     """
 
-    def __init__(self, interval: float) -> None:
-        """Pace polls *interval* seconds apart while the budget allows."""
+    def __init__(
+        self, interval: float, *, sleep: Callable[[float], None] | None = None
+    ) -> None:
+        """Pace polls *interval* seconds apart while the budget allows.
+
+        Args:
+            interval: Seconds between polls while the budget is ample.
+            sleep: What waits; `time.sleep` when None, looked up at
+                each wait.
+        """
         self.interval = interval
+        self._sleep = sleep
         self._slowed = False
+
+    def _wait(self, seconds: float) -> None:
+        """Wait *seconds* with the sleep this pace was given."""
+        (time.sleep if self._sleep is None else self._sleep)(seconds)
 
     def rest(self, repo: Repository) -> None:
         """Sleep until the next poll, slowed while *repo*'s forge budget is low."""
@@ -124,7 +137,7 @@ class Pace:
                 " until it renews"
             )
         self._slowed = slowed
-        time.sleep(wait)
+        self._wait(wait)
 
     def wait_out(self, error: RateLimited) -> float:
         """Sleep until a spent budget returns; the seconds waited.
@@ -134,7 +147,7 @@ class Pace:
         """
         wait = wait_for_reset(error, now=time.time())
         print(f"  {error}; waiting {_duration(wait)}, then watching again")
-        time.sleep(wait)
+        self._wait(wait)
         return wait
 
 
@@ -248,6 +261,8 @@ def follow(
     quiet: float | None = 60,
     transient: Transient | None = None,
     retried: tuple[type[Exception], ...] = (ForgeError,),
+    clock: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
 ) -> _T:
     """Poll *read* until it answers: the one wait on the forge.
 
@@ -263,7 +278,9 @@ def follow(
     line. The deadline, *timeout* seconds from the start, raises
     [livery.workshop._verdict.FollowTimedOut][]; ``None`` waits as long
     as the caller's own timeout allows. Without a *repo* the rests are
-    plain sleeps.
+    plain sleeps. The deadline and the quiet cadence read *clock*, and
+    every wait goes through *sleep*, so a caller that passes both
+    decides how much time each poll takes.
 
     Args:
         repo: The repository polled, for its rate budget; None for a
@@ -277,6 +294,8 @@ def follow(
         transient: The budget for unreadable polls; a fresh one at
             *interval* when None, shared across calls when given.
         retried: The exception types a poll may raise and be retried.
+        clock: Seconds from a fixed start; `time.monotonic` when None.
+        sleep: What waits between polls; `time.sleep` when None.
 
     Returns:
         What *read* answered.
@@ -285,11 +304,13 @@ def follow(
         FollowTimedOut: The deadline passed with *read* still pending.
         ForgeUnreachable: *read* raised a retried error past the budget.
     """
-    started = time.monotonic()
+    now_of = time.monotonic if clock is None else clock
+    pause = time.sleep if sleep is None else sleep
+    started = now_of()
     deadline = None if timeout is None else started + timeout
     if transient is None:
         transient = Transient(interval=interval)
-    pace = Pace(interval)
+    pace = Pace(interval, sleep=pause)
     last = Pending()
     printed_at: float | None = None
     while True:
@@ -304,12 +325,12 @@ def follow(
             if transient.note(exc):
                 words = subject if isinstance(subject, str) else subject()
                 raise ForgeUnreachable(transient.giving_up(words), exc) from exc
-            time.sleep(interval)
+            pause(interval)
             continue
         transient.reset()
         if not isinstance(answer, Pending):
             return answer
-        now = time.monotonic()
+        now = now_of()
         held = (
             quiet is not None and printed_at is not None and now - printed_at >= quiet
         )
@@ -323,7 +344,7 @@ def follow(
         if repo is not None:
             pace.rest(repo)
         else:
-            time.sleep(interval)
+            pause(interval)
 
 
 #: Green-and-armed polls the watch grants the server to merge before
@@ -715,6 +736,8 @@ def follow_pull_request(
     *,
     interval: float = 15,
     timeout: float = 1800,
+    clock: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
 ) -> Verdict:
     """Watch until a terminal verdict, or raise SystemExit with its code.
 
@@ -726,7 +749,8 @@ def follow_pull_request(
     (10-13, 16, 17) raises SystemExit carrying its code, after printing
     the detail; the deadline raises 14; a forge unreachable past the
     transient budget raises 15, naming the last error and the pull
-    request. The polls, the transient budget and the API budget are
+    request. The polls, the transient budget, the API budget, and the
+    *clock* and *sleep* the deadline and the waits use are
     [livery.workshop._verdict.follow][]'s.
     """
     green_polls = 0
@@ -780,6 +804,8 @@ def follow_pull_request(
             interval=interval,
             timeout=timeout,
             quiet=None,
+            clock=clock,
+            sleep=sleep,
         )
     except ForgeUnreachable as exc:
         print(exc.line)

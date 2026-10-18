@@ -32,7 +32,10 @@ carries it, and a mirror push of ``refs/workshop/*`` cannot carry it
 either; the checkout's worktrees share it, and a fresh clone starts
 empty. Its rows are read and written the same way. Only the transport
 differs: the ref moves by an in-process compare-and-swap on the old
-value, in place of a push with a lease.
+value, in place of a push with a lease. Every worktree writes the same
+refs, so a write that finds a ref's lock file held waits a bounded
+time for it, and a lock that does not clear is the returned reason,
+naming the lock file.
 
 The gate reads the remote namespace without the network. `fetch_store`
 mirrors the row series its caller names, and only them, under

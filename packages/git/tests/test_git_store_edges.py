@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -482,3 +484,101 @@ def test_a_local_series_declared_ci_only_is_refused() -> None:
         git.Series("local-rows", local=True)
     with pytest.raises(ValueError, match="declare one or the other"):
         git.Series("traced", ci_only=False, local=True, namespace=git.TRACE_NAMESPACE)
+
+
+# --- a ref whose lock another process holds -----------------------------------------
+
+LOCAL = git.LOCAL_NAMESPACE + "held"
+
+
+def _hold(work: Path, ref: str) -> Path:
+    """Create the lock file git and dulwich take beside *ref*, as another writer."""
+    lock = work / ".git" / f"{ref}.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_bytes(b"")
+    return lock
+
+
+def _head(work: Path) -> bytes:
+    return run_git(work, "rev-parse", "HEAD").strip().encode()
+
+
+def test_a_ref_write_raises_naming_a_lock_held_past_the_wait(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    monkeypatch.setattr(_objects, "LOCK_WAIT", 0.2)
+    lock = _hold(work, LOCAL)
+    sha = _head(work)
+    writes = {
+        "point": lambda repo: _objects.point(repo, LOCAL.encode(), sha),
+        "set_ref": lambda repo: _objects.set_ref(repo, LOCAL.encode(), sha, None),
+    }
+    for name, write in writes.items():
+        started = time.monotonic()
+        with _objects.opened(work) as repo, pytest.raises(_objects.RefLocked) as held:
+            write(repo)
+        assert time.monotonic() - started >= 0.2, name
+        assert Path(held.value.lock) == lock, name
+        assert held.value.waited >= 0.2, name
+        assert str(held.value).startswith(f"{held.value.lock} stayed locked for ")
+        assert lock.exists(), name
+    with _objects.opened(work) as repo:
+        assert _objects.ref_value(repo, LOCAL.encode()) is None
+
+
+def test_a_store_write_and_delete_refuse_naming_a_lock_held_past_the_wait(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    store = store_of(work)
+    monkeypatch.setattr(_objects, "LOCK_WAIT", 0.1)
+    assert git.put(store, LOCAL, {"a": "{}"}, message="a") == ""
+    lock = _hold(work, LOCAL)
+    why = git.put(store, LOCAL, {"b": "{}"}, message="b")
+    assert why.startswith("update refused: ") and str(lock) in why
+    assert git.drop(store, LOCAL).startswith(f"delete refused: {lock} stayed locked")
+    assert set(git.read(store, LOCAL).files or {}) == {"a"}
+    lock.unlink()
+    # The scratch ref every commit is built on, shared by every series.
+    scratch = _hold(work, store_module.IMPORT_REF)
+    why = git.put(store, LOCAL, {"c": "{}"}, message="c")
+    assert why.startswith(f"the commit could not be written: {scratch} stayed locked")
+
+
+def test_a_ref_write_waits_for_a_lock_released_within_the_wait(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    store = store_of(work)
+    lock = _hold(work, LOCAL)
+    release = threading.Timer(0.3, lock.unlink)
+    started = time.monotonic()
+    release.start()
+    try:
+        assert git.put(store, LOCAL, {"a": "{}"}, message="a") == ""
+    finally:
+        release.join()
+    assert time.monotonic() - started >= 0.3
+    assert set(git.read(store, LOCAL).files or {}) == {"a"}
+    _hold(work, LOCAL)
+    release = threading.Timer(0.3, lock.unlink)
+    release.start()
+    try:
+        assert git.drop(store, LOCAL) == ""
+    finally:
+        release.join()
+    assert git.read(store, LOCAL).sha is None
+
+
+def test_a_ref_created_by_one_writer_is_not_overwritten_by_another(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    sha = _head(work)
+    with _objects.opened(work) as repo:
+        tree = _objects.tree_at(repo, sha).id
+        assert _objects.set_ref(repo, LOCAL.encode(), sha, None)
+        # A second writer that also read the ref as absent loses the swap.
+        assert not _objects.set_ref(repo, LOCAL.encode(), tree, None)
+        assert _objects.ref_value(repo, LOCAL.encode()) == sha

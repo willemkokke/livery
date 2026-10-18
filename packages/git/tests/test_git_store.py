@@ -19,6 +19,7 @@ import pytest
 
 from git_seeds import (
     IDENTITY,
+    read_files,
     repos_fixture,  # noqa: F401
 )
 from git_seeds import (
@@ -79,6 +80,17 @@ def test_read_calls_an_unreachable_remote_a_failure(
     assert found.reason
 
 
+def test_a_read_that_cannot_answer_fails_the_test_with_its_reason(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    # A failed read and an absent ref both carry no files; the helper
+    # the store assertions read through tells them apart.
+    _, work = repos
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(pytest.fail.Exception, match=r"the read of .+ failed: \S"):
+        read_files(_store(work), REF)
+
+
 def test_put_refuses_to_rewrite_from_an_unread_state(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
@@ -90,7 +102,7 @@ def test_put_refuses_to_rewrite_from_an_unread_state(
     why = git.put(_store(work), REF, {"b.json": "2"}, message="second")
     assert "could not be read" in why and "would erase" in why
     survivor = _clone(tmp_path, "survivor", origin)
-    assert git.read(_store(survivor), REF).files == {"a.json": "1"}
+    assert read_files(_store(survivor), REF) == {"a.json": "1"}
 
 
 def test_a_stale_lease_re_reads_merges_and_wins(
@@ -114,7 +126,7 @@ def test_a_stale_lease_re_reads_merges_and_wins(
 
     monkeypatch.setattr(store_module, "read", read_then_race)
     assert git.put(_store(other), REF, {"c.json": "3"}, message="c") == ""
-    assert real_read(_store(work), REF).files == {
+    assert read_files(_store(work), REF) == {
         "a.json": "1",
         "b.json": "2",
         "c.json": "3",
@@ -173,7 +185,7 @@ def test_a_window_keeps_the_newest_names(repos: tuple[Path, Path]) -> None:
     _, work = repos
     rows = {f"run-{n:04d}.json": str(n) for n in range(5)}
     assert git.put(_store(work), REF, rows, message="five", window=3) == ""
-    assert git.read(_store(work), REF).files == {
+    assert read_files(_store(work), REF) == {
         "run-0002.json": "2",
         "run-0003.json": "3",
         "run-0004.json": "4",
@@ -201,7 +213,7 @@ def test_a_read_creates_no_local_ref_and_a_default_fetch_never_sees_the_namespac
 ) -> None:
     origin, work = repos
     assert git.put(_store(work), REF, {"a.json": "1"}, message="one") == ""
-    assert git.read(_store(work), REF).files == {"a.json": "1"}
+    assert read_files(_store(work), REF) == {"a.json": "1"}
     assert _git(work, "for-each-ref", "refs/workshop") == ""
     fresh = _clone(tmp_path, "fresh", origin)
     _git(fresh, "fetch", "-q", "origin")
@@ -979,16 +991,16 @@ def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
         and line.endswith("old, past 6.0h; would drop")
         for line in said
     )
-    assert git.read(_store(work), old.ref).files == {"row.json": half}
+    assert read_files(_store(work), old.ref) == {"row.json": half}
     lines = git.sweep(_store(work), (HALVES,), remote=True)
     assert any(
         line.startswith(f"  {old.ref}: ") and line.endswith("; dropped")
         for line in lines
     )
     assert f"  {young.ref}: 1 row(s), within its bounds" in lines
-    assert git.read(_store(work), old.ref).files is None
-    assert git.read(_store(work), dotted).files is None
-    assert git.read(_store(work), young.ref).files == {"row.json": half}
+    assert read_files(_store(work), old.ref) is None
+    assert read_files(_store(work), dotted) is None
+    assert read_files(_store(work), young.ref) == {"row.json": half}
     # Re-running is the recovery procedure: the second sweep drops nothing.
     again = git.sweep(_store(work), (HALVES,), remote=True)
     assert not any(line.endswith("dropped") for line in again)
