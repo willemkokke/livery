@@ -31,7 +31,7 @@ def offenders(root: Path) -> list[tuple[Path, str]]:
     a group directory carries the group's name too
     (``extensions_widgets_``).
     """
-    from livery.workshop._packages import package_directories
+    from livery.workshop import package_directories
 
     found: list[tuple[Path, str]] = []
     for package in package_directories(root):

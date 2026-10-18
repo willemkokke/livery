@@ -3,11 +3,12 @@
 Registered through livery-workshop's ``pytest11`` entry point, so every
 pytest this venv starts carries it. It acts only when the test runner
 names a file in [livery.workshop.SPEED_FILE_VARIABLE][],
-``WORKSHOP_SPEED_FILE``: every phase of every test adds
-its duration to its package's sum, and the session's end writes the
-sums as JSON to that file, from the controlling process alone under
-xdist. A pytest started without the variable, the nested runs the
-workshop's own tests spawn included, sums nothing and writes nothing.
+``WORKSHOP_SPEED_FILE``: every phase of every test adds its duration
+to the sum of its package, the one [livery.workshop.package_of][]
+names, and the session's end writes the sums as JSON to that file,
+from the controlling process alone under xdist. A pytest started
+without the variable, the nested runs the workshop's own tests spawn
+included, sums nothing and writes nothing.
 """
 
 from __future__ import annotations
@@ -19,35 +20,9 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop._speed import SPEED_FILE_VARIABLE
+from livery.workshop import SPEED_FILE_VARIABLE, package_of
 
 _sums: dict[str, dict[str, float]] = defaultdict(lambda: {"seconds": 0.0, "tests": 0})
-
-
-#: The directories a package's tests live under: the path before the
-#: first of them names the package, one level deeper in a group
-#: directory (``packages/extensions/widgets/tests/...``).
-PACKAGE_TREES = frozenset({"tests", "src", "docs"})
-
-
-def package_of(nodeid: str) -> str:
-    """The workspace package a test node belongs to (``packages/forge``), or ``""``.
-
-    A group's member may carry a tree's name: in
-    ``packages/extensions/docs/tests/...`` the tree directly beneath
-    ``docs`` says ``docs`` is the member, so the package is
-    ``packages/extensions/docs``.
-    """
-    parts = nodeid.split("::", 1)[0].split("/")
-    if len(parts) < 3 or parts[0] != "packages":
-        return ""
-    for index in range(2, len(parts) - 1):
-        if parts[index] not in PACKAGE_TREES:
-            continue
-        if index == 2 and parts[3] in PACKAGE_TREES and len(parts) > 4:
-            continue
-        return "/".join(parts[:index])
-    return "/".join(parts[:2])
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:

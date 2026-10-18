@@ -11,6 +11,8 @@ import pytest
 from livery.workshop import (
     Package,
     discover_packages,
+    package_directories,
+    package_of,
     verify_workspace,
     workspace_suite,
 )
@@ -18,12 +20,10 @@ from livery.workshop._contract import contract_paths
 from livery.workshop._packages import (
     member_depth,
     member_of,
-    package_directories,
     receipt_member,
     release_tag,
 )
 from livery.workshop._pytest_layout import offenders
-from livery.workshop._pytest_speed import package_of
 from livery.workshop._release_driver import uncut_in_set
 from livery.workshop._seeds import derived
 from workshop_installed import skip_unless_installed
@@ -264,6 +264,15 @@ def test_an_uncut_grouped_receipt_belongs_to_its_set(tmp_path: Path) -> None:
     ruff = next(p for p in discover_packages(tmp_path) if p.member != "forge")
     missing = ("packages/extensions/ruff/v0.2.0", "packages/forge/v1.0.0")
     assert uncut_in_set(missing, (ruff,)) == ("packages/extensions/ruff/v0.2.0",)
+
+
+def test_a_test_node_outside_packages_names_no_package() -> None:
+    assert package_of("packages/forge") == ""
+    assert package_of("src/livery/x.py::x") == ""
+
+
+def test_a_test_node_beside_the_trees_names_the_directory_beneath_packages() -> None:
+    assert package_of("packages/forge/test_x.py::test_y") == "packages/forge"
 
 
 def test_a_test_node_names_its_package_at_either_depth() -> None:
