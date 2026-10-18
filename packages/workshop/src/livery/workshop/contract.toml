@@ -1269,6 +1269,17 @@ combine = "livery.workshop._ci_generate:checkout_inputs"
 level = "workspace"
 combine = "livery.workshop._queries:merged"
 
+# What a change reaches beyond its own packages and their dependents:
+# each listed extension answers with functions, each called with the
+# run's livery.workshop.Changes, that map each changed path they widen
+# to why it widens and to the paths of the members it reaches. The
+# affected engine asks them while a changed path lies inside a package,
+# runs every member they name with its dependents, and runs everything
+# when one raises.
+[queries.reaches]
+level = "workspace"
+combine = "union"
+
 # The base's templates, in the grammar an extension declares one in
 # under the same table of its extension.toml; their files live under
 # content/templates/<name>/ beside this file. The extension format is

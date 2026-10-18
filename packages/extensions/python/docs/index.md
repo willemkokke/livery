@@ -146,6 +146,27 @@ release's isolated test installs the wheel with. A manifest with no
 `[project]` table refuses, and so does a test extra in a form the
 edit does not take, naming the line to write by hand.
 
+## What a change to a pytest plugin reaches
+
+pytest loads every module a member's `pyproject.toml` names under the
+`pytest11` entry points into every session it starts. While pytest is
+listed, python answers the base's `reaches` query, so a change to such
+a module runs every member pytest runs over, not only its own package
+and that package's dependents. A changed path widens when:
+
+- it is a module a member names under `pytest11`, or a file under such
+  a package;
+- the change removed it, and the tree the change is measured from
+  named it there;
+- it is a member's `pyproject.toml` whose `pytest11` table differs from
+  that tree's.
+
+The members pytest runs over are those whose set holds an extension
+pytest's test or examples step names, unless the member turned both
+steps off. `fm graph.affected` and the gate print one line for each
+path that widens, with why. A module a plugin imports, and does not
+name, reaches only its own package's dependents.
+
 ## The queries it declares
 
 - `python.test.runner` and `python.examples.runner`: who runs the

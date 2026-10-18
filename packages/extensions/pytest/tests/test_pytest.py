@@ -1322,3 +1322,78 @@ def test_the_top_up_runs_through_the_step_and_is_sliced_by_the_same_partition(
         "packages/one",
         "packages/two",
     ]
+
+
+# --- a change to a module pytest loads as a plugin -------------------------------
+
+
+def _plugin_workspace(root: Path, listed: str) -> None:
+    """Three python members, ``top`` on ``core``, ``host`` naming a pytest plugin.
+
+    *listed* is the root's extensions, a TOML list as written.
+    """
+    _workspace(root, listed)
+    for name, extra in (
+        ("core", ""),
+        ("top", '[[depends]]\npath = "packages/core"\nkind = "build"\n'),
+        ("host", ""),
+    ):
+        directory = root / "packages" / name
+        (directory / "src" / "acme" / name).mkdir(parents=True)
+        (directory / "workshop.toml").write_text(
+            f'extensions = ["python"]\nname = "acme-{name}"\n{extra}'
+        )
+        plugins = (
+            '\n[project.entry-points.pytest11]\nhost = "acme.host._plugin"\n'
+            if name == "host"
+            else ""
+        )
+        (directory / "pyproject.toml").write_text(
+            f'[project]\nname = "acme-{name}"\ndependencies = []\n{plugins}'
+        )
+        (directory / "src" / "acme" / name / "_plugin.py").write_text("x = 1\n")
+
+
+def test_unlisted_a_change_to_a_plugin_module_reaches_its_package_alone(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import discover_packages
+    from livery.workshop._graph import affected_from_paths
+
+    _plugin_workspace(tmp_path, '["python"]')
+    scope = affected_from_paths(
+        tmp_path,
+        discover_packages(tmp_path),
+        ["packages/host/src/acme/host/_plugin.py"],
+    )
+    assert scope is not None
+    assert [package.path for package in scope.packages] == ["packages/host"]
+
+
+def test_listed_a_change_to_a_plugin_module_reaches_every_python_member(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import discover_packages
+    from livery.workshop._graph import affected_from_paths
+
+    _plugin_workspace(tmp_path, '["pytest"]')
+    packages = discover_packages(tmp_path)
+    # A module pytest does not load reaches its package's dependents.
+    scope = affected_from_paths(
+        tmp_path, packages, ["packages/core/src/acme/core/_plugin.py"]
+    )
+    assert scope is not None
+    assert [package.path for package in scope.packages] == [
+        "packages/core",
+        "packages/top",
+    ]
+    scope = affected_from_paths(
+        tmp_path, packages, ["packages/host/src/acme/host/_plugin.py"]
+    )
+    assert scope is not None
+    assert [package.path for package in scope.packages] == [
+        "packages/core",
+        "packages/host",
+        "packages/top",
+    ]
+    assert "packages/host/src/acme/host/_plugin.py: pytest" in capsys.readouterr().out

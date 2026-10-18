@@ -3962,6 +3962,29 @@ neither needs nor rules out).
   package provides `changed`, and answers `version-files` with its
   consumer recipe, so the local act's refusal covers the floors it
   raises there.
+- 2026-10-18, #1736 P1, built: a change to a module a member names
+  under `pytest11` runs every member pytest runs over, at package
+  grain (ruled by Willem 2026-10-18). The base knows no tool: it
+  declares the workspace query `reaches`, a union of functions, each
+  called with the run's `Changes`, that map each changed path they
+  widen to why and to the members it reaches. The affected engine asks
+  them while a changed path lies inside a package, runs every member
+  they name with its dependents, prints one line for each widened
+  path, and runs everything when an answer raises or names a path
+  outside the members. python answers it under `[for.pytest.queries]`,
+  so the answer exists only while pytest is listed: a module a member
+  names under `pytest11` in the working tree, or a file under such a
+  package; a registered module the change removed, by the earlier
+  tree's `pyproject.toml`; and a member's `pyproject.toml` whose
+  `pytest11` table differs from the earlier tree's. The members pytest
+  runs over are those pytest's test or examples step judges and the
+  member keeps on. Decided without Willem, cheap to reverse: an answer
+  maps a path to its reason as well as its members, since only the
+  extension that widens knows why, and the line the engine prints
+  carries it. Not covered: a module a plugin imports reaches only its
+  own package's dependents (phase 5 of
+  `notes/20261012-what-a-change-affects.md`); a removed member that
+  named a plugin reaches what the root files' attribution gives it.
 
 ## Open
 
