@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -1704,9 +1705,20 @@ def test_a_disarmed_verdict_still_raises_for_the_watcher(
     # treats it as its own finish line.
     fake, root = rig
     _submit(fake, root, armed=False, follow_to_verdict=False)
+    clock = _Clock()
     with pytest.raises(SystemExit) as caught:
-        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(
+            _repo(fake),
+            "feat/1-first",
+            root,
+            interval=15,
+            timeout=1800,
+            clock=clock,
+            sleep=clock.sleep,
+        )
     assert caught.value.code == EXIT_DISARMED
+    # The blocker holds for the two polls that confirm it.
+    assert clock.slept == [15.0]
     verdict = classify(_repo(fake), "feat/1-first", root)
     assert "parked unarmed" in verdict.detail
 
@@ -1720,20 +1732,72 @@ def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, Path]) -> None:
     assert verdict.state == "merged" and verdict.pr_number == number
 
 
+class _Clock:
+    """A clock that moves only when the follow waits, by what it waits.
+
+    Each poll then takes the follow's interval and nothing else, so the
+    deadline and the number of polls are the same on a loaded machine
+    as on an idle one.
+
+    Attributes:
+        now: The seconds since the follow started.
+        slept: Every wait, in order: one between each two polls.
+        then: Called after each wait with the number of waits so far,
+            for a test that changes the forge between polls.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+        self.then: Callable[[int], None] = lambda _waits: None
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+        self.then(len(self.slept))
+
+
 def test_the_follow_polls_through_dropped_connections(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A transport error mid-poll is a retry, not a verdict: the watch
     # prints each one once and reads the verdict on the next answer
-    # (an unarmed, green pull request: parked, exit 11).
+    # (an unarmed, green pull request: parked, exit 11, after the two
+    # polls that confirm a blocker). An answered poll ends the run of
+    # failures, so a second run counts from 1 again: four more drops
+    # stay inside the budget of five that the six in a row would spend.
     fake, root = rig
     _submit(fake, root, armed=False, follow_to_verdict=False)
+    clock = _Clock()
+
+    def drop_four_after_the_first_answer(waits: int) -> None:
+        if waits == 3:
+            fake.faults.drop_connections = 4
+
+    clock.then = drop_four_after_the_first_answer
     fake.faults.drop_connections = 2
     with pytest.raises(SystemExit) as caught:
-        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(
+            _repo(fake),
+            "feat/1-first",
+            root,
+            interval=15,
+            timeout=1800,
+            clock=clock,
+            sleep=clock.sleep,
+        )
     assert caught.value.code == EXIT_DISARMED
+    # Two drops, the first answer, four drops, the confirming answer:
+    # eight polls, a wait of the interval between each two.
+    assert clock.slept == [15.0] * 7
     out = capsys.readouterr().out
-    assert "forge unreachable (1/5)" in out and "forge unreachable (2/5)" in out
+    assert out.count("forge unreachable (1/5)") == 2
+    assert out.count("forge unreachable (2/5)") == 2
+    assert out.count("forge unreachable (4/5)") == 1
+    assert "forge unreachable (5/5)" not in out
     assert "giving up" not in out and "parked unarmed" in out
 
 
@@ -1813,13 +1877,28 @@ def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
 
     fake, root = rig
     number = _submit(fake, root, armed=False, follow_to_verdict=False)
+    clock = _Clock()
     fake.faults.drop_connections = 50
     with pytest.raises(SystemExit) as caught:
-        follow_pull_request(_repo(fake), "feat/1-first", root, interval=0, timeout=1)
+        follow_pull_request(
+            _repo(fake),
+            "feat/1-first",
+            root,
+            interval=15,
+            timeout=1800,
+            clock=clock,
+            sleep=clock.sleep,
+        )
     assert caught.value.code == EXIT_UNREACHABLE
+    # Five failed polls and the waits between them; the fifth ends the
+    # watch without a wait after it.
+    assert clock.slept == [15.0] * 4
     out = capsys.readouterr().out
     assert "forge unreachable (5/5)" in out
-    assert "giving up" in out and "5 consecutive" in out
+    assert (
+        "giving up: the forge was unreachable for 5 consecutive polls (75s at 15s)"
+        in out
+    )
     assert "Remote end closed connection" in out
     assert f"fake://{OWNER}/{NAME}/pulls/{number}" in out
 
@@ -1883,18 +1962,27 @@ def test_a_follow_past_its_deadline_names_the_subject_and_the_last_state() -> No
 
 
 def test_a_follow_prints_a_held_state_again_at_its_quiet_cadence(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop._verdict import Pending, follow
 
-    # A fake clock that moves 31 seconds a read: the held line prints
-    # once, then again after the quiet minute, never between.
-    ticks = iter(range(0, 10_000, 31))
-    monkeypatch.setattr("livery.workshop._verdict.time.monotonic", lambda: next(ticks))
+    # A clock that moves 31 seconds a poll: the held line prints once,
+    # then again after the quiet minute, never between.
+    clock = _Clock()
     answers = iter([Pending("  waiting: queued", key="queued")] * 3 + ["done"])
     assert (
-        follow(None, lambda: next(answers), subject="x", interval=0, quiet=60) == "done"
+        follow(
+            None,
+            lambda: next(answers),
+            subject="x",
+            interval=31,
+            quiet=60,
+            clock=clock,
+            sleep=clock.sleep,
+        )
+        == "done"
     )
+    assert clock.slept == [31.0] * 3
     assert capsys.readouterr().out.count("  waiting: queued") == 2
 
 
@@ -1918,9 +2006,19 @@ def test_a_superseded_run_during_a_follow_is_reported_not_failed(
     verdict = classify(repo, "feat/1-first", root)
     assert verdict.state == "disarmed", verdict
     assert verdict.pr_number == number
+    clock = _Clock()
     with pytest.raises(SystemExit) as caught:
-        follow_pull_request(repo, "feat/1-first", root, interval=0, timeout=5)
+        follow_pull_request(
+            repo,
+            "feat/1-first",
+            root,
+            interval=15,
+            timeout=1800,
+            clock=clock,
+            sleep=clock.sleep,
+        )
     assert caught.value.code == EXIT_DISARMED
+    assert clock.slept == [15.0]
 
 
 def test_a_pull_request_the_forge_cannot_merge_ends_the_follow_at_once(
