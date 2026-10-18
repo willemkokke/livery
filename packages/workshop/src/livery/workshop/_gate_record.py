@@ -210,6 +210,12 @@ def remember(
     its delta was taken from; ``None`` records a full gate. A row of
     the same tree, scope, and base replaces its predecessor; the
     window keeps the newest `KEEP` rows.
+
+    Never raises. The record only lets a later gate run less, so a
+    row that is not written costs that gate time and changes no
+    verdict: a write that fails, by its returned reason or by raising,
+    comes back as the line that says so, and the gate that called it
+    stays green.
     """
     scope = FULL if packages is None else STEP
     base = base_tree if packages is not None else ""
@@ -220,13 +226,19 @@ def remember(
         "base_tree": base,
         "root": str(root),
     }
-    why = SERIES.put(
-        state_store(root),
-        {_name(tree, scope, base): row},
-        message=f"gate record: tree {tree[:12]} proved green ({scope})",
-    )
+    try:
+        why = SERIES.put(
+            state_store(root),
+            {_name(tree, scope, base): row},
+            message=f"gate record: tree {tree[:12]} proved green ({scope})",
+        )
+    except Exception as error:
+        why = str(error) or type(error).__name__
     if why:
-        return f"  gate record: {why}; nothing recorded"
+        return (
+            f"  gate record: not recorded ({why}); the next gate measures from"
+            " the last recorded tree"
+        )
     return f"  gate record: tree {tree[:12]} recorded as proved green ({scope})"
 
 
