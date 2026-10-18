@@ -1635,8 +1635,12 @@ absence.
   submits without the close footer, for preparatory work the merge
   must leave open; a pull request already green when `--armed` asks
   is merged directly, since a forge that arms only a blocked pull
-  request refuses. `fm submit.merge` lands a green,
-  deliberately-unarmed PR; `fm abandon [branch]` gives a feature up,
+  request refuses. `fm submit.merge [pr]` lands a green,
+  deliberately-unarmed PR; `fm submit.arm [pr]` arms one the way
+  `--armed` does, and `fm submit.disarm [pr]` takes arming off and
+  leaves the PR open. The three act on this branch's PR, or on the one
+  numbered (`123` or `#123`) from any checkout, and refuse one that
+  has merged or closed. `fm abandon [branch]` gives a feature up,
   this one or a named one, its worktree with it. `fm status` and
   `fm ci.*` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/). `fm doctor`

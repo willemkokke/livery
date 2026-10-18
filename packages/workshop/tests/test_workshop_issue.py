@@ -167,6 +167,9 @@ def test_ref_parsing_and_branch_grammar() -> None:
     assert parse_ref("#123") == (123, "")
     assert parse_ref("123") == (123, "")
     assert parse_ref("fix the flaky watch") == (0, "fix the flaky watch")
+    assert parse_ref("") == (0, "")
+    # A digit that is no decimal digit spells no number: a title, not a crash.
+    assert parse_ref("\u00b2") == (0, "\u00b2")
     long_title = "a " + "very " * 30 + "long name"
     branch = branch_name("feat", 7, long_title)
     assert branch.startswith("feat/7-a-very-")
