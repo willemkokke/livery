@@ -1,0 +1,1 @@
+{"branches":[[31,32,0,"line 31 didn't jump to line 32 because the condition on line 31 was never true"],[31,33,1,"line 31 didn't jump to line 33 because the condition on line 31 was always true"]],"excluded":"13-14","regions":[["function","is_example",17,"18-34"]],"spans":[[1,7],[18,30]],"statements":"9,11,17,31-34"}
