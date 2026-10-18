@@ -796,6 +796,7 @@ def _sharded(
     monkeypatch: pytest.MonkeyPatch,
     *,
     durations: dict[str, float] | None = None,
+    head: float = 0.0,
     rows: tuple[str, ...] = (),
     reason: str = "",
     leg: str = f"{LEG}-1of2",
@@ -803,17 +804,18 @@ def _sharded(
 ) -> list[tuple[str, datetime]]:
     """Stand in for the store and the checkout; each read the step makes of the store.
 
-    The durations series answers *durations* for the rows *rows*, or
-    *reason* when it cannot be read, and the checkout's committer
-    time is `BOUND`. The run is a CI run on *leg*, or none outside CI.
+    The durations series answers *durations* and *head* for the rows
+    *rows*, or *reason* when it cannot be read, and the checkout's
+    committer time is `BOUND`. The run is a CI run on *leg*, or none
+    outside CI.
     """
     asked: list[tuple[str, datetime]] = []
 
     def read_durations(
         root: Path, leg: str, *, before: datetime
-    ) -> tuple[dict[str, float], tuple[str, ...], str]:
+    ) -> tuple[dict[str, float], float, tuple[str, ...], str]:
         asked.append((leg, before))
-        return dict(durations or {}), tuple(rows), reason
+        return dict(durations or {}), head, tuple(rows), reason
 
     monkeypatch.setattr(pytest_slice, "read_durations", read_durations)
     monkeypatch.setattr(pytest_slice, "checkout_time", lambda root: BOUND)
@@ -969,6 +971,39 @@ def test_a_suite_with_no_file_in_the_share_is_left_out_of_the_call(
     assert "  test.pytest: shard 4of4 runs none of 3 test file(s)\n" in (
         capsys.readouterr().out
     )
+
+
+def test_the_first_shard_s_slice_starts_at_the_rows_head(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registered: None,
+) -> None:
+    calls = _watch(monkeypatch)
+    _workspace(tmp_path)
+    one = _member(tmp_path, "one")
+    a, b, c = _tests_of(one, "test_a.py", "test_b.py", "test_c.py")
+    weights = {a: 4.0, b: 3.0, c: 2.0}
+    rows = ("r1.json",)
+    step = registry.step_for("test.pytest")
+    # A head larger than every file together leaves the first shard none.
+    _sharded(monkeypatch, durations=weights, head=50.0, rows=rows, leg=f"{LEG}-1of2")
+    step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(1, 2)))
+    assert calls == []
+    assert "  test.pytest: shard 1of2 runs none of 3 test file(s)\n" in (
+        capsys.readouterr().out
+    )
+    _sharded(monkeypatch, durations=weights, head=50.0, rows=rows, leg=f"{LEG}-2of2")
+    step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(2, 2)))
+    assert [_selection(call) for call in calls] == [{"packages/one": (a, b, c)}]
+    # Without a head the first shard takes the 4 s file. A head of 3 s
+    # sends the 4 s file to the second shard, the 3 s file onto the
+    # first's 3 s, and the 2 s file onto the second's 4 s.
+    for head, mine in ((0.0, (a,)), (3.0, (b,))):
+        calls.clear()
+        _sharded(monkeypatch, durations=weights, head=head, rows=rows)
+        step.run(PhaseContext(root=tmp_path, packages=(one,), shard=Shard(1, 2)))
+        assert [_selection(call) for call in calls] == [{"packages/one": mine}]
 
 
 def test_two_shards_hand_the_runner_complementary_shares_of_every_test_file(

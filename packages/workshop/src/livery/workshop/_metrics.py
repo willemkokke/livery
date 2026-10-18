@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import statistics
 from collections import defaultdict
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -44,7 +46,13 @@ from typing import TYPE_CHECKING, Any
 
 from livery import git
 from livery.workshop._ci_context import RunContext, state_store
-from livery.workshop._shard import DURATIONS, marker_fields, platform_leg, read_shard
+from livery.workshop._shard import (
+    DURATIONS,
+    Shard,
+    marker_fields,
+    platform_leg,
+    read_shard,
+)
 from livery.workshop._speed import forge_shard_row, leg_of, package_of
 
 if TYPE_CHECKING:
@@ -86,6 +94,15 @@ RUN_ROW = ".workshop/run-row"
 
 #: The slowest tests a leg's row names, by their call phase.
 SLOWEST = 20
+
+#: The gate's steps among a row's tasks: the task ``check`` and the
+#: step's title, ``<phase>.<step>``. A task under ``check/`` spelled
+#: otherwise is a step's own command and is not read.
+GATE_STEPS = re.compile(r"^check/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+
+#: The test phase's steps, the ones the shards split, start with this.
+#: Every other gate step is unsplit: it runs whole on the first shard.
+TEST_PHASE = "check/test."
 
 
 def run_ref(run: RunContext, leg: str) -> str:
@@ -753,6 +770,100 @@ def _folded_job(
     )
 
 
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def gate_steps(row: Mapping[str, Any]) -> dict[str, float]:
+    """The gate's steps of a leg's *row* by task key, in milliseconds.
+
+    The row's tasks and the steps its tasks ran (``task_steps``) whose
+    key `GATE_STEPS` matches; a key in both is read from the tasks.
+    """
+    found: dict[str, float] = {}
+    for field in ("tasks", "task_steps"):
+        values = row.get(field)
+        if not isinstance(values, Mapping):
+            continue
+        for key, value in values.items():
+            ms = _number(value)
+            if GATE_STEPS.match(str(key)) and ms is not None:
+                found.setdefault(str(key), ms)
+    return found
+
+
+def tests_ms(packages: Any) -> float:
+    """The test time summed over *packages*, a row's ``packages``, in milliseconds."""
+    if not isinstance(packages, Mapping):
+        return 0.0
+    return sum(
+        _number(package.get("tests_ms")) or 0.0
+        for package in packages.values()
+        if isinstance(package, Mapping)
+    )
+
+
+def first_shard_head(row: Mapping[str, Any]) -> float | None:
+    """The item seconds the first shard's unsplit steps stand for on *row*.
+
+    The unsplit steps are the gate's steps outside the test phase
+    (`TEST_PHASE`); only a platform's first shard runs them, and the
+    folded row of a platform's shards carries the first shard's steps.
+    On the sharded runs the first shard's wall is about the summed wall
+    W of those steps plus its slice's test wall, not the longer of the
+    two: the steps hold the shard's cores while they run, and its tests
+    wait. The partition packs item seconds, and a second of a shard's
+    test wall holds p of them, p being the parallelism its tests reach,
+    so the head is W times p. p is the median, over the shards after
+    the first that the folded row lists under ``shard``, of each one's
+    summed test time over its wall; with no such shard, the row's own
+    summed test time over its test steps' wall. When neither reads, the
+    head is the longest unsplit step's wall, the least the first
+    shard's tests wait.
+
+    Returns:
+        The head, to a tenth of a second; ``None`` when the row names
+        no unsplit step.
+    """
+    steps = gate_steps(row)
+    unsplit = [ms for key, ms in steps.items() if not key.startswith(TEST_PHASE)]
+    if not unsplit:
+        return None
+    speed = _test_speed(row, steps)
+    if speed is None:
+        return round(max(unsplit) / 1000.0, 1)
+    return round(sum(unsplit) / 1000.0 * speed, 1)
+
+
+def _test_speed(row: Mapping[str, Any], steps: Mapping[str, float]) -> float | None:
+    """The parallelism *row*'s tests reached, as `first_shard_head` reads it."""
+    shard = row.get("shard")
+    listed: Any = shard.get("shards") if isinstance(shard, Mapping) else None
+    own: Any = row.get("packages")
+    speeds: list[float] = []
+    for item in listed if isinstance(listed, list) else ():
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            first = Shard.parse(str(item.get("shard", ""))).first
+        except ValueError:
+            continue
+        if first:
+            own = item.get("packages")
+            continue
+        wall = _number(item.get("total_ms")) or 0.0
+        tests = tests_ms(item.get("packages"))
+        if wall > 0 and tests > 0:
+            speeds.append(tests / wall)
+    if speeds:
+        return statistics.median(speeds)
+    wall = sum(ms for key, ms in steps.items() if key.startswith(TEST_PHASE))
+    tests = tests_ms(own)
+    return tests / wall if wall > 0 and tests > 0 else None
+
+
 def _put_durations(
     root: Path, run: RunContext, halves: Mapping[str, Mapping[str, Any]]
 ) -> list[str]:
@@ -761,9 +872,11 @@ def _put_durations(
     One row per leg whose half carries ``items``, named as the run's
     file ([livery.workshop._metrics.run_file][]), on the series of
     [livery.workshop.DURATIONS][] keyed by the platform leg the leg's
-    label names ([livery.workshop.platform_leg][]). A half without
-    ``items`` writes nothing. The row of one shard of several writes
-    nothing either, since the fold's row carries the platform's
+    label names ([livery.workshop.platform_leg][]), with the first
+    shard's head (`first_shard_head`) under ``head`` when the half
+    names an unsplit step. A half without ``items`` writes nothing.
+    The row of one shard of several writes nothing either, since the
+    fold's row carries the platform's
     items; a shard's row reaches the collect only when the fold did
     not run. A refused write is a line, never a red job.
     """
@@ -781,9 +894,13 @@ def _put_durations(
             continue
         leg = platform_leg(leg_of(name, half))
         series = DURATIONS.series(leg)
+        written: dict[str, Any] = {"run": run.run_id, "items": items}
+        head = first_shard_head(half)
+        if head is not None:
+            written["head"] = head
         why = series.put(
             state_store(root),
-            {run_file(run.run_id): {"run": run.run_id, "items": items}},
+            {run_file(run.run_id): written},
             message=f"durations: {leg} from run {run.run_id}",
         )
         if why:
@@ -791,6 +908,7 @@ def _put_durations(
         else:
             lines.append(
                 f"  {series.ref}: {len(items)} item(s) recorded for run {run.run_id}"
+                + (f", a head of {head:.1f} s" if head is not None else "")
             )
     return lines
 

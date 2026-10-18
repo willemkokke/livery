@@ -864,6 +864,98 @@ def test_collect_writes_a_legs_file_seconds_onto_its_platforms_durations(
     assert _shard.DURATIONS.series("gate").rows(state_store(work)).rows == ()
 
 
+def test_a_row_without_an_unsplit_step_has_no_head() -> None:
+    assert _metrics.first_shard_head({}) is None
+    assert (
+        _metrics.first_shard_head(
+            {
+                "tasks": {"check": 9_000.0},
+                "task_steps": {
+                    "check/test.pytest": 5_000.0,
+                    "check/pytest packages/a/tests": 5_000.0,
+                },
+            }
+        )
+        is None
+    )
+
+
+def test_a_row_whose_parallelism_cannot_be_read_takes_its_longest_unsplit_step() -> (
+    None
+):
+    # No test step's wall and no other shard: p is unknown, so the head
+    # is the longest unsplit step, the least the tests wait.
+    row = {
+        "task_steps": {"check/typecheck.mypy": 30_000.0, "check/lint.ruff": 10_000.0},
+        "packages": {"a": {"tests_ms": 9_000.0, "tests": 1}},
+    }
+    assert _metrics.first_shard_head(row) == 30.0
+    # Other shards that ran no test read no parallelism either; the
+    # first shard's own tests stand, not the folded sum of every
+    # shard's.
+    folded = {
+        "task_steps": {
+            "check/test.pytest": 10_000.0,
+            "check/typecheck.mypy": 30_000.0,
+        },
+        "packages": {"a": {"tests_ms": 900_000.0, "tests": 9}},
+        "shard": {
+            "shards": [
+                {
+                    "shard": "1of3",
+                    "total_ms": 40_000.0,
+                    "packages": {"a": {"tests_ms": 20_000.0, "tests": 2}},
+                },
+                {"shard": "2of3", "total_ms": 5_000.0, "packages": {}},
+                {"shard": "junk", "total_ms": 5_000.0, "packages": {}},
+                "junk",
+            ]
+        },
+    }
+    assert _metrics.first_shard_head(folded) == 60.0
+    folded["task_steps"] = {"check/typecheck.mypy": 30_000.0}
+    assert _metrics.first_shard_head(folded) == 30.0
+
+
+def test_the_head_is_the_unsplit_steps_wall_times_the_other_shards_parallelism() -> (
+    None
+):
+    folded = {
+        "tasks": {"check": 500_000.0, "check/typecheck.ty": 4_000.0},
+        "task_steps": {
+            "check/test.pytest": 400_000.0,
+            "check/typecheck.mypy": 50_000.0,
+            "check/typecheck.ty": 9_999.0,
+            "check/lint.docrefs": 16_000.0,
+        },
+        "shard": {
+            "shards": [
+                {
+                    "shard": "1of4",
+                    "total_ms": 433_000.0,
+                    "packages": {"a": {"tests_ms": 335_000.0, "tests": 1}},
+                },
+                *(
+                    {
+                        "shard": f"{index}of4",
+                        "total_ms": wall,
+                        "packages": {"a": {"tests_ms": tests, "tests": 1}},
+                    }
+                    for index, wall, tests in (
+                        (2, 100_000.0, 300_000.0),
+                        (3, 200_000.0, 400_000.0),
+                        (4, 100_000.0, 350_000.0),
+                    )
+                ),
+            ]
+        },
+    }
+    # The unsplit steps: mypy 50 s, ty 4 s (the task's own wall before
+    # its step's), docrefs 16 s, 70 s in all. The other shards reached
+    # 3.0, 2.0 and 3.5: the median is 3.0, so the head is 210 s.
+    assert _metrics.first_shard_head(folded) == 210.0
+
+
 def test_collect_leaves_the_durations_to_the_fold_for_one_shards_row(
     work: Path, tmp_path: Path
 ) -> None:
