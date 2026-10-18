@@ -1,12 +1,12 @@
 """Every pytest under a workshop venv runs with the workshop's own test guards.
 
 footman's pytest plugin points the runner's directories away and guards
-the task registry for every session; this one adds what the workshop
-owns.
+the task registry for every session, and livery-git's gives every
+test's git a config of the session's own; this one adds what the
+workshop owns.
 
-Every test's git reads a global config of the session's own, with one
-identity and none of the desk's settings, and none of the identity
-variables the outer environment carries.
+The check leg's label leaves the session's environment, so a test that
+drives the gate in-process runs as no shard.
 
 What an extension mount writes is put back after every test as well:
 the steps the listed extensions declare, the CI jobs they contribute
@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import shutil
 import sys
 from collections.abc import Iterator
 from typing import Any
@@ -46,59 +45,17 @@ from _pytest.compat import NOTSET
 
 from livery.workshop._ci_context import LEG_VARIABLE
 
-#: The session's scratch directory, which holds its git config.
-_HOME = pytest.StashKey[str]()
-
-#: The global git config every test's git reads in place of the
-#: developer's: one identity, so a repository a test creates commits
-#: without a config of its own, and none of the desk's own settings, a
-#: signer among them. A test that needs a second author, a colleague's
-#: clone, configures that clone, and the clone's own config wins over
-#: this one as it would over a person's.
-GIT_CONFIG = "[user]\n\tname = tester\n\temail = tester@example.invalid\n"
-
-#: The identity variables git reads ahead of every config. The runner's
-#: own git plugin sets them for a verb's task when the machine has no
-#: identity, and the session's children would inherit them, where they
-#: would beat the config a test gives a colleague's clone.
-IDENTITY_VARIABLES = (
-    "GIT_AUTHOR_NAME",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_COMMITTER_EMAIL",
-)
-
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Give every test's git the tester identity, and drop the leg's label.
+    """Drop the check leg's label from the session's environment.
 
-    Every test's git reads `GIT_CONFIG` as its global config, unless
-    the outer environment already points `GIT_CONFIG_GLOBAL` elsewhere,
-    and none of the identity variables the outer environment carries.
-    Nor the check leg's label: the job runner names the leg, its shard
-    included, to every child it spawns, and a test that drives the gate
-    in-process would otherwise run as that shard and leave every step
-    without the flag to the first one. A test that wants a leg sets the
-    variable itself.
+    The job runner names the leg, its shard included, to every child it
+    spawns, and a test that drives the gate in-process would otherwise
+    run as that shard and leave every step without the flag to the first
+    one. A test that wants a leg sets the variable itself.
     """
-    for name in (*IDENTITY_VARIABLES, LEG_VARIABLE):
-        os.environ.pop(name, None)
-    if "GIT_CONFIG_GLOBAL" in os.environ:
-        return
-    from livery.footman import scratch_dir
-
-    home = scratch_dir("workshop-isolation")
-    gitconfig = home / "gitconfig"
-    gitconfig.write_text(GIT_CONFIG, "utf-8")
-    os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
-    config.stash[_HOME] = str(home)
-
-
-def pytest_unconfigure(config: pytest.Config) -> None:
-    """Remove the session's git config."""
-    home = config.stash.get(_HOME, "")
-    if home:
-        shutil.rmtree(home, ignore_errors=True)
+    del config
+    os.environ.pop(LEG_VARIABLE, None)
 
 
 #: The workshop modules that hold what an extension mount writes.

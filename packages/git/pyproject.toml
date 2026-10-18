@@ -49,6 +49,11 @@ test = ["livery-footman>=0.61.0"]
 [project.entry-points."footman.builtin"]
 "livery.git" = "livery.git._plugin"
 
+# Every pytest session with livery-git installed gives its git a
+# global config of the session's own, with the tester identity.
+[project.entry-points.pytest11]
+livery-git-isolation = "livery.git._pytest_isolation"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

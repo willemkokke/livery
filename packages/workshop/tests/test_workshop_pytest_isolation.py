@@ -1,4 +1,4 @@
-"""The workshop's isolation plugin: git's config, the leg's label, the mount, patches.
+"""The workshop's isolation plugin: the leg's label, the mount, and patches.
 
 The plugin rides the ``pytest11`` entry point, so the inner sessions carry it
 without a conftest.
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 from importlib.metadata import entry_points
-from pathlib import Path
 from typing import cast
 
 import pytest
@@ -52,10 +51,7 @@ def test_the_legs_label_is_scrubbed_so_a_test_runs_as_no_shard(
 
     config = cast("pytest.Config", Config())
     _pytest_isolation.pytest_configure(config)
-    try:
-        assert LEG_VARIABLE not in os.environ
-    finally:
-        _pytest_isolation.pytest_unconfigure(config)
+    assert LEG_VARIABLE not in os.environ
 
 
 def test_a_session_that_never_loads_the_mount_takes_nothing_from_it(
@@ -234,110 +230,3 @@ def test_no_fixture_of_the_plugin_asks_for_monkeypatch() -> None:
             unwrap() if unwrap is not None else value
         )
         assert "monkeypatch" not in inspect.signature(wrapped).parameters, name
-
-
-# The pins: one property of the session's guards each, written as an
-# inner session that reads only behaviour, so each moves with the guard
-# it pins and asserts the same after the move.
-
-#: The identity variables git reads ahead of every config.
-IDENTITY_VARIABLES = (
-    "GIT_AUTHOR_NAME",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_COMMITTER_EMAIL",
-)
-
-#: The inner sessions' way to run git and read its answer.
-GIT_HELPER = """
-import subprocess
-
-
-def git(*args, cwd=None):
-    done = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
-    )
-    return done.stdout.strip()
-"""
-
-
-def test_a_child_git_reads_the_tester_identity_from_the_global_config(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # No outer redirect: the session writes a global config of its own,
-    # and a git the test starts reads the tester identity from it.
-    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
-    pytester.makepyfile(
-        GIT_HELPER
-        + """
-
-def test_identity():
-    assert git("config", "--global", "user.name") == "tester"
-    assert git("config", "--global", "user.email") == "tester@example.invalid"
-"""
-    )
-    _run(pytester).assert_outcomes(passed=1)
-
-
-def test_an_outer_global_git_config_is_kept(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    outer = tmp_path / "outer.gitconfig"
-    outer.write_text(
-        "[user]\n\tname = outer\n\temail = outer@example.invalid\n", "utf-8"
-    )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(outer))
-    pytester.makepyfile(
-        GIT_HELPER
-        + f"""
-import os
-
-
-def test_kept():
-    assert os.environ["GIT_CONFIG_GLOBAL"] == {str(outer)!r}
-    assert git("config", "--global", "user.email") == "outer@example.invalid"
-"""
-    )
-    _run(pytester).assert_outcomes(passed=1)
-
-
-def test_the_identity_variables_are_gone_in_the_session(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    for name in IDENTITY_VARIABLES:
-        monkeypatch.setenv(name, "runner")
-    pytester.makepyfile(
-        f"""
-        import os
-
-        def test_gone():
-            assert [n for n in {IDENTITY_VARIABLES!r} if n in os.environ] == []
-        """
-    )
-    _run(pytester).assert_outcomes(passed=1)
-
-
-def test_a_clone_s_own_config_beats_the_tester_identity(
-    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # A test that needs a second author, a colleague's clone, configures
-    # that clone, and its config wins over the session's global one, as
-    # it would over a person's. An identity variable the outer
-    # environment carries would beat both, so the session drops them.
-    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
-    for name in IDENTITY_VARIABLES:
-        monkeypatch.setenv(name, "runner")
-    pytester.makepyfile(
-        GIT_HELPER
-        + """
-
-def test_colleague(tmp_path):
-    git("init", "-q", cwd=tmp_path)
-    git("config", "user.name", "colleague", cwd=tmp_path)
-    git("config", "user.email", "colleague@example.invalid", cwd=tmp_path)
-    git("commit", "-q", "--allow-empty", "-m", "first", cwd=tmp_path)
-    who = git("log", "-1", "--format=%an <%ae>|%cn <%ce>", cwd=tmp_path)
-    assert who.split("|") == ["colleague <colleague@example.invalid>"] * 2
-"""
-    )
-    _run(pytester).assert_outcomes(passed=1)
