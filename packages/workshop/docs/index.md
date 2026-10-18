@@ -1639,8 +1639,10 @@ absence.
   deliberately-unarmed PR; `fm submit.arm [pr]` arms one the way
   `--armed` does, and `fm submit.disarm [pr]` takes arming off and
   leaves the PR open. The three act on this branch's PR, or on the one
-  numbered (`123` or `#123`) from any checkout, and refuse one that
-  has merged or closed. `fm abandon [branch]` gives a feature up,
+  numbered (`123` or `#123`) from any checkout. A merged PR is done
+  for `submit.arm` and `submit.merge`, which say so and succeed, and
+  too late for `submit.disarm`, which refuses; a PR closed without
+  merging refuses in all three. `fm abandon [branch]` gives a feature up,
   this one or a named one, its worktree with it. `fm status` and
   `fm ci.*` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/). `fm doctor`

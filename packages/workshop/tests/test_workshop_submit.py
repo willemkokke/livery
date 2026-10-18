@@ -502,29 +502,62 @@ def test_the_pull_request_verbs_refuse_a_branch_without_one_naming_submit(
         submit_arm()
 
 
-def test_the_pull_request_verbs_refuse_a_merged_or_closed_pull_request(
+def test_the_pull_request_verbs_refuse_a_pull_request_closed_unmerged(
     verbs: tuple[FakeForge, Path],
 ) -> None:
     fake, root = verbs
-    merged = _submit(fake, root, armed=True)
-    assert _pr(fake, merged).merged
-    for verb in _PR_VERBS:
-        with pytest.raises(_FAILURES, match=f"PR #{merged} has already merged"):
-            verb(str(merged))
-    _git(root, "checkout", "-b", "feat/2-second", "origin/main")
-    (root / "second.txt").write_text("second\n")
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", "feat: the second change")
     closed = _submit(fake, root, armed=False, follow_to_verdict=False)
     _repo(fake).pr.close(closed)
     for verb in _PR_VERBS:
         with pytest.raises(_FAILURES) as caught:
             verb(str(closed))
-        assert f"PR #{closed} is closed: `fm submit` on feat/2-second" in str(
+        assert f"PR #{closed} is closed: `fm submit` on feat/1-first" in str(
             caught.value
+        )
+        # On the branch, the head commit finds the closed one, which is
+        # no merge: the branch has no pull request until a submit.
+        with pytest.raises(_FAILURES) as caught:
+            verb()
+        assert "no open pull request for feat/1-first: `fm submit` opens one" in (
+            str(caught.value)
         )
     pr = _pr(fake, closed)
     assert pr.state == "closed" and not pr.merged
+
+
+def test_disarm_refuses_a_merged_pull_request_by_number_and_on_its_branch(
+    verbs: tuple[FakeForge, Path],
+) -> None:
+    # The merge the disarm was to prevent has happened: too late.
+    fake, root = verbs
+    merged = _submit(fake, root, armed=True)
+    assert _pr(fake, merged).merged
+    assert _repo(fake).pr.find_by_head("feat/1-first") is None
+    with pytest.raises(_FAILURES, match=f"PR #{merged} has already merged: too late"):
+        submit_disarm(str(merged))
+    with pytest.raises(_FAILURES, match=f"PR #{merged} has already merged: too late"):
+        submit_disarm()
+
+
+def test_arm_and_merge_on_a_merged_pull_request_say_so_and_succeed(
+    verbs: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A merged pull request is the end both aim at, so a re-run is the
+    # recovery: by number, and on its own branch once the branch has no
+    # open pull request, found by the branch's head commit.
+    fake, root = verbs
+    merged = _submit(fake, root, armed=True)
+    repo = _repo(fake)
+    assert _pr(fake, merged).merged
+    assert repo.pr.find_by_head("feat/1-first") is None
+    done = f"  PR #{merged} has already merged; nothing to do\n"
+    for ref in (str(merged), f"#{merged}", ""):
+        capsys.readouterr()
+        submit_arm(ref)
+        assert capsys.readouterr().out == done
+        submit_merge(ref)
+        assert capsys.readouterr().out == done
+    assert repo.pr.get(merged + 1) is None  # nothing opened, nothing merged twice
 
 
 def test_arming_an_armed_and_disarming_an_unarmed_pull_request_change_nothing(
