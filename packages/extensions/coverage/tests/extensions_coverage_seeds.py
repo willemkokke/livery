@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+from livery import git
+
 #: A seed builder: makes the repositories under the directory it is given;
 #: whatever it returns is ignored, so a helper that returns a path serves.
 Build = Callable[[Path], object]
@@ -200,3 +202,17 @@ _IDENTITY = ()
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+
+
+def read_files(store: git.StateStore, ref: str) -> dict[str, str] | None:
+    """Read *ref*'s files; a read that cannot answer fails the test with its reason.
+
+    [livery.git.read][] returns no files both for an absent ref and for
+    a read the transport could not answer, so a test that compares the
+    files alone takes a failed fetch for a dropped ref. Here ``None``
+    means the ref is absent.
+    """
+    found = git.read(store, ref)
+    if found.failed:
+        pytest.fail(f"the read of {ref} failed: {found.reason}")
+    return found.files

@@ -23,7 +23,13 @@ from livery.forge import Step
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_context, _metrics
 from livery.workshop._ci_context import state_store
-from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_seeds import (  # noqa: F401
+    Seeds,
+    _seed_home,
+    pushed,
+    read_files,
+    seed_copier,
+)
 
 RUN = _ci_context.RunContext("gitea", "1013", "push", "refs/heads/main")
 JOB = "check (ubuntu-latest, 3.14)"
@@ -252,6 +258,16 @@ def test_the_leg_row_sums_every_phase_per_test_file(tmp_path: Path) -> None:
 # --- the collect: refusals first ----------------------------------------------
 
 
+def test_a_read_that_cannot_answer_fails_the_test_with_its_reason(
+    work: Path, tmp_path: Path
+) -> None:
+    # A failed read and an absent ref both carry no files; the helper
+    # the store assertions read through tells them apart.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(pytest.fail.Exception, match=r"the read of .+ failed: \S"):
+        read_files(state_store(work), _metrics.SERIES.ref)
+
+
 def test_a_step_belongs_to_the_innermost_task_holding_it_on_its_own_track(
     tmp_path: Path,
 ) -> None:
@@ -472,7 +488,7 @@ def test_collect_says_so_when_no_leg_left_a_row(work: Path) -> None:
     repo = fake.repository("owner", "repo")
     lines = _metrics.collect(work, repo, RUN, sha="a" * 40)
     assert lines == [f"  run {RUN.run_id}: no leg left a row; nothing collected"]
-    assert git.read(state_store(work), _metrics.SERIES.ref).files is None
+    assert read_files(state_store(work), _metrics.SERIES.ref) is None
 
 
 def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
@@ -496,7 +512,7 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
     ) in lines
     assert lines[-1] == f"  run {RUN.run_id}: no leg left a row; nothing collected"
     # The skipped half is kept: nothing landed, so nothing is dropped.
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
 
 
 def test_collect_names_a_job_the_forge_does_not_know(
@@ -586,12 +602,12 @@ def test_the_drop_keeps_the_halves_while_a_completed_job_is_red(
     repo = cast(Repository, cast(Any, _Repo()))
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run 78 recorded, 5 job(s)" in lines
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
     lines = _metrics.drop_halves(
         work, repo, run, sha=sha, job="gate", writers=("check",)
     )
     assert lines == ["  the per-run refs stay: docs: failure"]
-    assert git.read(state_store(work), ref).files is not None
+    assert read_files(state_store(work), ref) is not None
 
 
 def test_the_drop_waits_for_a_sibling_writer_and_takes_the_halves_when_last(
@@ -673,11 +689,11 @@ def test_a_gate_re_run_after_a_red_first_attempt_still_finds_the_legs_parts(
     ref = _metrics.run_ref(RUN, "check-a")
     first = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in first
-    kept = git.read(state_store(work), ref).files
+    kept = read_files(state_store(work), ref)
     assert kept is not None and set(kept) == {_metrics.ROW_FILE, "coverage.json"}
     second = _metrics.collect(work, repo, RUN, sha="b" * 40)
     assert f"  {_metrics.SERIES.ref}: run {RUN.run_id} recorded, 1 job(s)" in second
-    assert git.read(state_store(work), ref).files == kept
+    assert read_files(state_store(work), ref) == kept
 
 
 def test_collect_joins_the_forge_times_and_keeps_the_halves_for_the_drop(
