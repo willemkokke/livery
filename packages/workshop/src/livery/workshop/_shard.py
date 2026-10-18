@@ -11,9 +11,10 @@ spells one, [livery.workshop.platform_leg][] and
 
 The share is a function of its inputs: [livery.workshop.partition][]
 packs the items longest first into the shard with the least summed
-seconds, so every shard of a run computes the same partition from the
-same set and the same durations, and every item lands in exactly one
-shard. The durations are the medians
+seconds, the first shard's sum starting at the head, so every shard of
+a run computes the same partition from the same set, the same
+durations and the same head, and every item lands in exactly one
+shard. The durations and the head are the medians
 [livery.workshop.read_durations][] takes over the newest rows of the
 platform leg's series in the [livery.workshop.DURATIONS][] family,
 bounded by the checkout's committer time
@@ -146,27 +147,37 @@ def shard_of(label: str) -> Shard:
 
 
 def partition(
-    items: Iterable[str], durations: Mapping[str, float], count: int
+    items: Iterable[str],
+    durations: Mapping[str, float],
+    count: int,
+    *,
+    head: float = 0.0,
 ) -> tuple[tuple[str, ...], ...]:
     """Pack *items* into *count* shards by their *durations*, every item in exactly one.
 
     The items go longest first, ties by name, each into the shard with
-    the least summed seconds so far, ties to the lowest shard. An item
+    the least summed seconds so far, ties to the lowest shard. The
+    first shard's sum starts at *head* seconds, the time of the steps
+    it runs that the other shards leave to it, so its share of the
+    items is lighter by about that much; a head above every other
+    shard's final sum leaves the first shard no item. An item
     *durations* does not name weighs the median of the named
     durations, or one second when none are named. The result is a
-    function of the set and the durations alone: the same whatever
-    order *items* comes in, and an item given twice is one item. With
-    more shards than items the surplus shards are empty.
+    function of the set, the durations and the head alone: the same
+    whatever order *items* comes in, and an item given twice is one
+    item. With more shards than items the surplus shards are empty.
 
     Returns:
         One tuple of items per shard, in the order the items were
         packed.
 
     Raises:
-        ValueError: When *count* is below 1.
+        ValueError: When *count* is below 1, or *head* is below 0.
     """
     if count < 1:
         raise ValueError(f"count is {count}; a partition has at least one shard")
+    if head < 0:
+        raise ValueError(f"head is {head}; a head is at least 0 seconds")
     named = [float(seconds) for seconds in durations.values()]
     fill = statistics.median(named) if named else 1.0
 
@@ -177,6 +188,7 @@ def partition(
     ordered = sorted(set(items), key=lambda name: (-weight(name), name))
     shards: list[list[str]] = [[] for _ in range(count)]
     sums = [0.0] * count
+    sums[0] = float(head)
     for name in ordered:
         at = min(range(count), key=lambda index: (sums[index], index))
         shards[at].append(name)
@@ -210,9 +222,12 @@ def _current_legs(root: Path) -> set[tuple[str, ...]] | None:
 
 
 #: The family: one series per platform leg, ``durations/<leg>``, one row
-#: per run, ``{"run": "<id>", "items": {"<item>": <seconds>}}``, written
-#: by the run's gate job from its shards' rows. A series of a leg the
-#: matrix no longer produces is the janitor's to drop.
+#: per run, ``{"run": "<id>", "items": {"<item>": <seconds>}, "head":
+#: <seconds>}``, written by the run's gate job from its shards' rows.
+#: ``head`` is the item seconds the first shard's unsplit steps stand
+#: for on the run ([livery.workshop._metrics.first_shard_head][]); a row
+#: without it reads as 0. A series of a leg the matrix no longer
+#: produces is the janitor's to drop.
 DURATIONS: git.Keyed = git.Keyed(
     "durations", ("leg",), window=WINDOW, schema=SCHEMA, current=_current_legs
 )
@@ -231,28 +246,31 @@ def _moment(stamp: str) -> datetime | None:
 
 def read_durations(
     root: Path, leg: str, *, before: datetime
-) -> tuple[dict[str, float], tuple[str, ...], str]:
-    """The median seconds per item on *leg*'s platform, from rows before *before*.
+) -> tuple[dict[str, float], float, tuple[str, ...], str]:
+    """The median seconds per item, and the head, of *leg*'s rows before *before*.
 
     The rows are the newest `NEWEST` of the series ``durations/<platform
     leg>`` whose store stamp is before *before*; a row stamped at or
     after it, or not stamped, is not read, so every shard of a run
     reads the same rows whatever lands while the run is in flight. The
     median of an item is over the rows that name it with a number
-    under ``items``. A naive *before* is read as UTC.
+    under ``items``. The head is the median of every row read's
+    ``head``, a row without a number there counting as 0, and is what
+    [livery.workshop.partition][] starts the first shard's sum at. A
+    naive *before* is read as UTC.
 
     Returns:
-        The seconds per item, the names of the rows read, newest first,
-        and why the series could not be read. A series that cannot be
-        read is ``({}, (), reason)``, never a raise: the caller runs as
-        one shard of one and says so. An absent series is ``({}, (),
-        "")``.
+        The seconds per item, the head in seconds, the names of the
+        rows read, newest first, and why the series could not be read.
+        A series that cannot be read is ``({}, 0.0, (), reason)``,
+        never a raise: the caller runs as one shard of one and says
+        so. An absent series is ``({}, 0.0, (), "")``.
     """
     bound = before if before.tzinfo is not None else before.replace(tzinfo=UTC)
     series = DURATIONS.series(platform_leg(leg))
     found = series.rows(state_store(root))
     if found.failed:
-        return {}, (), found.reason
+        return {}, 0.0, (), found.reason
     chosen: list[git.Row] = []
     for row in found.rows:
         when = _moment(row.when)
@@ -273,7 +291,16 @@ def read_durations(
         name: round(statistics.median(values), 1)
         for name, values in sorted(seen.items())
     }
-    return medians, tuple(row.name for row in chosen), ""
+    heads = [_seconds(row.data.get("head")) for row in chosen]
+    head = round(statistics.median(heads), 1) if heads else 0.0
+    return medians, head, tuple(row.name for row in chosen), ""
+
+
+def _seconds(value: Any) -> float:
+    """*value* as seconds when it is a number of at least 0; else 0."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return 0.0
+    return max(0.0, float(value))
 
 
 def checkout_time(root: Path) -> datetime:

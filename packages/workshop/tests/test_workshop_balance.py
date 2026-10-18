@@ -246,12 +246,14 @@ def test_shards_of_one_platform_fold_into_one_reading() -> None:
 
 def test_a_steps_own_command_is_not_a_gate_step_and_the_test_phase_sums() -> None:
     # A step's own command rides under check/ too, spelled as the
-    # command; it is not the gate's step and never O. Two steps of the
-    # test phase make one test wall.
+    # command; it is not the gate's step and never in O. The unsplit
+    # steps sum into O, and two steps of the test phase make one test
+    # wall.
     rows = _ubuntu_rows(
         3,
         other={
-            "check/typecheck.mypy": 84_000.0,
+            "check/typecheck.mypy": 70_000.0,
+            "check/lint.ruff": 14_000.0,
             "check/mypy --platform=linux": 80_000.0,
             "check/pytest packages/workshop/tests": 900_000.0,
             "check/test.ctest": 100_000.0,
@@ -285,11 +287,14 @@ def test_a_platform_whose_shard_is_red_or_narrowed_is_not_read_for_that_row() ->
 # --- the prediction -----------------------------------------------------------
 
 
-def test_the_wall_floors_at_the_setup_and_the_longest_other_step() -> None:
-    assert _balance.wall(WINDOWS, 1) == pytest.approx(935.9, abs=0.1)
-    assert _balance.wall(WINDOWS, 4) == pytest.approx(285.7, abs=0.1)
-    # Past the point where the tests fit under O, more shards save nothing.
-    assert _balance.wall(UBUNTU, 3) == _balance.wall(UBUNTU, 4) == 115.0
+def test_the_wall_floors_at_the_setup_and_the_unsplit_steps() -> None:
+    # The first shard's slice is lighter by the tests O holds back, so
+    # the shards split S / p + O: at one shard, 69 + 866.9 + 84 s.
+    assert _balance.wall(WINDOWS, 1) == pytest.approx(1019.9, abs=0.1)
+    assert _balance.wall(WINDOWS, 4) == pytest.approx(306.7, abs=0.1)
+    # Past the count where the first shard keeps no test, more shards
+    # save nothing: its wall is F + O.
+    assert _balance.wall(UBUNTU, 4) == _balance.wall(UBUNTU, 5) == 115.0
     assert _balance.runner_seconds(WINDOWS, 4) == pytest.approx(1226.9, abs=0.1)
 
 
@@ -299,7 +304,7 @@ def test_the_wall_floors_at_the_setup_and_the_longest_other_step() -> None:
 def test_the_slowest_platforms_count_stops_at_the_first_step_saving_less_than_f() -> (
     None
 ):
-    # Windows: 936, 502, 358, 286, 242 s; the fifth shard saves 43 s
+    # Windows: 1020, 544, 386, 307, 259 s; the fifth shard saves 47 s
     # against a setup of 69 s, so the count stops at 4 whatever the cap.
     assert _balance.propose([WINDOWS], cap=5).counts == {"windows-latest": 4}
     assert _balance.propose([WINDOWS], cap=3).counts == {"windows-latest": 3}
@@ -316,14 +321,14 @@ def test_every_other_platform_takes_the_smallest_count_within_the_tolerance() ->
         "windows-latest": 4,
     }
     assert proposal.slowest == "windows-latest, 3.14"
-    assert proposal.wall == pytest.approx(285.7, abs=0.1)
-    assert proposal.unsharded == pytest.approx(935.9, abs=0.1)
+    assert proposal.wall == pytest.approx(306.7, abs=0.1)
+    assert proposal.unsharded == pytest.approx(1019.9, abs=0.1)
     assert proposal.capped == ()
 
 
 def test_a_platform_that_cannot_reach_the_tolerance_at_the_cap_is_named() -> None:
-    # Its longest other step holds its wall at 400 s at every count,
-    # over 15% above the slowest platform's 286 s.
+    # Its unsplit steps hold its wall at 400 s from two shards on, over
+    # 15% above the slowest platform's 307 s.
     flat = _balance.Reading(
         "flat", "3.14", 3, 3, fixed=100, other=300, tests=100, speed=1
     )
@@ -331,7 +336,7 @@ def test_a_platform_that_cannot_reach_the_tolerance_at_the_cap_is_named() -> Non
     assert proposal.counts == {"windows-latest": 4, "flat": 4}
     assert proposal.capped == ("flat, 3.14",)
     lines = _balance.report([WINDOWS, flat], cap=4, runners=["windows-latest", "flat"])
-    assert "  flat, 3.14 takes the cap, 4: 400 s is not within 15% of 286 s" in lines
+    assert "  flat, 3.14 takes the cap, 4: 400 s is not within 15% of 307 s" in lines
 
 
 def test_a_platform_without_enough_rows_takes_no_part() -> None:
@@ -351,11 +356,11 @@ def test_the_pull_request_counts_apply_over_the_narrower_runner_list() -> None:
         pull_request_runners=["ubuntu-latest", "macos-latest"],
     )
     assert '  [ci] shards = { "macos-latest" = 3, "windows-latest" = 4 }' in lines
-    assert "  predicted run wall: 286 s for the slowest leg, from 936 s" in lines
-    # macos is the slowest of the two: 634, 354, 261, 214 s; the fourth
-    # shard saves 47 s against a setup of 74 s.
+    assert "  predicted run wall: 307 s for the slowest leg, from 1020 s" in lines
+    # macos is the slowest of the two: 712, 393, 287, 233 s; the fourth
+    # shard saves 53 s against a setup of 74 s.
     assert '  [ci] pull-request-shards = { "macos-latest" = 3 }' in lines
-    assert "  predicted pull request wall: 261 s for the slowest leg, from 634 s" in (
+    assert "  predicted pull request wall: 287 s for the slowest leg, from 712 s" in (
         lines
     )
 
@@ -369,12 +374,12 @@ def test_the_pull_request_counts_are_the_counts_over_the_same_runners() -> None:
 
 
 def test_a_proposal_of_ones_says_so() -> None:
-    # Alone, a platform is the slowest: 250 s, then 175 s at two
-    # shards, a saving of 75 s against a setup of 100 s.
+    # Alone, a platform is the slowest: 260 s, then 180 s at two
+    # shards, a saving of 80 s against a setup of 100 s.
     light = _balance.Reading("a", "3.14", 3, 3, fixed=100, other=10, tests=150, speed=1)
     lines = _balance.report([light], cap=4, runners=["a"])
     assert "  [ci] shards: none, every platform runs as one shard" in lines
-    assert "  predicted run wall: 250 s for the slowest leg, from 250 s" in lines
+    assert "  predicted run wall: 260 s for the slowest leg, from 260 s" in lines
 
 
 # --- the store ---------------------------------------------------------------
@@ -464,11 +469,11 @@ def test_the_measures_rows_propose_one_three_and_four_through_the_store(
         + 1 :
     ][:5]
     assert table[0].split() == ["shards", "wall", "runner", "s"]
-    assert table[1].split() == ["1", "936", "s", "1020", "s"]
-    assert table[4].split() == ["4", "286", "s", "1227", "s"]
+    assert table[1].split() == ["1", "1020", "s", "1020", "s"]
+    assert table[4].split() == ["4", "307", "s", "1227", "s"]
     assert '  [ci] shards = { "macos-latest" = 3, "windows-latest" = 4 }' in lines
     assert '  [ci] pull-request-shards = { "macos-latest" = 3 }' in lines
-    assert "  predicted run wall: 286 s for the slowest leg, from 936 s" in lines
+    assert "  predicted run wall: 307 s for the slowest leg, from 1020 s" in lines
 
 
 # --- the write: refusals first ----------------------------------------------
@@ -550,7 +555,7 @@ def test_a_write_with_too_few_rows_writes_nothing_and_says_why(
 def test_a_changed_count_whose_wall_moves_within_ten_percent_writes_nothing(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # F 10 s, O 40 s, S 100 s, p 1: the walls are 110, 60, 50 and 50 s,
+    # F 10 s, O 60 s, S 100 s, p 1: the walls are 170, 90, 70 and 70 s,
     # so the proposal is 3; the contract holds 4, and the wall does not
     # move between them. Writing 3 would only start the flapping the
     # hysteresis is there to stop.
@@ -562,7 +567,7 @@ def test_a_changed_count_whose_wall_moves_within_ten_percent_writes_nothing(
     rows = _ubuntu_rows(
         3,
         fixed=10_000.0,
-        other={"check/typecheck.mypy": 40_000.0},
+        other={"check/typecheck.mypy": 60_000.0},
         test_ms=100_000.0,
         packages={"workshop": 100_000.0},
     )
@@ -579,7 +584,7 @@ def test_a_changed_count_whose_wall_moves_within_ten_percent_writes_nothing(
     )
     assert _balance.write(work, balance) is None
     assert capsys.readouterr().out == (
-        "  nothing written: the predicted run wall moves from 50 s to 50 s,"
+        "  nothing written: the predicted run wall moves from 70 s to 70 s,"
         " within 10%\n"
     )
     assert _lines(work) == before
@@ -630,7 +635,7 @@ def test_a_changed_count_over_the_threshold_rewrites_the_two_keys_and_keeps_the_
     assert out == [
         '  [ci] shards: none becomes { "macos-latest" = 3, "windows-latest" = 4 }',
         '  [ci] pull-request-shards: none becomes { "macos-latest" = 3 }',
-        "  the predicted run wall moves from 936 s to 286 s",
+        "  the predicted run wall moves from 1020 s to 320 s",
     ]
     # The contract reads back as the legs the matrix fans out to.
     assert check_shards(work) == [
@@ -654,7 +659,7 @@ def test_a_changed_count_over_the_threshold_rewrites_the_two_keys_and_keeps_the_
 def test_a_count_of_one_removes_the_key_with_its_comment(
     work: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # F 100 s, O 10 s, S 150 s, p 1: a second shard saves 75 s against
+    # F 100 s, O 10 s, S 150 s, p 1: a second shard saves 80 s against
     # a setup of 100 s, so the proposal is one; the contract holds 2.
     _contract_text(
         work,
@@ -679,7 +684,7 @@ def test_a_count_of_one_removes_the_key_with_its_comment(
     assert _lines(work) == [*before[:at], *before[at + 2 :]]
     assert capsys.readouterr().out.splitlines() == [
         '  [ci] shards: { "ubuntu-latest" = 2 } becomes none',
-        "  the predicted run wall moves from 175 s to 250 s",
+        "  the predicted run wall moves from 180 s to 260 s",
     ]
     assert check_shards(work) == ["check-ubuntu-latest-3.14"]
 
@@ -963,7 +968,7 @@ def test_a_due_change_is_committed_on_the_days_branch_and_submitted_unarmed(
     assert _git(work, "rev-parse", f"{BRANCH}~1").strip() == main
     assert _git(work, "log", "-1", "--format=%s", BRANCH).strip() == title
     assert _git(work, "log", "-1", "--format=%b", BRANCH).strip() == (
-        "the predicted run wall moves from 936 s to 286 s"
+        "the predicted run wall moves from 1020 s to 320 s"
     )
     changed = _git(work, "show", "--name-only", "--format=", BRANCH).split()
     assert sorted(changed) == ["rendered.txt", "workshop.toml"]

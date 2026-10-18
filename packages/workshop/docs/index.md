@@ -1486,9 +1486,10 @@ absence.
   Each shard partitions the run's items, the test files of its test
   step, by the platform leg's `durations` rows: longest first, each
   item into the shard with the least summed seconds, ties by name, an
-  item no row names at the row's median, so every shard of a run
-  computes the same partition and every item lands in exactly one
-  shard. The rendered check job
+  item no row names at the row's median, the first shard's sum
+  starting at the rows' head, the time of the steps only it runs, so
+  every shard of a run computes the same partition and every item
+  lands in exactly one shard. The rendered check job
   carries the shards as literals. On GitHub and Gitea, while every
   count is one, its matrix is the `os` and `python` lists; when any
   count is above one it is `include` entries, one per runner, Python
@@ -1795,12 +1796,16 @@ platform's check leg ends at about the same time. Per platform, a
 runner and a Python, it takes the newest ten rows whose check jobs
 ran the full gate and succeeded, folds the shards of one platform
 into one reading, and takes the medians of four measures: the fixed
-setup F, every step the forge timed except the call; the longest gate
-step that is not the test step, O; the summed test time S over every
-package; and the parallelism p the test step reached, S over its
-wall. It predicts the leg's wall at n shards as F + max(O, S / (p n)),
-since the first shard runs the unsplit steps beside its slice, and
-the runner seconds as about n F + S / p + O, and prints both for every
+setup F, every step the forge timed except the call; the summed wall
+O of the gate steps that are not test steps, which the first shard
+alone runs; the summed test time S over every package; and the
+parallelism p the test step reached, S over its wall. The first
+shard's tests wait about O while those steps run, so its slice is
+lighter by the O p seconds of tests they hold back, and the shards
+split S + O p evenly. It predicts the leg's wall at n shards as
+F + max(O, (S / p + O) / n), the first shard with no tests left at
+the floor, and the runner seconds as about n F + S / p + O, and prints
+both for every
 count up to the cap, `[ci] shards-max` (4 when absent) or a `--max`
 under it. The slowest platform takes the
 largest count whose every added shard saved at least its own setup;
@@ -1951,12 +1956,17 @@ present, and the refs dropped by the last job to finish.
 
 The `durations` family is one series per platform leg,
 `check-<os>-<python>`, one row per run, `{"run": "<id>", "items":
-{"<item>": <seconds>}}`, the newest thirty kept, written by the gate
-job's collect from each check leg's folded row once the run's `metrics`
-file has landed; a series of a leg the matrix no longer produces is the
-janitor's to drop. A shard of that
+{"<item>": <seconds>}, "head": <seconds>}`, the newest thirty kept,
+written by the gate job's collect from each check leg's folded row
+once the run's `metrics` file has landed; a series of a leg the matrix
+no longer produces is the janitor's to drop. The `head` is the test
+seconds the first shard's unsplit steps hold back: the summed wall of
+the gate steps outside the test phase, times the parallelism the
+other shards' tests reached (the leg's own test step's, unsharded),
+or the longest such step when no parallelism reads. A shard of that
 leg reads the newest five rows stamped before the committer time of
-the commit it checked out and takes the median per item; a row the
+the commit it checked out and takes the median per item, and the
+median head, a row without one counting as 0; a row the
 store stamped at or after that time reaches no shard, so every shard
 of a run reads the same rows whatever lands while the run is in
 flight. A series that cannot be read is printed as the reason and the

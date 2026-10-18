@@ -1435,12 +1435,14 @@ def ci_balance(
     writer, a local run reads. Per platform, a runner and a Python,
     the newest ten rows whose check jobs ran the full gate and
     succeeded give the medians of four measures: F, the setup and
-    teardown the forge timed around the call; O, the longest gate
-    step that is not the test step; S, the summed test time over
-    every package; and p, the parallelism the test step reached, S
-    over its wall. The shards of a platform fold into one reading.
-    The wall at n shards is predicted as F + max(O, S / (p n)) and
-    the runner seconds as about n F + S / p + O; the table prints
+    teardown the forge timed around the call; O, the summed wall of
+    the gate steps that are not test steps, which the first shard
+    alone runs; S, the summed test time over every package; and p,
+    the parallelism the test step reached, S over its wall. The
+    shards of a platform fold into one reading. The first shard's
+    slice is lighter by the tests O holds back, so the wall at n
+    shards is predicted as F + max(O, (S / p + O) / n) and the runner
+    seconds as about n F + S / p + O; the table prints
     both for every count up to the cap, ``[ci] shards-max`` or
     ``--max`` under it.
 

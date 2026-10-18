@@ -11,22 +11,26 @@ one platform into one, and takes the medians of four measures:
 
 - F, the fixed setup: every step the forge timed except the ``Check``
   call, from the first shard, in seconds.
-- O, the longest step of the gate that is not a test step, from the
-  first shard. The gate's steps are the job's ``check/<phase>.<step>``
-  tasks, and the test steps are the test phase's,
-  [livery.workshop._balance.TEST_PHASE][].
+- O, the summed wall of the gate's steps that are not test steps,
+  from the first shard. The gate's steps are the job's
+  ``check/<phase>.<step>`` tasks, and the test steps are the test
+  phase's, [livery.workshop._metrics.TEST_PHASE][].
 - S, the summed test time over every package and every shard.
 - p, the measured parallelism: a shard's S over its test steps' wall,
   the median over shards.
 
-The wall at n shards is predicted as F + max(O, S / (p n)): the first
-shard runs the unsplit steps beside its slice, so no count brings a
-platform under F + O. The runner seconds at n are about n F + S / p +
-O. The slowest platform, the one with the largest wall at one shard,
-takes the largest count within the cap whose every added shard saved
-at least F, so a shard that costs more setup than it saves is not
-proposed. Every other platform takes the smallest count whose wall is
-within [livery.workshop._balance.TOLERANCE][] of the slowest
+The wall at n shards is predicted as F + max(O, (S / p + O) / n). The
+first shard runs the unsplit steps, and its tests wait about their
+summed wall, so the partition starts the first shard's slice O p item
+seconds in ([livery.workshop._metrics.first_shard_head][]): the S + O p
+item seconds split evenly over the n shards, and no count brings a
+platform under F + O, the first shard with no tests left. The runner
+seconds at n are about n F + S / p + O. The slowest platform, the one
+with the largest wall at one shard, takes the largest count within
+the cap whose every added shard saved at least F, so a shard that
+costs more setup than it saves is not proposed. Every other platform
+takes the smallest count whose wall is within
+[livery.workshop._balance.TOLERANCE][] of the slowest
 platform's at its count; one that cannot get there at the cap takes
 the cap and is named. The pull request counts apply the same rule
 over a pull request's runners when they are fewer than ``[ci]
@@ -73,21 +77,12 @@ from livery import git
 from livery.footman import fail
 from livery.workshop._ci_context import state_store
 from livery.workshop._contract import load_contract
-from livery.workshop._metrics import SERIES
+from livery.workshop._metrics import SERIES, TEST_PHASE, gate_steps, tests_ms
 from livery.workshop._points import pull_request_runners, shard_counts, shards_max
 
 #: The step the forge times for the gate's own call. Every other step
 #: the forge times is the job's setup and teardown, F.
 CALL_STEP = "Check"
-
-#: The gate's steps among a job's tasks: the task ``check`` and the
-#: step's title, ``<phase>.<step>``. A task under ``check/`` spelled
-#: otherwise is a step's own command and is not read.
-GATE_STEPS = re.compile(r"^check/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
-
-#: The test phase's steps, the ones the shards split, start with this.
-#: Every other gate step runs whole on the first shard.
-TEST_PHASE = "check/test."
 
 #: The newest full green rows read per platform.
 ROWS_READ = 10
@@ -140,8 +135,8 @@ class Reading:
             every shard; the medians are over these.
         fixed: F, the setup and teardown the forge timed around the
             call, in seconds.
-        other: O, the longest gate step that is not a test step, in
-            seconds; zero when the rows name none.
+        other: O, the summed wall of the gate steps that are not test
+            steps, in seconds; zero when the rows name none.
         tests: S, the summed test time over every package and shard,
             in seconds.
         speed: p, the measured parallelism: a shard's S over its test
@@ -192,8 +187,9 @@ class Proposal:
 
 
 def wall(reading: Reading, shards: int) -> float:
-    """The predicted wall of the leg at *shards*, in seconds: F + max(O, S / (p n))."""
-    return reading.fixed + max(reading.other, reading.tests / (reading.speed * shards))
+    """The leg's predicted wall at *shards*, in seconds: F + max(O, (S / p + O) / n)."""
+    spread = (reading.tests / reading.speed + reading.other) / shards
+    return reading.fixed + max(reading.other, spread)
 
 
 def runner_seconds(reading: Reading, shards: int) -> float:
@@ -274,20 +270,6 @@ def _full_green(job: Mapping[str, Any]) -> bool:
     )
 
 
-def _gate_steps(job: Mapping[str, Any]) -> dict[str, float]:
-    """The gate's steps of *job* by task key: its tasks and the steps its tasks ran."""
-    found: dict[str, float] = {}
-    for field in ("tasks", "task_steps"):
-        values = job.get(field)
-        if not isinstance(values, Mapping):
-            continue
-        for key, value in values.items():
-            ms = _number(value)
-            if GATE_STEPS.match(str(key)) and ms is not None:
-                found.setdefault(str(key), ms)
-    return found
-
-
 def _fixed_ms(job: Mapping[str, Any]) -> float:
     """The forge's steps of *job* except the call, summed; an untimed step is 0."""
     total = 0.0
@@ -295,17 +277,6 @@ def _fixed_ms(job: Mapping[str, Any]) -> float:
         if isinstance(step, Mapping) and step.get("name") != CALL_STEP:
             total += _number(step.get("ms")) or 0.0
     return total
-
-
-def _tests_ms(job: Mapping[str, Any]) -> float:
-    packages = job.get("packages")
-    if not isinstance(packages, Mapping):
-        return 0.0
-    return sum(
-        _number(package.get("tests_ms")) or 0.0
-        for package in packages.values()
-        if isinstance(package, Mapping)
-    )
 
 
 @dataclass(frozen=True)
@@ -326,18 +297,15 @@ def _measure(shards: Sequence[Mapping[str, Any]]) -> _Measures | None:
     speeds: list[float] = []
     total = 0.0
     for job in shards:
-        steps = _gate_steps(job)
+        steps = gate_steps(job)
         test_ms = sum(ms for key, ms in steps.items() if key.startswith(TEST_PHASE))
-        tests = _tests_ms(job)
+        tests = tests_ms(job.get("packages"))
         if test_ms <= 0 or tests <= 0:
             return None
         speeds.append(tests / test_ms)
         total += tests
-    steps = _gate_steps(shards[0])
-    other = max(
-        (ms for key, ms in steps.items() if not key.startswith(TEST_PHASE)),
-        default=0.0,
-    )
+    steps = gate_steps(shards[0])
+    other = sum(ms for key, ms in steps.items() if not key.startswith(TEST_PHASE))
     return _Measures(
         _fixed_ms(shards[0]) / 1000.0,
         other / 1000.0,
