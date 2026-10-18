@@ -72,8 +72,11 @@ them. A `GIT_CONFIG_GLOBAL` the environment already set is kept. The
 identity variables git reads ahead of every config, `GIT_AUTHOR_NAME`,
 `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL`,
 leave the session's environment, so a clone a test configures with an
-identity of its own commits as that identity. The session's end removes
-the directory; a killed session leaves it in the temporary folder.
+identity of its own commits as that identity. Every repository a test
+creates or clones starts from an empty template directory beside that
+config, so its `.git` holds none of git's sample hooks, `description`
+or `info/exclude`. The session's end removes the directory; a killed
+session leaves it in the temporary folder.
 `-p no:livery-git-isolation` turns the plugin off for one session.
 
 ## The state store

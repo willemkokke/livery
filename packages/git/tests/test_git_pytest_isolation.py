@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from importlib.metadata import entry_points
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import cast
 
 import pytest
@@ -70,7 +70,10 @@ def test_the_session_s_config_lives_in_the_temporary_folder_and_goes_at_its_end(
     home = gitconfig.parent
     assert home.parent == Path(tempfile.gettempdir())
     assert home.name.startswith("livery-git-isolation-")
-    assert gitconfig.read_text("utf-8") == _pytest_isolation.GIT_CONFIG
+    templates = home / _pytest_isolation.TEMPLATES
+    assert gitconfig.read_text("utf-8") == _pytest_isolation.session_config(templates)
+    assert templates.is_dir()
+    assert list(templates.iterdir()) == []
     _pytest_isolation.pytest_unconfigure(config)
     assert not home.exists()
     assert "GIT_CONFIG_GLOBAL" not in os.environ
@@ -175,6 +178,46 @@ def test_colleague(tmp_path):
     git("commit", "-q", "--allow-empty", "-m", "first", cwd=tmp_path)
     who = git("log", "-1", "--format=%an <%ae>|%cn <%ce>", cwd=tmp_path)
     assert who.split("|") == ["colleague <colleague@example.invalid>"] * 2
+"""
+    )
+    _run(pytester).assert_outcomes(passed=1)
+
+
+def test_a_windows_template_path_is_written_with_forward_slashes() -> None:
+    # git reads a backslash in a config value as an escape, so a Windows
+    # path written as it is would be a bad config line.
+    written = _pytest_isolation.session_config(
+        PureWindowsPath(r"C:\Users\runner\AppData\Local\Temp\x\templates")
+    )
+    assert "\\" not in written
+    assert 'templateDir = "C:/Users/runner/AppData/Local/Temp/x/templates"' in written
+
+
+def test_a_repository_a_test_creates_or_clones_holds_no_template_files(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No outer redirect: the session's config names its empty template
+    # directory, so neither a new repository nor a clone of it gets the
+    # sample hooks, the description or info/exclude, and both still
+    # commit as the tester.
+    monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+    pytester.makepyfile(
+        GIT_HELPER
+        + """
+
+TEMPLATE_FILES = ("hooks", "info", "description")
+
+
+def test_bare_of_templates(tmp_path):
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    git("init", "-q", cwd=origin)
+    assert [n for n in TEMPLATE_FILES if (origin / ".git" / n).exists()] == []
+    git("commit", "-q", "--allow-empty", "-m", "first", cwd=origin)
+    git("clone", "-q", str(origin), str(tmp_path / "clone"))
+    clone = tmp_path / "clone" / ".git"
+    assert [n for n in TEMPLATE_FILES if (clone / n).exists()] == []
+    assert git("log", "-1", "--format=%an", cwd=tmp_path / "clone") == "tester"
 """
     )
     _run(pytester).assert_outcomes(passed=1)
