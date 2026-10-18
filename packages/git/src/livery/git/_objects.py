@@ -7,29 +7,89 @@ its own, a reflog spelling or a date, is handed to git by the caller;
 what this module resolves is the common grammar: a sha, ``HEAD``, a
 branch, a tag, ``origin/<branch>``, a full ref, ``<rev>~<n>``,
 ``<rev>^{commit}``, ``<rev>^{tree}`` and ``<rev>:<path>``.
+
+A ref write takes git's lock file beside the ref, as git does. Every
+worktree of a checkout shares one git directory, so two processes
+writing the same ref is ordinary, and a write that finds the lock held
+waits `LOCK_WAIT` seconds for it before raising `RefLocked`.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import stat
+import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import ParamSpec, TypeVar
 
 from dulwich import graph
 from dulwich.diff_tree import tree_changes
 from dulwich.errors import NotGitRepository
+from dulwich.file import FileLocked
 from dulwich.objects import Blob, Commit, ObjectID, Tag, Tree
 from dulwich.refs import Ref
 from dulwich.repo import Repo
 
 _SHA = re.compile(r"^[0-9a-f]{4,40}$")
 
+#: How long, in seconds, a ref write waits for a lock file another
+#: process holds before it raises `RefLocked`. A ref write holds its
+#: lock for milliseconds, so a lock held this long belongs to a process
+#: that is stuck or died without removing it.
+LOCK_WAIT = 5.0
+
+#: How long, in seconds, a waiting ref write sleeps between tries.
+LOCK_PAUSE = 0.05
+
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
+
 
 class Unresolved(LookupError):
     """A revision the in-process resolver cannot name; git may still."""
+
+
+class RefLocked(OSError):
+    """A ref's lock file stayed held for the whole wait.
+
+    An `OSError`, so a caller that turns a failed write into its reason
+    reads this one the same way.
+
+    Attributes:
+        lock: The lock file's path.
+        waited: How long the write waited, in seconds.
+    """
+
+    def __init__(self, lock: str, waited: float) -> None:
+        """Name the lock file and how long the write waited for it."""
+        self.lock = lock
+        self.waited = waited
+        super().__init__(
+            f"{lock} stayed locked for {waited:.1f}s: another process is"
+            " writing the ref, or one that died left the lock file behind"
+        )
+
+
+def _waiting(write: Callable[_P, _T], *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    """Call *write*, trying again while another process holds its lock.
+
+    Raises:
+        RefLocked: When the lock is still held after `LOCK_WAIT` seconds.
+    """
+    start = time.monotonic()
+    while True:
+        try:
+            return write(*args, **kwargs)
+        except FileLocked as held:
+            waited = time.monotonic() - start
+            if waited >= LOCK_WAIT:
+                lock = os.path.normpath(os.fsdecode(held.lockfilename))
+                raise RefLocked(lock, waited) from held
+            time.sleep(LOCK_PAUSE)
 
 
 @contextmanager
@@ -65,8 +125,13 @@ def head_target(repo: Repo) -> bytes:
 
 
 def point(repo: Repo, ref: bytes, sha: bytes) -> None:
-    """Point *ref* at *sha*, whatever it held before."""
-    repo.refs[Ref(ref)] = ObjectID(sha)
+    """Point *ref* at *sha*, whatever it held before.
+
+    Raises:
+        RefLocked: When another process holds the ref's lock for the
+            whole wait.
+    """
+    _waiting(repo.refs.__setitem__, Ref(ref), ObjectID(sha))
 
 
 def commit_of(repo: Repo, sha: bytes) -> Commit:
@@ -385,21 +450,40 @@ def root_commit(
 
 
 def set_ref(repo: Repo, ref: bytes, new: bytes, old: bytes | None) -> bool:
-    """Point *ref* at *new* when it is at *old* (``None``: absent); whether it moved."""
-    return repo.refs.set_if_equals(
-        Ref(ref), None if old is None else ObjectID(old), ObjectID(new)
-    )
+    """Point *ref* at *new* when it is at *old* (``None``: absent); whether it moved.
+
+    The comparison is made under the ref's lock, so of two writers that
+    read the same *old*, one moves the ref and the other gets ``False``.
+
+    Raises:
+        RefLocked: When another process holds the ref's lock for the
+            whole wait.
+    """
+    if old is None:
+        # dulwich's set_if_equals reads an old value of None as "set
+        # whatever the ref holds", which would let a second writer
+        # overwrite a ref the first one created; add_if_new compares.
+        return _waiting(repo.refs.add_if_new, Ref(ref), ObjectID(new))
+    return _waiting(repo.refs.set_if_equals, Ref(ref), ObjectID(old), ObjectID(new))
 
 
 def drop_ref(repo: Repo, ref: bytes) -> bool:
-    """Delete *ref*; whether it was there."""
+    """Delete *ref*; whether it was there.
+
+    Raises:
+        RefLocked: When another process holds the ref's lock, or the
+            packed refs' lock, for the whole wait.
+    """
     if ref_value(repo, ref) is None:
         return False
-    return repo.refs.remove_if_equals(Ref(ref), None)
+    return _waiting(repo.refs.remove_if_equals, Ref(ref), None)
 
 
 __all__ = [
+    "LOCK_PAUSE",
+    "LOCK_WAIT",
     "NotGitRepository",
+    "RefLocked",
     "Unresolved",
     "blob_text",
     "changed_paths_between",
