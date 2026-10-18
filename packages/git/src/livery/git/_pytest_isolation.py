@@ -9,9 +9,12 @@ config of its own, and none of the desk's settings, a signer among
 them. A `GIT_CONFIG_GLOBAL` the outer environment already set is kept,
 since an outer redirect is a redirect. The identity variables git reads
 ahead of every config leave the session's environment, so a
-colleague's clone a test configures commits as the colleague. The
-session's end removes the directory and the variable it set; a session
-that is killed leaves the directory in the temporary folder.
+colleague's clone a test configures commits as the colleague. Every
+repository a test creates or clones starts from an empty template
+directory beside that config, so its `.git` holds none of git's sample
+hooks. The session's end removes the directory and the variable it
+set; a session that is killed leaves the directory in the temporary
+folder.
 
 `-p no:livery-git-isolation` turns the plugin off for one session.
 """
@@ -21,7 +24,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -42,21 +45,49 @@ IDENTITY_VARIABLES = (
     "GIT_COMMITTER_EMAIL",
 )
 
+#: The directory beside the session's config that git copies into
+#: every repository a test creates or clones, in place of git's own
+#: templates. It is empty, so a new `.git` gets none of the sample
+#: hooks, `description` or `info/exclude`: sixteen of the eighteen
+#: files a fresh `git init` writes, which no test reads and deleting
+#: the test's directory would cost.
+TEMPLATES = "templates"
+
+
+def session_config(templates: PurePath) -> str:
+    """Return the text of the session's global git config.
+
+    The config is `GIT_CONFIG`, and *templates* as git's template
+    directory. The path is written with forward slashes, which git
+    reads on every platform, since a backslash in a config value is
+    an escape.
+
+    Args:
+        templates: The empty directory new repositories start from.
+
+    Returns:
+        The config's text.
+    """
+    return f'{GIT_CONFIG}[init]\n\ttemplateDir = "{templates.as_posix()}"\n'
+
+
 #: The session's directory, for the session's end.
 _HOME = pytest.StashKey[str]()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Drop the identity variables, and point git at the session's config."""
+    """Drop the identity variables, and point git at the session's own config."""
     for name in IDENTITY_VARIABLES:
         os.environ.pop(name, None)
     if "GIT_CONFIG_GLOBAL" in os.environ:
         return
-    home = tempfile.mkdtemp(prefix="livery-git-isolation-")
-    gitconfig = Path(home) / "gitconfig"
-    gitconfig.write_text(GIT_CONFIG, "utf-8")
+    home = Path(tempfile.mkdtemp(prefix="livery-git-isolation-"))
+    templates = home / TEMPLATES
+    templates.mkdir()
+    gitconfig = home / "gitconfig"
+    gitconfig.write_text(session_config(templates), "utf-8")
     os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
-    config.stash[_HOME] = home
+    config.stash[_HOME] = str(home)
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
