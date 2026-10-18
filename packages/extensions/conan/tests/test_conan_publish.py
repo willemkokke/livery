@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -68,6 +70,82 @@ def test_conan_publish_refuses_without_conan(
     package = _package(tmp_path / "packages" / "lib", "acme-lib", "cmake", "conan")
     with pytest.raises(_FAILURES, match="conan is not on"):
         _conan.publish(package, str(tmp_path / "share"), version="0.1.0", local=True)
+
+
+# Each conan call runs in a temp directory of its own: conan writes
+# some temp files at a fixed name, so two calls sharing one race.
+
+
+class _TempSeen:
+    """A fake conan handle: each call's temp directory, and whether it existed."""
+
+    def __init__(self, code: int = 0, error: OSError | None = None) -> None:
+        self.code = code
+        self.error = error
+        self.envs: list[dict[str, str]] = []
+        self.existed: list[bool] = []
+
+    def opts(self, **kwargs: object) -> Callable[..., object]:
+        env = cast("dict[str, str]", kwargs["env"])
+
+        def _run(*args: str) -> object:
+            del args
+            self.envs.append(env)
+            self.existed.append(Path(env["TMPDIR"]).is_dir())
+            if self.error is not None:
+                raise self.error
+            return SimpleNamespace(code=self.code, stdout="", stderr="")
+
+        return _run
+
+    def temps(self) -> list[Path]:
+        return [Path(env["TMPDIR"]) for env in self.envs]
+
+
+def _seen_by_conan(monkeypatch: pytest.MonkeyPatch, handle: _TempSeen) -> _TempSeen:
+    import livery.toolroom.tools as tools
+
+    monkeypatch.setattr(tools, "conan", handle)
+    return handle
+
+
+def test_a_conan_call_that_cannot_start_leaves_no_temp_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _seen_by_conan(monkeypatch, _TempSeen(error=FileNotFoundError("conan")))
+    with pytest.raises(_FAILURES, match="conan is not on"):
+        _conan._conan(tmp_path, "cache", "save", "acme-lib/0.1.0")
+    assert seen.existed == [True]
+    assert not seen.temps()[0].exists()
+
+
+def test_a_conan_call_that_fails_leaves_no_temp_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = _seen_by_conan(monkeypatch, _TempSeen(code=7))
+    assert _conan._conan(tmp_path, "cache", "save", "acme-lib/0.1.0").code == 7
+    assert seen.existed == [True]
+    assert not seen.temps()[0].exists()
+
+
+def test_two_conan_calls_each_run_in_a_temp_directory_of_their_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shared = str(tmp_path / "shared")
+    for name in _conan.TEMP_VARIABLES:
+        monkeypatch.setenv(name, shared)
+    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "home"))
+    seen = _seen_by_conan(monkeypatch, _TempSeen())
+    _conan._conan(tmp_path, "cache", "save", "acme-lib/0.1.0", env={"TMPDIR": shared})
+    _conan._conan(tmp_path, "cache", "restore", "acme-lib.tgz")
+    first, second = seen.temps()
+    assert first != second
+    assert seen.existed == [True, True]
+    for env, temp in zip(seen.envs, (first, second), strict=True):
+        assert {env[name] for name in _conan.TEMP_VARIABLES} == {str(temp)}
+        assert env["CONAN_HOME"] == str(tmp_path / "home")
+    assert not first.exists()
+    assert not second.exists()
 
 
 _REMOTE = "https://forge.example/api/packages/acme/conan"
