@@ -418,6 +418,55 @@ def _pr_open_find_get(driver: ForgeDriver) -> None:
         raise AssertionError("a second open PR for one head must be refused")
 
 
+def _pr_list(driver: ForgeDriver) -> None:
+    """List filters by state, newest first, and each row is what get answers.
+
+    ``closed`` holds a merged pull request and one closed without
+    merging alike, and an open pull request names no merge commit even
+    after the forge has computed its mergeability.
+    """
+    repo = driver.fresh_repo()
+    base = _default_branch(driver, repo)
+    driver.push(repo.owner, repo.name, "merged")
+    merged = repo.pr.open("merged", base, "feat: merged", "the merged one")
+    driver.await_mergeable(repo.owner, repo.name, merged.number)
+    repo.pr.merge_now(merged.number, title="feat: merged")
+    driver.await_merged(repo.owner, repo.name, merged.number)
+    driver.push(repo.owner, repo.name, "closed")
+    closed = repo.pr.open("closed", base, "feat: closed", "the closed one")
+    repo.pr.close(closed.number)
+    driver.push(repo.owner, repo.name, "open")
+    opened = repo.pr.open("open", base, "feat: open", "the open one")
+    # GitHub names a test merge commit once mergeability is computed;
+    # the rows must still name no merge for a pull request with none.
+    driver.await_mergeable(repo.owner, repo.name, opened.number)
+    everything = repo.pr.list(state="all")
+    assert [row.number for row in everything] == [
+        opened.number,
+        closed.number,
+        merged.number,
+    ]
+    assert [row.number for row in repo.pr.list()] == [opened.number]
+    assert [row.number for row in repo.pr.list(state="open")] == [opened.number]
+    assert [row.number for row in repo.pr.list(state="closed")] == [
+        closed.number,
+        merged.number,
+    ]
+    for row in everything:
+        assert row == repo.pr.get(row.number)
+    rows = {row.number: row for row in everything}
+    listed_open, listed_closed = rows[opened.number], rows[closed.number]
+    listed_merged = rows[merged.number]
+    assert (listed_open.state, listed_open.merged) == ("open", False)
+    assert (listed_open.head_branch, listed_open.title) == ("open", "feat: open")
+    assert listed_open.merged_sha == ""
+    assert (listed_closed.state, listed_closed.merged) == ("closed", False)
+    assert listed_closed.merged_sha == ""
+    assert (listed_merged.state, listed_merged.merged) == ("closed", True)
+    assert listed_merged.head_branch == "merged"
+    assert len(listed_merged.merged_sha) == 40
+
+
 def _pr_title_close_reopen(driver: ForgeDriver) -> None:
     """update_title sticks; close and reopen reuse the pull request."""
     repo = driver.fresh_repo()
@@ -1072,6 +1121,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         forbids=("ci_secrets",),
     ),
     Scenario("pr-open-find-get", _pr_open_find_get),
+    Scenario("pr-list", _pr_list),
     Scenario("pr-title-close-reopen", _pr_title_close_reopen),
     Scenario("pr-merge-now", _pr_merge_now),
     Scenario("pr-comment", _pr_comment),

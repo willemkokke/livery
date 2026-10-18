@@ -103,6 +103,17 @@ class PullRequests(Protocol):
         """The pull request *number*, or None when it does not exist."""
         ...
 
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The repository's pull requests in *state*, newest first.
+
+        ``closed`` holds the merged pull requests and the ones closed
+        without merging, as [livery.forge.PullRequests.find_by_head][]
+        reads the filter; ``merged`` tells the two apart. Each row
+        carries the fields [livery.forge.PullRequests.get][] answers
+        for its number. Complete or raising, like every listing.
+        """
+        ...
+
     def update_title(self, number: int, title: str) -> None:
         """Retitle pull request *number*.
 

@@ -884,6 +884,13 @@ class _FakePullRequests:
         pr = self._state().prs.get(number)
         return None if pr is None else self._as_pull_request(pr)
 
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The pull requests in *state*, newest first; ``closed`` holds the merged."""
+        prs = sorted(self._state().prs.values(), key=lambda pr: pr.number, reverse=True)
+        return tuple(
+            self._as_pull_request(pr) for pr in prs if _matches(pr.state, state)
+        )
+
     def update_title(self, number: int, title: str) -> None:
         """Retitle pull request *number*."""
         self._fake._require_pr(self._state(), number).title = title

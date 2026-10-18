@@ -102,6 +102,7 @@ reached on (see `quirks.md`).
 | `find_by_head(branch, *, state)` | reliable for open pull requests |
 | `find_by_head_sha(sha)` | finds a merged pull request after its branch is gone; asked of the commit where the forge can |
 | `get(number)` | the pull request or None |
+| `list(*, state)` | every pull request in the state, newest first; `closed` holds the merged ones too, and each row is what `get` answers |
 | `update_title(number, title)` | the review-facing name and the future squash subject |
 | `update_body(number, body)` | the description, and the future squash message |
 | `close(number)` / `reopen(number)` | reopen reuses the pull request; a merged one refuses |

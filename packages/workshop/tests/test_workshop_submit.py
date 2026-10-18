@@ -466,6 +466,65 @@ def verbs(
 _PR_VERBS = (submit_arm, submit_disarm, submit_merge)
 
 
+def test_the_pull_request_completion_costs_the_suggestions_never_the_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Outside a workspace, without a token, and against a forge whose
+    # listing raises: each answers no numbers, and none raises.
+    from livery.workshop._submit import _open_pull_numbers
+
+    monkeypatch.setattr(
+        "livery.workshop._submit.workspace_root", lambda start=None: None
+    )
+    assert _open_pull_numbers() == []
+    monkeypatch.setattr(
+        "livery.workshop._submit.workspace_root", lambda start=None: tmp_path
+    )
+
+    def _token_less(_root: Path) -> Repository:
+        raise ForgeError("no token for github.com: set GITHUB_TOKEN or `gh auth login`")
+
+    monkeypatch.setattr("livery.workshop._forge_lane.this_repository", _token_less)
+    assert _open_pull_numbers() == []
+    # The fake holds no such repository, so the listing itself raises.
+    unreachable = FakeForge().repository(OWNER, NAME)
+    with pytest.raises(ForgeError):
+        unreachable.pr.list()
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: unreachable
+    )
+    assert _open_pull_numbers() == []
+
+
+def test_the_pull_request_verbs_complete_the_open_numbers_newest_first(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import inspect
+
+    from livery.footman import suggest
+    from livery.workshop._submit import _open_pull_numbers
+
+    fake = FakeForge()
+    repo = fake.create_repo(OWNER, NAME, private=True, description="test")
+    numbers: list[int] = []
+    for branch in ("feat/2-merged", "feat/3-closed", "feat/4-open", "feat/5-open"):
+        fake.push(OWNER, NAME, branch)
+        numbers.append(repo.pr.open(branch, "main", f"feat: {branch}", "").number)
+    merged, closed, older, newer = numbers
+    repo.pr.merge_now(merged, title="feat: merged")
+    repo.pr.close(closed)
+    monkeypatch.setattr(
+        "livery.workshop._submit.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_repository", lambda _r: repo)
+    assert _open_pull_numbers() == [str(newer), str(older)]
+    # The three verbs offer them on their pull request argument.
+    for verb in _PR_VERBS:
+        hint = inspect.signature(verb, eval_str=True).parameters["pr"].annotation
+        completers = [m for m in hint.__metadata__ if isinstance(m, suggest)]
+        assert [(c.fn, c.strict) for c in completers] == [(_open_pull_numbers, False)]
+
+
 def test_the_pull_request_verbs_refuse_a_token_that_is_no_number(
     verbs: tuple[FakeForge, Path],
 ) -> None:

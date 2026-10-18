@@ -892,11 +892,16 @@ class _GitlabPullRequests:
         )
         return _as_pull_request(data)
 
-    def _scan(self, query: str) -> list[dict[str, Any]]:
+    def _scan(self, query: str, *, state: str = "all") -> _Rows:
+        """The merge requests in GitLab's own *state*, narrowed by *query*.
+
+        Typed as ``_Rows`` because the class's own ``list`` method
+        shadows the builtin in its annotations.
+        """
         return self._client.paginate(
             lambda page: (
                 self._client.request(
-                    f"{self._base}/merge_requests?state=all"
+                    f"{self._base}/merge_requests?state={state}"
                     f"{query}&page={page}&per_page=50"
                 )
                 or []
@@ -948,6 +953,24 @@ class _GitlabPullRequests:
             f"{self._base}/merge_requests/{number}", none_on=(404,)
         )
         return None if data is None else _as_pull_request(data)
+
+    def list(self, *, state: StateFilter = "open") -> tuple[PullRequest, ...]:
+        """The merge requests in *state*, newest first.
+
+        GitLab keeps four states where the protocol keeps two:
+        ``opened`` and ``locked`` (a merge running) read as open,
+        ``closed`` and ``merged`` as closed. Each is asked of the
+        server by name, so listing the open ones never reads the
+        merged history.
+        """
+        asked = _SERVER_STATES[state]
+        found: dict[int, PullRequest] = {}
+        for server_state in asked:
+            for raw in self._scan("", state=server_state):
+                candidate = _as_pull_request(raw)
+                if _matches(candidate, state):
+                    found[candidate.number] = candidate
+        return tuple(sorted(found.values(), key=lambda pr: pr.number, reverse=True))
 
     def update_title(self, number: int, title: str) -> None:
         """Retitle merge request *number*."""
@@ -1196,6 +1219,14 @@ class _GitlabPullRequests:
 def _matches(pr: PullRequest, wanted: StateFilter) -> bool:
     """Whether *pr* passes the protocol's state filter."""
     return wanted == "all" or pr.state == wanted
+
+
+#: The GitLab merge request states each protocol filter asks for.
+_SERVER_STATES: dict[StateFilter, tuple[str, ...]] = {
+    "open": ("opened", "locked"),
+    "closed": ("closed", "merged"),
+    "all": ("all",),
+}
 
 
 class _GitlabChecks:
